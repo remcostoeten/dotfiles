@@ -1,0 +1,18 @@
+{
+  "name": "dotfile-symlinker-visual",
+  "version": "1.0.0",
+  "description": "A GUI to help manage dotfile symlinks with visualization.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": ["electron", "symlink", "dotfiles", "visualization"],
+  "author": "AI Assistant",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {}
+}
