@@ -1,8 +1,0 @@
-{
-  "name": "dotfiles",
-  "private": true,
-  "scripts": {
-    "docs:dev": "pnpm --filter dotfiles-docs dev",
-    "docs:build": "pnpm --filter dotfiles-docs build"
-  }
-}
