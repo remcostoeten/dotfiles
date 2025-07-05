@@ -1,5 +1,5 @@
 {
-  "name": "docs",
+  "name": "dotfiles-docs",
   "private": true,
   "type": "module",
   "scripts": {
