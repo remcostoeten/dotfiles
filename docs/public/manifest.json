@@ -1,0 +1,71 @@
+{
+  "name": "Dotfiles Documentation",
+  "short_name": "Dotfiles Docs",
+  "description": "Comprehensive guide to Remco's personal development environment dotfiles",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "any",
+  "categories": ["development", "documentation", "productivity"],
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png", 
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-desktop.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "375x667",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Setup Guide",
+      "short_name": "Setup",
+      "description": "Installation and configuration instructions",
+      "url": "/setup",
+      "icons": [
+        {
+          "src": "/favicon.ico",
+          "sizes": "32x32"
+        }
+      ]
+    },
+    {
+      "name": "Development Tools",
+      "short_name": "Tools",
+      "description": "Available utilities and scripts",
+      "url": "/dev-tools",
+      "icons": [
+        {
+          "src": "/favicon.ico", 
+          "sizes": "32x32"
+        }
+      ]
+    }
+  ]
+}
