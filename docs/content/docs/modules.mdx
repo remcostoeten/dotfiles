@@ -1,0 +1,235 @@
+---
+title: Modules Overview
+description: Understanding the modular architecture of the dotfiles system
+---
+
+## Architecture Overview
+
+The dotfiles system is built with a modular architecture that promotes maintainability, reusability, and cross-platform compatibility. Each module serves a specific purpose and can be used independently or in combination with others.
+
+## Module Structure
+
+### `/bin` - Executable Scripts
+
+The main utilities available to users:
+
+```
+bin/
+├── copy.fish              # Advanced file copying utility
+├── file-utils.fish        # File management operations
+├── git-commit.fish        # Interactive git commit helper
+├── kill-ports.fish        # Port management utility
+├── node-clean.fish        # Node.js cache cleaner
+├── node-clean-dev.fish    # Development environment cleaner
+├── node-reinstall.fish    # Complete Node.js reinstallation
+├── remove-comments        # Source code comment remover
+└── webcam-mic.fish        # Media device toggle utility
+```
+
+Each script in `/bin` is:
+- **Executable**: Can be run directly from the command line
+- **Self-contained**: Includes all necessary logic or imports helpers
+- **Cross-platform**: Works on Linux and macOS
+- **Well-documented**: Includes help text and usage examples
+
+### `/env` - Environment Management
+
+Platform-specific environment configuration:
+
+```
+env/
+├── loader.sh              # Main environment loader
+├── init.fish              # Fish shell initialization
+├── init.sh                # Bash/Zsh initialization
+├── common/
+│   ├── env.sh            # Cross-platform variables
+│   └── modules.list      # Common modules
+├── linux/
+│   ├── env.sh            # Linux-specific variables
+│   └── modules.list      # Linux modules
+└── macos/
+    ├── env.sh            # macOS-specific variables
+    └── modules.list      # macOS modules
+```
+
+**Key Features:**
+- **Platform Detection**: Automatically detects OS and loads appropriate config
+- **Modular Loading**: Only loads necessary modules for the current platform
+- **Variable Management**: Centralized environment variable configuration
+- **Path Management**: Automatically adds tools to PATH
+
+### `/internal` - Internal System Components
+
+Bootstrap scripts and helper functions:
+
+```
+internal/
+├── bootstrap/
+│   └── setup-fish-config.fish    # Fish shell setup
+├── helpers/
+│   ├── copy-helper.fish          # File copying logic
+│   ├── git-commit-helper.fish    # Git commit utilities
+│   ├── kill-ports-helper.fish    # Port management logic
+│   ├── node-clean-helper.fish    # Node.js cleaning logic
+│   ├── webcam-mic-helper.fish    # Media device logic
+│   └── helper-factory.fish       # Helper loading system
+└── loaders/
+    └── source-factory.fish       # Dynamic sourcing system
+```
+
+**Purpose:**
+- **Separation of Concerns**: Business logic separated from user interfaces
+- **Reusability**: Helper functions can be used by multiple scripts
+- **Testing**: Internal components can be tested independently
+- **Maintenance**: Easier to update and modify functionality
+
+### `/scripts` - Standalone Automation
+
+Larger automation scripts and tools:
+
+```
+scripts/
+└── kill-development-ports/
+    ├── index.js              # Node.js port killer
+    ├── package.json          # Dependencies
+    ├── setup.sh              # Installation script
+    └── README.md             # Documentation
+```
+
+**Characteristics:**
+- **Self-contained**: Each script directory is a complete project
+- **Language Agnostic**: Can be written in any language
+- **Specialized**: Focused on specific automation tasks
+- **Installable**: Can be installed independently
+
+### `/configs` - Application Configurations
+
+Configuration files for various applications:
+
+```
+configs/
+└── README.md              # Configuration documentation
+```
+
+**Future Expansion:**
+- Editor configurations (VS Code, Vim, etc.)
+- Terminal emulator settings
+- Development tool configurations
+- Application dotfiles
+
+## Module Interaction
+
+### Dependency Flow
+
+```mermaid
+graph TD
+    A[User Command] --> B[/bin Script]
+    B --> C[/internal/helpers]
+    C --> D[/env Variables]
+    
+    E[Environment Loader] --> F[Platform Detection]
+    F --> G[Load Platform Config]
+    G --> H[Set Variables]
+    H --> I[Add to PATH]
+```
+
+### Loading Sequence
+
+1. **Environment Initialization**
+   - Platform detection
+   - Load common environment
+   - Load platform-specific environment
+   - Set PATH variables
+
+2. **Helper Loading**
+   - Fish functions are sourced automatically
+   - Helpers are loaded on-demand
+   - Factory pattern for dynamic loading
+
+3. **Command Execution**
+   - User runs command from `/bin`
+   - Script imports necessary helpers
+   - Environment variables are available
+   - Cross-platform compatibility is handled
+
+## Creating New Modules
+
+### Adding a New Utility
+
+1. **Create the main script** in `/bin`:
+```fish
+#!/usr/bin/env fish
+# /bin/my-tool.fish
+
+source ~/.config/dotfiles/internal/helpers/my-tool-helper.fish
+
+function my-tool
+    my_tool_helper $argv
+end
+
+my-tool $argv
+```
+
+2. **Create the helper** in `/internal/helpers`:
+```fish
+# /internal/helpers/my-tool-helper.fish
+
+function my_tool_helper
+    set -l args $argv
+    
+    # Implementation here
+    echo "My tool running with args: $args"
+end
+```
+
+3. **Make executable**:
+```bash
+chmod +x ~/.config/dotfiles/bin/my-tool.fish
+```
+
+### Platform-Specific Configuration
+
+Add platform-specific variables to the appropriate env file:
+
+```bash
+# /env/linux/env.sh
+export MY_TOOL_LINUX_SETTING="value"
+
+# /env/macos/env.sh  
+export MY_TOOL_MACOS_SETTING="value"
+
+# /env/common/env.sh
+export MY_TOOL_COMMON_SETTING="value"
+```
+
+### Module Guidelines
+
+When creating new modules:
+
+1. **Follow naming conventions**: Use lowercase with hyphens
+2. **Include help text**: All scripts should support `--help`
+3. **Handle errors gracefully**: Provide meaningful error messages
+4. **Test cross-platform**: Ensure compatibility with Linux and macOS
+5. **Document thoroughly**: Include inline comments and external docs
+6. **Use helper pattern**: Separate logic from interface
+
+## Module Benefits
+
+### Maintainability
+- **Single Responsibility**: Each module has a clear purpose
+- **Loose Coupling**: Modules can be modified independently
+- **Clear Structure**: Easy to locate and understand code
+
+### Reusability
+- **Helper Functions**: Common logic is shared
+- **Platform Abstraction**: Write once, run anywhere
+- **Composable**: Modules can be combined for complex tasks
+
+### Extensibility
+- **Plugin Architecture**: Easy to add new functionality
+- **Template System**: Consistent patterns for new modules
+- **Configuration**: Behavior can be modified without code changes
+
+---
+
+*Next: Explore the [Shell Configuration](./shell) and available customizations.*

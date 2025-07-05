@@ -1,32 +1,91 @@
 ---
-title: Hello World
+title: Dotfiles Documentation
 description: |
-  Your first `document`
-  You'll love it!
+  Comprehensive guide to Remco's personal development environment dotfiles
+  Modular, cross-platform configuration for enhanced developer productivity
 ---
 
-Hey there! Fumadocs is the docs framework that also works on React Router!
+## Welcome to the Dotfiles Collection
 
-## Heading
+This repository contains a comprehensive collection of dotfiles and development environment configurations designed to streamline and enhance the developer experience across different operating systems.
 
-Hello World
+### 🎯 What This Provides
 
-<Cards>
-  <Card title="Learn more about React Router" href="https://reactrouter.com" />
-  <Card title="Learn more about Fumadocs" href="https://fumadocs.vercel.app" />
-</Cards>
+A modular, cross-platform development environment that includes:
 
-```ts
-console.log('I love React!');
+- **Shell Configuration**: Fish shell setup with custom functions and aliases
+- **Development Tools**: Node.js utilities, port management, and build scripts
+- **Environment Management**: Cross-platform environment variable handling
+- **Utility Scripts**: File operations, git helpers, and system management tools
+- **Modular Architecture**: Clean, maintainable structure with separation of concerns
+
+### 🚀 Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/remco-stoeten/dotfiles.git ~/.config/dotfiles
+
+# Make scripts executable
+chmod +x ~/.config/dotfiles/bin/*
+
+# Initialize environment (Linux/MacOS)
+source ~/.config/dotfiles/env/loader.sh
+
+# Or for Fish shell
+source ~/.config/dotfiles/env/init.fish
 ```
 
-### Heading
+### 📁 Repository Structure
 
-#### Heading
+The dotfiles are organized into logical modules:
 
-| Head                            | Description                         |
-| ------------------------------- | ----------------------------------- |
-| `hello`                         | Hello World                         |
-| very **important**              | Hey                                 |
-| _Surprisingly_                  | Fumadocs                            |
-| very long text that looks weird | hello world hello world hello world |
+```
+~/.config/dotfiles/
+├── bin/                 # Executable utilities and scripts
+├── env/                 # Environment configuration per platform
+├── configs/             # Application-specific configurations
+├── internal/            # Internal helpers and bootstrap scripts
+├── scripts/             # Standalone automation scripts
+└── docs/                # This documentation site
+```
+
+<Cards>
+  <Card title="Setup Guide" href="./setup" description="Get started with installation and configuration" />
+  <Card title="Modules Overview" href="./modules" description="Understanding the modular structure" />
+  <Card title="Shell Configuration" href="./shell" description="Fish shell setup and customization" />
+  <Card title="Development Tools" href="./dev-tools" description="Available utilities and scripts" />
+</Cards>
+
+### 🔧 Key Features
+
+#### Development Workflow Tools
+- **Port Management**: Kill development servers and clean up ports
+- **Node.js Utilities**: Clean installs, dependency management
+- **Git Helpers**: Streamlined commit workflows
+- **File Operations**: Advanced file copying and manipulation
+
+#### Cross-Platform Support
+- Linux (Ubuntu/Debian focus)
+- MacOS (Intel & Apple Silicon)
+- Modular environment detection
+
+#### Shell Enhancement
+- Fish shell configuration with custom functions
+- Intelligent command aliases
+- Development-focused shortcuts
+
+### 💡 Philosophy
+
+These dotfiles follow a modular, maintainable approach:
+
+| Principle | Description |
+| --------- | ----------- |
+| **Modularity** | Each component serves a specific purpose |
+| **Cross-Platform** | Works across different operating systems |
+| **Maintainability** | Clean code structure with clear separation |
+| **Flexibility** | Easy to customize and extend |
+| **Performance** | Optimized for development workflows |
+
+---
+
+*Ready to enhance your development environment? Start with the [Setup Guide](./setup) to get everything configured.*
