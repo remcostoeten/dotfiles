@@ -1,3 +1,29 @@
+# Function for interactive prompt after a successful commit
+function _commit_interactive_prompt
+    set -l commit_hash $argv[1]
+
+    while true
+        echo -n "Commit successful! Do you want to push (y/N/r to revert)? "
+        read -l choice
+
+        switch $choice
+            case y Y
+                echo "Pushing to remote..."
+                git push
+                break
+            case n N ''
+                echo "Not pushing to remote."
+                break
+            case r R
+                echo "Reverting the commit..."
+                git revert $commit_hash
+                break
+            case '*'
+                echo "Invalid option. Please choose y (yes), n (no), or r (revert)."
+        end
+    end
+end
+
 #!/usr/bin/env fish
 
 function commit
@@ -161,6 +187,9 @@ function _show_commit_success
 
     echo (set_color yellow)"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"(set_color normal)
     echo
+
+    # Interactive prompt
+    _commit_interactive_prompt $commit_hash
 end
 
 # Helper function for displaying help

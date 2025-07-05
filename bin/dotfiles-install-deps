@@ -1,0 +1,273 @@
+#!/usr/bin/env fish
+
+# ==============================================================================
+# DOTFILES DEPENDENCY INSTALLER
+# Detects missing dependencies and installs them using the installer
+# ==============================================================================
+
+# Script directory for relative paths
+set -g script_dir (dirname (realpath (status filename)))
+set -g dotfiles_root (dirname $script_dir)
+
+# Color helper functions
+function _color_success
+    echo -e (set_color green)"✓ $argv"(set_color normal)
+end
+
+function _color_error
+    echo -e (set_color red)"✗ $argv"(set_color normal)
+end
+
+function _color_warning
+    echo -e (set_color yellow)"⚠ $argv"(set_color normal)
+end
+
+function _color_info
+    echo -e (set_color cyan)"ℹ $argv"(set_color normal)
+end
+
+function _color_header
+    echo -e (set_color cyan --bold)"$argv"(set_color normal)
+end
+
+function _color_dim
+    echo -e (set_color brblack)"$argv"(set_color normal)
+end
+
+function print_help
+    echo ""
+    _color_header "╔═══════════════════════════════════════════════════════════╗"
+    _color_header "║                                                           ║"
+    _color_header "║              Dotfiles Dependency Installer               ║"
+    _color_header "║                    by @remcostoeten                      ║"
+    _color_header "║                                                           ║"
+    _color_header "╚═══════════════════════════════════════════════════════════╝"
+    echo ""
+    _color_info "Usage:"
+    echo "  dotfiles-install-deps [options]"
+    echo ""
+    _color_info "Options:"
+    echo "  --yes, -y        Non-interactive mode (auto-confirm installations)"
+    echo "  --dry-run, -d    Show what would be installed without installing"
+    echo "  --help, -h       Show this help message"
+    echo ""
+    _color_info "Description:"
+    echo "  This script detects missing dependencies for dotfiles tools and"
+    echo "  installs them using the appropriate package manager."
+    echo ""
+    _color_info "Examples:"
+    echo "  dotfiles-install-deps                → Interactive installation"
+    echo "  dotfiles-install-deps --yes          → Auto-install all missing deps"
+    echo "  dotfiles-install-deps --dry-run      → Show what would be installed"
+    echo ""
+end
+
+# Parse dependencies from detect-deps output
+function get_missing_dependencies
+    set -l detect_script "$dotfiles_root/internal/deps/detect-deps.fish"
+    
+    if not test -f "$detect_script"
+        echo "ERROR: detect-deps.fish not found at $detect_script" >&2
+        return 2  # Different exit code for script not found
+    end
+    
+    # Source the detect-deps script to get access to its functions
+    source "$detect_script"
+    
+    # Capture the output and check for missing dependencies
+    set -l temp_output (mktemp)
+    
+    # Run detect_deps and capture both output and exit code
+    detect_deps > "$temp_output" 2>&1
+    set -l detect_exit_code $status
+    
+    # Parse the output for missing dependencies
+    set -l missing_deps
+    set -l in_missing_section 0
+    
+    while read -l line
+        if string match -q "*Missing Dependencies:*" "$line"
+            set in_missing_section 1
+            continue
+        end
+        
+        if test $in_missing_section -eq 1
+            if string match -q "*Present Dependencies:*" "$line"; or string match -q "*Unknown Tools*" "$line"; or string match -q "*Summary:*" "$line"
+                set in_missing_section 0
+                continue
+            end
+            
+            # Extract dependency name from "• tool requires: dependency" format
+            if string match -q "*requires:*" "$line"
+                set -l dep (string replace -r ".*requires:\\s*" "" "$line" | string trim)
+                if test -n "$dep"
+                    set -a missing_deps "$dep"
+                end
+            end
+        end
+    end < "$temp_output"
+    
+    rm -f "$temp_output"
+    
+    # Return the missing dependencies and exit code
+    if test (count $missing_deps) -gt 0
+        for dep in $missing_deps
+            echo "$dep"
+        end
+        return 1
+    else
+        return 0
+    end
+end
+
+# Main function
+function main
+    set -l yes_flag 0
+    set -l dry_run_flag 0
+    
+    # Parse command line arguments
+    for arg in $argv
+        switch $arg
+            case --help -h help
+                print_help
+                return 0
+            case --yes -y
+                set yes_flag 1
+            case --dry-run -d
+                set dry_run_flag 1
+            case '*'
+                _color_error "Unknown option: $arg"
+                echo "Use --help for usage information."
+                return 1
+        end
+    end
+    
+    echo ""
+    _color_header "Dotfiles Dependency Installer"
+    _color_dim "════════════════════════════════════════"
+    
+    # Get missing dependencies
+    _color_info "Checking for missing dependencies..."
+    set -l missing_deps (get_missing_dependencies)
+    set -l deps_exit_code $status
+    
+    if test $deps_exit_code -eq 2
+        _color_error "Cannot proceed: detect-deps.fish script not found"
+        return 1
+    end
+    
+    if test $deps_exit_code -eq 0
+        echo ""
+        _color_success "All dependencies are already installed!"
+        return 0
+    end
+    
+    if test (count $missing_deps) -eq 0
+        _color_error "Failed to detect dependencies"
+        return 1
+    end
+    
+    # Remove duplicates
+    set -l unique_deps
+    for dep in $missing_deps
+        if not contains "$dep" $unique_deps
+            set -a unique_deps "$dep"
+        end
+    end
+    
+    echo ""
+    _color_warning "Missing dependencies found:"
+    for dep in $unique_deps
+        echo "  • $dep"
+    end
+    echo ""
+    
+    # Handle dry-run mode
+    if test $dry_run_flag -eq 1
+        _color_info "Dry-run mode: would install the following packages:"
+        for dep in $unique_deps
+            echo "  • $dep"
+        end
+        echo ""
+        _color_dim "Run without --dry-run to actually install these packages."
+        return 0
+    end
+    
+    # Install dependencies
+    set -l installer_script "$dotfiles_root/internal/deps/installer.fish"
+    
+    if not test -f "$installer_script"
+        _color_error "installer.fish not found at $installer_script"
+        return 1
+    end
+    
+    _color_info "Installing missing dependencies..."
+    
+    # Prepare installer arguments
+    set -l installer_args
+    if test $yes_flag -eq 1
+        # For non-interactive mode, we need to modify the installer to skip confirmation
+        # Since the current installer doesn't support --yes flag, we'll use expect or similar approach
+        # For now, we'll inform the user that manual confirmation might be needed
+        if not test $yes_flag -eq 1
+            _color_warning "Note: You may need to confirm installation prompts."
+        end
+    end
+    
+    # Execute installer
+    if test $yes_flag -eq 1
+        # Non-interactive mode - use expect if available, otherwise provide instructions
+        if command -v expect >/dev/null 2>&1
+            set -l expect_script (mktemp)
+            echo "#!/usr/bin/expect -f" > "$expect_script"
+            echo "spawn fish $installer_script $unique_deps" >> "$expect_script"
+            echo "expect \"Execute this command? *\"" >> "$expect_script"
+            echo "send \"y\\r\"" >> "$expect_script"
+            echo "interact" >> "$expect_script"
+            
+            chmod +x "$expect_script"
+            "$expect_script"
+            set -l install_exit_code $status
+            rm -f "$expect_script"
+        else
+            _color_warning "Non-interactive mode requested but 'expect' not found."
+            _color_info "Installing interactively..."
+            fish "$installer_script" $unique_deps
+            set -l install_exit_code $status
+        end
+    else
+        fish "$installer_script" $unique_deps
+        set -l install_exit_code $status
+    end
+    
+    # Check installation result
+    if test $install_exit_code -ne 0
+        _color_error "Installation failed with exit code: $install_exit_code"
+        return $install_exit_code
+    end
+    
+    echo ""
+    _color_info "Verifying installation..."
+    
+    # Re-check dependencies to ensure they're now installed
+    set -l remaining_deps (get_missing_dependencies)
+    set -l final_check_exit_code $status
+    
+    if test $final_check_exit_code -eq 0
+        echo ""
+        _color_success "All dependencies successfully installed!"
+        return 0
+    else
+        echo ""
+        _color_error "Some dependencies are still missing after installation:"
+        for dep in $remaining_deps
+            echo "  • $dep"
+        end
+        echo ""
+        _color_warning "You may need to install these manually or check your package manager."
+        return 1
+    end
+end
+
+# Execute main function with all arguments
+main $argv

@@ -1,0 +1,410 @@
+# Git Configuration File
+# This file contains comprehensive Git settings organized by functionality.
+# Each section includes detailed explanations and placeholder values.
+# Copy this file to ~/.gitconfig or use git config --global --file path/to/this/file
+
+# =============================================================================
+# USER IDENTITY
+# =============================================================================
+# Basic user information - these are required for commits
+# Replace with your actual name and email address
+[user]
+	name = Your Full Name
+	email = your.email@example.com
+	# Optional: specify a different email for work repositories
+	# Configure per-repository with: git config user.email work@company.com
+
+# =============================================================================
+# COMMIT SIGNING
+# =============================================================================
+# GPG signing configuration for commit verification
+# Uncomment and configure if you want to sign your commits
+[commit]
+	# gpgsign = true                    # Sign all commits by default
+	# template = ~/.gitmessage          # Use a commit message template
+
+[tag]
+	# gpgsign = true                    # Sign all tags by default
+	# forceSignAnnotated = true         # Force signing of annotated tags
+
+[gpg]
+	# program = gpg2                    # Specify GPG program (gpg, gpg2, etc.)
+	# format = openpgp                  # Signature format (openpgp, x509, ssh)
+
+# For SSH signing (alternative to GPG)
+# [gpg "ssh"]
+	# program = ssh-keygen              # SSH signing program
+	# allowedSignersFile = ~/.ssh/allowed_signers
+
+# =============================================================================
+# CORE SETTINGS
+# =============================================================================
+# Essential Git behavior configuration
+[core]
+	# Text editor for commit messages, interactive rebase, etc.
+	editor = vim
+	# Alternative editors:
+	# editor = code --wait              # Visual Studio Code
+	# editor = nano                     # Nano
+	# editor = emacs                    # Emacs
+
+	# Line ending handling
+	autocrlf = input                    # Convert CRLF to LF on commit (Unix/Mac)
+	# autocrlf = true                   # Convert LF to CRLF on Windows
+	# autocrlf = false                  # No conversion (not recommended)
+
+	# Whitespace handling
+	whitespace = trailing-space,space-before-tab
+	
+	# File permissions (useful for scripts)
+	filemode = true
+	
+	# Pager settings
+	pager = less -FRX
+	
+	# Prevent showing files whose names contain non-ASCII symbols as unversioned
+	precomposeunicode = false
+	
+	# Speed up commands involving untracked files
+	untrackedCache = true
+
+# =============================================================================
+# ALIASES
+# =============================================================================
+# Custom shortcuts for common Git operations
+# Use with: git <alias-name>
+[alias]
+	# Status and information
+	st = status
+	s = status --short
+	stat = status
+	
+	# Commit shortcuts
+	c = commit
+	cm = commit -m
+	ca = commit -a
+	cam = commit -am
+	amend = commit --amend
+	
+	# Branch management
+	b = branch
+	ba = branch -a
+	bd = branch -d
+	bD = branch -D
+	
+	# Checkout shortcuts
+	co = checkout
+	cb = checkout -b
+	
+	# Switch (newer alternative to checkout for branch switching)
+	sw = switch
+	swc = switch -c
+	
+	# Remote operations
+	f = fetch
+	fa = fetch --all
+	p = push
+	pu = pull
+	
+	# Merge and rebase
+	m = merge
+	rb = rebase
+	rbi = rebase -i
+	
+	# Diff variations
+	d = diff
+	ds = diff --staged
+	dc = diff --cached
+	
+	# Log aliases with different formats
+	l = log --oneline
+	lg = log --oneline --graph
+	ll = log --oneline --graph --decorate --all
+	lol = log --graph --decorate --pretty=oneline --abbrev-commit
+	lola = log --graph --decorate --pretty=oneline --abbrev-commit --all
+	
+	# Show commit details
+	last = log -1 HEAD
+	visual = !gitk
+	
+	# Stash shortcuts
+	sl = stash list
+	sa = stash apply
+	ss = stash save
+	
+	# Undo shortcuts
+	unstage = reset HEAD --
+	uncommit = reset --soft HEAD^
+	
+	# Find commits by commit message
+	find = log --grep
+	
+	# Show files in a commit
+	files = diff-tree --no-commit-id --name-only -r
+	
+	# Show ignored files
+	ignored = ls-files --others --ignored --exclude-standard
+
+# =============================================================================
+# COLOR CONFIGURATION
+# =============================================================================
+# Enable and configure colored output for better readability
+[color]
+	ui = auto                           # Enable colors when output is to a terminal
+	branch = auto
+	diff = auto
+	interactive = auto
+	status = auto
+
+# Customize specific color schemes
+[color "branch"]
+	current = yellow reverse
+	local = yellow
+	remote = green
+
+[color "diff"]
+	meta = yellow bold
+	frag = magenta bold
+	old = red bold
+	new = green bold
+	whitespace = red reverse
+
+[color "status"]
+	added = yellow
+	changed = green
+	untracked = cyan
+
+# =============================================================================
+# DIFF AND MERGE TOOLS
+# =============================================================================
+# Configure external tools for viewing diffs and resolving conflicts
+[diff]
+	tool = vimdiff
+	# Alternative diff tools:
+	# tool = meld
+	# tool = code
+	# tool = beyond-compare
+
+[merge]
+	tool = vimdiff
+	# Alternative merge tools:
+	# tool = meld
+	# tool = code
+	# tool = beyond-compare
+	
+	# Include summaries of merged commits in merge commit messages
+	log = true
+	
+	# Avoid fast-forward merges to preserve merge history
+	ff = false
+
+[mergetool]
+	# Don't create .orig backup files after merge
+	keepBackup = false
+	
+	# Don't prompt before opening merge tool
+	prompt = false
+
+# =============================================================================
+# PULL AND PUSH DEFAULTS
+# =============================================================================
+# Configure default behavior for pull and push operations
+[pull]
+	# Default pull strategy - choose one:
+	rebase = false                      # Merge (default)
+	# rebase = true                     # Rebase instead of merge
+	# ff = only                         # Fast-forward only
+	
+	# Auto-stash uncommitted changes during pull
+	# autostash = true
+
+[push]
+	# Default push behavior - choose one:
+	default = simple                    # Push current branch to upstream with same name
+	# default = current                 # Push current branch to upstream
+	# default = upstream                # Push current branch to its upstream
+	# default = matching                # Push all matching branches
+	
+	# Automatically set up remote tracking
+	autoSetupRemote = true
+	
+	# Push tags along with commits
+	# followTags = true
+
+# =============================================================================
+# CREDENTIAL HELPERS
+# =============================================================================
+# Configure how Git handles authentication credentials
+[credential]
+	# Credential storage - choose one based on your system:
+	
+	# For macOS - use Keychain
+	# helper = osxkeychain
+	
+	# For Windows - use Windows Credential Manager
+	# helper = manager-core
+	
+	# For Linux - use libsecret (GNOME Keyring)
+	# helper = /usr/share/doc/git/contrib/credential/libsecret/git-credential-libsecret
+	
+	# Cross-platform - cache credentials in memory
+	helper = cache --timeout=3600
+	
+	# Store credentials in plain text file (NOT RECOMMENDED for production)
+	# helper = store --file ~/.git-credentials
+
+# =============================================================================
+# WORKFLOW TWEAKS
+# =============================================================================
+# Advanced settings to improve Git workflow
+[fetch]
+	# Automatically prune deleted remote branches
+	prune = true
+	
+	# Fetch all tags
+	tags = true
+
+[rebase]
+	# Automatically stash uncommitted changes before rebase
+	autostash = true
+	
+	# Use abbreviated commit SHAs in interactive rebase
+	abbreviateCommands = true
+
+[rerere]
+	# Remember resolved conflicts for future use
+	enabled = true
+
+[status]
+	# Show individual files in untracked directories
+	showUntrackedFiles = all
+	
+	# Show branch and tracking info
+	branch = true
+	
+	# Show stash count in status
+	showStash = true
+
+[log]
+	# Show dates in relative format (e.g., "2 hours ago")
+	date = relative
+	
+	# Abbreviate commit SHAs in log output
+	abbrevCommit = true
+
+[branch]
+	# Automatically set up tracking when creating new branches
+	autoSetupMerge = always
+	
+	# Automatically rebase when pulling
+	# autoSetupRebase = always
+
+[init]
+	# Default branch name for new repositories
+	defaultBranch = main
+
+# =============================================================================
+# PERFORMANCE OPTIMIZATIONS
+# =============================================================================
+# Settings to improve Git performance
+[gc]
+	# Automatic garbage collection threshold
+	auto = 1000
+	
+	# Automatically pack refs
+	autopacklimit = 50
+
+[pack]
+	# Use multiple threads for packing
+	threads = 0                         # Use all available cores
+
+[index]
+	# Use file system monitor for large repositories
+	# version = 4
+
+# =============================================================================
+# SECURITY SETTINGS
+# =============================================================================
+# Security-related configuration
+[transfer]
+	# Verify received objects
+	fsckObjects = true
+
+[receive]
+	# Verify pushed objects
+	fsckObjects = true
+
+# =============================================================================
+# URL SHORTCUTS
+# =============================================================================
+# Define shortcuts for common repository URLs
+[url "git@github.com:"]
+	insteadOf = https://github.com/
+	pushInsteadOf = https://github.com/
+
+# Example for GitLab:
+# [url "git@gitlab.com:"]
+	# insteadOf = https://gitlab.com/
+	# pushInsteadOf = https://gitlab.com/
+
+# =============================================================================
+# HOOKS
+# =============================================================================
+# Configure Git hooks behavior
+[hooks]
+	# Path to global hooks directory
+	# hooksPath = ~/.githooks
+
+# =============================================================================
+# EXPERIMENTAL FEATURES
+# =============================================================================
+# Enable experimental Git features (use with caution)
+[feature]
+	# Enable partial clone support
+	# experimental = true
+	
+	# Enable multi-pack-index
+	# manyFiles = true
+
+# =============================================================================
+# CONDITIONAL INCLUDES
+# =============================================================================
+# Include additional config files based on conditions
+# Useful for separating work and personal configurations
+
+# Example: Use different settings for work repositories
+# [includeIf "gitdir:~/work/"]
+	# path = ~/.gitconfig-work
+
+# Example: Use different settings for specific hosting services
+# [includeIf "hasconfig:remote.*.url:https://github.com/**"]
+	# path = ~/.gitconfig-github
+
+# =============================================================================
+# NOTES
+# =============================================================================
+# Additional notes and tips:
+#
+# 1. To use this config globally:
+#    cp this-file ~/.gitconfig
+#
+# 2. To use this config for a specific repository:
+#    git config --local include.path /path/to/this/file
+#
+# 3. To override settings temporarily:
+#    git -c user.name="Temp Name" commit -m "message"
+#
+# 4. To see all current settings:
+#    git config --list
+#
+# 5. To see where a setting is defined:
+#    git config --show-origin user.name
+#
+# 6. To edit global config:
+#    git config --global --edit
+#
+# 7. Common per-repository overrides:
+#    git config user.email "work@company.com"
+#    git config core.editor "code --wait"
+#    git config branch.main.remote origin
+#    git config branch.main.merge refs/heads/main

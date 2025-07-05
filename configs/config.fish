@@ -48,6 +48,9 @@ end
 # Set dotfiles directory
 set -gx DOTFILES_DIR "$HOME/.config/dotfiles"
 
+# Add dotfiles bin to PATH
+set -gx PATH "$DOTFILES_DIR/bin" $PATH
+
 # Enable quiet mode for dotfiles loading (suppress verbose messages)
 set -gx DOTFILES_QUIET true
 
@@ -135,3 +138,10 @@ set -gx FORCE_COLOR 1
 # ------------------------------------------------------------------------------
 # END OF CONFIGURATION
 # ------------------------------------------------------------------------------
+
+# pnpm
+set -gx PNPM_HOME "/home/remco-stoeten/.local/share/pnpm"
+if not string match -q -- $PNPM_HOME $PATH
+  set -gx PATH "$PNPM_HOME" $PATH
+end
+# pnpm end

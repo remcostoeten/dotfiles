@@ -201,3 +201,27 @@ source "${DOTFILES_ROOT}/env/init.sh"
 ```
 
 This will automatically detect the platform and load the appropriate configuration.
+
+## Dependency Management Integration
+
+The environment system works closely with the dependency management system:
+
+- **Platform Detection**: Used by the dependency installer to select appropriate package managers
+- **Environment Variables**: Platform-specific settings help tools function correctly
+- **Package Manager Integration**: Environment configuration includes paths for platform-specific package managers
+
+### Related Tools
+
+- **[Dependency Management](../docs/DEPENDENCIES.md)**: Comprehensive dependency detection and installation
+- **[Platform Installer](../internal/deps/installer.fish)**: Cross-platform package installation
+- **[Bootstrap Process](../bootstrap.fish)**: Automated setup including environment and dependencies
+
+### Platform-Specific Package Managers
+
+The environment system helps configure:
+
+- **Linux**: apt, dnf, pacman paths and configuration
+- **macOS**: Homebrew paths and Apple Silicon support
+- **Development**: Node.js, Python, and other language-specific tools
+
+This ensures that dependency installation and tool execution work seamlessly across platforms.
