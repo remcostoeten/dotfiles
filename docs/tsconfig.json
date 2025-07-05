@@ -1,11 +1,27 @@
 {
+  "include": [
+    "**/*",
+    "**/.server/**/*",
+    "**/.client/**/*",
+    ".react-router/types/**/*"
+  ],
   "compilerOptions": {
-    "target": "ES2022",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "module": "ESNext",
+    "types": ["node", "vite/client"],
+    "target": "esnext",
+    "module": "esnext",
     "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "rootDirs": [".", "./.react-router/types"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./app/*"]
+    },
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
     "strict": true,
     "noImplicitAny": true,
     "noImplicitReturns": true,
@@ -14,34 +30,6 @@
     "noUnusedParameters": true,
     "exactOptionalPropertyTypes": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "allowJs": false,
-    "checkJs": false,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "removeComments": true,
-    "noEmit": true,
-    "isolatedModules": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "build",
-    "**/*.test.ts",
-    "**/*.test.tsx",
-    "**/*.spec.ts",
-    "**/*.spec.tsx"
-  ]
+    "noUncheckedIndexedAccess": true
+  }
 }
