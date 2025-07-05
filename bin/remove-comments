@@ -1,0 +1,326 @@
+#!/usr/bin/env python3
+"""
+Comment Remover Script
+Removes comments from .ts, .tsx, and .py files with backup and revert functionality.
+"""
+
+import argparse
+import os
+import re
+import shutil
+import json
+from pathlib import Path
+from datetime import datetime
+import logging
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+class CommentRemover:
+    def __init__(self):
+        self.backup_dir = Path('.comment_remover_backups')
+        self.backup_index_file = self.backup_dir / 'index.json'
+        self.backup_index = self.load_backup_index()
+    
+    def load_backup_index(self):
+        """Load the backup index or create empty one"""
+        if self.backup_index_file.exists():
+            try:
+                with open(self.backup_index_file, 'r') as f:
+                    return json.load(f)
+            except json.JSONDecodeError:
+                logger.warning("Corrupted backup index, creating new one")
+                return {}
+        return {}
+    
+    def save_backup_index(self):
+        """Save the backup index"""
+        self.backup_dir.mkdir(exist_ok=True)
+        with open(self.backup_index_file, 'w') as f:
+            json.dump(self.backup_index, f, indent=2)
+    
+    def create_backup(self, file_path):
+        """Create a backup of the file before modification"""
+        file_path = Path(file_path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+        
+        # Create backup directory
+        self.backup_dir.mkdir(exist_ok=True)
+        
+        # Generate backup filename with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_name = f"{file_path.stem}_{timestamp}{file_path.suffix}"
+        backup_path = self.backup_dir / backup_name
+        
+        # Copy file to backup
+        shutil.copy2(file_path, backup_path)
+        
+        # Update backup index
+        self.backup_index[str(file_path)] = {
+            'backup_file': str(backup_path),
+            'timestamp': timestamp,
+            'original_size': file_path.stat().st_size
+        }
+        self.save_backup_index()
+        
+        logger.info(f"Backup created: {backup_path}")
+        return backup_path
+    
+    def remove_python_comments(self, content):
+        """Remove Python comments while preserving strings"""
+        lines = content.split('\n')
+        result_lines = []
+        comments_removed = 0
+        in_multiline_string = False
+        multiline_delimiter = None
+
+        for line_num, line in enumerate(lines):
+            # Preserve shebang line
+            if line_num == 0 and line.startswith('#!'):
+                result_lines.append(line)
+                continue
+
+            # Check for multiline string delimiters
+            triple_quote_positions = []
+            for delim in ['"""', "'''"]:
+                pos = 0
+                while True:
+                    pos = line.find(delim, pos)
+                    if pos == -1:
+                        break
+                    triple_quote_positions.append((pos, delim))
+                    pos += 3
+            
+            # Sort by position
+            triple_quote_positions.sort()
+            
+            # Process multiline strings
+            for pos, delim in triple_quote_positions:
+                if not in_multiline_string:
+                    in_multiline_string = True
+                    multiline_delimiter = delim
+                elif delim == multiline_delimiter:
+                    in_multiline_string = False
+                    multiline_delimiter = None
+            
+            # If we're in a multiline string, preserve the line
+            if in_multiline_string:
+                result_lines.append(line)
+                continue
+
+            # Skip full-line comments (except shebang)
+            stripped = line.strip()
+            if stripped.startswith('#') and not stripped.startswith('#!'):
+                comments_removed += 1
+                continue
+
+            # Find comments not inside strings
+            in_string = False
+            string_char = None
+            comment_pos = -1
+            escape_next = False
+
+            i = 0
+            while i < len(line):
+                char = line[i]
+
+                if escape_next:
+                    escape_next = False
+                    i += 1
+                    continue
+
+                if char == '\\':
+                    escape_next = True
+                    i += 1
+                    continue
+
+                if not in_string:
+                    if char in ['"', "'"]:
+                        # Check if it's a triple quote
+                        if i + 2 < len(line) and line[i:i+3] in ['"""', "'''"]:
+                            # Skip triple quotes as they're handled above
+                            i += 3
+                            continue
+                        in_string = True
+                        string_char = char
+                    elif char == '#':
+                        comment_pos = i
+                        break
+                else:
+                    if char == string_char:
+                        in_string = False
+                        string_char = None
+
+                i += 1
+
+            if comment_pos != -1:
+                # Remove the comment part
+                cleaned_line = line[:comment_pos].rstrip()
+                result_lines.append(cleaned_line)
+                comments_removed += 1
+            else:
+                result_lines.append(line)
+
+        return '\n'.join(result_lines), comments_removed
+    
+    def remove_ts_comments(self, content):
+        """Remove TypeScript/TSX comments while preserving strings and JSX"""
+        # Remove single-line comments
+        lines = content.split('\n')
+        result_lines = []
+        
+        for line in lines:
+            # Check if line contains // comment
+            in_string = False
+            string_char = None
+            comment_pos = -1
+            
+            i = 0
+            while i < len(line) - 1:
+                char = line[i]
+                next_char = line[i + 1]
+                
+                if not in_string:
+                    if char in ['"', "'", '`']:
+                        in_string = True
+                        string_char = char
+                    elif char == '/' and next_char == '/':
+                        comment_pos = i
+                        break
+                else:
+                    if char == string_char and (i == 0 or line[i-1] != '\\'):
+                        in_string = False
+                        string_char = None
+                
+                i += 1
+            
+            if comment_pos != -1:
+                cleaned_line = line[:comment_pos].rstrip()
+                result_lines.append(cleaned_line)
+            else:
+                result_lines.append(line)
+        
+        content = '\n'.join(result_lines)
+        
+        # Remove multi-line comments /* */
+        # This is a simplified version - a full parser would be more robust
+        content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+        
+        return content
+    
+    def remove_comments(self, file_path):
+        """Remove comments from a file based on its extension"""
+        file_path = Path(file_path)
+        
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+        
+        logger.info(f"Processing file: {file_path}")
+        
+        # Create backup first
+        backup_path = self.create_backup(file_path)
+        
+        try:
+            # Read file content
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            original_lines = len(content.split('\n'))
+            
+            # Remove comments based on file extension
+            comments_removed = 0
+            if file_path.suffix == '.py':
+                cleaned_content, comments_removed = self.remove_python_comments(content)
+            elif file_path.suffix in ['.ts', '.tsx']:
+                cleaned_content = self.remove_ts_comments(content)
+            else:
+                raise ValueError(f"Unsupported file type: {file_path.suffix}")
+            
+            # Write cleaned content back
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(cleaned_content)
+            
+            cleaned_lines = len(cleaned_content.split('\n'))
+            
+            logger.info(f"Comments removed successfully!")
+            logger.info(f"Original lines: {original_lines}")
+            logger.info(f"Cleaned lines: {cleaned_lines}")
+            if file_path.suffix == '.py':
+                logger.info(f"Comments removed: {comments_removed}")
+            else:
+                logger.info(f"Lines saved: {original_lines - cleaned_lines}")
+            
+        except Exception as e:
+            # Restore from backup if something goes wrong
+            logger.error(f"Error processing file: {e}")
+            shutil.copy2(backup_path, file_path)
+            logger.info(f"File restored from backup")
+            raise
+    
+    def revert_file(self, file_path):
+        """Revert a file to its backup"""
+        file_path = str(Path(file_path))
+        
+        if file_path not in self.backup_index:
+            logger.error(f"No backup found for: {file_path}")
+            return False
+        
+        backup_info = self.backup_index[file_path]
+        backup_file = Path(backup_info['backup_file'])
+        
+        if not backup_file.exists():
+            logger.error(f"Backup file missing: {backup_file}")
+            return False
+        
+        # Restore the file
+        shutil.copy2(backup_file, file_path)
+        logger.info(f"File reverted from backup: {backup_info['timestamp']}")
+        return True
+    
+    def list_backups(self):
+        """List all available backups"""
+        if not self.backup_index:
+            logger.info("No backups found")
+            return
+        
+        logger.info("Available backups:")
+        for file_path, info in self.backup_index.items():
+            logger.info(f"  {file_path} -> {info['backup_file']} ({info['timestamp']})")
+
+def main():
+    parser = argparse.ArgumentParser(description='Remove comments from code files')
+    parser.add_argument('file', nargs='?', help='Target file to process')
+    parser.add_argument('--revert', action='store_true', help='Revert file to backup')
+    parser.add_argument('--list-backups', action='store_true', help='List available backups')
+    
+    args = parser.parse_args()
+    
+    remover = CommentRemover()
+    
+    if args.list_backups:
+        remover.list_backups()
+        return
+    
+    if not args.file:
+        logger.error("Please provide a file to process")
+        parser.print_help()
+        return
+    
+    try:
+        if args.revert:
+            success = remover.revert_file(args.file)
+            if not success:
+                exit(1)
+        else:
+            remover.remove_comments(args.file)
+    except Exception as e:
+        logger.error(f"Operation failed: {e}")
+        exit(1)
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,13 @@
+# Linux-specific Modules
+
+# System modules
+system/linux-utils
+system/package-managers
+
+# Development modules (Linux-specific)
+development/docker
+development/containers
+
+# Media modules (Linux-specific)
+media/linux-codecs
+media/ffmpeg
