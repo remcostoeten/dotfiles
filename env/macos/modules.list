@@ -1,0 +1,13 @@
+# macOS-specific Modules
+
+# System modules
+system/macos-utils
+system/homebrew
+
+# Development modules (macOS-specific)
+development/xcode
+development/macos-dev
+
+# Media modules (macOS-specific)  
+media/macos-codecs
+media/quicktime

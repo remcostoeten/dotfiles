@@ -1,0 +1,10 @@
+planning-ideas/
+linker.state
+
+# Internal files backup
+internal/**/*.backup
+*.log
+
+# User customizations (not tracked)
+configs/**/*.local.*
+**node_modules**

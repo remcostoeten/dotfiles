@@ -1,0 +1,14 @@
+# Common Modules
+# These modules are loaded on all platforms
+
+# Core system modules
+git
+filesystem
+clipboard
+
+# Development modules
+development/core
+development/tools
+
+# Media modules
+media/basic
