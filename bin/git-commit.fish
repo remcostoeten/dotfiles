@@ -1,3 +1,4 @@
+#!/usr/bin/env fish
 # Function for interactive prompt after a successful commit
 function _commit_interactive_prompt
     set -l commit_hash $argv[1]
@@ -23,8 +24,6 @@ function _commit_interactive_prompt
         end
     end
 end
-
-#!/usr/bin/env fish
 
 function commit
     # Check for help flags
