@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Simple shim to execute the fish implementation next to this file
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec fish "$SCRIPT_DIR/symlink-manager.fish" "$@"
+
