@@ -7,7 +7,8 @@ A clean, minimal dotfiles structure with essential directories and standardized 
 ```
 dotfiles/
 ├── bin/              # 🟢 Your scripts and commands
-├── configs/          # 🟢 Configuration files (Fish, etc.)
+├── config/          # 🟢 App/tool configs (kitty, nvim, git, etc.)
+├── configs/         # 🟢 Fish shell configuration (config.fish)
 ├── env/             # 🟢 Environment variables (Linux/macOS/Windows)
 └── internal/        # 🔴 System files (don't modify)
     ├── bootstrap/   # Setup scripts
