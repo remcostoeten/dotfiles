@@ -41,6 +41,19 @@ detect_platform() {
   echo "$platform"
 }
 
+# Load secrets from the secrets directory
+load_secrets() {
+  local secrets_dir="$ENV_ROOT/secrets"
+  if [ -d "$secrets_dir" ]; then
+    env_log_info "Loading secrets"
+    for secret_file in "$secrets_dir"/*.sh; do
+      if [ -f "$secret_file" ]; then
+        source "$secret_file"
+      fi
+    done
+  fi
+}
+
 # Load environment configurations
 load_environment() {
   local platform=$(detect_platform)
@@ -64,6 +77,8 @@ load_environment() {
   else
     env_log_warn "Platform-specific configuration not found: $ENV_ROOT/$platform/env.sh"
   fi
+  
+  load_secrets
 }
 
 # Generate merged module list

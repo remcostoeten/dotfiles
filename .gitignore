@@ -11,3 +11,4 @@ configs/**/*.local.*
 
 # Ignore embedded nvim git repo
 config/nvim/
+
