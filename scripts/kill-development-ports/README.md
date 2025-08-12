@@ -24,7 +24,7 @@ This will install the necessary Node.js dependencies locally.
 ## Usage
 
 ```bash
-# Scan default ports (3000-3010, 5173-5183)
+# Scan default ports (3000-3010, 5000-5005, 5173-5183)
 ports
 # or
 kill-dev
@@ -68,6 +68,7 @@ kill-dev 3000 8000-8010
 ## Default Ports
 
 - Next.js/React: 3000-3010
+- Generic dev: 5000-5005
 - Vite: 5173-5183
 
 ## Requirements

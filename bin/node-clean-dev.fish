@@ -1,3 +1,4 @@
+#!/usr/bin/env fish
 function restartnode
     # Check for help flag
     if test (count $argv) -eq 1 -a "$argv[1]" = --help -o "$argv[1]" = --h -o "$argv[1]" = -h

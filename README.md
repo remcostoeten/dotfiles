@@ -37,7 +37,7 @@ If you prefer manual setup:
 
 3. **Create symlink to Fish configuration:**
    ```bash
-   ln -s ~/.config/dotfiles/config/config.fish ~/.config/fish/config.fish
+   ln -s ~/.config/dotfiles/configs/config.fish ~/.config/fish/config.fish
    ```
 
 4. **Install dependencies (optional):**
@@ -134,7 +134,8 @@ symlink-manager clean    # Remove all symlinks (careful!)
 ```
 dotfiles/
 ├── bin/                 # 🟢 Executable scripts and commands
-├── config/              # 🟢 Configuration files
+├── config/              # 🟢 App/tool configs (kitty, nvim, git, etc.)
+├── configs/             # 🟢 Fish shell configuration (config.fish)
 ├── docs/                # 📚 Documentation files
 │   ├── ARCHITECTURE.md  # System design and architecture
 │   ├── DEPENDENCIES.md  # Dependency management guide

@@ -8,3 +8,7 @@ internal/**/*.backup
 # User customizations (not tracked)
 configs/**/*.local.*
 **node_modules**
+
+# Ignore embedded nvim git repo
+config/nvim/
+

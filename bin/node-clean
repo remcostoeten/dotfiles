@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Shim to invoke the Fish implementation for node-clean
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ARGS=()
+if [ "$#" -eq 0 ]; then
+  ARGS=("--help")
+else
+  ARGS=("$@")
+fi
+exec fish -c "source '$SCRIPT_DIR/node-clean.fish'; rmnode ${ARGS[*]}"
+

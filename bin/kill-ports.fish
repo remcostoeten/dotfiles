@@ -1,3 +1,4 @@
+#!/usr/bin/env fish
 # ==============================================================================
 # SECTION 3: PROCESS, PORT, AND FILE UTILITIES
 # Dependencies: lsof or ss, fzf

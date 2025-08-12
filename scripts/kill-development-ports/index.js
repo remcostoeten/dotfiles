@@ -7,7 +7,7 @@
  * running on common ports used by Next.js, React, Vite, and other dev servers.
  * 
  * Features:
- * - Scans default development ports (3000-3010, 5173-5183)
+ * - Scans default development ports (3000-3010, 5000-5005, 5173-5183)
  * - Interactive process selection with fuzzy search
  * - Supports port ranges and individual port specification
  * - Clean ASCII interface without excessive colors/emojis
@@ -31,10 +31,12 @@ const ora = require("ora");
 const Table = require("cli-table3");
 const { exec } = require("child_process");
 
-// Default ports to scan (Next.js/React and Vite common ports)
+// Default ports to scan (Next.js/React, generic dev, and Vite common ports)
 const DEFAULT_PORTS = [
   // Next.js/React ports (3000-3010)
   ...Array.from({ length: 11 }, (_, i) => 3000 + i),
+  // Generic dev ports often used by local servers (5000-5005)
+  ...Array.from({ length: 6 }, (_, i) => 5000 + i),
   // Vite ports (5173-5183)
   ...Array.from({ length: 11 }, (_, i) => 5173 + i)
 ];
@@ -74,6 +76,7 @@ EXAMPLES:
 
 DEFAULT PORTS:
   Next.js/React: 3000-3010
+  Generic dev: 5000-5005
   Vite: 5173-5183
 
 INTERACTIVE CONTROLS:

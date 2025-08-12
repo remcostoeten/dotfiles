@@ -132,8 +132,11 @@ function show_help
     echo "  setup     Create all configured symlinks"
     echo "  verify    Check if all symlinks are valid"
     echo "  clean     Remove all configured symlinks"
-    echo "  status    Show status of all symlinks"
+    echo "  status    Show symlink status"
     echo "  help      Show this help message"
+    echo ""
+    echo "Flags:"
+    echo "  -h, --help  Show this help message"
     echo ""
     echo "Configured symlinks:"
     for link in $SYMLINKS
@@ -143,9 +146,17 @@ function show_help
 end
 
 # Main command handler
-set -l command $argv[1]
+set -l command ""
+if test (count $argv) -eq 0
+    set command "help"
+else
+    set command $argv[1]
+end
 
 switch $command
+    case -h --help help ''
+        show_help
+        
     case setup
         echo "Setting up symlinks..."
         echo ""
@@ -220,7 +231,7 @@ switch $command
         # Count all theme files
         set -l theme_count 0
         if test -d "$DOTFILES_DIR/config/warp-themes"
-            set theme_count (count $DOTFILES_DIR/config/warp-themes/*.yaml 2>/dev/null || echo 0)
+            set theme_count (count $DOTFILES_DIR/config/warp-themes/*.yaml 2/dev/null || echo 0)
         end
         
         set -l total_links (math (count $SYMLINKS) + $theme_count)
@@ -349,7 +360,7 @@ switch $command
                 echo "$GREEN🎉 All required dependencies are available!$NORMAL"
             else
                 echo ""
-                echo "$BLUE→$NORMAL No dependencies detected or dependency detection unavailable"
+            echo "$BLUE→$NORMAL No dependencies detected or dependency detection unavailable"
             end
         else
             echo "$YELLOW⚠$NORMAL Dependency detection script not found at: $deps_script"
@@ -374,12 +385,10 @@ switch $command
             echo "$GREEN🎉 All symlinks are working perfectly!$NORMAL"
         end
         
-    case help ''
-        show_help
-        
     case '*'
         print_status error "Unknown command: $command"
         echo ""
         show_help
         exit 1
 end
+
