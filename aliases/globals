@@ -1,0 +1,14 @@
+# This file defines global variables for different shells.
+# It's sourced by the loader script.
+
+if [ -n "$FISH_VERSION" ]; then
+  # fish shell
+  set -gx PACKAGE_MANAGER "bun"
+  set -gx PACKAGE_MANAGER_FALLBACK "pnpm"
+  set -gx SHELL_SHEBANG "#!/usr/bin/env fish"
+else
+  # bash/zsh/sh
+  export PACKAGE_MANAGER="bun"
+  export PACKAGE_MANAGER_FALLBACK="pnpm"
+  export SHELL_SHEBANG="#!/usr/bin/env bash"
+fi

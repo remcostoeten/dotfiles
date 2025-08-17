@@ -1,0 +1,20 @@
+alias q='exit'
+alias x='exit'
+alias c='clear'
+alias .='open .'
+
+
+alias x='exit'
+alias c='clear'
+alias .='open .'
+
+alias ..='cd ../'
+alias ...='cd  ../../'
+alias ....='cd ../../../'
+alias .....='cd ../../../../'
+
+alias restart='restart now'
+alias shutdown='shutdown now'
+alias bios='sudo systemctl reboot --firmware-setup'
+
+alias rm='rm -rf'

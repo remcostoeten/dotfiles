@@ -18,8 +18,9 @@ set -l NORMAL (set_color normal)
 set -l SYMLINKS \
     "$DOTFILES_DIR/config/kitty:$HOME/.config/kitty" \
     "$DOTFILES_DIR/config/nvim:$HOME/.config/nvim" \
-    "$DOTFILES_DIR/.npmrc:$HOME/.npmrc" \
-    "$DOTFILES_DIR/configs/config.fish:$HOME/.config/fish/config.fish"
+    
+    "$DOTFILES_DIR/configs/config.fish:$HOME/.config/fish/config.fish" \
+    "$DOTFILES_DIR/configs/functions:$HOME/.config/fish/functions"
 
 function print_status
     set -l msg_type $argv[1]

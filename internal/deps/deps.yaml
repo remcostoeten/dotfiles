@@ -7,6 +7,11 @@ tools:
     optional: [xclip, xsel, pbcopy]
     notes: "Uses pbcopy on macOS, xclip or xsel on Linux for clipboard functionality"
 
+  - tool: dotfiles-install-deps
+    requires: [fish]
+    optional: [expect]
+    notes: "Dependency installer for dotfiles system"
+
   - tool: file-utils.fish
     requires: [mkdir, touch, chmod]
     optional: []
@@ -22,15 +27,15 @@ tools:
     optional: [lsof, ss, fzf]
     notes: "Uses Node.js script for port management, lsof/ss for port detection"
 
-  - tool: node-clean-dev.fish
-    requires: [bun, lsof]
-    optional: [brave-browser]
-    notes: "Development server restart utility, opens browser automatically"
-
   - tool: node-clean.fish
     requires: [rm]
     optional: []
     notes: "Clean Node.js project folders without reinstalling"
+
+  - tool: node-clean-dev.fish
+    requires: [bun, lsof]
+    optional: [brave-browser]
+    notes: "Development server restart utility, opens browser automatically"
 
   - tool: node-reinstall.fish
     requires: [bun, rm]
@@ -42,20 +47,21 @@ tools:
     optional: []
     notes: "Python script to remove comments from .ts, .tsx, and .py files"
 
-  - tool: symlink-manager
-    requires: [fish, mkdir, ln, rm, mv, dirname, basename, realpath, date, readlink]
-    optional: []
-    notes: "Fish script for managing dotfile symlinks"
-
   - tool: symlink-manager.fish
     requires: [fish, mkdir, ln, rm, mv, dirname, basename, realpath, date, readlink]
     optional: []
-    notes: "Duplicate of symlink-manager, Fish script for managing dotfile symlinks"
+    notes: "Fish script for managing dotfile symlinks"
 
   - tool: webcam-mic.fish
     requires: [ffmpeg]
     optional: [v4l2-utils, pulseaudio-utils, pactl, brave-browser]
     notes: "Cross-platform webcam and microphone testing utility"
+
+# Summary:
+# - 11 total tools catalogued
+# - Common dependencies: git, node, bun, ffmpeg, python3, fish
+# - Most tools are Fish shell scripts
+# - Platform-specific dependencies handled gracefully with fallbacks
 
 # Summary:
 # - 11 total tools catalogued

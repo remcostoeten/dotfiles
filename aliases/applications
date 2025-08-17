@@ -1,0 +1,26 @@
+# Shell-agnostic aliases and functions
+# This file can be sourced by fish, bash, zsh, or any sh-compatible shell
+
+# Set environment variables
+export CURSOR_DIR="$HOME/appimages/cursor"
+export DOTFILES_DIR="$HOME/.config/dotfiles"
+
+# Functions using fish-compatible syntax (works in bash/zsh too)
+function cursor
+    nohup "$CURSOR_DIR" "$argv" &
+end
+
+function opendotfiles
+    cursor "$DOTFILES_DIR"
+end
+
+function dotfiles
+    cd "$DOTFILES_DIR"
+end
+
+# Aliases
+alias vim='nvim'
+alias v='nvim'
+alias brave='brave-browser'
+alias warp='warp-terminal'
+alias ports='node "$HOME/.config/dotfiles/scripts/kill-development-ports/index.js"'
