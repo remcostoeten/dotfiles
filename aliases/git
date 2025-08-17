@@ -1,0 +1,13 @@
+alias g='git'
+alias lg='lazygit'
+alias clone='git clone'
+alias checkout='git checkout'
+alias newbranch='git checkout -b'
+alias push='git push'
+alias pull='git pull'
+alias reset='git reset --hard'
+alias add='git add .'
+alias stash='git stash'
+alias log='git log'
+alias status='git status'
+

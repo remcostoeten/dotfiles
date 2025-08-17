@@ -1,0 +1,22 @@
+#!/usr/bin/env fish
+
+echo "Sorting aliases..."
+
+set script_dir (status --current-filename | xargs dirname)
+
+for file in $script_dir/*
+    set file_basename (basename $file)
+
+    # Skip the loader, helper, and sorter files
+    if test $file_basename = "loader.fish" -o $file_basename = "helper.fish" -o $file_basename = "sorter"
+        continue
+    end
+
+    echo "Sorting aliases in: " $file_basename
+
+    # Read the file, sort its content, and write it back
+    cat $file | sort > $file.sorted
+    mv $file.sorted $file
+end
+
+echo "Alias sorting complete."

@@ -1,0 +1,4 @@
+alias bu='$PACKAGE_MANAGER run'
+alias b='bu build'
+alias r='bu dev'
+alias i='$PACKAGE_MANAGER install'
