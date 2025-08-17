@@ -39,7 +39,7 @@ These are always created by `symlink-manager.fish`:
 |--------|--------|-------------|
 | `~/.config/dotfiles/config/kitty/` | `~/.config/kitty/` | Kitty terminal configuration |
 | `~/.config/dotfiles/config/warp-themes/` | `~/.config/warp-terminal/themes/` | Warp terminal themes |
-| `~/.config/dotfiles/.npmrc` | `~/.npmrc` | NPM configuration |
+
 
 ### Platform-Specific Symlinks
 These are created conditionally by `setup-symlinks.fish` based on platform and installed tools:

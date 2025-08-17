@@ -10,4 +10,5 @@ alias add='git add .'
 alias stash='git stash'
 alias log='git log'
 alias status='git status'
-
+alias viewrepo='gh repo view -w'
+alias allrepos'gh select'

@@ -13,3 +13,4 @@ configs/**/*.local.*
 config/nvim/
 
 .npmrc
+nohup.out

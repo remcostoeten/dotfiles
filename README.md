@@ -116,11 +116,6 @@ dotfiles-install-deps --dry-run  # Show what would be installed
 - Warp terminal themes
 - NPM configuration
 
-**Platform-Specific Symlinks:**
-- Alacritty (Linux, if installed)
-- iTerm2 (macOS, if directory exists)
-- Git, SSH, Tmux configurations
-
 **Commands:**
 ```bash
 symlink-manager status   # Check symlink status
