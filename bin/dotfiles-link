@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+
+source "${HOME}/.config/dotfiles/core/env"
+source "${HOME}/.config/dotfiles/core/colors"
+source "${HOME}/.config/dotfiles/core/safety"
+
+function link_list() {
+    echo.header "Symlink Registry"
+    
+    if [[ ! -f "$DOTFILES_LINKS_DB" ]] || [[ $(stat -c%s "$DOTFILES_LINKS_DB") -le 2 ]]; then
+        echo.warning "No symlinks registered"
+        return 0
+    fi
+    
+    jq -r 'to_entries | .[] | "\(.key)|\(.value.source)|\(.value.created)"' "$DOTFILES_LINKS_DB" 2>/dev/null | \
+    while IFS='|' read -r target source created; do
+        if [[ -L "$target" ]]; then
+            current="$(readlink "$target")"
+            if [[ "$current" == "$source" ]]; then
+                echo.success "✓ $target -> $source"
+            else
+                echo.warning "⚠ $target -> $current (expected: $source)"
+            fi
+        else
+            echo.error "✗ $target (broken link)"
+        fi
+    done
+}
+
+function link_add() {
+    local source="$1"
+    local target="$2"
+    
+    if [[ -z "$source" || -z "$target" ]]; then
+        echo.error "Usage: dotfiles-link add <source> <target>"
+        return 1
+    fi
+    
+    source="$(realpath "$source" 2>/dev/null || echo "$source")"
+    target="$(realpath "$target" 2>/dev/null || echo "$target")"
+    
+    if [[ ! -e "$source" ]]; then
+        echo.error "Source does not exist: $source"
+        return 1
+    fi
+    
+    if safe_link "$source" "$target"; then
+        local entry=$(jq -n \
+            --arg source "$source" \
+            --arg created "$(date -Iseconds)" \
+            '{source: $source, created: $created}')
+        
+        jq --arg target "$target" \
+           --argjson entry "$entry" \
+           '.[$target] = $entry' "$DOTFILES_LINKS_DB" > "${DOTFILES_LINKS_DB}.tmp" && \
+        mv "${DOTFILES_LINKS_DB}.tmp" "$DOTFILES_LINKS_DB"
+        
+        echo.success "Registered link: $target -> $source"
+    fi
+}
+
+function link_remove() {
+    local target="$1"
+    
+    if [[ -z "$target" ]]; then
+        echo.error "Usage: dotfiles-link remove <target>"
+        return 1
+    fi
+    
+    target="$(realpath "$target" 2>/dev/null || echo "$target")"
+    
+    if [[ -L "$target" ]]; then
+        rm "$target" && echo.success "Removed symlink: $target"
+    else
+        echo.warning "Not a symlink: $target"
+    fi
+    
+    jq --arg target "$target" 'del(.[$target])' "$DOTFILES_LINKS_DB" > "${DOTFILES_LINKS_DB}.tmp" && \
+    mv "${DOTFILES_LINKS_DB}.tmp" "$DOTFILES_LINKS_DB"
+}
+
+function link_fix() {
+    echo.header "Fixing Broken Links"
+    
+    local fixed=0
+    local failed=0
+    
+    jq -r 'to_entries | .[] | "\(.key)|\(.value.source)"' "$DOTFILES_LINKS_DB" 2>/dev/null | \
+    while IFS='|' read -r target source; do
+        if [[ ! -L "$target" ]] || [[ ! -e "$target" ]]; then
+            echo.info "Fixing: $target -> $source"
+            if safe_link "$source" "$target"; then
+                ((fixed++))
+            else
+                ((failed++))
+            fi
+        fi
+    done
+    
+    echo.info "Fixed: $fixed, Failed: $failed"
+}
+
+function link_sync() {
+    echo.header "Syncing Config Files"
+    
+    local configs=(
+        "nvim:$HOME/.config/nvim"
+        "kitty:$HOME/.config/kitty"
+        "git/gitconfig:$HOME/.gitconfig"
+        "git/gitignore:$HOME/.gitignore"
+        "tmux/tmux.conf:$HOME/.tmux.conf"
+        "ssh/config:$HOME/.ssh/config"
+    )
+    
+    for config in "${configs[@]}"; do
+        IFS=':' read -r source target <<< "$config"
+        source="$DOTFILES_CONFIG/$source"
+        
+        if [[ -e "$source" ]]; then
+            echo.info "Linking: $target -> $source"
+            link_add "$source" "$target"
+        fi
+    done
+}
+
+function link_help() {
+    echo.header "Dotfiles Link Manager"
+    echo
+    echo "Usage: dotfiles-link <command> [args]"
+    echo
+    echo "Commands:"
+    echo "  list      List all registered symlinks"
+    echo "  add       Add a new symlink"
+    echo "  remove    Remove a symlink"
+    echo "  fix       Fix broken symlinks"
+    echo "  sync      Sync config files"
+    echo "  help      Show this help"
+    echo
+    echo "Examples:"
+    echo "  dotfiles-link list"
+    echo "  dotfiles-link add ~/.config/dotfiles/configs/nvim ~/.config/nvim"
+    echo "  dotfiles-link remove ~/.config/nvim"
+    echo "  dotfiles-link fix"
+    echo "  dotfiles-link sync"
+}
+
+case "${1:-help}" in
+    list|ls)
+        link_list
+        ;;
+    add|ln)
+        link_add "$2" "$3"
+        ;;
+    remove|rm)
+        link_remove "$2"
+        ;;
+    fix|repair)
+        link_fix
+        ;;
+    sync)
+        link_sync
+        ;;
+    help|--help|-h)
+        link_help
+        ;;
+    *)
+        echo.error "Unknown command: $1"
+        link_help
+        exit 1
+        ;;
+esac

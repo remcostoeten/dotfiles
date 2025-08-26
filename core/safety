@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+
+function safe_source() {
+    local file="$1"
+    local description="${2:-$file}"
+    
+    [[ -z "$file" ]] && return 1
+    
+    if [[ ! -f "$file" ]]; then
+        echo.error "File not found: $file"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] File not found: $file" >> "$DOTFILES_ERROR_LOG"
+        return 1
+    fi
+    
+    if [[ ! -r "$file" ]]; then
+        echo.error "File not readable: $file"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] File not readable: $file" >> "$DOTFILES_ERROR_LOG"
+        return 1
+    fi
+    
+    (
+        set -euo pipefail
+        trap 'echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Failed to source: $file (line $LINENO)" >> "$DOTFILES_ERROR_LOG"' ERR
+        
+        source "$file"
+    ) 2>/dev/null
+    
+    local result=$?
+    
+    if [[ $result -eq 0 ]]; then
+        echo.debug "Sourced: $description"
+        return 0
+    else
+        echo.error "Failed to source: $description"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Failed to source: $file (exit code: $result)" >> "$DOTFILES_ERROR_LOG"
+        return $result
+    fi
+}
+
+function safe_source_dir() {
+    local dir="$1"
+    local pattern="${2:-*}"
+    local description="${3:-modules in $dir}"
+    
+    [[ ! -d "$dir" ]] && return 0
+    
+    local count=0
+    local failed=0
+    
+    echo.verbose "Loading $description..."
+    
+    for file in "$dir"/$pattern; do
+        [[ ! -f "$file" ]] && continue
+        [[ "${file##*/}" == "README"* ]] && continue
+        [[ "${file##*/}" == "."* ]] && continue
+        
+        count=$((count + 1))
+        
+        if safe_source "$file" "$(basename "$file")"; then
+            echo.verbose "  ✓ $(basename "$file")"
+        else
+            failed=$((failed + 1))
+            echo.warning "  ✗ $(basename "$file")"
+        fi
+    done
+    
+    if [[ $count -gt 0 ]]; then
+        echo.debug "Loaded $((count - failed))/$count $description"
+    fi
+    
+    return 0
+}
+
+function safe_eval() {
+    local command="$1"
+    local description="${2:-command}"
+    
+    (
+        set -euo pipefail
+        trap 'echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Failed to eval: $command" >> "$DOTFILES_ERROR_LOG"' ERR
+        
+        eval "$command"
+    ) 2>/dev/null
+    
+    local result=$?
+    
+    if [[ $result -eq 0 ]]; then
+        echo.debug "Executed: $description"
+        return 0
+    else
+        echo.error "Failed to execute: $description"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Failed to eval: $command (exit code: $result)" >> "$DOTFILES_ERROR_LOG"
+        return $result
+    fi
+}
+
+function safe_command() {
+    local cmd="$1"
+    shift
+    
+    if ! command -v "$cmd" &>/dev/null; then
+        echo.warning "Command not found: $cmd"
+        return 127
+    fi
+    
+    "$cmd" "$@"
+}
+
+function require() {
+    local file="$1"
+    
+    if ! safe_source "$file" "$file"; then
+        echo.error "Required module failed: $file"
+        exit 1
+    fi
+}
+
+function optional() {
+    local file="$1"
+    safe_source "$file" "$file" || true
+}
+
+function ensure_command() {
+    local cmd="$1"
+    local package="${2:-$cmd}"
+    
+    if ! command -v "$cmd" &>/dev/null; then
+        echo.warning "$cmd not found. Install with: sudo apt install $package"
+        return 1
+    fi
+    return 0
+}
+
+function ensure_dir() {
+    local dir="$1"
+    
+    if [[ ! -d "$dir" ]]; then
+        mkdir -p "$dir" && echo.debug "Created directory: $dir"
+    fi
+}
+
+function ensure_file() {
+    local file="$1"
+    local default_content="${2:-}"
+    
+    if [[ ! -f "$file" ]]; then
+        ensure_dir "$(dirname "$file")"
+        echo "$default_content" > "$file" && echo.debug "Created file: $file"
+    fi
+}
+
+function safe_link() {
+    local source="$1"
+    local target="$2"
+    
+    if [[ ! -e "$source" ]]; then
+        echo.error "Source does not exist: $source"
+        return 1
+    fi
+    
+    if [[ -L "$target" ]]; then
+        local current_source="$(readlink "$target")"
+        if [[ "$current_source" == "$source" ]]; then
+            echo.debug "Link already exists: $target -> $source"
+            return 0
+        else
+            echo.warning "Link exists with different target: $target -> $current_source"
+            echo.info "Updating to: $target -> $source"
+            rm "$target"
+        fi
+    elif [[ -e "$target" ]]; then
+        echo.warning "Target exists and is not a symlink: $target"
+        local backup="${target}.backup.$(date +%s)"
+        mv "$target" "$backup"
+        echo.info "Backed up to: $backup"
+    fi
+    
+    ln -sf "$source" "$target" && echo.success "Created symlink: $target -> $source"
+}
+
+function safe_rm() {
+    local file="$1"
+    local trash_dir="${XDG_DATA_HOME}/Trash/files"
+    
+    if [[ ! -e "$file" ]]; then
+        echo.warning "File does not exist: $file"
+        return 1
+    fi
+    
+    ensure_dir "$trash_dir"
+    
+    local basename="$(basename "$file")"
+    local timestamp="$(date +%s)"
+    local trash_file="${trash_dir}/${basename}.${timestamp}"
+    
+    mv "$file" "$trash_file" && echo.success "Moved to trash: $file -> $trash_file"
+}

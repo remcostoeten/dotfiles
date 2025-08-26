@@ -1,0 +1,31 @@
+{{SHEBANG}}
+
+{{HELP}}
+
+function {{NAME}}_init() {
+    echo.debug "Initializing {{NAME}} plugin"
+    
+    if ! command -v {{NAME}} &>/dev/null; then
+        echo.warning "{{NAME}} is not installed"
+        echo.info "Install with: {{INSTALL_CMD}}"
+        return 1
+    fi
+    
+    {{INIT_CODE}}
+    
+    echo.success "{{NAME}} plugin loaded"
+}
+
+function {{NAME}}_help() {
+    echo.header "{{NAME}} Plugin"
+    echo
+    echo "Description:"
+    echo "  {{DESCRIPTION}}"
+    echo
+    echo "Commands:"
+    echo "  {{NAME}}_init  - Initialize the plugin"
+    echo "  {{NAME}}_help  - Show this help message"
+    echo
+}
+
+{{NAME}}_init

@@ -1,0 +1,311 @@
+#!/usr/bin/env bash
+
+source "${HOME}/.config/dotfiles/core/env"
+source "${HOME}/.config/dotfiles/core/colors"
+source "${HOME}/.config/dotfiles/core/safety"
+
+function dotfiles_version() {
+    echo.header "Dotfiles v${DOTFILES_VERSION}"
+    echo
+    echo "  Path: $DOTFILES_ROOT"
+    echo "  Shell: $DOTFILES_SHELL"
+    echo "  OS: $DOTFILES_OS ($DOTFILES_ARCH)"
+    echo
+    echo "Components:"
+    echo "  • $(ls $DOTFILES_MODULES/enabled 2>/dev/null | wc -l) enabled modules"
+    echo "  • $(ls $DOTFILES_MODULES/disabled 2>/dev/null | wc -l) disabled modules"
+    echo "  • $(ls $DOTFILES_BIN 2>/dev/null | wc -l) commands"
+    echo "  • $(jq 'length' $DOTFILES_LINKS_DB 2>/dev/null || echo 0) symlinks"
+    echo "  • $(jq 'length' $DOTFILES_ENV_DB 2>/dev/null || echo 0) env variables"
+}
+
+function dotfiles_reload() {
+    echo.info "Reloading dotfiles..."
+    source "$DOTFILES_ROOT/cfg"
+    echo.success "Dotfiles reloaded"
+}
+
+function dotfiles_update() {
+    echo.header "Updating Dotfiles"
+    
+    cd "$DOTFILES_ROOT" || exit 1
+    
+    echo.info "Fetching updates..."
+    git fetch origin
+    
+    local LOCAL=$(git rev-parse @)
+    local REMOTE=$(git rev-parse @{u})
+    
+    if [[ "$LOCAL" == "$REMOTE" ]]; then
+        echo.success "Already up to date"
+    else
+        echo.info "Updates available"
+        git pull origin main
+        echo.success "Updated successfully"
+        dotfiles_reload
+    fi
+}
+
+function dotfiles_doctor() {
+    echo.header "Dotfiles Health Check"
+    
+    local issues=0
+    
+    # Check core files
+    echo.info "Checking core files..."
+    for file in cfg core/env core/colors core/safety core/bootstrap; do
+        if [[ ! -f "$DOTFILES_ROOT/$file" ]]; then
+            echo.error "  ✗ Missing: $file"
+            ((issues++))
+        else
+            echo.success "  ✓ $file"
+        fi
+    done
+    
+    # Check directories
+    echo.info "Checking directories..."
+    for dir in bin modules utils configs templates logs; do
+        if [[ ! -d "$DOTFILES_ROOT/$dir" ]]; then
+            echo.warning "  ✗ Missing directory: $dir"
+            mkdir -p "$DOTFILES_ROOT/$dir"
+            echo.success "    Created: $dir"
+        else
+            echo.success "  ✓ $dir"
+        fi
+    done
+    
+    # Check symlinks
+    echo.info "Checking symlinks..."
+    local broken=0
+    jq -r 'to_entries | .[] | "\(.key)"' "$DOTFILES_LINKS_DB" 2>/dev/null | \
+    while read -r target; do
+        if [[ ! -e "$target" ]]; then
+            echo.warning "  ✗ Broken link: $target"
+            ((broken++))
+        fi
+    done
+    
+    if [[ $broken -gt 0 ]]; then
+        echo.warning "  Found $broken broken symlinks. Run: dotfiles-link fix"
+        ((issues++))
+    else
+        echo.success "  ✓ All symlinks valid"
+    fi
+    
+    # Check commands
+    echo.info "Checking commands..."
+    for cmd in jq git curl; do
+        if command -v $cmd &>/dev/null; then
+            echo.success "  ✓ $cmd"
+        else
+            echo.warning "  ✗ $cmd not found"
+            ((issues++))
+        fi
+    done
+    
+    echo
+    if [[ $issues -eq 0 ]]; then
+        echo.success "No issues found!"
+    else
+        echo.warning "Found $issues issue(s)"
+    fi
+}
+
+function dotfiles_backup() {
+    local backup_dir="${1:-$HOME/.config/dotfiles-backup-$(date +%Y%m%d-%H%M%S)}"
+    
+    echo.header "Backing Up Dotfiles"
+    echo.info "Backup location: $backup_dir"
+    
+    mkdir -p "$backup_dir"
+    
+    # Backup dotfiles
+    cp -r "$DOTFILES_ROOT" "$backup_dir/"
+    
+    # Backup databases
+    cp "$DOTFILES_LINKS_DB" "$backup_dir/links.json" 2>/dev/null || true
+    cp "$DOTFILES_ENV_DB" "$backup_dir/env.json" 2>/dev/null || true
+    
+    # Create restore script
+    cat > "$backup_dir/restore.sh" << EOF
+#!/usr/bin/env bash
+echo "Restoring dotfiles from backup..."
+cp -r dotfiles/* ~/.config/dotfiles/
+cp links.json ~/.config/dotfiles/utils/
+cp env.json ~/.config/dotfiles/utils/
+echo "Restore complete. Run: source ~/.config/dotfiles/cfg"
+EOF
+    
+    chmod +x "$backup_dir/restore.sh"
+    
+    # Compress if requested
+    if [[ "$2" == "--compress" ]]; then
+        echo.info "Compressing backup..."
+        tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        echo.success "Backup saved to: ${backup_dir}.tar.gz"
+    else
+        echo.success "Backup saved to: $backup_dir"
+    fi
+}
+
+function dotfiles_install() {
+    echo.header "Installing Dotfiles"
+    
+    # Create symlink to shell rc
+    if [[ "$DOTFILES_SHELL" == "bash" ]]; then
+        safe_link "$DOTFILES_ROOT/cfg" "$HOME/.bashrc"
+    elif [[ "$DOTFILES_SHELL" == "zsh" ]]; then
+        safe_link "$DOTFILES_ROOT/cfg" "$HOME/.zshrc"
+    fi
+    
+    # Add bin to path in profile
+    if ! grep -q "DOTFILES_ROOT" "$HOME/.profile" 2>/dev/null; then
+        echo 'export PATH="$HOME/.config/dotfiles/bin:$PATH"' >> "$HOME/.profile"
+    fi
+    
+    echo.success "Dotfiles installed"
+    echo.info "Restart your shell or run: source ~/.$DOTFILES_SHELL"
+}
+
+function dotfiles_modules() {
+    echo.header "Module Manager"
+    
+    case "${2:-list}" in
+        list|ls)
+            echo.cyan "Enabled modules:"
+            for file in "$DOTFILES_MODULES/enabled"/*; do
+                [[ -f "$file" ]] && echo "  • $(basename "$file")"
+            done
+            
+            echo.cyan "Disabled modules:"
+            for file in "$DOTFILES_MODULES/disabled"/*; do
+                [[ -f "$file" ]] && echo "  • $(basename "$file")"
+            done
+            ;;
+            
+        enable)
+            local module="${3}"
+            if [[ -z "$module" ]]; then
+                echo.error "Usage: dotfiles modules enable <module>"
+                return 1
+            fi
+            
+            if [[ -f "$DOTFILES_MODULES/disabled/$module" ]]; then
+                mv "$DOTFILES_MODULES/disabled/$module" "$DOTFILES_MODULES/enabled/"
+                echo.success "Enabled module: $module"
+            else
+                echo.error "Module not found: $module"
+            fi
+            ;;
+            
+        disable)
+            local module="${3}"
+            if [[ -z "$module" ]]; then
+                echo.error "Usage: dotfiles modules disable <module>"
+                return 1
+            fi
+            
+            if [[ -f "$DOTFILES_MODULES/enabled/$module" ]]; then
+                ensure_dir "$DOTFILES_MODULES/disabled"
+                mv "$DOTFILES_MODULES/enabled/$module" "$DOTFILES_MODULES/disabled/"
+                echo.success "Disabled module: $module"
+            else
+                echo.error "Module not found: $module"
+            fi
+            ;;
+            
+        *)
+            echo.error "Unknown command: ${2}"
+            echo "Usage: dotfiles modules [list|enable|disable] [module]"
+            ;;
+    esac
+}
+
+function dotfiles_help() {
+    echo.header "Dotfiles Management System"
+    echo
+    echo "Usage: dotfiles <command> [args]"
+    echo
+    echo.cyan "Core Commands:"
+    echo "  help       Show this help"
+    echo "  version    Show version information"
+    echo "  reload     Reload dotfiles configuration"
+    echo "  update     Update dotfiles from git"
+    echo "  doctor     Run health check"
+    echo "  backup     Create a backup"
+    echo "  install    Install dotfiles symlinks"
+    echo
+    echo.cyan "Module Commands:"
+    echo "  modules    Manage modules"
+    echo "  new        Create new module/plugin/script"
+    echo
+    echo.cyan "Management Commands:"
+    echo "  link       Symlink manager (dotfiles-link)"
+    echo "  env        Environment manager (dotfiles-env)"
+    echo
+    echo.cyan "Quick Actions:"
+    echo "  cd         Go to dotfiles directory"
+    echo "  edit       Edit dotfiles in \$EDITOR"
+    echo "  logs       View error logs"
+    echo
+    echo "For command help, use: dotfiles <command> help"
+    echo "Example: dotfiles link help"
+}
+
+case "${1:-help}" in
+    version|v)
+        dotfiles_version
+        ;;
+    reload|r)
+        dotfiles_reload
+        ;;
+    update|u)
+        dotfiles_update
+        ;;
+    doctor|check)
+        dotfiles_doctor
+        ;;
+    backup|b)
+        dotfiles_backup "$2" "$3"
+        ;;
+    install|i)
+        dotfiles_install
+        ;;
+    modules|mod|m)
+        dotfiles_modules "$@"
+        ;;
+    new|n)
+        shift
+        "$DOTFILES_BIN/dotfiles-new" "$@"
+        ;;
+    link|l)
+        shift
+        "$DOTFILES_BIN/dotfiles-link" "$@"
+        ;;
+    env|e)
+        shift
+        "$DOTFILES_BIN/dotfiles-env" "$@"
+        ;;
+    cd)
+        cd "$DOTFILES_ROOT"
+        ;;
+    edit)
+        ${EDITOR:-vim} "$DOTFILES_ROOT"
+        ;;
+    logs)
+        if [[ -f "$DOTFILES_ERROR_LOG" ]]; then
+            tail -n 50 "$DOTFILES_ERROR_LOG"
+        else
+            echo.info "No error logs found"
+        fi
+        ;;
+    help|h|--help|-h)
+        dotfiles_help
+        ;;
+    *)
+        echo.error "Unknown command: $1"
+        dotfiles_help
+        exit 1
+        ;;
+esac

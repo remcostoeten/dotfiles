@@ -1,0 +1,15 @@
+{{SHEBANG}}
+
+{{HELP}}
+
+alias {{NAME}}.list='echo "Available {{NAME}} aliases:"'
+alias {{NAME}}.help='{{NAME}}_help'
+
+function {{NAME}}_help() {
+    echo.header "{{NAME}} Aliases"
+    echo
+    echo "Available aliases:"
+    echo "  {{NAME}}.list  - List all {{NAME}} aliases"
+    echo "  {{NAME}}.help  - Show this help message"
+    echo
+}

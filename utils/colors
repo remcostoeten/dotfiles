@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+
+if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
+    COLORS_ENABLED=1
+    
+    COLOR_RESET=$(tput sgr0)
+    COLOR_BLACK=$(tput setaf 0)
+    COLOR_RED=$(tput setaf 1)
+    COLOR_GREEN=$(tput setaf 2)
+    COLOR_YELLOW=$(tput setaf 3)
+    COLOR_BLUE=$(tput setaf 4)
+    COLOR_MAGENTA=$(tput setaf 5)
+    COLOR_CYAN=$(tput setaf 6)
+    COLOR_WHITE=$(tput setaf 7)
+    COLOR_BRIGHT_BLACK=$(tput setaf 8)
+    COLOR_BRIGHT_RED=$(tput setaf 9)
+    COLOR_BRIGHT_GREEN=$(tput setaf 10)
+    COLOR_BRIGHT_YELLOW=$(tput setaf 11)
+    COLOR_BRIGHT_BLUE=$(tput setaf 12)
+    COLOR_BRIGHT_MAGENTA=$(tput setaf 13)
+    COLOR_BRIGHT_CYAN=$(tput setaf 14)
+    COLOR_BRIGHT_WHITE=$(tput setaf 15)
+    
+    COLOR_BOLD=$(tput bold)
+    COLOR_DIM=$(tput dim)
+    COLOR_ITALIC=$(tput sitm 2>/dev/null || tput ritm 2>/dev/null || echo '')
+    COLOR_UNDERLINE=$(tput smul)
+    COLOR_BLINK=$(tput blink)
+    COLOR_REVERSE=$(tput rev)
+    COLOR_STRIKETHROUGH=$(tput smxx 2>/dev/null || echo '')
+else
+    COLORS_ENABLED=0
+    COLOR_RESET=""
+    COLOR_BLACK=""
+    COLOR_RED=""
+    COLOR_GREEN=""
+    COLOR_YELLOW=""
+    COLOR_BLUE=""
+    COLOR_MAGENTA=""
+    COLOR_CYAN=""
+    COLOR_WHITE=""
+    COLOR_BRIGHT_BLACK=""
+    COLOR_BRIGHT_RED=""
+    COLOR_BRIGHT_GREEN=""
+    COLOR_BRIGHT_YELLOW=""
+    COLOR_BRIGHT_BLUE=""
+    COLOR_BRIGHT_MAGENTA=""
+    COLOR_BRIGHT_CYAN=""
+    COLOR_BRIGHT_WHITE=""
+    COLOR_BOLD=""
+    COLOR_DIM=""
+    COLOR_ITALIC=""
+    COLOR_UNDERLINE=""
+    COLOR_BLINK=""
+    COLOR_REVERSE=""
+    COLOR_STRIKETHROUGH=""
+fi
+
+function echo.black() { echo "${COLOR_BLACK}$*${COLOR_RESET}"; }
+function echo.red() { echo "${COLOR_RED}$*${COLOR_RESET}"; }
+function echo.green() { echo "${COLOR_GREEN}$*${COLOR_RESET}"; }
+function echo.yellow() { echo "${COLOR_YELLOW}$*${COLOR_RESET}"; }
+function echo.blue() { echo "${COLOR_BLUE}$*${COLOR_RESET}"; }
+function echo.magenta() { echo "${COLOR_MAGENTA}$*${COLOR_RESET}"; }
+function echo.cyan() { echo "${COLOR_CYAN}$*${COLOR_RESET}"; }
+function echo.white() { echo "${COLOR_WHITE}$*${COLOR_RESET}"; }
+
+function echo.bright_black() { echo "${COLOR_BRIGHT_BLACK}$*${COLOR_RESET}"; }
+function echo.bright_red() { echo "${COLOR_BRIGHT_RED}$*${COLOR_RESET}"; }
+function echo.bright_green() { echo "${COLOR_BRIGHT_GREEN}$*${COLOR_RESET}"; }
+function echo.bright_yellow() { echo "${COLOR_BRIGHT_YELLOW}$*${COLOR_RESET}"; }
+function echo.bright_blue() { echo "${COLOR_BRIGHT_BLUE}$*${COLOR_RESET}"; }
+function echo.bright_magenta() { echo "${COLOR_BRIGHT_MAGENTA}$*${COLOR_RESET}"; }
+function echo.bright_cyan() { echo "${COLOR_BRIGHT_CYAN}$*${COLOR_RESET}"; }
+function echo.bright_white() { echo "${COLOR_BRIGHT_WHITE}$*${COLOR_RESET}"; }
+
+function echo.bold() { echo "${COLOR_BOLD}$*${COLOR_RESET}"; }
+function echo.dim() { echo "${COLOR_DIM}$*${COLOR_RESET}"; }
+function echo.italic() { echo "${COLOR_ITALIC}$*${COLOR_RESET}"; }
+function echo.underline() { echo "${COLOR_UNDERLINE}$*${COLOR_RESET}"; }
+
+function echo.success() { echo "${COLOR_GREEN}✓${COLOR_RESET} $*"; }
+function echo.error() { echo "${COLOR_RED}✗${COLOR_RESET} $*"; }
+function echo.warning() { echo "${COLOR_YELLOW}⚠${COLOR_RESET} $*"; }
+function echo.info() { echo "${COLOR_BLUE}ℹ${COLOR_RESET} $*"; }
+function echo.debug() { [[ "$DOTFILES_DEBUG" == "1" ]] && echo "${COLOR_DIM}[DEBUG]${COLOR_RESET} $*" || true; }
+
+function echo.header() {
+    local text="$*"
+    local width=60
+    local padding=$(( (width - ${#text}) / 2 ))
+    echo
+    echo "${COLOR_BOLD}${COLOR_CYAN}$(printf '═%.0s' {1..60})${COLOR_RESET}"
+    printf "${COLOR_BOLD}%*s%s%*s${COLOR_RESET}\n" $padding "" "$text" $padding ""
+    echo "${COLOR_BOLD}${COLOR_CYAN}$(printf '═%.0s' {1..60})${COLOR_RESET}"
+    echo
+}
+
+function echo.box() {
+    local text="$*"
+    local width=${#text}
+    echo "${COLOR_CYAN}┌─$(printf '─%.0s' $(seq 1 $width))─┐${COLOR_RESET}"
+    echo "${COLOR_CYAN}│${COLOR_RESET} $text ${COLOR_CYAN}│${COLOR_RESET}"
+    echo "${COLOR_CYAN}└─$(printf '─%.0s' $(seq 1 $width))─┘${COLOR_RESET}"
+}
+
+function echo.progress() {
+    local current=$1
+    local total=$2
+    local width=30
+    local percentage=$((current * 100 / total))
+    local filled=$((current * width / total))
+    local empty=$((width - filled))
+    
+    printf "\r${COLOR_CYAN}[${COLOR_RESET}"
+    printf "${COLOR_GREEN}%0.s█" $(seq 1 $filled)
+    printf "${COLOR_DIM}%0.s░" $(seq 1 $empty)
+    printf "${COLOR_CYAN}]${COLOR_RESET} ${COLOR_BOLD}%3d%%${COLOR_RESET}" $percentage
+}
+
+function echo.spinner() {
+    local pid=$1
+    local delay=0.1
+    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    while ps -p $pid > /dev/null 2>&1; do
+        local temp=${spinstr#?}
+        printf " ${COLOR_CYAN}%c${COLOR_RESET}  " "$spinstr"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+        printf "\b\b\b\b"
+    done
+    printf "    \b\b\b\b"
+}
+
+alias e.red='echo.red'
+alias e.green='echo.green'
+alias e.yellow='echo.yellow'
+alias e.blue='echo.blue'
+alias e.cyan='echo.cyan'
+alias e.magenta='echo.magenta'

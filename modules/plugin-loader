@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+
+function load_plugins() {
+    local plugin_dir="$DOTFILES_MODULES/plugins"
+    
+    if [[ ! -d "$plugin_dir" ]]; then
+        echo.debug "No plugin directory found at $plugin_dir"
+        return 0
+    fi
+    
+    echo.info "Loading plugins..."
+    
+    local count=0
+    local failed=0
+    
+    for plugin_file in "$plugin_dir"/*; do
+        [[ ! -f "$plugin_file" ]] && continue
+        
+        local filename=$(basename "$plugin_file")
+        
+        if [[ "$filename" == *.disabled ]]; then
+            echo.dim "  ⊗ $filename (disabled)"
+            continue
+        fi
+        
+        count=$((count + 1))
+        
+        if safe_source "$plugin_file"; then
+            echo.success "  $filename"
+        else
+            failed=$((failed + 1))
+            echo.error "  $filename"
+        fi
+    done
+    
+    if [[ $count -eq 0 ]]; then
+        echo.warning "  No plugins found"
+    else
+        echo.info "  Loaded $((count - failed))/$count plugin files"
+    fi
+    
+    load_plugin_configs
+}
+
+function load_plugin_configs() {
+    if command -v fzf &>/dev/null && [[ -f "$HOME/.fzf.bash" || -f "$HOME/.fzf.zsh" ]]; then
+        if [[ "$DOTFILES_SHELL" == "zsh" ]]; then
+            safe_source "$HOME/.fzf.zsh" "fzf completions (zsh)"
+        else
+            safe_source "$HOME/.fzf.bash" "fzf completions (bash)"
+        fi
+    fi
+    
+    if command -v zoxide &>/dev/null; then
+        eval "$(zoxide init "$DOTFILES_SHELL" 2>/dev/null)" && echo.success "  zoxide"
+    fi
+    
+    if command -v starship &>/dev/null; then
+        eval "$(starship init "$DOTFILES_SHELL" 2>/dev/null)" && echo.success "  starship prompt"
+    fi
+    
+    if command -v direnv &>/dev/null; then
+        eval "$(direnv hook "$DOTFILES_SHELL" 2>/dev/null)" && echo.success "  direnv"
+    fi
+}
+
+load_plugins

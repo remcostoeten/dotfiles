@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+export DOTFILES_ROOT="${DOTFILES_ROOT:-${HOME}/.config/dotfiles}"
+export DOTFILES_CONFIG="${DOTFILES_ROOT}/configs"
+export DOTFILES_MODULES="${DOTFILES_ROOT}/modules"
+export DOTFILES_BIN="${DOTFILES_ROOT}/bin"
+export DOTFILES_UTILS="${DOTFILES_ROOT}/utils"
+export DOTFILES_LOGS="${DOTFILES_ROOT}/logs"
+export DOTFILES_ASSETS="${DOTFILES_ROOT}/assets"
+export DOTFILES_TEMPLATES="${DOTFILES_ROOT}/templates"
+export DOTFILES_CORE="${DOTFILES_ROOT}/core"
+
+export DOTFILES_SHELL="${SHELL##*/}"
+export DOTFILES_OS="$(uname -s)"
+export DOTFILES_ARCH="$(uname -m)"
+
+export DOTFILES_DEBUG="${DOTFILES_DEBUG:-0}"
+export DOTFILES_VERBOSE="${DOTFILES_VERBOSE:-0}"
+
+export DOTFILES_LINKS_DB="${DOTFILES_UTILS}/links.json"
+export DOTFILES_ENV_DB="${DOTFILES_UTILS}/env.json"
+export DOTFILES_STATE="${DOTFILES_UTILS}/state.json"
+
+export DOTFILES_LOG_FILE="${DOTFILES_LOGS}/dotfiles.log"
+export DOTFILES_ERROR_LOG="${DOTFILES_LOGS}/error.log"
+
+export SHEBANG='#!/usr/bin/env bash'
+
+export EDITOR="${EDITOR:-nvim}"
+export VISUAL="${VISUAL:-$EDITOR}"
+export BROWSER="${BROWSER:-firefox}"
+export PAGER="${PAGER:-less}"
+
+export HISTFILE="${HOME}/.history"
+export HISTSIZE=50000
+export SAVEHIST=50000
+export HISTCONTROL="ignoreboth:erasedups"
+
+export LANG="${LANG:-en_US.UTF-8}"
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
+
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${HOME}/.cache}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-${HOME}/.local/state}"
+
+[[ ! -d "$DOTFILES_LOGS" ]] && mkdir -p "$DOTFILES_LOGS"
+[[ ! -d "$DOTFILES_UTILS" ]] && mkdir -p "$DOTFILES_UTILS"
+[[ ! -f "$DOTFILES_LINKS_DB" ]] && echo '{}' > "$DOTFILES_LINKS_DB"
+[[ ! -f "$DOTFILES_ENV_DB" ]] && echo '{}' > "$DOTFILES_ENV_DB"
+[[ ! -f "$DOTFILES_STATE" ]] && echo '{"version":"'$DOTFILES_VERSION'","last_update":"'$(date -Iseconds)'"}' > "$DOTFILES_STATE"
+
+function dotfiles_load_custom_env() {
+    if [[ -f "$DOTFILES_ENV_DB" ]]; then
+        while IFS='=' read -r key value; do
+            [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+            export "$key=$value"
+        done < <(jq -r 'to_entries | .[] | .key + "=" + .value' "$DOTFILES_ENV_DB" 2>/dev/null || true)
+    fi
+    
+    [[ -f "${HOME}/.env" ]] && source "${HOME}/.env"
+    [[ -f "${DOTFILES_ROOT}/.env.local" ]] && source "${DOTFILES_ROOT}/.env.local"
+}
+
+dotfiles_load_custom_env

@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+
+# Plugin: zsh-enhancements
+# Description: Fish-like features for ZSH (autosuggestions, syntax highlighting, better completions)
+# Dependencies: zsh, git
+# Date: 2024-08-26
+
+function install_zsh_enhancements() {
+    echo.info "Installing ZSH enhancement plugins..."
+    
+    local plugins_dir="$HOME/.local/share/zsh-plugins"
+    ensure_dir "$plugins_dir"
+    
+    # Install zsh-autosuggestions
+    if [[ ! -d "$plugins_dir/zsh-autosuggestions" ]]; then
+        echo.info "Installing zsh-autosuggestions..."
+        git clone https://github.com/zsh-users/zsh-autosuggestions "$plugins_dir/zsh-autosuggestions"
+        echo.success "Installed zsh-autosuggestions"
+    fi
+    
+    # Install zsh-syntax-highlighting
+    if [[ ! -d "$plugins_dir/zsh-syntax-highlighting" ]]; then
+        echo.info "Installing zsh-syntax-highlighting..."
+        git clone https://github.com/zsh-users/zsh-syntax-highlighting "$plugins_dir/zsh-syntax-highlighting"
+        echo.success "Installed zsh-syntax-highlighting"
+    fi
+    
+    # Install zsh-completions
+    if [[ ! -d "$plugins_dir/zsh-completions" ]]; then
+        echo.info "Installing zsh-completions..."
+        git clone https://github.com/zsh-users/zsh-completions "$plugins_dir/zsh-completions"
+        echo.success "Installed zsh-completions"
+    fi
+    
+    # Install fzf-tab for better tab completions
+    if [[ ! -d "$plugins_dir/fzf-tab" ]]; then
+        echo.info "Installing fzf-tab..."
+        git clone https://github.com/Aloxaf/fzf-tab "$plugins_dir/fzf-tab"
+        echo.success "Installed fzf-tab"
+    fi
+    
+    echo.success "All ZSH enhancements installed"
+}
+
+function configure_zsh_enhancements() {
+    if [[ "$DOTFILES_SHELL" != "zsh" ]]; then
+        return 0
+    fi
+    
+    # Configure autosuggestions
+    export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=245'
+    export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+    export ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
+    export ZSH_AUTOSUGGEST_USE_ASYNC=1
+    
+    # Configure syntax highlighting
+    export ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor)
+    
+    # Better history search
+    bindkey '^[[A' history-substring-search-up
+    bindkey '^[[B' history-substring-search-down
+    bindkey '^P' history-substring-search-up
+    bindkey '^N' history-substring-search-down
+    
+    # Fish-like accept suggestions
+    bindkey '^ ' autosuggest-accept
+    bindkey '^f' autosuggest-accept
+    
+    echo.debug "Configured ZSH enhancements"
+}
+
+function load_zsh_enhancements() {
+    if [[ "$DOTFILES_SHELL" != "zsh" ]]; then
+        echo.debug "Not running ZSH, skipping enhancements"
+        return 0
+    fi
+    
+    local plugins_dir="$HOME/.local/share/zsh-plugins"
+    
+    # Load autosuggestions
+    if [[ -f "$plugins_dir/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
+        source "$plugins_dir/zsh-autosuggestions/zsh-autosuggestions.zsh"
+        echo.debug "Loaded zsh-autosuggestions"
+    fi
+    
+    # Load syntax highlighting (must be loaded after all other plugins)
+    if [[ -f "$plugins_dir/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]]; then
+        source "$plugins_dir/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+        echo.debug "Loaded zsh-syntax-highlighting"
+    fi
+    
+    # Load additional completions
+    if [[ -d "$plugins_dir/zsh-completions/src" ]]; then
+        fpath=("$plugins_dir/zsh-completions/src" $fpath)
+        echo.debug "Added zsh-completions to fpath"
+    fi
+    
+    # Load fzf-tab
+    if [[ -f "$plugins_dir/fzf-tab/fzf-tab.plugin.zsh" ]]; then
+        source "$plugins_dir/fzf-tab/fzf-tab.plugin.zsh"
+        echo.debug "Loaded fzf-tab"
+    fi
+    
+    configure_zsh_enhancements
+}
+
+# Auto-install if not present
+if [[ "$DOTFILES_SHELL" == "zsh" ]]; then
+    if [[ ! -d "$HOME/.local/share/zsh-plugins/zsh-autosuggestions" ]]; then
+        echo.warning "ZSH enhancements not installed. Installing..."
+        install_zsh_enhancements
+    fi
+    load_zsh_enhancements
+fi

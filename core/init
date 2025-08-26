@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+export DOTFILES_ROOT="$HOME/.config/dotfiles"
+
+if [[ -f "$DOTFILES_ROOT/assets/ascii" ]]; then
+    cat "$DOTFILES_ROOT/assets/ascii"
+fi
+
+if [[ -f "$DOTFILES_ROOT/core/bootstrap" ]]; then
+    source "$DOTFILES_ROOT/core/bootstrap"
+    
+    dotfiles_bootstrap
+    
+    if [[ -t 1 ]]; then
+        echo
+        echo "  $(tput setaf 2)✓$(tput sgr0) Dotfiles loaded successfully"
+        echo "  Type $(tput setaf 6)dotfiles help$(tput sgr0) for available commands"
+        echo
+    fi
+else
+    echo "ERROR: Could not find bootstrap file at $DOTFILES_ROOT/core/bootstrap"
+    echo "Please check your dotfiles installation."
+fi

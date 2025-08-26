@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+
+source "${HOME}/.config/dotfiles/core/env"
+source "${HOME}/.config/dotfiles/core/colors"
+source "${HOME}/.config/dotfiles/core/safety"
+
+function env_list() {
+    echo.header "Environment Variables"
+    
+    if [[ ! -f "$DOTFILES_ENV_DB" ]] || [[ $(stat -c%s "$DOTFILES_ENV_DB") -le 2 ]]; then
+        echo.warning "No custom environment variables set"
+        return 0
+    fi
+    
+    jq -r 'to_entries | .[] | "\(.key)=\(.value)"' "$DOTFILES_ENV_DB" 2>/dev/null | \
+    while IFS='=' read -r key value; do
+        echo.cyan "$key" | tr '\n' ' '
+        echo "= $value"
+    done
+}
+
+function env_get() {
+    local key="$1"
+    
+    if [[ -z "$key" ]]; then
+        echo.error "Usage: dotfiles-env get <key>"
+        return 1
+    fi
+    
+    local value=$(jq -r --arg key "$key" '.[$key] // empty' "$DOTFILES_ENV_DB" 2>/dev/null)
+    
+    if [[ -n "$value" ]]; then
+        echo "$value"
+    else
+        echo.error "Variable not found: $key"
+        return 1
+    fi
+}
+
+function env_set() {
+    local key="$1"
+    local value="$2"
+    
+    if [[ -z "$key" || -z "$value" ]]; then
+        echo.error "Usage: dotfiles-env set <key> <value>"
+        return 1
+    fi
+    
+    if [[ "$key" =~ [^a-zA-Z0-9_] ]]; then
+        echo.error "Invalid variable name: $key (use only alphanumeric and underscore)"
+        return 1
+    fi
+    
+    jq --arg key "$key" --arg value "$value" '.[$key] = $value' "$DOTFILES_ENV_DB" > "${DOTFILES_ENV_DB}.tmp" && \
+    mv "${DOTFILES_ENV_DB}.tmp" "$DOTFILES_ENV_DB"
+    
+    export "$key=$value"
+    echo.success "Set $key=$value"
+}
+
+function env_unset() {
+    local key="$1"
+    
+    if [[ -z "$key" ]]; then
+        echo.error "Usage: dotfiles-env unset <key>"
+        return 1
+    fi
+    
+    jq --arg key "$key" 'del(.[$key])' "$DOTFILES_ENV_DB" > "${DOTFILES_ENV_DB}.tmp" && \
+    mv "${DOTFILES_ENV_DB}.tmp" "$DOTFILES_ENV_DB"
+    
+    unset "$key"
+    echo.success "Unset $key"
+}
+
+function env_export() {
+    local file="${1:-$HOME/.env.export}"
+    
+    echo.info "Exporting to: $file"
+    
+    jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' "$DOTFILES_ENV_DB" > "$file"
+    
+    echo.success "Exported $(jq 'length' "$DOTFILES_ENV_DB") variables to $file"
+}
+
+function env_import() {
+    local file="${1:-$HOME/.env}"
+    
+    if [[ ! -f "$file" ]]; then
+        echo.error "File not found: $file"
+        return 1
+    fi
+    
+    echo.info "Importing from: $file"
+    
+    local count=0
+    while IFS='=' read -r key value; do
+        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+        
+        key="${key#export }"
+        key="${key%% *}"
+        value="${value#\"}"
+        value="${value%\"}"
+        
+        if env_set "$key" "$value" &>/dev/null; then
+            ((count++))
+            echo.success "  ✓ $key"
+        fi
+    done < "$file"
+    
+    echo.success "Imported $count variables"
+}
+
+function env_clear() {
+    echo.warning "This will clear all custom environment variables"
+    echo -n "Continue? [y/N] "
+    read -r response
+    
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        echo '{}' > "$DOTFILES_ENV_DB"
+        echo.success "Cleared all custom environment variables"
+    else
+        echo.info "Cancelled"
+    fi
+}
+
+function env_help() {
+    echo.header "Dotfiles Environment Manager"
+    echo
+    echo "Usage: dotfiles-env <command> [args]"
+    echo
+    echo "Commands:"
+    echo "  list      List all environment variables"
+    echo "  get       Get a variable value"
+    echo "  set       Set a variable"
+    echo "  unset     Unset a variable"
+    echo "  export    Export variables to file"
+    echo "  import    Import variables from file"
+    echo "  clear     Clear all variables"
+    echo "  help      Show this help"
+    echo
+    echo "Examples:"
+    echo "  dotfiles-env list"
+    echo "  dotfiles-env get MY_VAR"
+    echo "  dotfiles-env set MY_VAR \"some value\""
+    echo "  dotfiles-env unset MY_VAR"
+    echo "  dotfiles-env export ~/.env.backup"
+    echo "  dotfiles-env import ~/.env"
+}
+
+case "${1:-help}" in
+    list|ls)
+        env_list
+        ;;
+    get)
+        env_get "$2"
+        ;;
+    set)
+        env_set "$2" "$3"
+        ;;
+    unset|rm)
+        env_unset "$2"
+        ;;
+    export)
+        env_export "$2"
+        ;;
+    import)
+        env_import "$2"
+        ;;
+    clear)
+        env_clear
+        ;;
+    help|--help|-h)
+        env_help
+        ;;
+    *)
+        echo.error "Unknown command: $1"
+        env_help
+        exit 1
+        ;;
+esac

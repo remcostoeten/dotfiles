@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+
+source "$HOME/.config/dotfiles/core/constants"
+source "$DOTFILES_UTILS/colors"
+
+function links_help() {
+    echo.header "Dotfiles Link Manager"
+    echo
+    echo "Usage: $(basename $0) [command] [options]"
+    echo
+    echo "Commands:"
+    echo "  list           List all managed symlinks"
+    echo "  add <src> <dst> Create a new symlink"
+    echo "  remove <link>  Remove a managed symlink"
+    echo "  repair         Fix broken symlinks"
+    echo "  verify         Check symlink integrity"
+    echo "  init           Initialize shell rc symlink"
+    echo
+    echo "Examples:"
+    echo "  $(basename $0) list"
+    echo "  $(basename $0) add ~/.config/dotfiles/configs/git ~/.gitconfig"
+    echo "  $(basename $0) remove ~/.gitconfig"
+    echo "  $(basename $0) repair"
+}
+
+function links_read_db() {
+    if [[ -f "$DOTFILES_LINKS_DB" ]]; then
+        cat "$DOTFILES_LINKS_DB"
+    else
+        echo '{}'
+    fi
+}
+
+function links_write_db() {
+    local data="$1"
+    echo "$data" > "$DOTFILES_LINKS_DB"
+}
+
+function links_list() {
+    echo.header "Managed Symlinks"
+    
+    local db=$(links_read_db)
+    
+    if [[ "$db" == "{}" ]]; then
+        echo.warning "No managed symlinks found"
+        return 0
+    fi
+    
+    echo "$db" | grep -E '^\s*"[^"]+":' | while IFS= read -r line; do
+        local link=$(echo "$line" | sed 's/.*"\([^"]*\)".*/\1/')
+        local target=$(echo "$line" | sed 's/.*: *"\([^"]*\)".*/\1/')
+        
+        if [[ -L "$link" ]]; then
+            if [[ -e "$link" ]]; then
+                echo.success "$link → $target"
+            else
+                echo.error "$link → $target (broken)"
+            fi
+        else
+            echo.warning "$link → $target (missing)"
+        fi
+    done
+}
+
+function links_add() {
+    local src="$1"
+    local dst="$2"
+    
+    if [[ -z "$src" || -z "$dst" ]]; then
+        echo.error "Usage: $(basename $0) add <source> <destination>"
+        return 1
+    fi
+    
+    src=$(realpath "$src" 2>/dev/null || echo "$src")
+    dst=$(realpath "$dst" 2>/dev/null || echo "$dst")
+    
+    if [[ ! -e "$src" ]]; then
+        echo.error "Source file does not exist: $src"
+        return 1
+    fi
+    
+    if [[ -e "$dst" && ! -L "$dst" ]]; then
+        echo.warning "Destination already exists and is not a symlink: $dst"
+        echo -n "Backup and replace? [y/N] "
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            mv "$dst" "${dst}.backup.$(date +%Y%m%d_%H%M%S)"
+            echo.success "Backed up existing file"
+        else
+            echo.info "Cancelled"
+            return 1
+        fi
+    fi
+    
+    ln -sfn "$src" "$dst"
+    echo.success "Created symlink: $dst → $src"
+    
+    local db=$(links_read_db)
+    local new_db=$(echo "$db" | jq --arg dst "$dst" --arg src "$src" '. + {($dst): $src}')
+    links_write_db "$new_db"
+    
+    echo.success "Added to link database"
+}
+
+function links_remove() {
+    local link="$1"
+    
+    if [[ -z "$link" ]]; then
+        echo.error "Usage: $(basename $0) remove <link>"
+        return 1
+    fi
+    
+    link=$(realpath "$link" 2>/dev/null || echo "$link")
+    
+    if [[ -L "$link" ]]; then
+        rm "$link"
+        echo.success "Removed symlink: $link"
+    else
+        echo.warning "Not a symlink or doesn't exist: $link"
+    fi
+    
+    local db=$(links_read_db)
+    local new_db=$(echo "$db" | jq --arg link "$link" 'del(.[$link])')
+    links_write_db "$new_db"
+    
+    echo.success "Removed from link database"
+}
+
+function links_repair() {
+    echo.header "Repairing Broken Links"
+    
+    local db=$(links_read_db)
+    local repaired=0
+    local failed=0
+    
+    echo "$db" | grep -E '^\s*"[^"]+":' | while IFS= read -r line; do
+        local link=$(echo "$line" | sed 's/.*"\([^"]*\)".*/\1/')
+        local target=$(echo "$line" | sed 's/.*: *"\([^"]*\)".*/\1/')
+        
+        if [[ -L "$link" && ! -e "$link" ]]; then
+            echo.warning "Repairing: $link"
+            rm "$link"
+            
+            if [[ -e "$target" ]]; then
+                ln -sfn "$target" "$link"
+                echo.success "  Fixed: $link → $target"
+                repaired=$((repaired + 1))
+            else
+                echo.error "  Target missing: $target"
+                failed=$((failed + 1))
+            fi
+        fi
+    done
+    
+    echo
+    echo.info "Repaired: $repaired, Failed: $failed"
+}
+
+function links_verify() {
+    echo.header "Verifying Symlinks"
+    
+    local db=$(links_read_db)
+    local valid=0
+    local broken=0
+    local missing=0
+    
+    echo "$db" | grep -E '^\s*"[^"]+":' | while IFS= read -r line; do
+        local link=$(echo "$line" | sed 's/.*"\([^"]*\)".*/\1/')
+        local target=$(echo "$line" | sed 's/.*: *"\([^"]*\)".*/\1/')
+        
+        if [[ -L "$link" ]]; then
+            if [[ -e "$link" ]]; then
+                valid=$((valid + 1))
+                echo.success "✓ $link"
+            else
+                broken=$((broken + 1))
+                echo.error "✗ $link (broken)"
+            fi
+        else
+            missing=$((missing + 1))
+            echo.warning "⚠ $link (missing)"
+        fi
+    done
+    
+    echo
+    echo.box "Valid: $valid, Broken: $broken, Missing: $missing"
+}
+
+function links_init() {
+    echo.header "Initializing Shell RC Symlink"
+    
+    local src="$DOTFILES_ROOT/core/init"
+    local dst="$DOTFILES_RC"
+    
+    echo.info "Linking $src → $dst"
+    
+    if [[ -f "$dst" && ! -L "$dst" ]]; then
+        echo.warning "Found existing $dst"
+        echo -n "Backup and replace? [y/N] "
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            mv "$dst" "${dst}.backup.$(date +%Y%m%d_%H%M%S)"
+            echo.success "Backed up existing file"
+        else
+            echo.info "Cancelled"
+            return 1
+        fi
+    fi
+    
+    ln -sfn "$src" "$dst"
+    echo.success "Created symlink: $dst → $src"
+    
+    local db=$(links_read_db)
+    local new_db=$(echo "$db" | jq --arg dst "$dst" --arg src "$src" '. + {($dst): $src}')
+    links_write_db "$new_db"
+    
+    echo
+    echo.success "Shell RC initialized!"
+    echo.info "Run 'source $dst' to reload"
+}
+
+if ! command -v jq &>/dev/null; then
+    echo.error "jq is required for JSON operations"
+    echo.info "Install with: sudo apt install jq"
+    exit 1
+fi
+
+case "${1:-help}" in
+    list)
+        links_list
+        ;;
+    add)
+        links_add "$2" "$3"
+        ;;
+    remove|rm)
+        links_remove "$2"
+        ;;
+    repair|fix)
+        links_repair
+        ;;
+    verify|check)
+        links_verify
+        ;;
+    init)
+        links_init
+        ;;
+    help|--help|-h)
+        links_help
+        ;;
+    *)
+        echo.error "Unknown command: $1"
+        links_help
+        exit 1
+        ;;
+esac

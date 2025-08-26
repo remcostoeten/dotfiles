@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+function load_aliases() {
+    local alias_dir="$DOTFILES_MODULES/aliases"
+    
+    if [[ ! -d "$alias_dir" ]]; then
+        echo.debug "No alias directory found at $alias_dir"
+        return 0
+    fi
+    
+    echo.info "Loading aliases..."
+    
+    local count=0
+    local failed=0
+    
+    for alias_file in "$alias_dir"/*; do
+        [[ ! -f "$alias_file" ]] && continue
+        
+        local filename=$(basename "$alias_file")
+        
+        if [[ "$filename" == *.disabled ]]; then
+            echo.dim "  ⊗ $filename (disabled)"
+            continue
+        fi
+        
+        count=$((count + 1))
+        
+        if safe_source "$alias_file"; then
+            echo.success "  $filename"
+        else
+            failed=$((failed + 1))
+            echo.error "  $filename"
+        fi
+    done
+    
+    if [[ $count -eq 0 ]]; then
+        echo.warning "  No aliases found"
+    else
+        echo.info "  Loaded $((count - failed))/$count alias files"
+    fi
+}
+
+load_aliases

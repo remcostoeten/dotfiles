@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+export DOTFILES_ROOT="${HOME}/.config/dotfiles"
+export DOTFILES_VERSION="3.0.0"
+
+[[ ! -d "$DOTFILES_ROOT" ]] && echo "ERROR: Dotfiles not found at $DOTFILES_ROOT" && exit 1
+
+source "${DOTFILES_ROOT}/core/env"
+
+source "${DOTFILES_ROOT}/core/colors"
+
+[[ -f "${DOTFILES_ROOT}/assets/ascii/intro" ]] && cat "${DOTFILES_ROOT}/assets/ascii/intro"
+
+source "${DOTFILES_ROOT}/core/safety"
+
+source "${DOTFILES_ROOT}/core/bootstrap"
+
+dotfiles_bootstrap
+
+alias reload='exec ${SHELL}'
+alias dotfiles='cd ${DOTFILES_ROOT}'
+alias df='dotfiles'
+
+if [[ -t 1 ]]; then
+    echo
+    echo.success "Dotfiles v${DOTFILES_VERSION} loaded"
+    echo.info "Type $(echo.cyan 'dotfiles help') for available commands"
+    echo
+fi

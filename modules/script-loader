@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+function load_scripts() {
+    local script_dir="$DOTFILES_MODULES/scripts"
+    
+    if [[ ! -d "$script_dir" ]]; then
+        echo.debug "No script directory found at $script_dir"
+        return 0
+    fi
+    
+    echo.info "Loading scripts..."
+    
+    local count=0
+    local failed=0
+    
+    for script_file in "$script_dir"/*; do
+        [[ ! -f "$script_file" ]] && continue
+        
+        local filename=$(basename "$script_file")
+        
+        if [[ "$filename" == *.disabled ]]; then
+            echo.dim "  ⊗ $filename (disabled)"
+            continue
+        fi
+        
+        count=$((count + 1))
+        
+        if safe_source "$script_file"; then
+            echo.success "  $filename"
+        else
+            failed=$((failed + 1))
+            echo.error "  $filename"
+        fi
+    done
+    
+    if [[ $count -eq 0 ]]; then
+        echo.warning "  No scripts found"
+    else
+        echo.info "  Loaded $((count - failed))/$count script files"
+    fi
+}
+
+load_scripts
