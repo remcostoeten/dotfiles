@@ -119,23 +119,43 @@ dotfiles-link fix
 dotfiles-link sync
 ```
 
-### Environment Variables
+### Environment Variables & Secrets Manager
 ```bash
-# List custom environment variables
+# List all stored environment variables and secrets
 dotfiles-env list
+# Shorthand alias:
+envs list
 
 # Set persistent environment variable
 dotfiles-env set MY_VAR "value"
+# Set encrypted secret with type and description
+dotfiles-env set API_KEY "secret-value" api --desc "My API Key"
 
-# Get variable value
+# Get variable value (automatically copies to clipboard)
 dotfiles-env get MY_VAR
+# Interactive selection with fzf (if available)
+dotfiles-env get
 
-# Remove variable
-dotfiles-env unset MY_VAR
+# Remove variable or secret
+dotfiles-env remove MY_VAR      # Direct removal
+dotfiles-env remove             # Interactive picker (requires fzf)
+
+# Generate random secrets
+dotfiles-env generate RANDOM_SECRET 32 password
+
+# Generate OAuth key pairs
+dotfiles-env generate-oauth GITHUB_OAUTH rsa 4096 "GitHub OAuth App"
+
+# Search variables and secrets
+dotfiles-env search "api"
 
 # Export/import from files
 dotfiles-env export ~/.env.backup
 dotfiles-env import ~/.env
+
+# Backup and restore
+dotfiles-env backup
+dotfiles-env restore backup_file.json
 ```
 
 ## Global Helper Functions

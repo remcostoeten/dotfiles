@@ -296,7 +296,30 @@ function env_remove() {
     local key="$1"
     
     if [[ -z "$key" ]]; then
-        echo.error "Usage: dotfiles env remove <key>"
+        # Interactive mode - let user pick from existing keys
+        key=$(_env_pick_key)
+        if [[ -z "$key" ]]; then
+            echo.error "No key selected or fzf not available"
+            return 1
+        fi
+        
+        # Confirmation prompt for interactive removal
+        echo.warning "About to remove: $key"
+        read -r -p "Are you sure? [y/N] " yn
+        case "$yn" in
+            [Yy]*) 
+                ;; # Continue with removal
+            *)
+                echo.info "Removal cancelled"
+                return 0
+                ;;
+        esac
+    fi
+    
+    # Check if key exists before attempting removal
+    local exists=$(jq -r --arg key "$key" '.[$key] // empty' "$DOTFILES_ENV_DB" 2>/dev/null)
+    if [[ -z "$exists" ]]; then
+        echo.error "Environment variable not found: $key"
         return 1
     fi
     
@@ -602,8 +625,8 @@ function main() {
             echo "     - Get a variable value; interactive if key omitted; copies to clipboard"
             echo.cyan "  set <key> <value> [type] [--prefix <name>] [--desc <description>]" | tr '\n' ' '
             echo "     - Store a variable with optional type, prefix and description"
-            echo.cyan "  remove, rm <key>" | tr '\n' ' '
-            echo "     - Remove a variable"
+            echo.cyan "  remove, rm [key]" | tr '\n' ' '
+            echo "     - Remove a variable (interactive if key omitted)"
             echo.cyan "  export" | tr '\n' ' '
             echo "     - Export variables to environment"
             echo.cyan "  import [file]" | tr '\n' ' '
@@ -630,6 +653,8 @@ function main() {
             echo "  dotfiles env get GITHUB_TOKEN"
             echo "  dotfiles env get                    # Interactive selection"
             echo "  dotfiles env get --copy             # Interactive selection, copy only"
+            echo "  dotfiles env rm                     # Interactive removal"
+            echo "  dotfiles env rm GITHUB_TOKEN        # Direct removal"
             echo "  dotfiles env set API_KEY abc api --prefix MYAPI"
             echo "  dotfiles env get -p API_KEY         # Copies as MYAPI=<value> if prefix stored"
             echo "  dotfiles env get --prefix=FOO API_KEY  # Copies as FOO=<value>"
