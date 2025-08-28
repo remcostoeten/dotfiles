@@ -1,5 +1,25 @@
-# 🚀 Dotfiles - Complete Development Environment
+# Remco Stoeten's dotfiles
 
+**Version:** 2.1.2 <!-- AUTO-UPDATED by pre-commit hook -->
+
+<i>Over-engineered? Maybe. Beauiful OS-experience</i>
+A sophisticated dotfiles management system designed in a way to allow full customization. For most tools there are custom designed (cli) tools to help manage that particular module.
+
+### Current features:
+- 
+- Secrerts managementInteractive CLI for handling encrypted secrets synced to a private GitHub Gist vault. Supports listing, prefix-based copying (e.g. DATABASE_URL=), open related link, and environment export for global shell access.
+<details>
+  <summary>View gif example </summary>
+   todo
+  ```
+</details>
+
+ There's a encrypted   with encrypted secrets sync, modern CLI tools, and cross-shell compatibility.
+
+
+
+
+____________________________________________________________ OLD 
 A sophisticated dotfiles management system with encrypted secrets sync, modern CLI tools, and cross-shell compatibility.
 
 ## ⚡ Quick Start (One Command Setup)
