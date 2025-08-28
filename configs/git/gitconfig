@@ -1,0 +1,145 @@
+[user]
+	name = Remco Stoeten
+	email = remcostoeten@hotmail.com
+
+[core]
+	editor = vim
+	autocrlf = input
+	whitespace = trailing-space,space-before-tab
+	filemode = true
+	pager = less -FRX
+	precomposeunicode = false
+	untrackedCache = true
+
+[alias]
+	st = status
+	s = status --short
+	stat = status
+	c = commit
+	cm = commit -m
+	ca = commit -a
+	cam = commit -am
+	amend = commit --amend
+	b = branch
+	ba = branch -a
+	bd = branch -d
+	bD = branch -D
+	co = checkout
+	cb = checkout -b
+	sw = switch
+	swc = switch -c
+	f = fetch
+	fa = fetch --all
+	p = push
+	pu = pull
+	m = merge
+	rb = rebase
+	rbi = rebase -i
+	d = diff
+	ds = diff --staged
+	dc = diff --cached
+	l = log --oneline
+	lg = log --oneline --graph
+	ll = log --oneline --graph --decorate --all
+	lol = log --graph --decorate --pretty=oneline --abbrev-commit
+	lola = log --graph --decorate --pretty=oneline --abbrev-commit --all
+	last = log -1 HEAD
+	visual = !gitk
+	sl = stash list
+	sa = stash apply
+	ss = stash save
+	unstage = reset HEAD --
+	uncommit = reset --soft HEAD^
+	find = log --grep
+	files = diff-tree --no-commit-id --name-only -r
+	ignored = ls-files --others --ignored --exclude-standard
+
+[color]
+	ui = auto
+	branch = auto
+	diff = auto
+	interactive = auto
+	status = auto
+
+[color "branch"]
+	current = yellow reverse
+	local = yellow
+	remote = green
+
+[color "diff"]
+	meta = yellow bold
+	frag = magenta bold
+	old = red bold
+	new = green bold
+	whitespace = red reverse
+
+[color "status"]
+	added = yellow
+	changed = green
+	untracked = cyan
+
+[diff]
+	tool = vimdiff
+
+[merge]
+	tool = vimdiff
+	log = true
+	ff = false
+
+[mergetool]
+	keepBackup = false
+	prompt = false
+
+[pull]
+	rebase = false
+	autostash = true
+
+[push]
+	default = simple
+	autoSetupRemote = true
+
+[credential]
+	helper = cache --timeout=3600
+
+[fetch]
+	prune = true
+	tags = true
+
+[rebase]
+	autostash = true
+	abbreviateCommands = true
+
+[rerere]
+	enabled = true
+
+[status]
+	showUntrackedFiles = all
+	branch = true
+	showStash = true
+
+[log]
+	date = relative
+	abbrevCommit = true
+
+[branch]
+	autoSetupMerge = always
+
+[init]
+	defaultBranch = master
+
+[gc]
+	auto = 1000
+	autopacklimit = 50
+
+[pack]
+	threads = 0
+
+[transfer]
+	fsckObjects = true
+
+[receive]
+	fsckObjects = true
+
+[url "git@github.com:"]
+	insteadOf = https://github.com/
+	pushInsteadOf = https://github.com/

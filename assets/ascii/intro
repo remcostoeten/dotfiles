@@ -1,13 +1,20 @@
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║   ██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗  ║
-║   ██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝  ║
-║   ██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗    ║
-║   ██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝    ║
-║   ██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗  ║
-║   ╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝  ║
-║                                                           ║
-║            Terminal Configuration Framework               ║
-║                    Version 3.0.0                          ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
+function echo.dotfiles_banner() {
+    echo
+    echo "${COLOR_BRIGHT_CYAN}╔═══════════════════════════════════════════════════════════╗${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                                                           ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_BRIGHT_BLUE}██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗${COLOR_RESET}   ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_BLUE}██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝${COLOR_RESET}   ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_CYAN}██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗${COLOR_RESET}     ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_GREEN}██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝${COLOR_RESET}     ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_BRIGHT_GREEN}██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗${COLOR_RESET}   ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_DIM}╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝${COLOR_RESET}   ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                                                           ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}            ${COLOR_BOLD}${COLOR_YELLOW}Terminal Configuration Framework${COLOR_RESET}               ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                    ${COLOR_MAGENTA}Version 3.0.0${COLOR_RESET}                          ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                                                           ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}╚═══════════════════════════════════════════════════════════╝${COLOR_RESET}"
+    echo
+}
+
+# Add alias for convenience
+alias e.banner='echo.dotfiles_banner'

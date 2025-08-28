@@ -1,0 +1,48 @@
+[
+  {
+    "name": "lazygit",
+    "description": "Terminal UI for git",
+    "docs": "https://github.com/jesseduffield/lazygit",
+    "commands": [
+      { "os": "linux", "distro": "ubuntu", "manager": "apt", "command": "sudo add-apt-repository ppa:lazygit-team/release && sudo apt-get update && sudo apt-get install lazygit" },
+      { "os": "linux", "distro": "fedora", "manager": "dnf", "command": "sudo dnf copr enable atim/lazygit -y && sudo dnf install lazygit" },
+      { "os": "linux", "distro": "arch", "manager": "pacman", "command": "sudo pacman -S lazygit" },
+      { "os": "macos", "manager": "brew", "command": "brew install lazygit" }
+    ]
+  },
+  {
+    "name": "lazydocker",
+    "description": "Terminal UI for docker",
+    "docs": "https://github.com/jesseduffield/lazydocker",
+    "commands": [
+      { "os": "macos", "manager": "brew", "command": "brew install jesseduffield/lazydocker/lazydocker" },
+      { "os": "linux", "distro": "arch", "manager": "pacman", "command": "sudo pacman -S lazydocker" }
+    ]
+  },
+  {
+    "name": "vercel-cli",
+    "description": "Vercel deployment CLI",
+    "commands": [
+      { "manager": "npm", "command": "npm i -g vercel" }
+    ]
+  },
+  {
+    "name": "gitlab-cli",
+    "description": "GitLab command line client",
+    "docs": "https://gitlab.com/gitlab-org/cli",
+    "commands": [
+      { "os": "linux", "manager": "apt", "command": "sudo apt install glab" },
+      { "os": "linux", "manager": "dnf", "command": "sudo dnf install glab" },
+      { "os": "linux", "manager": "pacman", "command": "sudo pacman -S git-extras" },
+      { "os": "macos", "manager": "brew", "command": "brew install glab" }
+    ]
+  },
+  {
+    "name": "cloudflare-cli",
+    "description": "Cloudflare Wrangler CLI",
+    "docs": "https://developers.cloudflare.com/workers/wrangler/",
+    "commands": [
+      { "manager": "npm", "command": "npm i -g wrangler" }
+    ]
+  }
+]

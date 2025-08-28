@@ -10,7 +10,13 @@ export DOTFILES_ASSETS="${DOTFILES_ROOT}/assets"
 export DOTFILES_TEMPLATES="${DOTFILES_ROOT}/templates"
 export DOTFILES_CORE="${DOTFILES_ROOT}/core"
 
-export DOTFILES_SHELL="${SHELL##*/}"
+if [[ -n "${ZSH_VERSION}" ]]; then
+    export DOTFILES_SHELL="zsh"
+elif [[ -n "${BASH_VERSION}" ]]; then
+    export DOTFILES_SHELL="bash"
+else
+    export DOTFILES_SHELL="$(basename "$SHELL")"
+fi
 export DOTFILES_OS="$(uname -s)"
 export DOTFILES_ARCH="$(uname -m)"
 

@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+source "${HOME}/.config/dotfiles/core/env"
+source "${HOME}/.config/dotfiles/core/colors"
+source "${HOME}/.config/dotfiles/core/safety"
+
+function complete_setup() {
+    echo.header "🚀 Completing Aesthetic Terminal Setup"
+    
+    echo.info "Current shell: $SHELL"
+    echo.info "Target shell: ZSH"
+    
+    # Ensure ZSH is installed
+    if ! command -v zsh &>/dev/null; then
+        echo.error "ZSH not found. Please install it first."
+        return 1
+    fi
+    
+    # Show current symlinks
+    echo.info "Active symlinks:"
+    dotfiles-link list
+    
+    echo.info "System status:"
+    dotfiles version
+    
+    echo.success "✅ Aesthetic terminal setup complete!"
+    echo
+    echo.cyan "🎨 Features enabled:"
+    echo "  • Starship prompt with beautiful colors"
+    echo "  • ZSH with fish-like autosuggestions"
+    echo "  • Syntax highlighting"
+    echo "  • Enhanced ls (eza) with icons"
+    echo "  • Modern cat (bat) with syntax highlighting"
+    echo "  • Smart directory jumping (zoxide)"
+    echo "  • Fuzzy finder (fzf) integration"
+    echo "  • Beautiful git commands"
+    echo "  • Neofetch system info"
+    echo
+    echo.yellow "🚀 Next steps:"
+    echo "  1. Close this terminal"
+    echo "  2. Open a new terminal"
+    echo "  3. Enjoy your aesthetic ricer terminal!"
+    echo
+    echo.rainbow "Welcome to the Matrix! 🕶️"
+    echo
+}
+
+complete_setup "$@"

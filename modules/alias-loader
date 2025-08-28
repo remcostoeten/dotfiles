@@ -13,7 +13,7 @@ function load_aliases() {
     local count=0
     local failed=0
     
-    for alias_file in "$alias_dir"/*; do
+    for alias_file in "$alias_dir"/*.aliases; do
         [[ ! -f "$alias_file" ]] && continue
         
         local filename=$(basename "$alias_file")
@@ -34,10 +34,32 @@ function load_aliases() {
     done
     
     if [[ $count -eq 0 ]]; then
-        echo.warning "  No aliases found"
+        echo.warning "  No alias files found"
     else
         echo.info "  Loaded $((count - failed))/$count alias files"
     fi
 }
+
+function help() {
+    if [[ -z "$1" ]]; then
+        echo "Available commands:"
+        for file in "$DOTFILES_MODULES"/aliases/*.aliases; do
+            [[ ! -f "$file" ]] && continue
+            echo "--- $(basename "$file" .aliases) ---"
+            grep -E '^# @alias' "$file" 2>/dev/null | sed -e 's/# @alias //' -e 's/# @desc /\t/' || true
+        done
+    else
+        for file in "$DOTFILES_MODULES"/aliases/*.aliases; do
+            [[ ! -f "$file" ]] && continue
+            if grep -q "# @alias $1" "$file" 2>/dev/null; then
+                grep -A 1 "# @alias $1" "$file" 2>/dev/null | sed -e 's/# @alias //' -e 's/# @desc /\t/' || true
+                return
+            fi
+        done
+        echo "Alias not found: $1"
+    fi
+}
+
+alias help=help
 
 load_aliases

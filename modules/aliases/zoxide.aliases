@@ -1,0 +1,4 @@
+# @alias z
+# @desc Zoxide (smarter cd)
+
+eval "$(zoxide init zsh)"

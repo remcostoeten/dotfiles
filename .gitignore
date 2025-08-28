@@ -1,0 +1,30 @@
+# Secrets and encryption keys - NEVER commit these
+utils/secrets.json
+utils/.secrets.key
+utils/.secrets.salt
+utils/tokens.json
+utils/.tokens.key
+utils/.tokens.salt
+
+# Secrets sync vault (stored externally)
+.secrets-vault/
+
+# Backup files
+utils/backups/
+*.bak
+*.tmp
+
+# Local state that shouldn't be shared
+utils/state.json
+utils/env.json
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

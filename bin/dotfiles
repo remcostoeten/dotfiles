@@ -20,9 +20,8 @@ function dotfiles_version() {
 }
 
 function dotfiles_reload() {
-    echo.info "Reloading dotfiles..."
-    source "$DOTFILES_ROOT/cfg"
-    echo.success "Dotfiles reloaded"
+    echo.info "Reloading shell..."
+    exec ${SHELL}
 }
 
 function dotfiles_update() {
@@ -111,43 +110,6 @@ function dotfiles_doctor() {
     fi
 }
 
-function dotfiles_backup() {
-    local backup_dir="${1:-$HOME/.config/dotfiles-backup-$(date +%Y%m%d-%H%M%S)}"
-    
-    echo.header "Backing Up Dotfiles"
-    echo.info "Backup location: $backup_dir"
-    
-    mkdir -p "$backup_dir"
-    
-    # Backup dotfiles
-    cp -r "$DOTFILES_ROOT" "$backup_dir/"
-    
-    # Backup databases
-    cp "$DOTFILES_LINKS_DB" "$backup_dir/links.json" 2>/dev/null || true
-    cp "$DOTFILES_ENV_DB" "$backup_dir/env.json" 2>/dev/null || true
-    
-    # Create restore script
-    cat > "$backup_dir/restore.sh" << EOF
-#!/usr/bin/env bash
-echo "Restoring dotfiles from backup..."
-cp -r dotfiles/* ~/.config/dotfiles/
-cp links.json ~/.config/dotfiles/utils/
-cp env.json ~/.config/dotfiles/utils/
-echo "Restore complete. Run: source ~/.config/dotfiles/cfg"
-EOF
-    
-    chmod +x "$backup_dir/restore.sh"
-    
-    # Compress if requested
-    if [[ "$2" == "--compress" ]]; then
-        echo.info "Compressing backup..."
-        tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
-        rm -rf "$backup_dir"
-        echo.success "Backup saved to: ${backup_dir}.tar.gz"
-    else
-        echo.success "Backup saved to: $backup_dir"
-    fi
-}
 
 function dotfiles_install() {
     echo.header "Installing Dotfiles"
@@ -165,7 +127,7 @@ function dotfiles_install() {
     fi
     
     echo.success "Dotfiles installed"
-    echo.info "Restart your shell or run: source ~/.$DOTFILES_SHELL"
+    echo.info "Restart your shell or run: source ~/.${DOTFILES_SHELL}rc"
 }
 
 function dotfiles_modules() {
@@ -222,6 +184,27 @@ function dotfiles_modules() {
     esac
 }
 
+function dotfiles_aliases_help() {
+    echo
+    echo.cyan "Available Aliases:"
+    for file in "$DOTFILES_ROOT/modules/aliases"/*.aliases; do
+        if [[ -f "$file" ]]; then
+            local category=$(basename "$file" .aliases)
+            echo "  --- $category ---"
+            while IFS= read -r line; do
+                if [[ "$line" =~ ^#\ @alias\ (.+) ]]; then
+                    local alias_name="${BASH_REMATCH[1]}"
+                    read -r desc_line
+                    if [[ "$desc_line" =~ ^#\ @desc\ (.+) ]]; then
+                        local alias_desc="${BASH_REMATCH[1]}"
+                        printf "    %-15s %s\n" "$alias_name" "$alias_desc"
+                    fi
+                fi
+            done < "$file"
+        fi
+    done
+}
+
 function dotfiles_help() {
     echo.header "Dotfiles Management System"
     echo
@@ -233,7 +216,6 @@ function dotfiles_help() {
     echo "  reload     Reload dotfiles configuration"
     echo "  update     Update dotfiles from git"
     echo "  doctor     Run health check"
-    echo "  backup     Create a backup"
     echo "  install    Install dotfiles symlinks"
     echo
     echo.cyan "Module Commands:"
@@ -243,11 +225,17 @@ function dotfiles_help() {
     echo.cyan "Management Commands:"
     echo "  link       Symlink manager (dotfiles-link)"
     echo "  env        Environment manager (dotfiles-env)"
+    echo "  secrets    Secrets manager (dotfiles-secrets)"
+    echo "  sync       Secrets sync across machines (dotfiles-secrets-sync)"
+    echo "  tokens     OAuth tokens manager (dotfiles-tokens)"
+    echo "  packages   Manage additional packages (dotfiles-packages)"
     echo
     echo.cyan "Quick Actions:"
     echo "  cd         Go to dotfiles directory"
     echo "  edit       Edit dotfiles in \$EDITOR"
     echo "  logs       View error logs"
+    echo
+    dotfiles_aliases_help
     echo
     echo "For command help, use: dotfiles <command> help"
     echo "Example: dotfiles link help"
@@ -266,9 +254,6 @@ case "${1:-help}" in
     doctor|check)
         dotfiles_doctor
         ;;
-    backup|b)
-        dotfiles_backup "$2" "$3"
-        ;;
     install|i)
         dotfiles_install
         ;;
@@ -286,6 +271,18 @@ case "${1:-help}" in
     env|e)
         shift
         "$DOTFILES_BIN/dotfiles-env" "$@"
+        ;;
+    secrets|sec)
+        shift
+        "$DOTFILES_BIN/dotfiles-secrets" "$@"
+        ;;
+    secrets-sync|sync)
+        shift
+        "$DOTFILES_BIN/dotfiles-secrets-sync" "$@"
+        ;;
+    tokens|tok)
+        shift
+        "$DOTFILES_BIN/dotfiles-tokens" "$@"
         ;;
     cd)
         cd "$DOTFILES_ROOT"

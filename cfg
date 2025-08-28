@@ -9,7 +9,7 @@ source "${DOTFILES_ROOT}/core/env"
 
 source "${DOTFILES_ROOT}/core/colors"
 
-[[ -f "${DOTFILES_ROOT}/assets/ascii/intro" ]] && cat "${DOTFILES_ROOT}/assets/ascii/intro"
+[[ -f "${DOTFILES_ROOT}/assets/ascii/intro" ]] && source "${DOTFILES_ROOT}/assets/ascii/intro" && echo.dotfiles_banner 2>/dev/null || true
 
 source "${DOTFILES_ROOT}/core/safety"
 
@@ -18,8 +18,7 @@ source "${DOTFILES_ROOT}/core/bootstrap"
 dotfiles_bootstrap
 
 alias reload='exec ${SHELL}'
-alias dotfiles='cd ${DOTFILES_ROOT}'
-alias df='dotfiles'
+alias cdf='cd ${DOTFILES_ROOT}'
 
 if [[ -t 1 ]]; then
     echo
@@ -27,3 +26,17 @@ if [[ -t 1 ]]; then
     echo.info "Type $(echo.cyan 'dotfiles help') for available commands"
     echo
 fi
+# Load secrets and tokens
+# Use dotfiles secrets to manage encrypted secrets
+# Use dotfiles tokens to manage OAuth tokens
+
+# Export encrypted secrets to environment
+dotfiles secrets export 2>/dev/null || true
+
+# Export OAuth public keys to environment
+dotfiles tokens export 2>/dev/null || true
+
+# Personal Startpage - Auto command tracking
+source /home/remcostoeten/current/personal-startpage/shell-integration.sh
+alias pct="personal-dashboard"
+alias dashboard="personal-dashboard"

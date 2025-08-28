@@ -17,21 +17,21 @@ function dotfiles_add_to_path() {
 }
 
 function dotfiles_setup_shell() {
-    if [[ "$DOTFILES_SHELL" == "bash" ]]; then
-        shopt -s histappend
-        shopt -s checkwinsize
-        shopt -s globstar 2>/dev/null
-        shopt -s autocd 2>/dev/null
-        shopt -s cdspell 2>/dev/null
-        shopt -s dirspell 2>/dev/null
-        shopt -s dotglob
-        shopt -s extglob
-        shopt -s nocaseglob
+    if [[ "$DOTFILES_SHELL" == "bash" ]] && [[ -n "${BASH_VERSION}" ]]; then
+        shopt -s histappend 2>/dev/null || true
+        shopt -s checkwinsize 2>/dev/null || true
+        shopt -s globstar 2>/dev/null || true
+        shopt -s autocd 2>/dev/null || true
+        shopt -s cdspell 2>/dev/null || true
+        shopt -s dirspell 2>/dev/null || true
+        shopt -s dotglob 2>/dev/null || true
+        shopt -s extglob 2>/dev/null || true
+        shopt -s nocaseglob 2>/dev/null || true
         
-        if [[ -f /etc/bash_completion ]]; then
-            source /etc/bash_completion
-        elif [[ -f /usr/share/bash-completion/bash_completion ]]; then
-            source /usr/share/bash-completion/bash_completion
+        if [[ -f /etc/bash_completion ]] && [[ -n "${BASH_VERSION}" ]]; then
+            source /etc/bash_completion 2>/dev/null || true
+        elif [[ -f /usr/share/bash-completion/bash_completion ]] && [[ -n "${BASH_VERSION}" ]]; then
+            source /usr/share/bash-completion/bash_completion 2>/dev/null || true
         fi
         
     elif [[ "$DOTFILES_SHELL" == "zsh" ]]; then
@@ -83,9 +83,9 @@ function dotfiles_load_modules() {
     
     safe_source_dir "$DOTFILES_MODULES/enabled" "*.sh" "enabled modules"
     
-    [[ -f "$DOTFILES_MODULES/aliases/loader" ]] && safe_source "$DOTFILES_MODULES/aliases/loader" "alias loader"
-    [[ -f "$DOTFILES_MODULES/plugins/loader" ]] && safe_source "$DOTFILES_MODULES/plugins/loader" "plugin loader"
-    [[ -f "$DOTFILES_MODULES/scripts/loader" ]] && safe_source "$DOTFILES_MODULES/scripts/loader" "script loader"
+    [[ -f "$DOTFILES_MODULES/alias-loader" ]] && safe_source "$DOTFILES_MODULES/alias-loader" "alias loader"
+    [[ -f "$DOTFILES_MODULES/plugin-loader" ]] && safe_source "$DOTFILES_MODULES/plugin-loader" "plugin loader"
+    [[ -f "$DOTFILES_MODULES/script-loader" ]] && safe_source "$DOTFILES_MODULES/script-loader" "script loader"
     
     safe_source_dir "$HOME/.config/dotfiles-local/modules" "*.sh" "local modules"
 }
@@ -94,52 +94,22 @@ function dotfiles_load_configs() {
     safe_source_dir "$DOTFILES_CONFIG" "*.sh" "config files"
 }
 
-function dotfiles_setup_aliases() {
-    alias ls='ls --color=auto'
-    alias ll='ls -alF'
-    alias la='ls -A'
-    alias l='ls -CF'
-    alias grep='grep --color=auto'
-    alias fgrep='fgrep --color=auto'
-    alias egrep='egrep --color=auto'
-    
-    alias ..='cd ..'
-    alias ...='cd ../..'
-    alias ....='cd ../../..'
-    alias .....='cd ../../../..'
-    
-    alias md='mkdir -p'
-    alias rd='rmdir'
-    alias cls='clear'
-    
-    alias h='history'
-    alias j='jobs -l'
-    alias which='type -a'
-    alias path='echo -e ${PATH//:/\\n}'
-    
-    alias now='date +"%T"'
-    alias nowdate='date +"%Y-%m-%d"'
-    
-    alias vi='${EDITOR}'
-    alias vim='${EDITOR}'
-    alias svi='sudo ${EDITOR}'
-    
-    alias ports='netstat -tulanp'
-    alias mount='mount | column -t'
-    
-    alias meminfo='free -m -l -t'
-    alias psmem='ps auxf | sort -nr -k 4'
-    alias pscpu='ps auxf | sort -nr -k 3'
-    
-    alias wget='wget -c'
-    
-    alias df='df -H'
-    alias du='du -ch'
-    
-    alias top='htop'
-}
+
 
 function dotfiles_setup_prompt() {
+    # Initialize Starship prompt if available (works with both bash and zsh)
+    if command -v starship &>/dev/null; then
+        if [[ "$DOTFILES_SHELL" == "bash" ]]; then
+            eval "$(starship init bash)"
+            echo.debug "Initialized Starship prompt for bash"
+        elif [[ "$DOTFILES_SHELL" == "zsh" ]]; then
+            eval "$(starship init zsh)"
+            echo.debug "Initialized Starship prompt for zsh"
+        fi
+        return 0
+    fi
+    
+    # Fallback to custom prompts if Starship is not available
     if [[ "$DOTFILES_SHELL" == "bash" ]]; then
         if [[ -f "$DOTFILES_MODULES/enabled/prompt-bash" ]]; then
             safe_source "$DOTFILES_MODULES/enabled/prompt-bash"
@@ -172,7 +142,6 @@ function dotfiles_bootstrap() {
     
     dotfiles_add_to_path
     dotfiles_setup_shell
-    dotfiles_setup_aliases
     dotfiles_load_configs
     dotfiles_load_modules
     dotfiles_setup_prompt

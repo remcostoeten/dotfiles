@@ -1,0 +1,119 @@
+# @alias ls
+# @desc List files with colors
+alias ls='ls --color=auto'
+
+# @alias ll
+# @desc List all files in long format
+alias ll='ls -alF'
+
+# @alias la
+# @desc List all files including hidden
+alias la='ls -A'
+
+# @alias l
+# @desc List files in one column
+alias l='ls -CF'
+
+# @alias grep
+# @desc Grep with colors
+alias grep='grep --color=auto'
+
+# @alias fgrep
+# @desc Fgrep with colors
+alias fgrep='fgrep --color=auto'
+
+# @alias egrep
+# @desc Egrep with colors
+alias egrep='egrep --color=auto'
+
+# @alias md
+# @desc Create directory recursively
+alias md='mkdir -p'
+
+# @alias rd
+# @desc Remove directory
+alias rd='rmdir'
+
+# @alias cls
+# @desc Clear screen
+alias cls='clear'
+
+# @alias h
+# @desc Show history
+alias h='history'
+
+# @alias j
+# @desc Show jobs
+alias j='jobs -l'
+
+# @alias which
+# @desc Show all matching commands
+alias which='type -a'
+
+# @alias path
+# @desc Show path in a readable format
+alias path='echo -e ${PATH//:/\n}'
+
+# @alias now
+# @desc Show current time
+alias now='date +"%T"'
+
+# @alias nowdate
+# @desc Show current date
+alias nowdate='date +"%Y-%m-%d"'
+
+# @alias vi
+# @desc Edit file with default editor
+alias vi='${EDITOR}'
+
+# @alias vim
+# @desc Edit file with default editor
+alias vim='${EDITOR}'
+
+# @alias svi
+# @desc Edit file with default editor as root
+alias svi='sudo ${EDITOR}'
+
+# @alias ports
+# @desc Show open ports
+alias ports='netstat -tulanp'
+
+# @alias mount
+# @desc Show mounted filesystems
+alias mount='mount | column -t'
+
+# @alias meminfo
+# @desc Show memory info
+alias meminfo='free -m -l -t'
+
+# @alias psmem
+# @desc Show processes sorted by memory usage
+alias psmem='ps auxf | sort -nr -k 4'
+
+# @alias pscpu
+# @desc Show processes sorted by cpu usage
+alias pscpu='ps auxf | sort -nr -k 3'
+
+# @alias wget
+# @desc Wget with continue option
+alias wget='wget -c'
+
+# @alias df
+# @desc Show disk usage
+alias df='df -H'
+
+# @alias du
+# @desc Show directory usage
+alias du='du -ch'
+
+# @alias top
+# @desc Show processes with htop
+alias top='htop'
+
+# @alias ..
+# @desc Go up one directory
+alias ..='cd ..'
+
+# @alias ...
+# @desc Go up two directories
+alias ...='cd ../..'

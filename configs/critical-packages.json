@@ -1,0 +1,38 @@
+[
+  {
+    "name": "curl",
+    "description": "Command line tool for transferring data with URL syntax",
+    "critical": true,
+    "commands": [
+      { "os": "linux", "manager": "apt", "command": "sudo apt install -y curl" },
+      { "os": "linux", "manager": "dnf", "command": "sudo dnf install -y curl" },
+      { "os": "linux", "manager": "pacman", "command": "sudo pacman -S --noconfirm curl" },
+      { "os": "linux", "manager": "zypper", "command": "sudo zypper install -y curl" },
+      { "os": "macos", "manager": "brew", "command": "brew install curl" }
+    ]
+  },
+  {
+    "name": "git",
+    "description": "Distributed version control system",
+    "critical": true,
+    "commands": [
+      { "os": "linux", "manager": "apt", "command": "sudo apt install -y git" },
+      { "os": "linux", "manager": "dnf", "command": "sudo dnf install -y git" },
+      { "os": "linux", "manager": "pacman", "command": "sudo pacman -S --noconfirm git" },
+      { "os": "linux", "manager": "zypper", "command": "sudo zypper install -y git" },
+      { "os": "macos", "manager": "brew", "command": "brew install git" }
+    ]
+  },
+  {
+    "name": "jq",
+    "description": "Command-line JSON processor",
+    "critical": true,
+    "commands": [
+      { "os": "linux", "manager": "apt", "command": "sudo apt install -y jq" },
+      { "os": "linux", "manager": "dnf", "command": "sudo dnf install -y jq" },
+      { "os": "linux", "manager": "pacman", "command": "sudo pacman -S --noconfirm jq" },
+      { "os": "linux", "manager": "zypper", "command": "sudo zypper install -y jq" },
+      { "os": "macos", "manager": "brew", "command": "brew install jq" }
+    ]
+  }
+]

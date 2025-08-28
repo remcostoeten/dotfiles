@@ -40,4 +40,4 @@ function load_scripts() {
     fi
 }
 
-load_scripts
+load_scripts || true

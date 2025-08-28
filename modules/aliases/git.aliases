@@ -1,0 +1,11 @@
+# @alias gco
+# @desc Checkout a git branch
+alias gco='git checkout'
+
+# @alias ga
+# @desc Add all changes to git
+alias ga='git add .'
+
+# @alias gc
+# @desc Commit changes
+alias gc='git commit -m'

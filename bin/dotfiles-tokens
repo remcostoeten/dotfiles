@@ -1,0 +1,387 @@
+#!/usr/bin/env bash
+
+source "${HOME}/.config/dotfiles/core/env"
+source "${HOME}/.config/dotfiles/core/colors"
+source "${HOME}/.config/dotfiles/core/safety"
+
+# OAuth tokens manager configuration
+export DOTFILES_TOKENS_DB="${DOTFILES_UTILS}/tokens.json"
+export DOTFILES_TOKENS_KEY="${DOTFILES_UTILS}/.tokens.key"
+export DOTFILES_TOKENS_SALT="${DOTFILES_UTILS}/.tokens.salt"
+
+# Initialize tokens database if it doesn't exist
+[[ ! -f "$DOTFILES_TOKENS_DB" ]] && echo '{}' > "$DOTFILES_TOKENS_DB"
+
+# Generate encryption key and salt if they don't exist
+function tokens_init() {
+    if [[ ! -f "$DOTFILES_TOKENS_KEY" ]]; then
+        echo.info "Generating encryption key..."
+        openssl rand -hex 32 > "$DOTFILES_TOKENS_KEY"
+        chmod 600 "$DOTFILES_TOKENS_KEY"
+        echo.success "Encryption key generated"
+    fi
+    
+    if [[ ! -f "$DOTFILES_TOKENS_SALT" ]]; then
+        echo.info "Generating salt..."
+        openssl rand -hex 16 > "$DOTFILES_TOKENS_SALT"
+        chmod 600 "$DOTFILES_TOKENS_SALT"
+        echo.success "Salt generated"
+    fi
+}
+
+# Encrypt a value
+function tokens_encrypt() {
+    local value="$1"
+    local key=$(cat "$DOTFILES_TOKENS_KEY")
+    
+    echo "$value" | openssl enc -aes-256-cbc -a -salt -pbkdf2 -iter 10000 -pass "pass:$key" 2>/dev/null
+}
+
+# Decrypt a value
+function tokens_decrypt() {
+    local encrypted_value="$1"
+    local key=$(cat "$DOTFILES_TOKENS_KEY")
+    
+    echo "$encrypted_value" | openssl enc -aes-256-cbc -a -d -salt -pbkdf2 -iter 10000 -pass "pass:$key" 2>/dev/null
+}
+
+# List all OAuth tokens
+function tokens_list() {
+    echo.header "OAuth Tokens & Keys"
+    
+    if [[ ! -f "$DOTFILES_TOKENS_DB" ]] || [[ $(stat -c%s "$DOTFILES_TOKENS_DB") -le 2 ]]; then
+        echo.warning "No OAuth tokens stored"
+        return 0
+    fi
+    
+    jq -r 'to_entries | .[] | "\(.key) (\(.value.type)) - \(.value.description // \"No description\")"' "$DOTFILES_TOKENS_DB" 2>/dev/null | \
+    while IFS=' ' read -r key type description; do
+        echo.cyan "$key" | tr '\n' ' '
+        echo "($type) - $description"
+    done
+}
+
+# Interactive picker for token name using fzf
+function _tokens_pick_name() {
+    if ! command -v fzf &>/dev/null;
+    then
+        return 1
+    fi
+    if [[ ! -s "$DOTFILES_TOKENS_DB" ]]; then
+        return 1
+    fi
+    local choice
+    choice=$(jq -r 'to_entries | .[] | "\(.key)\t\(.value.type)\t\(.value.description // \"\")"' "$DOTFILES_TOKENS_DB" 2>/dev/null | \
+        fzf --prompt="Select token > " --with-nth=1,2,3 --delimiter='\t' --height=40% --layout=reverse --border)
+    if [[ -n "$choice" ]]; then
+        echo "$choice" | awk -F '\t' '{print $1}'
+        return 0
+    fi
+    return 1
+}
+
+# Get OAuth token details
+function tokens_get() {
+    local name="$1"
+    
+    if [[ -z "$name" ]]; then
+        name=$(_tokens_pick_name)
+        if [[ -z "$name" ]]; then
+            echo.error "Provide a name or install fzf for interactive selection"
+            return 1
+        fi
+    fi
+    
+    local token_info=$(jq --arg name "$name" '.[$name]' "$DOTFILES_TOKENS_DB" 2>/dev/null)
+    
+    if [[ "$token_info" != "null" ]]; then
+        echo.header "OAuth Token: $name"
+        
+        local type=$(echo "$token_info" | jq -r '.type')
+        local description=$(echo "$token_info" | jq -r '.description // "No description"')
+        local created=$(echo "$token_info" | jq -r '.created')
+        
+        echo.info "Type: $type"
+        echo.info "Description: $description"
+        echo.info "Created: $created"
+        echo
+        
+        # Show public key if available
+        local public_key=$(echo "$token_info" | jq -r '.public_key // empty')
+        if [[ -n "$public_key" ]]; then
+            echo.info "Public Key:"
+            echo "$public_key"
+            echo
+        fi
+        
+        # Show private key if available
+        local encrypted_private_key=$(echo "$token_info" | jq -r '.private_key // empty')
+        if [[ -n "$encrypted_private_key" ]]; then
+            local decrypted_private_key=$(tokens_decrypt "$encrypted_private_key")
+            if [[ -n "$decrypted_private_key" ]]; then
+                echo.info "Private Key:"
+                echo "$decrypted_private_key"
+            else
+                echo.error "Failed to decrypt private key"
+            fi
+        fi
+    else
+        echo.error "OAuth token not found: $name"
+        return 1
+    fi
+}
+
+
+# Set OAuth token with public/private key pair
+function tokens_set() {
+    local name="$1"
+    local type="$2"
+    local public_key="$3"
+    local private_key="$4"
+    local description="${5:-}"
+    
+    if [[ -z "$name" || -z "$type" || -z "$public_key" || -z "$private_key" ]]; then
+        echo.error "Usage: dotfiles-tokens set <name> <type> <public_key> <private_key> [description]"
+        return 1
+    fi
+    
+    if [[ "$name" =~ [^a-zA-Z0-9_-] ]]; then
+        echo.error "Invalid token name: $name (use only alphanumeric, underscore, and hyphen)"
+        return 1
+    fi
+    
+    # Initialize encryption if needed
+    tokens_init
+    
+    local encrypted_private_key=$(tokens_encrypt "$private_key")
+    if [[ -z "$encrypted_private_key" ]]; then
+        echo.error "Failed to encrypt private key"
+        return 1
+    fi
+    
+    jq --arg name "$name" \
+       --arg type "$type" \
+       --arg public_key "$public_key" \
+       --arg private_key "$encrypted_private_key" \
+       --arg description "$description" \
+       --arg created "$(date -Iseconds)" \
+       '.[$name] = {"type": $type, "public_key": $public_key, "private_key": $private_key, "description": $description, "created": $created}' \
+       "$DOTFILES_TOKENS_DB" > "${DOTFILES_TOKENS_DB}.tmp" && \
+    mv "${DOTFILES_TOKENS_DB}.tmp" "$DOTFILES_TOKENS_DB"
+    
+    echo.success "OAuth token '$name' stored as $type"
+}
+
+# Remove OAuth token
+function tokens_remove() {
+    local name="$1"
+    
+    if [[ -z "$name" ]]; then
+        echo.error "Usage: dotfiles-tokens remove <name>"
+        return 1
+    fi
+    
+    jq --arg name "$name" 'del(.[$name])' "$DOTFILES_TOKENS_DB" > "${DOTFILES_TOKENS_DB}.tmp" && \
+    mv "${DOTFILES_TOKENS_DB}.tmp" "$DOTFILES_TOKENS_DB"
+    
+    echo.success "OAuth token '$name' removed"
+}
+
+# Generate new key pair
+function tokens_generate() {
+    local name="$1"
+    local type="${2:-rsa}"
+    local bits="${3:-2048}"
+    local description="${4:-}"
+    
+    if [[ -z "$name" ]]; then
+        echo.error "Usage: dotfiles-tokens generate <name> [type] [bits] [description]"
+        return 1
+    fi
+    
+    echo.info "Generating $bits-bit $type key pair for '$name'..."
+    
+    local temp_dir=$(mktemp -d)
+    local private_key_file="$temp_dir/private.pem"
+    local public_key_file="$temp_dir/public.pem"
+    
+    case "$type" in
+        "rsa")
+            openssl genrsa -out "$private_key_file" "$bits" 2>/dev/null
+            openssl rsa -in "$private_key_file" -pubout -out "$public_key_file" 2>/dev/null
+            ;;
+        "ec")
+            openssl ecparam -genkey -name secp256r1 -out "$private_key_file" 2>/dev/null
+            openssl ec -in "$private_key_file" -pubout -out "$public_key_file" 2>/dev/null
+            ;;
+        "ed25519")
+            openssl genpkey -algorithm ED25519 -out "$private_key_file" 2>/dev/null
+            openssl pkey -in "$private_key_file" -pubout -out "$public_key_file" 2>/dev/null
+            ;;
+        *)
+            echo.error "Unsupported key type: $type (supported: rsa, ec, ed25519)"
+            rm -rf "$temp_dir"
+            return 1
+            ;;
+    esac
+    
+    if [[ -f "$private_key_file" && -f "$public_key_file" ]]; then
+        local private_key=$(cat "$private_key_file")
+        local public_key=$(cat "$public_key_file")
+        
+        tokens_set "$name" "$type" "$public_key" "$private_key" "$description"
+        echo.success "Generated $bits-bit $type key pair for '$name'"
+    else
+        echo.error "Failed to generate key pair"
+    fi
+    
+    rm -rf "$temp_dir"
+}
+
+# Search OAuth tokens
+function tokens_search() {
+    local query="$1"
+    
+    if [[ -z "$query" ]]; then
+        echo.error "Usage: dotfiles-tokens search <query>"
+        return 1
+    fi
+    
+    echo.info "Searching for OAuth tokens matching: $query"
+    
+    jq -r --arg query "$query" 'to_entries | .[] | select(.key | contains($query) or .value.type | contains($query) or .value.description | contains($query)) | "\(.key) (\(.value.type)) - \(.value.description // "No description")"' "$DOTFILES_TOKENS_DB" 2>/dev/null | \
+    while IFS=' ' read -r key type description; do
+        if [[ -n "$key" ]]; then
+            echo.cyan "$key" | tr '\n' ' '
+            echo "($type) - $description"
+        fi
+    done
+}
+
+# Export OAuth tokens to environment variables
+function tokens_export() {
+    echo.info "Exporting OAuth tokens to environment variables..."
+    
+    local count=0
+    local temp_file=$(mktemp)
+    jq -r 'to_entries | .[] | "\(.key)_PUBLIC_KEY:\(.value.public_key)"' "$DOTFILES_TOKENS_DB" 2>/dev/null > "$temp_file"
+    
+    while IFS=':' read -r key public_key; do
+        if [[ -n "$key" && -n "$public_key" ]]; then
+            export "${key}_PUBLIC_KEY=$public_key"
+            echo.cyan "${key}_PUBLIC_KEY" | tr '\n' ' '
+            echo "= [PUBLIC]"
+            ((count++))
+        fi
+    done < "$temp_file"
+    
+    rm -f "$temp_file"
+    
+    echo.success "Exported $count public keys to environment"
+}
+
+
+# Show tokens info
+function tokens_info() {
+    local name="$1"
+    
+    if [[ -z "$name" ]]; then
+        echo.header "OAuth Tokens Database Info"
+        echo.info "Database: $DOTFILES_TOKENS_DB"
+        echo.info "Encryption: AES-256-CBC with PBKDF2"
+        echo.info "Total tokens: $(jq 'length' "$DOTFILES_TOKENS_DB" 2>/dev/null || echo '0')"
+        echo.info "Last modified: $(stat -c %y "$DOTFILES_TOKENS_DB" 2>/dev/null || echo 'Unknown')"
+    else
+        local token_info=$(jq --arg name "$name" '.[$name]' "$DOTFILES_TOKENS_DB" 2>/dev/null)
+        if [[ "$token_info" != "null" ]]; then
+            echo.header "OAuth Token: $name"
+            echo "$token_info" | jq -r 'to_entries | .[] | "\(.key): \(.value)"'
+        else
+            echo.error "OAuth token not found: $name"
+            return 1
+        fi
+    fi
+}
+
+# Main function
+function main() {
+    local command="$1"
+    shift
+    
+    case "$command" in
+        "list"|"ls")
+            tokens_list
+            ;;
+        "get")
+            tokens_get "$@"
+            ;;
+        "set")
+            tokens_set "$@"
+            ;;
+        "remove"|"rm")
+            tokens_remove "$@"
+            ;;
+        "generate"|"gen")
+            tokens_generate "$@"
+            ;;
+        "search")
+            tokens_search "$@"
+            ;;
+        "export")
+            tokens_export
+            ;;
+        "info")
+            tokens_info "$@"
+            ;;
+        "init")
+            tokens_init
+            ;;
+        "help"|"--help"|"-h"|"")
+            echo.header "Dotfiles OAuth Tokens Manager"
+            echo
+            echo.info "Usage: dotfiles-tokens <command> [options]"
+            echo
+            echo.info "Commands:"
+            echo.cyan "  list, ls" | tr '\n' ' '
+            echo "     - List all OAuth tokens"
+            echo.cyan "  get <name>" | tr '\n' ' '
+            echo "     - Get OAuth token details"
+            echo.cyan "  set <name> <type> <public_key> <private_key> [description]" | tr '\n' ' '
+            echo "     - Store OAuth token with key pair"
+            echo.cyan "  remove, rm <name>" | tr '\n' ' '
+            echo "     - Remove OAuth token"
+            echo.cyan "  generate, gen <name> [type] [bits] [description]" | tr '\n' ' '
+            echo "     - Generate new key pair"
+            echo.cyan "  search <query>" | tr '\n' ' '
+            echo "     - Search OAuth tokens"
+            echo.cyan "  export" | tr '\n' ' '
+            echo "     - Export public keys to environment"
+            echo.cyan "  info [name]" | tr '\n' ' '
+            echo "     - Show database info or token details"
+            echo.cyan "  init" | tr '\n' ' '
+            echo "     - Initialize encryption keys"
+            echo.cyan "  help" | tr '\n' ' '
+            echo "     - Show this help message"
+            echo
+            echo.info "Key Types:"
+            echo "  rsa      - RSA key pair (default: 2048 bits)"
+            echo "  ec       - Elliptic Curve key pair (secp256r1)"
+            echo "  ed25519  - Ed25519 key pair"
+            echo
+            echo.info "Examples:"
+            echo "  dotfiles-tokens set GITHUB_OAUTH oauth 'public_key' 'private_key' 'GitHub OAuth'"
+            echo "  dotfiles-tokens generate GITHUB_OAUTH rsa 4096 'GitHub OAuth App'"
+            echo "  dotfiles-tokens get GITHUB_OAUTH"
+            echo "  dotfiles-tokens export"
+            ;;
+        *)
+            echo.error "Unknown command: $command"
+            echo.info "Run 'dotfiles-tokens help' for usage information"
+            return 1
+            ;;
+    esac
+}
+
+# Run main function with all arguments
+main "$@"
+
