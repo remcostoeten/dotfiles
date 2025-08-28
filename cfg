@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 
 export DOTFILES_ROOT="${HOME}/.config/dotfiles"
-export DOTFILES_VERSION="3.0.0"
 
 [[ ! -d "$DOTFILES_ROOT" ]] && echo "ERROR: Dotfiles not found at $DOTFILES_ROOT" && exit 1
 
-source "${DOTFILES_ROOT}/core/env"
+source "${DOTFILES_ROOT}/core/_env"
 
-source "${DOTFILES_ROOT}/core/colors"
+source "${DOTFILES_ROOT}/core/_colors"
 
 [[ -f "${DOTFILES_ROOT}/assets/ascii/intro" ]] && source "${DOTFILES_ROOT}/assets/ascii/intro" && echo.dotfiles_banner 2>/dev/null || true
 
-source "${DOTFILES_ROOT}/core/safety"
+source "${DOTFILES_ROOT}/core/_safety"
 
-source "${DOTFILES_ROOT}/core/bootstrap"
+source "${DOTFILES_ROOT}/core/_bootstrap"
 
 dotfiles_bootstrap
 
@@ -26,15 +25,11 @@ if [[ -t 1 ]]; then
     echo.info "Type $(echo.cyan 'dotfiles help') for available commands"
     echo
 fi
-# Load secrets and tokens
-# Use dotfiles secrets to manage encrypted secrets
-# Use dotfiles tokens to manage OAuth tokens
+# Load environment variables & secrets
+# Use dotfiles env to manage encrypted environment variables and OAuth tokens
 
-# Export encrypted secrets to environment
-dotfiles secrets export 2>/dev/null || true
-
-# Export OAuth public keys to environment
-dotfiles tokens export 2>/dev/null || true
+# Export environment variables and secrets
+dotfiles env export 2>/dev/null || true
 
 # Personal Startpage - Auto command tracking
 source /home/remcostoeten/current/personal-startpage/shell-integration.sh

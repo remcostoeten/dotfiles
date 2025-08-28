@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+# Update all Starship variants to include dotfiles version
+DOTFILES_ROOT="${DOTFILES_ROOT:-$HOME/.config/dotfiles}"
+STARSHIP_VARIANTS_DIR="$DOTFILES_ROOT/starship-variants"
+
+echo "Updating all Starship variants with dotfiles version module..."
+
+# The custom module configuration
+CUSTOM_MODULE='[custom.dotfiles_version]
+command = "~/.config/dotfiles/bin/dotfiles-version-short"
+when = "test -f ~/.config/dotfiles/bin/dotfiles-version-short"
+style = "bg:#6A1B9A white bold"
+format = '"'"'[ 󰔘 v$output ]($style)'"'"'
+description = "Show current dotfiles version"'
+
+for variant_file in "$STARSHIP_VARIANTS_DIR"/*.toml; do
+    if [[ -f "$variant_file" ]]; then
+        variant_name=$(basename "$variant_file" .toml)
+        echo "Processing $variant_name..."
+        
+        # Check if already has the custom module
+        if grep -q "custom.dotfiles_version" "$variant_file"; then
+            echo "  ✓ Already has version module"
+            continue
+        fi
+        
+        # Add the custom module before [character] section
+        if grep -q "^\[character\]" "$variant_file"; then
+            # Create temp file with the module inserted
+            awk '
+            /^\[character\]/ {
+                print ""
+                print "'"${CUSTOM_MODULE//\'/\\\'}"'"
+                print ""
+            }
+            { print }
+            ' "$variant_file" > "${variant_file}.tmp" && mv "${variant_file}.tmp" "$variant_file"
+            echo "  ✓ Added custom module"
+        fi
+        
+        # Add to format string if not already there
+        if ! grep -q '\$custom\.dotfiles_version' "$variant_file"; then
+            # Simple pattern: add version after username in format section
+            sed -i '/\$username\\/s/$username\\/$username\\\n[](bg:#6A1B9A fg:#[0-9A-Fa-f]*)\\\n$custom.dotfiles_version\\\n[](bg:#[0-9A-Fa-f]* fg:#6A1B9A)\\/' "$variant_file"
+            echo "  ✓ Updated format string"
+        fi
+    fi
+done
+
+echo "✓ All variants updated!"
+echo "💡 To apply changes, reload your shell or run: exec \$SHELL"

@@ -18,6 +18,7 @@ if [[ -f "$DOTFILES_ROOT/core/bootstrap" ]]; then
         echo
     fi
 else
-    echo "ERROR: Could not find bootstrap file at $DOTFILES_ROOT/core/bootstrap"
+    echo "ERROR: Could not find bootstrap file at $DOTFILES_ROOT/core/_bootstrap"
     echo "Please check your dotfiles installation."
 fi
+

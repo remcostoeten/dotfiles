@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-source "${HOME}/.config/dotfiles/core/env"
-source "${HOME}/.config/dotfiles/core/colors"
-source "${HOME}/.config/dotfiles/core/safety"
+source "${HOME}/.config/dotfiles/core/_env"
+source "${HOME}/.config/dotfiles/core/_colors"
+source "${HOME}/.config/dotfiles/core/_safety"
 
 function link_list() {
     echo.header "Symlink Registry"

@@ -116,4 +116,4 @@ alias ..='cd ..'
 
 # @alias ...
 # @desc Go up two directories
-alias ...='cd ../..'
+alias ...='cd ../..'alias promptc="prompt"

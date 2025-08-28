@@ -1,13 +1,10 @@
-# Secrets and encryption keys - NEVER commit these
-utils/secrets.json
-utils/.secrets.key
-utils/.secrets.salt
-utils/tokens.json
-utils/.tokens.key
-utils/.tokens.salt
+# Environment variables and encryption keys - NEVER commit these
+utils/env.json
+utils/.env.key
+utils/.env.salt
 
-# Secrets sync vault (stored externally)
-.secrets-vault/
+# Environment sync vault (stored externally)
+.env-vault/
 
 # Backup files
 utils/backups/
@@ -16,7 +13,6 @@ utils/backups/
 
 # Local state that shouldn't be shared
 utils/state.json
-utils/env.json
 
 # OS-specific files
 .DS_Store

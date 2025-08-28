@@ -10,7 +10,7 @@ function echo.dotfiles_banner() {
     echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_DIM}╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝${COLOR_RESET}   ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
     echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                                                           ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
     echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}            ${COLOR_BOLD}${COLOR_YELLOW}Terminal Configuration Framework${COLOR_RESET}               ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                    ${COLOR_MAGENTA}Version 3.0.0${COLOR_RESET}                          ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                    ${COLOR_MAGENTA}Version ${DOTFILES_VERSION}${COLOR_RESET}                          ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
     echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                                                           ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
     echo "${COLOR_BRIGHT_CYAN}╚═══════════════════════════════════════════════════════════╝${COLOR_RESET}"
     echo

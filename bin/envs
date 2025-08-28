@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-source "$HOME/.config/dotfiles/core/constants"
+source "$HOME/.config/dotfiles/core/_constants"
+source "$HOME/.config/dotfiles/core/_constants"
 source "$DOTFILES_UTILS/colors"
 
 function envs_help() {

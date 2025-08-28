@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+# Add dotfiles version module to all Starship variants
+DOTFILES_ROOT="${DOTFILES_ROOT:-$HOME/.config/dotfiles}"
+STARSHIP_VARIANTS_DIR="$DOTFILES_ROOT/starship-variants"
+
+# Custom dotfiles version module configuration
+CUSTOM_MODULE='
+[custom.dotfiles_version]
+command = "~/.config/dotfiles/bin/dotfiles-version-short"
+when = "test -f ~/.config/dotfiles/bin/dotfiles-version-short"
+style = "bg:#6A1B9A white bold"
+format = '"'"'[ 󰔘 v$output ]($style)'"'"'
+description = "Show current dotfiles version"'
+
+echo "Adding dotfiles version module to all Starship variants..."
+
+# Process each variant
+for variant_file in "$STARSHIP_VARIANTS_DIR"/*.toml; do
+    if [[ -f "$variant_file" ]]; then
+        variant_name=$(basename "$variant_file" .toml)
+        echo "  Processing $variant_name..."
+        
+        # Check if the custom module already exists
+        if grep -q "custom.dotfiles_version" "$variant_file"; then
+            echo "    ✓ Version module already exists in $variant_name"
+            continue
+        fi
+        
+        # Add the custom module before [character] section
+        if grep -q "^\[character\]" "$variant_file"; then
+            # Insert before [character] section
+            sed -i '/^\[character\]/i\\n'"$(echo "$CUSTOM_MODULE" | sed 's/$/\\n/g' | tr -d '\n')"'\\n' "$variant_file"
+        else
+            # Append to end of file
+            echo -e "\n$CUSTOM_MODULE" >> "$variant_file"
+        fi
+        
+        # Add the version module to the format string if it doesn't exist
+        if ! grep -q '\$custom\.dotfiles_version' "$variant_file"; then
+            # Find the format section and add the version module after username
+            sed -i '/^format = """/,/^"""/ {
+                s/\$username\\/&\n[](bg:#6A1B9A fg:#[0-9A-Fa-f]*)\\/\n$custom.dotfiles_version\\/\n[](bg:#[0-9A-Fa-f]* fg:#6A1B9A)\\/
+            }' "$variant_file"
+        fi
+        
+        echo "    ✓ Added version module to $variant_name"
+    fi
+done
+
+echo "✓ Finished updating all Starship variants"
+echo "ℹ  Reload your shell or run 'exec \$SHELL' to see the changes"

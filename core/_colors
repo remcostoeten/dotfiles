@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+# Color definitions and helper functions
+
+# --- Colors ---
+export NC='\033[0m' # No Color
+export RED='\033[0;31m'
+export GREEN='\033[0;32m'
+export YELLOW='\033[1;33m'
+export BLUE='\033[0;34m'
+export PURPLE='\033[0;35m'
+export CYAN='\033[0;36m'
+export WHITE='\033[1;37m'
+export BOLD='\033[1m'
+
+# --- Helper Functions ---
+function echo.error() {
+    echo -e "${RED}✗${NC} $@"
+}
+
+function echo.success() {
+    echo -e "${GREEN}✓${NC} $@"
+}
+
+function echo.warning() {
+    echo -e "${YELLOW}⚠${NC} $@"
+}
+
+function echo.info() {
+    echo -e "${CYAN}ℹ${NC} $@"
+}
+
+function echo.debug() {
+    [[ "$DOTFILES_DEBUG" == "1" ]] && echo -e "${PURPLE}DEBUG:${NC} $@"
+}
+
+function echo.verbose() {
+    [[ "$DOTFILES_VERBOSE" == "1" ]] && echo -e "${PURPLE}VERBOSE:${NC} $@"
+}
+
+function echo.header() {
+    echo -e "\n${BOLD}${BLUE}════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BOLD}${BLUE}                    $@${NC}"
+    echo -e "${BOLD}${BLUE}════════════════════════════════════════════════════════════${NC}\n"
+}
+
+function echo.cyan() {
+    echo -e "${CYAN}$@${NC}"
+}
+
+function echo.purple() {
+    echo -e "${PURPLE}$@${NC}"
+}

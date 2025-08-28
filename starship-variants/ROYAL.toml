@@ -1,0 +1,131 @@
+format = """
+[](#4B0082)\
+$username\
+[](bg:#8A2BE2 fg:#4B0082)\
+$directory\
+[](fg:#8A2BE2 bg:#9370DB)\
+$git_branch\
+$git_status\
+[](fg:#9370DB bg:#FFD700)\
+$c\
+$elixir\
+$elm\
+$golang\
+$gradle\
+$haskell\
+$java\
+$julia\
+$nodejs\
+$nim\
+$rust\
+$scala\
+[](fg:#FFD700 bg:#DA70D6)\
+$docker_context\
+[](fg:#DA70D6 bg:#DDA0DD)\
+$time\
+[ ](fg:#DDA0DD)\
+"""
+
+add_newline = false
+
+[username]
+show_always = true
+style_user = "bg:#4B0082 bold white"
+style_root = "bg:#4B0082 bold white"
+format = '[  $user ]($style)'
+disabled = false
+
+[directory]
+style = "bg:#8A2BE2 bold white"
+format = "[ 󰉋 $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+
+[c]
+symbol = " "
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[docker_context]
+symbol = " "
+style = "bg:#DA70D6 black bold"
+format = '[ $symbol $context ]($style) $path'
+
+[elixir]
+symbol = " "
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[elm]
+symbol = " "
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[git_branch]
+symbol = ""
+style = "bg:#9370DB white bold"
+format = '[ $symbol $branch ]($style)'
+
+[git_status]
+style = "bg:#9370DB white bold"
+format = '[$all_status$ahead_behind ]($style)'
+
+[golang]
+symbol = " "
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[gradle]
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[haskell]
+symbol = " "
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[java]
+symbol = " "
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[julia]
+symbol = " "
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[nodejs]
+symbol = ""
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[nim]
+symbol = "󰆥 "
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[rust]
+symbol = ""
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[scala]
+symbol = " "
+style = "bg:#FFD700 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:#DDA0DD black bold"
+format = '[ 👑 $time ]($style)'
+
+[character]
+success_symbol = '[⟩⟩⟩](bold magenta)'
+error_symbol = '[⟩⟩⟩](bold red)'

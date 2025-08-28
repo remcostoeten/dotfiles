@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+# Get dotfiles version for Starship prompt
+# Returns just the version number without extra formatting
+
+DOTFILES_ROOT="${DOTFILES_ROOT:-$HOME/.config/dotfiles}"
+VERSION_TOOL="$DOTFILES_ROOT/bin/dotfiles-version"
+
+if [[ -x "$VERSION_TOOL" ]]; then
+    "$VERSION_TOOL" show 2>/dev/null | grep "Current version:" | awk '{print $3}' 2>/dev/null || echo "unknown"
+else
+    # Fallback: try to read from constants file
+    if [[ -f "$DOTFILES_ROOT/core/_constants" ]]; then
+        grep "DOTFILES_VERSION=" "$DOTFILES_ROOT/core/_constants" 2>/dev/null | cut -d'"' -f2 || echo "unknown"
+    else
+        echo "unknown"
+    fi
+fi

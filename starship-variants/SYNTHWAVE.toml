@@ -1,0 +1,131 @@
+format = """
+[](#0D1B2A)\
+$username\
+[](bg:#FF006E fg:#0D1B2A)\
+$directory\
+[](fg:#FF006E bg:#8338EC)\
+$git_branch\
+$git_status\
+[](fg:#8338EC bg:#3A86FF)\
+$c\
+$elixir\
+$elm\
+$golang\
+$gradle\
+$haskell\
+$java\
+$julia\
+$nodejs\
+$nim\
+$rust\
+$scala\
+[](fg:#3A86FF bg:#06FFA5)\
+$docker_context\
+[](fg:#06FFA5 bg:#FFBE0B)\
+$time\
+[ ](fg:#FFBE0B)\
+"""
+
+add_newline = false
+
+[username]
+show_always = true
+style_user = "bg:#0D1B2A bold white"
+style_root = "bg:#0D1B2A bold white"
+format = '[  $user ]($style)'
+disabled = false
+
+[directory]
+style = "bg:#FF006E bold white"
+format = "[ 󰉋 $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+
+[c]
+symbol = " "
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[docker_context]
+symbol = " "
+style = "bg:#06FFA5 black bold"
+format = '[ $symbol $context ]($style) $path'
+
+[elixir]
+symbol = " "
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[elm]
+symbol = " "
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[git_branch]
+symbol = ""
+style = "bg:#8338EC white bold"
+format = '[ $symbol $branch ]($style)'
+
+[git_status]
+style = "bg:#8338EC white bold"
+format = '[$all_status$ahead_behind ]($style)'
+
+[golang]
+symbol = " "
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[gradle]
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[haskell]
+symbol = " "
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[java]
+symbol = " "
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[julia]
+symbol = " "
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[nodejs]
+symbol = ""
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[nim]
+symbol = "󰆥 "
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[rust]
+symbol = ""
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[scala]
+symbol = " "
+style = "bg:#3A86FF white bold"
+format = '[ $symbol ($version) ]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:#FFBE0B black bold"
+format = '[ 🌆 $time ]($style)'
+
+[character]
+success_symbol = '[⟩⟩⟩](bold magenta)'
+error_symbol = '[⟩⟩⟩](bold red)'

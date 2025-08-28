@@ -1,0 +1,131 @@
+format = """
+[](#FF00FF)\
+$username\
+[](bg:#00FFFF fg:#FF00FF)\
+$directory\
+[](fg:#00FFFF bg:#FFFF00)\
+$git_branch\
+$git_status\
+[](fg:#FFFF00 bg:#00FF00)\
+$c\
+$elixir\
+$elm\
+$golang\
+$gradle\
+$haskell\
+$java\
+$julia\
+$nodejs\
+$nim\
+$rust\
+$scala\
+[](fg:#00FF00 bg:#FF0080)\
+$docker_context\
+[](fg:#FF0080 bg:#8000FF)\
+$time\
+[ ](fg:#8000FF)\
+"""
+
+add_newline = false
+
+[username]
+show_always = true
+style_user = "bg:#FF00FF bold"
+style_root = "bg:#FF00FF bold"
+format = '[  $user ]($style)'
+disabled = false
+
+[directory]
+style = "bg:#00FFFF bold black"
+format = "[ 󰉋 $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+
+[c]
+symbol = " "
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[docker_context]
+symbol = " "
+style = "bg:#FF0080 bold"
+format = '[ $symbol $context ]($style) $path'
+
+[elixir]
+symbol = " "
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[elm]
+symbol = " "
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[git_branch]
+symbol = ""
+style = "bg:#FFFF00 black bold"
+format = '[ $symbol $branch ]($style)'
+
+[git_status]
+style = "bg:#FFFF00 black bold"
+format = '[$all_status$ahead_behind ]($style)'
+
+[golang]
+symbol = " "
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[gradle]
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[haskell]
+symbol = " "
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[java]
+symbol = " "
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[julia]
+symbol = " "
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[nodejs]
+symbol = ""
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[nim]
+symbol = "󰆥 "
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[rust]
+symbol = ""
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[scala]
+symbol = " "
+style = "bg:#00FF00 black bold"
+format = '[ $symbol ($version) ]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:#8000FF bold"
+format = '[ ⚡ $time ]($style)'
+
+[character]
+success_symbol = '[⟩⟩⟩](bold cyan)'
+error_symbol = '[⟩⟩⟩](bold red)'

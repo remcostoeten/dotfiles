@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 
-source "${HOME}/.config/dotfiles/core/env"
-source "${HOME}/.config/dotfiles/core/colors"
-source "${HOME}/.config/dotfiles/core/safety"
+source "${HOME}/.config/dotfiles/core/_env"
+source "${HOME}/.config/dotfiles/core/_colors"
+source "${HOME}/.config/dotfiles/core/_safety"
 
 # Configuration
-SECRETS_SYNC_DIR="${HOME}/.secrets-vault"
-ENCRYPTED_BACKUP="${SECRETS_SYNC_DIR}/secrets.vault"
-SYNC_URL_FILE="${SECRETS_SYNC_DIR}/sync_url"
+ENV_SYNC_DIR="${HOME}/.env-vault"
+ENCRYPTED_BACKUP="${ENV_SYNC_DIR}/env.vault"
+SYNC_URL_FILE="${ENV_SYNC_DIR}/sync_url"
 
-# Initialize secrets vault
-function secrets_sync_init() {
-    echo.info "Initializing secrets sync system..."
+# Initialize environment vault
+function env_sync_init() {
+    echo.info "Initializing environment sync system..."
     
-    mkdir -p "$SECRETS_SYNC_DIR"
-    chmod 700 "$SECRETS_SYNC_DIR"
+    mkdir -p "$ENV_SYNC_DIR"
+    chmod 700 "$ENV_SYNC_DIR"
     
     if [[ ! -f "$SYNC_URL_FILE" ]]; then
         echo.info "Choose sync method:"
@@ -43,7 +43,7 @@ function secrets_sync_init() {
         esac
     fi
     
-    echo.success "Secrets sync initialized"
+    echo.success "Environment sync initialized"
 }
 
 # Setup GitHub gist for sync
@@ -62,16 +62,16 @@ function setup_github_gist() {
         return 1
     fi
     
-    # Search for existing secrets gist first
-    echo.info "Checking for existing secrets gist..."
-    local existing_gist=$(gh gist list --limit 100 | grep -E "(Encrypted dotfiles secrets|secrets\.vault)" | head -1 | awk '{print $1}' || true)
+    # Search for existing env gist first
+    echo.info "Checking for existing environment gist..."
+    local existing_gist=$(gh gist list --limit 100 | grep -E "(Encrypted dotfiles environment|env\.vault)" | head -1 | awk '{print $1}' || true)
     
     if [[ -n "$existing_gist" ]]; then
         echo.info "Found existing secrets gist: $existing_gist"
         read -r -p "Use existing gist? [Y/n] " use_existing
         if [[ ! "$use_existing" =~ ^[Nn]$ ]]; then
             local github_user=$(gh api user --jq .login)
-            echo "https://gist.githubusercontent.com/${github_user}/${existing_gist}/raw/secrets.vault" > "$SYNC_URL_FILE"
+            echo "https://gist.githubusercontent.com/${github_user}/${existing_gist}/raw/env.vault" > "$SYNC_URL_FILE"
             echo.success "Using existing gist: $existing_gist"
             return 0
         fi
@@ -80,23 +80,23 @@ function setup_github_gist() {
     # Create new private gist
     echo.info "Creating new private gist..."
     local gist_content='{
-  "description": "Encrypted dotfiles secrets - DO NOT EDIT MANUALLY",
+  "description": "Encrypted dotfiles environment - DO NOT EDIT MANUALLY",
   "public": false,
   "files": {
-    "secrets.vault": {
-      "content": "# Encrypted dotfiles secrets\n# This file is managed by dotfiles-secrets-sync\n# Last updated: '$(date)'\n\nplaceholder"
+    "env.vault": {
+      "content": "# Encrypted dotfiles environment\n# This file is managed by dotfiles-env-sync\n# Last updated: '$(date)'\n\nplaceholder"
     },
     "README.md": {
-      "content": "# Encrypted Dotfiles Secrets\n\nThis gist contains encrypted secrets for dotfiles sync.\n\n**Do not edit manually!**\n\nManaged by: dotfiles-secrets-sync\nLast updated: '$(date)'\n"
+      "content": "# Encrypted Dotfiles Environment\n\nThis gist contains encrypted environment variables for dotfiles sync.\n\n**Do not edit manually!**\n\nManaged by: dotfiles-env-sync\nLast updated: '$(date)'\n"
     }
   }
 }'
     
-    local gist_id=$(echo "$gist_content" | gh gist create --private --filename secrets.vault --desc "Encrypted dotfiles secrets" | grep -o '[a-f0-9]\{32\}')
+    local gist_id=$(echo "$gist_content" | gh gist create --private --filename env.vault --desc "Encrypted dotfiles environment" | grep -o '[a-f0-9]\{32\}')
     
     if [[ -n "$gist_id" ]]; then
         local github_user=$(gh api user --jq .login)
-        echo "https://gist.githubusercontent.com/${github_user}/${gist_id}/raw/secrets.vault" > "$SYNC_URL_FILE"
+        echo "https://gist.githubusercontent.com/${github_user}/${gist_id}/raw/env.vault" > "$SYNC_URL_FILE"
         echo.success "GitHub gist created: $gist_id"
         echo.info "Gist URL: https://gist.github.com/${github_user}/${gist_id}"
     else
@@ -105,17 +105,17 @@ function setup_github_gist() {
     fi
 }
 
-# Encrypt and upload secrets
-function secrets_sync_push() {
-    echo.info "Encrypting and syncing secrets..."
+# Encrypt and upload environment variables
+function env_sync_push() {
+    echo.info "Encrypting and syncing environment variables..."
     
-    if [[ ! -f "$DOTFILES_SECRETS_DB" ]]; then
-        echo.error "No secrets database found"
+    if [[ ! -f "$DOTFILES_ENV_DB" ]]; then
+        echo.error "No environment database found"
         return 1
     fi
     
     if [[ ! -f "$SYNC_URL_FILE" ]]; then
-        echo.error "Sync not initialized. Run: dotfiles secrets-sync init"
+        echo.error "Sync not initialized. Run: dotfiles env-sync init"
         return 1
     fi
     
@@ -124,7 +124,7 @@ function secrets_sync_push() {
     echo
     
     # Create encrypted backup
-    tar -czf - -C "$DOTFILES_UTILS" secrets.json .secrets.key .secrets.salt 2>/dev/null | \
+    tar -czf - -C "$DOTFILES_UTILS" env.json .env.key .env.salt 2>/dev/null | \
     openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -pass "pass:$master_pass" -out "$ENCRYPTED_BACKUP"
     
     # Upload to sync location
@@ -133,28 +133,28 @@ function secrets_sync_push() {
     if [[ "$sync_url" == https://gist.githubusercontent.com/* ]]; then
         # Update GitHub gist
         local gist_id=$(echo "$sync_url" | sed 's|.*github.com/.*/\([^/]*\)/.*|\1|')
-        gh gist edit "$gist_id" --add secrets.vault < "$ENCRYPTED_BACKUP"
-        echo.success "Secrets pushed to GitHub gist"
+        gh gist edit "$gist_id" --add env.vault < "$ENCRYPTED_BACKUP"
+        echo.success "Environment variables pushed to GitHub gist"
     elif [[ "$sync_url" == file://* ]]; then
         # Copy to file location
         local file_path="${sync_url#file://}"
-        cp "$ENCRYPTED_BACKUP" "$file_path/secrets.vault"
-        echo.success "Secrets pushed to $file_path"
+        cp "$ENCRYPTED_BACKUP" "$file_path/env.vault"
+        echo.success "Environment variables pushed to $file_path"
     else
         # Upload via curl
         curl -s -X PUT --data-binary "@$ENCRYPTED_BACKUP" "$sync_url" > /dev/null
-        echo.success "Secrets pushed to $sync_url"
+        echo.success "Environment variables pushed to $sync_url"
     fi
     
     rm -f "$ENCRYPTED_BACKUP"
 }
 
-# Download and decrypt secrets
-function secrets_sync_pull() {
-    echo.info "Downloading and decrypting secrets..."
+# Download and decrypt environment variables
+function env_sync_pull() {
+    echo.info "Downloading and decrypting environment variables..."
     
     if [[ ! -f "$SYNC_URL_FILE" ]]; then
-        echo.error "Sync not initialized. Run: dotfiles secrets-sync init"
+        echo.error "Sync not initialized. Run: dotfiles env-sync init"
         return 1
     fi
     
@@ -165,13 +165,13 @@ function secrets_sync_pull() {
         curl -s "$sync_url" -o "$ENCRYPTED_BACKUP"
     elif [[ "$sync_url" == file://* ]]; then
         local file_path="${sync_url#file://}"
-        cp "$file_path/secrets.vault" "$ENCRYPTED_BACKUP"
+        cp "$file_path/env.vault" "$ENCRYPTED_BACKUP"
     else
         curl -s "$sync_url" -o "$ENCRYPTED_BACKUP"
     fi
     
     if [[ ! -f "$ENCRYPTED_BACKUP" ]] || [[ ! -s "$ENCRYPTED_BACKUP" ]]; then
-        echo.error "Failed to download secrets or file is empty"
+        echo.error "Failed to download environment variables or file is empty"
         return 1
     fi
     
@@ -179,19 +179,19 @@ function secrets_sync_pull() {
     read -r -s -p "Enter master password for decryption: " master_pass
     echo
     
-    # Create backup of current secrets
-    if [[ -f "$DOTFILES_SECRETS_DB" ]]; then
-        cp "$DOTFILES_SECRETS_DB" "${DOTFILES_SECRETS_DB}.backup.$(date +%s)"
-        echo.info "Current secrets backed up"
+    # Create backup of current environment variables
+    if [[ -f "$DOTFILES_ENV_DB" ]]; then
+        cp "$DOTFILES_ENV_DB" "${DOTFILES_ENV_DB}.backup.$(date +%s)"
+        echo.info "Current environment variables backed up"
     fi
     
     # Decrypt and extract
     if openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 -pass "pass:$master_pass" -in "$ENCRYPTED_BACKUP" | \
        tar -xzf - -C "$DOTFILES_UTILS" 2>/dev/null; then
-        echo.success "Secrets successfully restored"
-        echo.info "Run 'dotfiles secrets list' to verify"
+        echo.success "Environment variables successfully restored"
+        echo.info "Run 'dotfiles env list' to verify"
     else
-        echo.error "Failed to decrypt secrets. Wrong password?"
+        echo.error "Failed to decrypt environment variables. Wrong password?"
         return 1
     fi
     
@@ -199,10 +199,10 @@ function secrets_sync_pull() {
 }
 
 # Auto-sync on dotfiles operations
-function secrets_sync_auto() {
+function env_sync_auto() {
     if [[ -f "$SYNC_URL_FILE" ]] && [[ "${DOTFILES_AUTO_SYNC:-0}" == "1" ]]; then
-        echo.info "Auto-syncing secrets..."
-        secrets_sync_push
+        echo.info "Auto-syncing environment variables..."
+        env_sync_push
     fi
 }
 
@@ -213,16 +213,16 @@ function main() {
     
     case "$command" in
         "init")
-            secrets_sync_init
+            env_sync_init
             ;;
         "push"|"upload")
-            secrets_sync_push
+            env_sync_push
             ;;
         "pull"|"download")
-            secrets_sync_pull
+            env_sync_pull
             ;;
         "auto")
-            secrets_sync_auto
+            env_sync_auto
             ;;
         "status")
             if [[ -f "$SYNC_URL_FILE" ]]; then
@@ -232,33 +232,33 @@ function main() {
             fi
             ;;
         "help"|"--help"|"-h"|"")
-            echo.header "Dotfiles Secrets Sync"
+            echo.header "Dotfiles Environment Sync"
             echo
-            echo.info "Usage: dotfiles secrets-sync <command>"
+            echo.info "Usage: dotfiles env-sync <command>"
             echo
             echo.info "Commands:"
             echo.cyan "  init" | tr '\n' ' '
             echo "       - Initialize sync system"
             echo.cyan "  push" | tr '\n' ' '
-            echo "       - Encrypt and upload secrets"
+            echo "       - Encrypt and upload environment variables"
             echo.cyan "  pull" | tr '\n' ' '
-            echo "       - Download and decrypt secrets"
+            echo "       - Download and decrypt environment variables"
             echo.cyan "  status" | tr '\n' ' '
             echo "       - Show sync configuration"
             echo.cyan "  help" | tr '\n' ' '
             echo "       - Show this help"
             echo
             echo.info "Setup:"
-            echo "1. Run 'dotfiles secrets-sync init' on your main machine"
-            echo "2. Run 'dotfiles secrets-sync push' to upload secrets"
-            echo "3. On new machine: clone dotfiles, then 'dotfiles secrets-sync pull'"
+            echo "1. Run 'dotfiles env-sync init' on your main machine"
+            echo "2. Run 'dotfiles env-sync push' to upload environment variables"
+            echo "3. On new machine: clone dotfiles, then 'dotfiles env-sync pull'"
             echo
             echo.info "Auto-sync:"
             echo "Set DOTFILES_AUTO_SYNC=1 in your environment for automatic syncing"
             ;;
         *)
             echo.error "Unknown command: $command"
-            echo.info "Run 'dotfiles secrets-sync help' for usage"
+            echo.info "Run 'dotfiles env-sync help' for usage"
             return 1
             ;;
     esac

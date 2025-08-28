@@ -1,106 +1,78 @@
-# 🔐 Secrets & Token Management System
+# 🔐 Environment Variables & Secrets Management System
 
-A secure approach to managing sensitive data and OAuth tokens in your dotfiles system.
+A secure and unified approach to managing environment variables, secrets, and OAuth tokens in your dotfiles system.
 
 ## 🎯 **System Overview**
 
-This system provides **two security-focused modules** for sensitive data:
+This system provides **one comprehensive security module** for all sensitive data:
 
-1. **🔐 Secrets Manager** - Encrypts and stores sensitive data (API keys, passwords)
-2. **🔑 OAuth Tokens Manager** - Handles public/private key pairs for OAuth
+1. **🔐 Environment Manager** - Encrypts and stores environment variables, secrets, API keys, passwords, and OAuth tokens
 
 ## 📁 **File Structure**
 
 ```
 ~/.config/dotfiles/
 ├── bin/
-│   ├── dotfiles-secrets         # Encrypted secrets manager
-│   └── dotfiles-tokens          # OAuth tokens manager
+│   ├── dotfiles-env             # Environment variables & secrets manager
+│   └── dotfiles-env-sync        # Sync across machines
 └── utils/
-    ├── secrets.json             # Encrypted secrets database
-    └── tokens.json              # Encrypted OAuth tokens database
+    └── env.json                 # Encrypted environment database
 ```
 
-## 🔐 **Secrets Manager (`dotfiles secrets`)**
+## 🔐 **Environment Manager (`dotfiles env`)**
 
-Encrypts and stores sensitive data like API keys and passwords.
+Encrypts and stores environment variables, secrets, API keys, passwords, and OAuth tokens.
 
 ### **Features**
 - **AES-256 encryption** with PBKDF2 key derivation
-- **Multiple secret types** (api, password, token, database, etc.)
+- **Multiple variable types** (api, password, token, database, oauth, etc.)
+- **OAuth key pair generation** (RSA, EC, Ed25519)
 - **Automatic export** to environment variables
 - **Backup and restore** functionality
+- **Interactive clipboard support**
 
 ### **Usage**
 
 ```bash
-# Store a secret
-dotfiles secrets set GITHUB_TOKEN "your_token" api
+# Store a secret/environment variable
+dotfiles env set GITHUB_TOKEN "your_token" api
 
-# Retrieve a secret
-dotfiles secrets get GITHUB_TOKEN
+# Retrieve a value
+dotfiles env get GITHUB_TOKEN
 
-# List all secrets
-dotfiles secrets list
+# List all variables
+dotfiles env list
 
 # Export to environment
-dotfiles secrets export
+dotfiles env export
 
-# Generate random secrets
-dotfiles secrets generate DB_PASSWORD 64 database
+# Generate random values
+dotfiles env generate DB_PASSWORD 64 database
+
+# Generate OAuth key pairs
+dotfiles env generate-oauth GITHUB_OAUTH rsa 4096 "GitHub OAuth App"
 ```
 
-## 🔑 **OAuth Tokens Manager (`dotfiles tokens`)**
-
-Manages OAuth applications with public/private key pairs.
-
-### **Features**
-- **Key pair generation** (RSA, EC, Ed25519)
-- **Encrypted private key storage**
-- **Public key export** to environment
-- **Descriptive metadata** for each token
-
-### **Usage**
-
-```bash
-# Generate new key pair
-dotfiles tokens generate GITHUB_OAUTH rsa 4096 "GitHub OAuth App"
-
-# Store existing key pair
-dotfiles tokens set GITHUB_OAUTH oauth "public_key" "private_key" "GitHub OAuth"
-
-# View token details
-dotfiles tokens get GITHUB_OAUTH
-
-# Export public keys
-dotfiles tokens export
-
-# List all tokens
-dotfiles tokens list
-```
 
 ## 🚀 **Integration with Main System**
 
-Both modules are integrated into the main `dotfiles` command:
+The environment manager is integrated into the main `dotfiles` command:
 
 ```bash
-# Secrets management
-dotfiles secrets set API_KEY "value" api
-dotfiles secrets export
+# Environment variable management
+dotfiles env set API_KEY "value" api
+dotfiles env export
 
-# OAuth tokens management
-dotfiles tokens generate APP_OAUTH rsa 2048 "App OAuth"
-dotfiles tokens export
+# OAuth key pair generation
+dotfiles env generate-oauth APP_OAUTH rsa 2048 "App OAuth"
 ```
 
 ## 🔒 **Security Features**
 
-### **Secrets Manager**
+### **Environment Manager**
 - ✅ **AES-256 encryption** - Military-grade security
 - ✅ **Secure key storage** - Separate encryption keys
 - ✅ **File permissions** - Restrictive access (600)
-
-### **OAuth Tokens**
 - ✅ **Private key encryption** - Never stored in plain text
 - ✅ **Public key export** - Safe for environment variables
 - ✅ **Key generation** - Cryptographically secure
@@ -111,10 +83,10 @@ dotfiles tokens export
 
 ```bash
 # 1. Store API key securely
-dotfiles secrets set SERVICE_API_KEY "your_key" api
+dotfiles env set SERVICE_API_KEY "your_key" api
 
 # 2. Export to environment
-dotfiles secrets export
+dotfiles env export
 
 # 3. Use in your scripts
 echo $SERVICE_API_KEY
@@ -124,10 +96,10 @@ echo $SERVICE_API_KEY
 
 ```bash
 # 1. Generate key pair
-dotfiles tokens generate GITHUB_OAUTH rsa 4096 "GitHub OAuth App"
+dotfiles env generate-oauth GITHUB_OAUTH rsa 4096 "GitHub OAuth App"
 
-# 2. Export public key
-dotfiles tokens export
+# 2. Export variables
+dotfiles env export
 
 # 3. Use public key in your app
 echo $GITHUB_OAUTH_PUBLIC_KEY
@@ -135,47 +107,44 @@ echo $GITHUB_OAUTH_PUBLIC_KEY
 
 ## 🧹 **Clean Configuration**
 
-Your `cfg` file automatically loads secrets and tokens:
+Your `cfg` file automatically loads environment variables:
 
 ```bash
-# Export encrypted secrets to environment
-dotfiles secrets export 2>/dev/null || true
-
-# Export OAuth public keys to environment
-dotfiles tokens export 2>/dev/null || true
+# Export encrypted environment variables and secrets
+dotfiles env export 2>/dev/null || true
 ```
 
 ## 🎯 **Best Practices**
 
-1. **Store all sensitive data encrypted** with the secrets manager
-2. **Generate OAuth keys** with the tokens manager
-3. **Regular backups** of encrypted databases
+1. **Store all sensitive data encrypted** with the environment manager
+2. **Generate OAuth keys** with the `generate-oauth` command
+3. **Regular backups** of encrypted database
 4. **Never commit** plain text secrets or private keys
 
 ## 🔧 **Customization**
 
-Each module can be customized:
+The environment manager can be customized:
 
-- **Secrets manager**: Adjust encryption settings in `configs/secrets.conf`
-- **OAuth tokens**: Customize key generation parameters
+- **Environment manager**: Adjust encryption settings in `configs/env.conf`
+- **Key generation**: Customize OAuth key generation parameters
 
 ## 🚨 **Migration from Old System**
 
-If you have existing secrets in another system:
+If you have existing environment variables in another system:
 
 ```bash
 # Import from environment file
-dotfiles secrets import ~/.env
+dotfiles env import ~/.env
 
 # Import from backup file
-dotfiles secrets import ~/old-secrets.txt
+dotfiles env import ~/old-env.txt
 ```
 
 ## 🎉 **Benefits**
 
 - **🔒 Secure**: No plain text secrets anywhere
-- **📦 Modular**: Independent secret and token management
-- **🔄 Flexible**: Easy to add/remove secrets
+- **📦 Unified**: Single system for all environment variables and secrets
+- **🔄 Flexible**: Easy to add/remove variables
 - **📱 Accessible**: Simple commands for common tasks
 - **💾 Version Safe**: Can be committed to git safely
 - **🛡️ Professional**: Enterprise-level security practices

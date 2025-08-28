@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 
 export DOTFILES_ROOT="${DOTFILES_ROOT:-${HOME}/.config/dotfiles}"
-export DOTFILES_CONFIG="${DOTFILES_ROOT}/configs"
-export DOTFILES_MODULES="${DOTFILES_ROOT}/modules"
-export DOTFILES_BIN="${DOTFILES_ROOT}/bin"
-export DOTFILES_UTILS="${DOTFILES_ROOT}/utils"
-export DOTFILES_LOGS="${DOTFILES_ROOT}/logs"
-export DOTFILES_ASSETS="${DOTFILES_ROOT}/assets"
+
+source "${DOTFILES_ROOT}/core/_constants"
+
 export DOTFILES_TEMPLATES="${DOTFILES_ROOT}/templates"
 export DOTFILES_CORE="${DOTFILES_ROOT}/core"
 

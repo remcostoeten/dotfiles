@@ -4,23 +4,51 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## Repository Overview
 
-This is a sophisticated **personal dotfiles management system** designed for cross-shell compatibility (bash/zsh) with advanced features like symlink management, environment variable persistence, and a modular plugin architecture.
+This is a sophisticated **personal dotfiles management system** designed for **ZSH-first** cross-shell compatibility with advanced features like symlink management, environment variable persistence, modular plugin architecture, and comprehensive logging.
 
 ## Core Architecture
 
 ### Entry Point
 - **`cfg`** - Main entry point that bootstraps the entire system
-- Gets symlinked to `~/.bashrc` or `~/.zshrc` depending on shell
-- Sources core modules in proper order: env → colors → safety → bootstrap
+- Gets symlinked to `~/.zshrc` (primary) or `~/.bashrc` (fallback)
+- Executes core boot sequence: `_env` → `_colors` → `_safety` → `_bootstrap`
+- Includes secrets/tokens integration and personal dashboard hooks
+
+### Core Boot Sequence
+The system follows a strict initialization order through private core files:
+
+```
+cfg (Main Entry)
+├── core/_env        # Environment variables, paths, shell detection
+├── core/_colors     # Global color functions and themes
+├── core/_safety     # Safe sourcing, linking, error handling
+└── core/_bootstrap  # Module loading, shell config, prompt setup
+    ├── alias-loader     # Loads all .aliases files
+    ├── plugin-loader    # Loads and configures plugins
+    ├── script-loader    # Links scripts to PATH
+    └── modules/enabled/ # Active modules and features
+```
 
 ### Core System Components
+**Private Core Files (underscore-prefixed):**
 ```
 core/
-├── env          # Environment variables and path definitions  
-├── colors       # Color functions (echo.red, echo.success, etc)
-├── safety       # Safe sourcing, linking, and error handling
-├── bootstrap    # Main initialization and module loading
-└── constants    # Core constants and version info
+├── _env         # Environment setup, shell detection, XDG paths
+├── _colors      # Color definitions and echo.* helper functions
+├── _safety      # safe_source, safe_link, error logging
+├── _bootstrap   # Main initialization, shell options, module loading
+└── _constants   # Version info, paths, constants
+```
+
+**Public Core Files (legacy compatibility):**
+```
+core/
+├── bootstrap    # Public wrapper for _bootstrap
+├── colors       # Public wrapper for _colors  
+├── constants    # Public wrapper for _constants
+├── env          # Public wrapper for _env
+├── init         # Legacy initialization script
+└── safety       # Public wrapper for _safety
 ```
 
 ### Module System
@@ -110,12 +138,94 @@ dotfiles-env export ~/.env.backup
 dotfiles-env import ~/.env
 ```
 
-## Key Features
+## Global Helper Functions
 
-### Color System
-- Global color functions available everywhere: `echo.red`, `echo.success`, `echo.warning`, etc.
-- Aliases: `e.red`, `e.success`, etc.
-- Special functions: `echo.header`, `echo.box`, `echo.progress`, `echo.rainbow`
+The system provides a comprehensive set of globally available helper functions:
+
+### Echo/Color Functions
+| Function | Purpose |
+|----------|----------|
+| `echo.error` | Red error messages with ✗ icon |
+| `echo.success` | Green success messages with ✓ icon |
+| `echo.warning` | Yellow warning messages with ⚠ icon |
+| `echo.info` | Cyan info messages with ℹ icon |
+| `echo.debug` | Purple debug messages (if `DOTFILES_DEBUG=1`) |
+| `echo.verbose` | Purple verbose messages (if `DOTFILES_VERBOSE=1`) |
+| `echo.header` | Blue bordered headers for sections |
+| `echo.cyan` | Cyan colored text |
+| `echo.purple` | Purple colored text |
+| `echo.dotfiles_banner` | ASCII art banner for dotfiles |
+
+### Safety Functions  
+| Function | Purpose |
+|----------|----------|
+| `safe_source <file> [description]` | Source file with error handling and logging |
+| `safe_source_dir <dir> [pattern] [description]` | Source all files in directory safely |
+| `safe_eval <command> [description]` | Execute command with error trapping |
+| `safe_link <source> <target>` | Create symlink with backup and validation |
+| `safe_rm <file>` | Move file to XDG trash instead of deletion |
+| `safe_command <cmd> <args...>` | Execute command only if it exists |
+
+### Utility Functions
+| Function | Purpose |
+|----------|----------|
+| `require <file>` | Source file or exit on failure |
+| `optional <file>` | Source file silently if exists |
+| `ensure_command <cmd> [package]` | Check command exists or show install hint |
+| `ensure_dir <path>` | Create directory if it doesn't exist |
+| `ensure_file <path> [content]` | Create file with default content if missing |
+
+### Convenience Aliases
+- **Color shortcuts**: `e.red`, `e.success`, `e.warning`, `e.info`, etc.
+- **Banner shortcut**: `e.banner` for ASCII art display
+
+## ZSH-Centric Runtime
+
+The system is designed with **ZSH as the primary shell**, with bash as fallback support:
+
+### Shell Detection & Configuration
+```bash
+$ echo $DOTFILES_SHELL
+zsh
+```
+
+**ZSH-Specific Optimizations:**
+- Auto-completion with menu selection and case-insensitive matching
+- Advanced history management (dedup, sharing, verification)
+- Extended globbing and smart directory navigation
+- Integration with modern tools (starship, zoxide, direnv)
+
+**ZSH Options Automatically Enabled:**
+- `AUTO_CD`, `AUTO_PUSHD` - Smart directory navigation
+- `CORRECT`, `CORRECT_ALL` - Command correction
+- `EXTENDED_GLOB`, `NO_CASE_GLOB` - Advanced pattern matching
+- `HIST_IGNORE_ALL_DUPS`, `SHARE_HISTORY` - Intelligent history
+- `COMPLETE_IN_WORD`, `AUTO_MENU` - Enhanced completion
+
+### Modern Tool Integration
+The system automatically configures these tools when available:
+
+**Starship Prompt**: Beautiful cross-shell prompt with git integration
+```bash
+eval "$(starship init zsh)"
+```
+
+**Zoxide**: Smart directory jumping (z/zi commands)
+```bash
+eval "$(zoxide init zsh)"
+```
+
+**Direnv**: Automatic environment loading
+```bash
+eval "$(direnv hook zsh)"
+```
+
+**FZF**: Fuzzy finding with ZSH completions
+```bash
+source "$HOME/.fzf.zsh"
+```
+
+## Key Features
 
 ### Safe Operations  
 - `safe_source` - Error-handled file sourcing with logging
@@ -166,6 +276,111 @@ chsh -s $(which zsh)
 source modules/plugins/zsh-enhancements
 ```
 
+## Module & Plugin Lifecycle
+
+### Module Creation Workflow
+1. **Scaffold**: `dotfiles-new module <name>` creates template in `modules/enabled/`
+2. **Structure**: Each module includes `init()`, `help()`, and main functionality
+3. **Auto-loading**: Modules in `modules/enabled/` are sourced automatically
+4. **Disabling**: Move to `modules/disabled/` or add `.disabled` suffix
+
+**Module Template Structure:**
+```bash
+$ dotfiles-new module git-extras
+# Creates modules/enabled/git-extras with:
+function git_extras_init() {
+    echo.debug "Initializing git-extras"
+}
+
+function git_extras_help() {
+    echo.header "Git Extras Help"
+    echo "Available commands:"
+    echo "  git-extras <command>    Main command"
+}
+
+alias ge='git-extras'
+git_extras_init
+```
+
+### Plugin Management
+1. **Scaffold**: `dotfiles-new plugin <name>` creates wrapper in `modules/plugins/`
+2. **Functions**: Each plugin includes `install_<name>()`, `configure_<name>()`, `load_<name>()`
+3. **Lazy Loading**: Plugins check for installation before loading
+4. **Integration**: Plugin loader handles modern tools (fzf, zoxide, starship)
+
+**Plugin Template Structure:**
+```bash
+$ dotfiles-new plugin neovim-config
+# Creates modules/plugins/neovim-config with:
+function install_neovim_config() {
+    echo.info "Installing neovim-config..."
+    # Installation logic here
+}
+
+function configure_neovim_config() {
+    # Configuration logic here
+}
+
+function load_neovim_config() {
+    if [[ -d "$HOME/.config/nvim" ]]; then
+        # Load plugin
+        echo.debug "Loaded neovim-config"
+    fi
+}
+```
+
+### Alias Collections
+1. **Scaffold**: `dotfiles-new alias <name>` creates `modules/aliases/<name>.aliases`
+2. **Convention**: Use `.aliases` extension for auto-discovery
+3. **Documentation**: Use `# @alias` and `# @desc` comments for help system
+4. **Loading**: Alias loader sources all `.aliases` files automatically
+
+## Logging & Persistence
+
+### Logging System
+All operations are logged to dedicated files with timestamps:
+
+```bash
+logs/
+├── dotfiles.log     # General operations and info
+└── error.log        # Errors and failures
+```
+
+**Log Functions:**
+- `safe_source` logs all file sourcing attempts
+- `safe_link` logs symlink operations  
+- `safe_rm` logs file removals to trash
+- Error handling automatically logs failures
+
+### JSON Registries
+The system maintains persistent state in JSON files:
+
+```bash
+utils/
+├── links.json       # Symlink registry
+├── env.json         # Custom environment variables
+└── state.json       # System state and version
+```
+
+**Registry Benefits:**
+- **Symlinks**: Track all managed symlinks for health checks
+- **Environment**: Persist custom variables across sessions
+- **State**: Version tracking and update detection
+- **Portability**: JSON format enables easy backup/restore
+
+### Data Management Commands
+```bash
+# View registries
+dotfiles-link list              # Show all tracked symlinks
+dotfiles-env list               # Show custom environment variables
+cat utils/state.json            # View system state
+
+# Backup/restore
+dotfiles-env export backup.env  # Export environment variables
+dotfiles-env import backup.env  # Import from file
+jq '.' utils/links.json         # Pretty-print symlink registry
+```
+
 ## Extension Points
 
 ### Creating New Modules
@@ -187,7 +402,7 @@ The system automatically sources all modules in `modules/enabled/` on shell star
 ## Aesthetic Ricer Terminal Setup
 
 ### ✨ Completed Features
-This setup includes a full aesthetic ricer terminal configuration:
+This setup includes a full aesthetic ricer terminal configuration via the `aesthetic` module in `modules/enabled/aesthetic`:
 
 **🎨 Visual Enhancements:**
 - **Starship Prompt**: Beautiful, modern prompt with git integration and language icons

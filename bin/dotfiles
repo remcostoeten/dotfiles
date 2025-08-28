@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-source "${HOME}/.config/dotfiles/core/env"
-source "${HOME}/.config/dotfiles/core/colors"
-source "${HOME}/.config/dotfiles/core/safety"
+source "${HOME}/.config/dotfiles/core/_env"
+source "${HOME}/.config/dotfiles/core/_colors"
+source "${HOME}/.config/dotfiles/core/_safety"
 
 function dotfiles_version() {
     echo.header "Dotfiles v${DOTFILES_VERSION}"
@@ -52,7 +52,7 @@ function dotfiles_doctor() {
     
     # Check core files
     echo.info "Checking core files..."
-    for file in cfg core/env core/colors core/safety core/bootstrap; do
+    for file in cfg core/_env core/_colors core/_safety core/_bootstrap; do
         if [[ ! -f "$DOTFILES_ROOT/$file" ]]; then
             echo.error "  ✗ Missing: $file"
             ((issues++))
@@ -224,11 +224,14 @@ function dotfiles_help() {
     echo
     echo.cyan "Management Commands:"
     echo "  link       Symlink manager (dotfiles-link)"
-    echo "  env        Environment manager (dotfiles-env)"
-    echo "  secrets    Secrets manager (dotfiles-secrets)"
-    echo "  sync       Secrets sync across machines (dotfiles-secrets-sync)"
-    echo "  tokens     OAuth tokens manager (dotfiles-tokens)"
+    echo "  env        Environment variables & secrets manager (dotfiles-env)"
+    echo "  sync       Environment sync across machines (dotfiles-env-sync)"
     echo "  packages   Manage additional packages (dotfiles-packages)"
+    echo
+    echo.cyan "Version Commands:"
+    echo "  version    Show version information"
+    echo "  version bump    Auto-increment version"
+    echo "  version set <v> Set specific version"
     echo
     echo.cyan "Quick Actions:"
     echo "  cd         Go to dotfiles directory"
@@ -243,7 +246,13 @@ function dotfiles_help() {
 
 case "${1:-help}" in
     version|v)
-        dotfiles_version
+        if [[ -n "$2" ]]; then
+            # Delegate to dotfiles-version for subcommands
+            shift
+            "$DOTFILES_BIN/dotfiles-version" "$@"
+        else
+            dotfiles_version
+        fi
         ;;
     reload|r)
         dotfiles_reload
@@ -272,17 +281,9 @@ case "${1:-help}" in
         shift
         "$DOTFILES_BIN/dotfiles-env" "$@"
         ;;
-    secrets|sec)
+    sync)
         shift
-        "$DOTFILES_BIN/dotfiles-secrets" "$@"
-        ;;
-    secrets-sync|sync)
-        shift
-        "$DOTFILES_BIN/dotfiles-secrets-sync" "$@"
-        ;;
-    tokens|tok)
-        shift
-        "$DOTFILES_BIN/dotfiles-tokens" "$@"
+        "$DOTFILES_BIN/dotfiles-env-sync" "$@"
         ;;
     cd)
         cd "$DOTFILES_ROOT"

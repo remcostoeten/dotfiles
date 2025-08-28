@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Combined safety and sourcing functions
+
 function safe_source() {
     local file="$1"
     local description="${2:-$file}"
@@ -28,7 +30,7 @@ function safe_source() {
     local result=$?
     
     if [[ $result -eq 0 ]]; then
-        echo.debug "Sourced: $description"
+        [[ "$DOTFILES_DEBUG" == "1" ]] && echo.debug "Sourced: $description"
         return 0
     else
         echo.error "Failed to source: $description"
@@ -85,25 +87,13 @@ function safe_eval() {
     local result=$?
     
     if [[ $result -eq 0 ]]; then
-        echo.debug "Executed: $description"
+        [[ "$DOTFILES_DEBUG" == "1" ]] && echo.debug "Executed: $description"
         return 0
     else
         echo.error "Failed to execute: $description"
         echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Failed to eval: $command (exit code: $result)" >> "$DOTFILES_ERROR_LOG"
         return $result
     fi
-}
-
-function safe_command() {
-    local cmd="$1"
-    shift
-    
-    if ! command -v "$cmd" &>/dev/null; then
-        echo.warning "Command not found: $cmd"
-        return 127
-    fi
-    
-    "$cmd" "$@"
 }
 
 function require() {
@@ -118,6 +108,18 @@ function require() {
 function optional() {
     local file="$1"
     safe_source "$file" "$file" || true
+}
+
+function safe_command() {
+    local cmd="$1"
+    shift
+    
+    if ! command -v "$cmd" &>/dev/null; then
+        echo.warning "Command not found: $cmd"
+        return 127
+    fi
+    
+    "$cmd" "$@"
 }
 
 function ensure_command() {
