@@ -1,6 +1,6 @@
 # Remco Stoeten's dotfiles
 
-**Version:** [0;36m2.1.5[0m <!-- AUTO-UPDATED by pre-commit hook -->
+**Version:** [0;36m0.1.8[0m <!-- AUTO-UPDATED by pre-commit hook -->
 
 <i>Over-engineered? Maybe. Beauiful OS-experience</i>
 A sophisticated dotfiles management system designed in a way to allow full customization. For most tools there are custom designed (cli) tools to help manage that particular module.

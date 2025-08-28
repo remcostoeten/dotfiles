@@ -105,6 +105,35 @@ function setup_github_gist() {
     fi
 }
 
+# Calculate hash of environment database for conflict detection
+function env_sync_calculate_hash() {
+    if [[ -f "$DOTFILES_ENV_DB" ]]; then
+        sha256sum "$DOTFILES_ENV_DB" | cut -d' ' -f1
+    else
+        echo ""
+    fi
+}
+
+# Store sync metadata
+function env_sync_store_metadata() {
+    local hash="$1"
+    local timestamp="$2"
+    local metadata_file="${ENV_SYNC_DIR}/sync_metadata.json"
+    
+    jq -n --arg hash "$hash" --arg timestamp "$timestamp" \
+        '{last_sync: $timestamp, local_hash: $hash}' > "$metadata_file"
+}
+
+# Get sync metadata
+function env_sync_get_metadata() {
+    local metadata_file="${ENV_SYNC_DIR}/sync_metadata.json"
+    if [[ -f "$metadata_file" ]]; then
+        cat "$metadata_file"
+    else
+        echo '{}'
+    fi
+}
+
 # Encrypt and upload environment variables
 function env_sync_push() {
     echo.info "Encrypting and syncing environment variables..."
@@ -119,13 +148,22 @@ function env_sync_push() {
         return 1
     fi
     
+    # Calculate current hash
+    local current_hash=$(env_sync_calculate_hash)
+    local timestamp=$(date -Iseconds)
+    
     # Get master password
     read -r -s -p "Enter master password for encryption: " master_pass
     echo
     
     # Create encrypted backup
+    echo.info "Creating encrypted backup..."
     tar -czf - -C "$DOTFILES_UTILS" env.json .env.key .env.salt 2>/dev/null | \
     openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -pass "pass:$master_pass" -out "$ENCRYPTED_BACKUP"
+    
+    # Add metadata to the backup
+    local metadata_temp=$(mktemp)
+    echo "{\"hash\": \"$current_hash\", \"timestamp\": \"$timestamp\", \"hostname\": \"$(hostname)\"}" > "$metadata_temp"
     
     # Upload to sync location
     local sync_url=$(cat "$SYNC_URL_FILE")
@@ -133,12 +171,22 @@ function env_sync_push() {
     if [[ "$sync_url" == https://gist.githubusercontent.com/* ]]; then
         # Update GitHub gist
         local gist_id=$(echo "$sync_url" | sed 's|.*github.com/.*/\([^/]*\)/.*|\1|')
-        gh gist edit "$gist_id" --add env.vault < "$ENCRYPTED_BACKUP"
+        echo.info "Updating gist $gist_id..."
+        
+        # Update both the vault file and metadata
+        gh gist edit "$gist_id" --add env.vault < "$ENCRYPTED_BACKUP" --add sync_metadata.json < "$metadata_temp"
+        
+        # Update gist description with timestamp
+        local description="Encrypted dotfiles environment - Last updated: $timestamp from $(hostname)"
+        gh api "gists/$gist_id" -X PATCH -f description="$description" > /dev/null
+        
         echo.success "Environment variables pushed to GitHub gist"
     elif [[ "$sync_url" == file://* ]]; then
         # Copy to file location
         local file_path="${sync_url#file://}"
+        mkdir -p "$(dirname "$file_path")"
         cp "$ENCRYPTED_BACKUP" "$file_path/env.vault"
+        cp "$metadata_temp" "$file_path/sync_metadata.json"
         echo.success "Environment variables pushed to $file_path"
     else
         # Upload via curl
@@ -146,7 +194,10 @@ function env_sync_push() {
         echo.success "Environment variables pushed to $sync_url"
     fi
     
-    rm -f "$ENCRYPTED_BACKUP"
+    # Store local metadata
+    env_sync_store_metadata "$current_hash" "$timestamp"
+    
+    rm -f "$ENCRYPTED_BACKUP" "$metadata_temp"
 }
 
 # Download and decrypt environment variables
@@ -198,6 +249,92 @@ function env_sync_pull() {
     rm -f "$ENCRYPTED_BACKUP"
 }
 
+# Enhanced status command
+function env_sync_status() {
+    echo.header "🔄 Environment Sync Status"
+    
+    # Sync configuration
+    echo.info "Configuration:"
+    if [[ -f "$SYNC_URL_FILE" ]]; then
+        local sync_url=$(cat "$SYNC_URL_FILE")
+        echo.success "  ✓ Sync configured"
+        echo.info "    URL: $sync_url"
+        
+        # Extract gist ID for GitHub gists
+        if [[ "$sync_url" == https://gist.githubusercontent.com/* ]]; then
+            local gist_id=$(echo "$sync_url" | sed 's|.*github.com/.*/\([^/]*\)/.*|\1|')
+            echo.info "    Gist ID: $gist_id"
+        fi
+    else
+        echo.warning "  ✗ Sync not configured"
+        echo.info "    Run: dotfiles env-sync init"
+    fi
+    
+    echo
+    echo.info "Local Status:"
+    if [[ -f "$DOTFILES_ENV_DB" ]]; then
+        local env_count=$(jq 'length' "$DOTFILES_ENV_DB" 2>/dev/null || echo "0")
+        local current_hash=$(env_sync_calculate_hash)
+        echo.success "  ✓ Environment database exists"
+        echo.info "    Variables: $env_count"
+        echo.info "    Current hash: ${current_hash:0:12}..."
+        echo.info "    Last modified: $(stat -c %y "$DOTFILES_ENV_DB" 2>/dev/null || echo 'Unknown')"
+    else
+        echo.warning "  ✗ No environment database found"
+    fi
+    
+    echo
+    echo.info "Sync History:"
+    local metadata=$(env_sync_get_metadata)
+    local last_sync=$(echo "$metadata" | jq -r '.last_sync // "Never"')
+    local stored_hash=$(echo "$metadata" | jq -r '.local_hash // "None"')
+    
+    if [[ "$last_sync" != "Never" ]]; then
+        echo.success "  ✓ Last sync: $last_sync"
+        echo.info "    Synced hash: ${stored_hash:0:12}..."
+        
+        # Check if current state differs from last sync
+        local current_hash=$(env_sync_calculate_hash)
+        if [[ "$current_hash" != "$stored_hash" && -n "$current_hash" ]]; then
+            echo.warning "  ⚠ Local changes detected since last sync"
+        else
+            echo.success "  ✓ Local state matches last sync"
+        fi
+    else
+        echo.info "  • No sync history"
+    fi
+    
+    echo
+    echo.info "Auto-sync: ${DOTFILES_AUTO_SYNC:-disabled}"
+}
+
+# Discover existing gists (delegated to bootstrap command)
+function env_sync_discover() {
+    echo.info "Discovering existing secrets gists..."
+    if command -v "$DOTFILES_BIN/dotfiles-secrets-bootstrap" &>/dev/null; then
+        "$DOTFILES_BIN/dotfiles-secrets-bootstrap" discover
+    else
+        echo.warning "Enhanced discovery not available - using basic search"
+        if command -v gh &>/dev/null && gh auth status &>/dev/null; then
+            echo.info "Searching GitHub gists..."
+            gh gist list --limit 50 | grep -i "dotfiles\|env\|secrets" || echo.info "No matching gists found"
+        else
+            echo.error "GitHub CLI not available or not authenticated"
+        fi
+    fi
+}
+
+# Bootstrap command (delegated to dedicated bootstrap script)
+function env_sync_bootstrap() {
+    echo.info "Bootstrapping secrets sync..."
+    if command -v "$DOTFILES_BIN/dotfiles-secrets-bootstrap" &>/dev/null; then
+        "$DOTFILES_BIN/dotfiles-secrets-bootstrap" setup
+    else
+        echo.warning "Enhanced bootstrap not available - using fallback"
+        env_sync_init
+    fi
+}
+
 # Auto-sync on dotfiles operations
 function env_sync_auto() {
     if [[ -f "$SYNC_URL_FILE" ]] && [[ "${DOTFILES_AUTO_SYNC:-0}" == "1" ]]; then
@@ -225,11 +362,13 @@ function main() {
             env_sync_auto
             ;;
         "status")
-            if [[ -f "$SYNC_URL_FILE" ]]; then
-                echo.success "Sync configured: $(cat "$SYNC_URL_FILE")"
-            else
-                echo.warning "Sync not configured"
-            fi
+            env_sync_status
+            ;;
+        "discover")
+            env_sync_discover
+            ;;
+        "bootstrap")
+            env_sync_bootstrap
             ;;
         "help"|"--help"|"-h"|"")
             echo.header "Dotfiles Environment Sync"
