@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import { useStore, defaultScenarios } from '../store';
 import type { TScenario } from '../types/starship';
 import AnsiToHtml from 'ansi-to-html';
+import TOML from '@iarna/toml';
 
 function createAnsiConverter(): AnsiToHtml {
   return new (AnsiToHtml as unknown as { new (opts?: any): AnsiToHtml })({
@@ -54,6 +55,7 @@ export function TerminalPreview() {
   const { promptState, activeScenario } = useStore();
   const [html, setHtml] = useState('');
   const [serverError, setServerError] = useState<string | null>(null);
+  const [skipCustom, setSkipCustom] = useState(false);
   const converter = useMemo(createAnsiConverter, []);
   const scenario = useMemo(function pick() { return selectScenario(defaultScenarios, activeScenario); }, [activeScenario]);
 
@@ -61,12 +63,32 @@ export function TerminalPreview() {
     setHtml('');
   }
 
+  function sanitizeTomlForPreview(raw: string, skip: boolean): string {
+    if (!skip) return raw;
+    try {
+      const obj = TOML.parse(raw) as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(obj)) {
+        if (k === 'format') continue;
+        if (k === 'palette' || k === 'palettes') { out[k] = (obj as any)[k]; continue; }
+        if (k.startsWith('custom.')) continue;
+        out[k] = (obj as any)[k];
+      }
+      const fmt = typeof (obj as any).format === 'string' ? String((obj as any).format) : '';
+      const cleaned = fmt.split('\n').filter(function keep(line){ return line.indexOf('$custom.') === -1; }).join('\n');
+      out.format = cleaned;
+      return TOML.stringify(out as any);
+    } catch {
+      return raw;
+    }
+  }
+
   async function fetchPreview(): Promise<void> {
     try {
       const resp = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toml: useStore.getState().exportToToml(), cwd: scenario.context.directory })
+        body: JSON.stringify({ toml: sanitizeTomlForPreview(useStore.getState().exportToToml(), skipCustom), cwd: scenario.context.directory })
       });
       if (!resp.ok) {
         setServerError('Preview server not available or starship not found');
@@ -102,7 +124,13 @@ export function TerminalPreview() {
 
   return (
     <div className="terminal-preview flex-1 bg-gray-900 text-white p-6 font-mono">
-      <TerminalHeader name={scenario.name} />
+      <div className="flex items-center justify-between mb-2">
+        <TerminalHeader name={scenario.name} />
+        <label className="text-xs text-gray-300 inline-flex items-center space-x-2">
+          <input type="checkbox" checked={skipCustom} onChange={function onChange(e){ setSkipCustom(e.target.checked); }} />
+          <span>Skip custom.* modules</span>
+        </label>
+      </div>
       <div className="terminal-content bg-black rounded-lg p-4 min-h-[200px]">
         <div className="space-y-2">
           <div className="text-gray-400"><span className="text-green-400">$</span> ls -la</div>

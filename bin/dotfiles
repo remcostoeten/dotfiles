@@ -226,6 +226,8 @@ function dotfiles_help() {
     echo "  link       Symlink manager (dotfiles-link)"
     echo "  env        Environment variables & secrets manager (dotfiles-env)"
     echo "  sync       Environment sync across machines (dotfiles-env-sync)"
+    echo "  secrets    Secrets discovery & setup for new machines (dotfiles-secrets-bootstrap)"
+    echo "  visualize  Render diagrams (Mermaid)"
     echo "  packages   Manage additional packages (dotfiles-packages)"
     echo
     echo.cyan "Version Commands:"
@@ -235,13 +237,76 @@ function dotfiles_help() {
     echo
     echo.cyan "Quick Actions:"
     echo "  cd         Go to dotfiles directory"
-    echo "  edit       Edit dotfiles in \$EDITOR"
+    echo "  edit       Edit dotfiles in $EDITOR"
     echo "  logs       View error logs"
+    echo "  studio     Launch Dotfiles Studio (dev) or deploy"
     echo
     dotfiles_aliases_help
     echo
     echo "For command help, use: dotfiles <command> help"
     echo "Example: dotfiles link help"
+}
+
+function dotfiles_studio_start() {
+    local app_dir="$DOTFILES_ROOT/tools/starship-visual-generator"
+    if [[ ! -d "$app_dir" ]]; then
+        echo.error "Studio app not found at $app_dir"
+        return 1
+    fi
+    echo.info "Starting Dotfiles Studio in background..."
+    (
+      cd "$app_dir" && nohup bun run start > "$DOTFILES_ROOT/logs/studio.log" 2>&1 & echo $! > "$DOTFILES_ROOT/logs/studio.pid"
+    )
+    sleep 1
+    local url="http://localhost:5173"
+    echo.success "Studio started at ${url}"
+    read -r -p "Open in browser? [Y/n] " ans
+    ans=${ans:-Y}
+    if [[ "$ans" == "Y" || "$ans" == "y" ]]; then
+        if command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 &
+        elif command -v open >/dev/null 2>&1; then open "$url" >/dev/null 2>&1 &
+        else echo.info "Please open $url in your browser"; fi
+    fi
+    echo.info "Vite server running in background; CLI remains usable"
+}
+
+function dotfiles_studio_deploy() {
+    local app_dir="$DOTFILES_ROOT/tools/starship-visual-generator"
+    if [[ ! -d "$app_dir" ]]; then
+        echo.error "Studio app not found at $app_dir"
+        return 1
+    fi
+    if ! command -v vercel >/dev/null 2>&1; then
+        echo.error "vercel CLI not found. Install with: npm i -g vercel"
+        return 1
+    fi
+    echo.header "Building and deploying Dotfiles Studio"
+    (
+      cd "$app_dir" && bun run build
+    ) || { echo.error "Build failed"; return 1; }
+    local deploy_url
+    deploy_url=$(cd "$app_dir" && vercel deploy --prod --yes 2>/dev/null | tail -n 1)
+    if [[ -z "$deploy_url" ]]; then
+        echo.error "Deploy failed"
+        return 1
+    fi
+    echo.success "Deployed: $deploy_url"
+    local alias="dotfiles-studio"
+    if (cd "$app_dir" && vercel alias set "$deploy_url" "$alias" >/dev/null 2>&1); then
+        echo.success "Alias set: https://$alias.vercel.app"
+    else
+        local fallback1="${alias}-$(whoami)"
+        if (cd "$app_dir" && vercel alias set "$deploy_url" "$fallback1" >/dev/null 2>&1); then
+            echo.success "Alias set: https://$fallback1.vercel.app"
+        else
+            local fallback2="${alias}-$(date +%s)"
+            if (cd "$app_dir" && vercel alias set "$deploy_url" "$fallback2" >/dev/null 2>&1); then
+                echo.success "Alias set: https://$fallback2.vercel.app"
+            else
+                echo.warning "Could not set alias; use deployed URL above"
+            fi
+        fi
+    fi
 }
 
 case "${1:-help}" in
@@ -261,7 +326,18 @@ case "${1:-help}" in
         dotfiles_update
         ;;
     doctor|check)
-        dotfiles_doctor
+        case "$2" in
+            animated|a)
+                shift 2
+                "$DOTFILES_BIN/dotfiles-doctor-animated" "$@"
+                ;;
+            fast|f)
+                "$DOTFILES_BIN/dotfiles-doctor-fast"
+                ;;
+            *)
+                dotfiles_doctor
+                ;;
+        esac
         ;;
     install|i)
         dotfiles_install
@@ -285,6 +361,18 @@ case "${1:-help}" in
         shift
         "$DOTFILES_BIN/dotfiles-env-sync" "$@"
         ;;
+    secrets|secrets-bootstrap)
+        shift
+        "$DOTFILES_BIN/dotfiles-secrets-bootstrap" "$@"
+        ;;
+    visualize|viz|diagram)
+        shift
+        if [[ $# -eq 0 ]]; then
+            bash "$DOTFILES_ROOT/scripts/dotfiles-visualize-secrets.sh" secrets
+        else
+            bash "$DOTFILES_ROOT/scripts/dotfiles-visualize-secrets.sh" "$@"
+        fi
+        ;;
     cd)
         cd "$DOTFILES_ROOT"
         ;;
@@ -297,6 +385,19 @@ case "${1:-help}" in
         else
             echo.info "No error logs found"
         fi
+        ;;
+    studio)
+        case "${2:-start}" in
+            start|dev)
+                dotfiles_studio_start
+                ;;
+            deploy)
+                dotfiles_studio_deploy
+                ;;
+            *)
+                echo.error "Usage: dotfiles studio [start|deploy]"
+                ;;
+        esac
         ;;
     help|h|--help|-h)
         dotfiles_help
