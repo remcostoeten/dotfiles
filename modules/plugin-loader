@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 
-# Ensure echo.* helpers are available
+# Ensure required functions are available
 if ! declare -f echo.debug >/dev/null 2>&1; then
     source "${DOTFILES_ROOT:-$HOME/.config/dotfiles}/core/_colors" 2>/dev/null || {
         function echo.debug() { [[ "${DOTFILES_DEBUG}" == "1" ]] && echo "[DEBUG] $*" >&2; }
         function echo.error() { echo "[ERROR] $*" >&2; }
         function echo.success() { echo "[SUCCESS] $*"; }
+        function echo.warning() { echo "[WARNING] $*" >&2; }
+    }
+fi
+
+if ! declare -f safe_source >/dev/null 2>&1; then
+    source "${DOTFILES_ROOT:-$HOME/.config/dotfiles}/core/_safety" 2>/dev/null || {
+        function safe_source() {
+            local file="$1"
+            [[ -f "$file" ]] && source "$file" 2>/dev/null
+        }
     }
 fi
 

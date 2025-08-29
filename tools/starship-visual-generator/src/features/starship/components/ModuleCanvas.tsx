@@ -45,7 +45,7 @@ export function ModuleCanvas() {
   }
 
   return (
-    <div className="module-canvas">
+    <div className="module-canvas bg-white dark:bg-haptic.surface border dark:border-haptic.border">
       <div className="canvas-header">
         <h2>Prompt Structure</h2>
         <p>Drag modules to reorder them in your prompt</p>

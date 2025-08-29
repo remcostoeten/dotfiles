@@ -117,15 +117,6 @@ const defaultModules: TStarshipModule[] = [
     }
   },
   {
-    id: 'custom.dotfiles_version-1',
-    name: 'custom.dotfiles_version',
-    displayName: 'Dotfiles Version',
-    category: 'custom',
-    enabled: true,
-    order: 2,
-    config: {}
-  },
-  {
     id: 'directory-1',
     name: 'directory',
     displayName: 'Directory',

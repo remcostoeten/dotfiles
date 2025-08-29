@@ -5,6 +5,27 @@
 # Dependencies: zsh, git
 # Date: 2024-08-26
 
+# Only run under ZSH
+if [[ "$DOTFILES_SHELL" != "zsh" && "${0##*/}" != "bash" ]]; then
+    return 0 2>/dev/null || exit 0
+fi
+
+# Ensure echo.* functions are available
+if ! declare -f echo.debug >/dev/null 2>&1; then
+    function echo.debug() { [[ "${DOTFILES_DEBUG}" == "1" ]] && echo "[DEBUG] $*" >&2; }
+    function echo.error() { echo "[ERROR] $*" >&2; }
+    function echo.success() { echo "[SUCCESS] $*"; }
+    function echo.warning() { echo "[WARNING] $*" >&2; }
+    function echo.info() { echo "[INFO] $*"; }
+fi
+
+if ! declare -f ensure_dir >/dev/null 2>&1; then
+    function ensure_dir() {
+        local dir="$1"
+        [[ ! -d "$dir" ]] && mkdir -p "$dir"
+    }
+fi
+
 function install_zsh_enhancements() {
     echo.debug "Installing ZSH enhancement plugins..."
     

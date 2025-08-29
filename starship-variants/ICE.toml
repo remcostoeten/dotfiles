@@ -50,9 +50,6 @@ $memory_usage\
 format = """
 [](bg:#transparent fg:#d1005b)\
 $username\
-[](bg:#6A1B9A fg:#[0-9A-Fa-f]*)\
-$custom.dotfiles_version\
-[](bg:#[0-9A-Fa-f]* fg:#6A1B9A)\
 $os\
 [](fg:#d1005b bg:#68032F)\
 $directory\

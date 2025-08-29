@@ -18,7 +18,7 @@ export function FeatureSidebar({ active, onSelect }: TProps) {
   }
   
   return (
-    <aside className="w-56 border-r border-gray-200 bg-white flex-shrink-0">
+    <aside className="w-56 border-r border-gray-200 dark:border-haptic.border bg-white dark:bg-haptic.surface flex-shrink-0">
       <div className="p-4">
         <div className="text-xs uppercase text-gray-500 font-semibold mb-2">Features</div>
         <div className="space-y-1">
@@ -30,7 +30,7 @@ export function FeatureSidebar({ active, onSelect }: TProps) {
                 onClick={function click(){ handleClick(i.key); }}
                 className={clsx(
                   'w-full text-left px-3 py-2 rounded-lg border transition-colors',
-                  isActive ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  isActive ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-haptic.muted dark:text-haptic.text dark:border-haptic.border' : 'bg-white dark:bg-transparent text-gray-700 dark:text-haptic.text border-gray-200 dark:border-haptic.border hover:bg-gray-50 dark:hover:bg-haptic.muted'
                 )}
               >
                 {i.label}

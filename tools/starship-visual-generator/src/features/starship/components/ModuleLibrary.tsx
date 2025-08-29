@@ -198,8 +198,8 @@ export function ModuleLibrary() {
   }
 
   return (
-    <div className="module-library bg-white border-r border-gray-200 w-80 h-full overflow-hidden flex flex-col">
-      <div className="library-header p-4 border-b border-gray-200">
+    <div className="module-library bg-white dark:bg-haptic.surface border-r border-gray-200 dark:border-haptic.border w-80 h-full overflow-hidden flex flex-col text-gray-900 dark:text-haptic.text">
+      <div className="library-header p-4 border-b border-gray-200 dark:border-haptic.border">
         <h2 className="font-semibold text-gray-900 mb-4">Module Library</h2>
         
         <div className="relative mb-4">
@@ -209,7 +209,7 @@ export function ModuleLibrary() {
             placeholder="Search modules..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-haptic.border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-haptic.muted text-gray-900 dark:text-haptic.text"
           />
           {searchTerm && (
             <button
@@ -246,7 +246,7 @@ export function ModuleLibrary() {
           {filteredModules.map(module => (
             <div
               key={module.name}
-              className="module-item bg-gray-50 border border-gray-200 rounded-lg p-3 hover:bg-gray-100 transition-colors"
+              className="module-item bg-gray-50 dark:bg-haptic.muted border border-gray-200 dark:border-haptic.border rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-haptic.surface transition-colors"
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">

@@ -16,15 +16,6 @@ export function generateToml(state: TPromptState): string {
       config[m.name] = m.config as unknown;
     }
   }
-  if (enabledModules.some(isDotfilesModule)) {
-    config['custom.dotfiles_version'] = {
-      command: '~/.config/dotfiles/bin/dotfiles-version-short',
-      when: 'test -f ~/.config/dotfiles/bin/dotfiles-version-short',
-      style: 'bg:#6A1B9A white bold',
-      format: '[ 󰔘 v$output ]($style)',
-      description: 'Show current dotfiles version'
-    } as unknown;
-  }
   return TOML.stringify(config as unknown as TOML.JsonMap);
 }
 
@@ -93,19 +84,12 @@ function isEnabled(m: TStarshipModule): boolean {
   return m.enabled === true;
 }
 
-function isDotfilesModule(m: TStarshipModule): boolean {
-  return m.name === 'custom.dotfiles_version' && m.enabled === true;
-}
 
 function buildFormatFromModules(mods: TStarshipModule[]): string {
   const parts: string[] = [];
   for (let i = 0; i < mods.length; i++) {
     const module = mods[i];
-    if (module.name === 'custom.dotfiles_version') {
-      parts.push('[](bg:#6A1B9A fg:color_yellow)\\');
-      parts.push('$custom.dotfiles_version\\');
-      parts.push('[](bg:color_aqua fg:#6A1B9A)\\');
-    } else if (module.name === 'line_break') {
+    if (module.name === 'line_break') {
       parts.push('$line_break');
     } else {
       parts.push(`$${module.name}\\`);
@@ -147,7 +131,6 @@ function getDisplayName(moduleName: string): string {
     time: 'Time',
     character: 'Character',
     line_break: 'Line Break',
-    'custom.dotfiles_version': 'Dotfiles Version'
   };
   return (
     displayNames[moduleName] ||

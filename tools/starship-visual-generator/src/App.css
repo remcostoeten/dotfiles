@@ -36,11 +36,21 @@ body {
   border: 1px solid #e2e8f0;
 }
 
+.dark .module-canvas {
+  background: #0F1419;
+  border-color: #1F2937;
+}
+
 .canvas-header {
   background: white;
   border-radius: 12px 12px 0 0;
   border-bottom: 1px solid #e2e8f0;
   padding: 24px;
+}
+
+.dark .canvas-header {
+  background: #0F1419;
+  border-bottom-color: #1F2937;
 }
 
 .canvas-header h2 {
@@ -85,6 +95,11 @@ body {
   border: 2px solid #e2e8f0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
+}
+
+.dark .module-card {
+  background: #0F1419;
+  border-color: #1F2937;
 }
 
 .module-card:hover {

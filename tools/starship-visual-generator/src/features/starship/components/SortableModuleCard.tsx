@@ -57,7 +57,7 @@ export function SortableModuleCard({ module, isSelected, onSelect }: TProps) {
       style={style}
       className={clsx(
         'module-card',
-        'bg-white border-2 rounded-lg p-4 mb-3 shadow-sm',
+        'bg-white dark:bg-haptic.surface border-2 dark:border-haptic.border rounded-lg p-4 mb-3 shadow-sm',
         'transition-all duration-200 hover:shadow-md',
         isSelected && 'border-blue-500 shadow-md',
         isDragging && 'opacity-50 rotate-2 scale-105'
