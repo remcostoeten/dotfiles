@@ -1,20 +1,46 @@
 function echo.dotfiles_banner() {
+    # Prevent duplicate banner display
+    [[ -n "$DOTFILES_BANNER_SHOWN" ]] && return 0
+    export DOTFILES_BANNER_SHOWN=1
+    
+    # Gruvbox-inspired colors for aesthetic appeal (using 256-color codes)
+    local orange='\033[38;5;208m'        # Gruvbox orange
+    local aqua='\033[38;5;108m'          # Gruvbox aqua  
+    local bright_yellow='\033[38;5;214m' # Gruvbox yellow
+    local bright_green='\033[38;5;142m'  # Gruvbox green
+    local bright_blue='\033[38;5;109m'   # Gruvbox blue
+    local bright_red='\033[38;5;167m'    # Gruvbox red
+    local dim='\033[2;37m'               # Dimmed text
+    local bright_fg='\033[38;5;223m'     # Gruvbox foreground
+    
+    # Modern aesthetic banner with Gruvbox colors matching Starship
     echo
-    echo "${COLOR_BRIGHT_CYAN}╔═══════════════════════════════════════════════════════════╗${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                                                           ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_BRIGHT_BLUE}██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗${COLOR_RESET}   ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_BLUE}██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝${COLOR_RESET}   ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_CYAN}██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗${COLOR_RESET}     ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_GREEN}██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝${COLOR_RESET}     ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_BRIGHT_GREEN}██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗${COLOR_RESET}   ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}   ${COLOR_DIM}╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝${COLOR_RESET}   ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                                                           ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}            ${COLOR_BOLD}${COLOR_YELLOW}Terminal Configuration Framework${COLOR_RESET}               ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                    ${COLOR_MAGENTA}Version ${DOTFILES_VERSION}${COLOR_RESET}                          ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}║${COLOR_RESET}                                                           ${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
-    echo "${COLOR_BRIGHT_CYAN}╚═══════════════════════════════════════════════════════════╝${COLOR_RESET}"
+    echo -e "${aqua}╭─────────────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${aqua}│${NC}                                                                 ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}    ${orange}██████╗  ${bright_yellow}██████╗${NC} ${bright_green}████████╗${NC}${bright_blue}███████╗${NC}${PURPLE}██╗${NC}${bright_red}██╗     ${NC}${aqua}███████╗${NC}   ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}    ${orange}██╔══██╗${NC}${bright_yellow}██╔═══██╗${NC}${bright_green}╚══██╔══╝${NC}${bright_blue}██╔════╝${NC}${PURPLE}██║${NC}${bright_red}██║     ${NC}${aqua}██╔════╝${NC}   ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}    ${orange}██║  ██║${NC}${bright_yellow}██║   ██║${NC}${bright_green}   ██║   ${NC}${bright_blue}█████╗  ${NC}${PURPLE}██║${NC}${bright_red}██║     ${NC}${aqua}█████╗${NC}     ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}    ${orange}██║  ██║${NC}${bright_yellow}██║   ██║${NC}${bright_green}   ██║   ${NC}${bright_blue}██╔══╝  ${NC}${PURPLE}██║${NC}${bright_red}██║     ${NC}${aqua}██╔══╝${NC}     ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}    ${orange}██████╔╝${NC}${bright_yellow}╚██████╔╝${NC}${bright_green}   ██║   ${NC}${bright_blue}██║     ${NC}${PURPLE}██║${NC}${bright_red}███████╗${NC}${aqua}███████╗${NC}   ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}    ${dim}╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝${NC}   ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}                                                                 ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}           ${bright_fg}✨ Terminal Configuration Framework ✨${NC}            ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}                                                                 ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}        ${PURPLE}🚀 Aesthetic${NC} ${orange}•${NC} ${YELLOW}Modular${NC} ${orange}•${NC} ${GREEN}ZSH-First${NC} ${orange}•${NC} ${BLUE}Modern${NC}         ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}                                                                 ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}                    ${PURPLE}Version ${DOTFILES_VERSION:-'unknown'}${NC} ${orange}│${NC} ${bright_yellow}$(date +'%H:%M')${NC}                     ${aqua}│${NC}"
+    echo -e "${aqua}│${NC}                                                                 ${aqua}│${NC}"
+    echo -e "${aqua}╰─────────────────────────────────────────────────────────────────╯${NC}"
+    echo
+    # Quick status indicators with modern styling
+    echo -e "${dim}▌${NC}${bright_fg} Shell: ${CYAN}${SHELL##*/}${NC} ${dim}▌${NC}${bright_fg} OS: ${GREEN}$(uname -s)${NC} ${dim}▌${NC}${bright_fg} User: ${PURPLE}$USER${NC} ${dim}▌${NC}"
     echo
 }
+
+# Source pastel banner functions
+if [[ -f "${DOTFILES_ROOT:-$HOME/.config/dotfiles}/assets/ascii/pastel" ]]; then
+    source "${DOTFILES_ROOT:-$HOME/.config/dotfiles}/assets/ascii/pastel"
+fi
 
 # Add alias for convenience
 alias e.banner='echo.dotfiles_banner'

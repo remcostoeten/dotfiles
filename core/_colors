@@ -51,3 +51,99 @@ function echo.cyan() {
 function echo.purple() {
     echo -e "${PURPLE}$@${NC}"
 }
+
+# --- Gruvbox Dark Colors (matching Starship) ---
+export GRUVBOX_FG0='\033[38;2;251;241;199m'   # #fbf1c7 - light foreground
+export GRUVBOX_BG1='\033[38;2;60;56;54m'      # #3c3836 - dark background
+export GRUVBOX_BG3='\033[38;2;102;92;84m'     # #665c54 - darker background
+export GRUVBOX_BLUE='\033[38;2;69;133;136m'    # #458588 - blue
+export GRUVBOX_AQUA='\033[38;2;104;157;106m'   # #689d6a - aqua
+export GRUVBOX_GREEN='\033[38;2;152;151;26m'   # #98971a - green
+export GRUVBOX_ORANGE='\033[38;2;214;93;14m'   # #d65d0e - orange
+export GRUVBOX_PURPLE='\033[38;2;177;98;134m'  # #b16286 - purple
+export GRUVBOX_RED='\033[38;2;204;36;29m'      # #cc241d - red
+export GRUVBOX_YELLOW='\033[38;2;215;153;33m'  # #d79921 - yellow
+
+# --- Pastel Colors (matching kitty pastel-dusk theme) ---
+export PASTEL_BG='\033[38;2;40;37;54m'        # #282536 - background
+export PASTEL_FG='\033[38;2;224;226;241m'      # #e0e2f1 - foreground
+export PASTEL_PINK='\033[38;2;255;133;150m'    # #ff8596 - red/pink
+export PASTEL_GREEN='\033[38;2;173;218;120m'   # #adda78 - green
+export PASTEL_YELLOW='\033[38;2;255;211;146m'  # #ffd392 - yellow
+export PASTEL_BLUE='\033[38;2;131;160;236m'    # #83a0ec - blue
+export PASTEL_PURPLE='\033[38;2;209;159;222m'  # #d19fde - purple
+export PASTEL_CYAN='\033[38;2;133;218;224m'    # #85dae0 - cyan
+export PASTEL_GRAY='\033[38;2;199;201;217m'    # #c7c9d9 - gray
+export PASTEL_BRIGHT_PINK='\033[38;2;255;161;173m'   # #ffa1ad - bright pink
+export PASTEL_BRIGHT_GREEN='\033[38;2;193;230;149m'  # #c1e695 - bright green
+export PASTEL_BRIGHT_YELLOW='\033[38;2;255;224;176m' # #ffe0b0 - bright yellow
+export PASTEL_BRIGHT_BLUE='\033[38;2;163;184;255m'   # #a3b8ff - bright blue
+export PASTEL_BRIGHT_PURPLE='\033[38;2;226;184;238m' # #e2b8ee - bright purple
+export PASTEL_BRIGHT_CYAN='\033[38;2;154;236;242m'   # #9aecf2 - bright cyan
+export PASTEL_CURSOR='\033[38;2;241;197;226m'  # #f1c5e2 - cursor/accent
+
+# --- Gradient helpers ---
+function echo.gradient() {
+    local text="$1"
+    local start_color="$2"
+    local end_color="$3"
+    echo -e "${start_color}${text}${NC}"
+}
+
+# --- Pastel banner function ---
+function echo.pastel_banner() {
+    # Prevent duplicate banner display
+    [[ -n "$DOTFILES_PASTEL_BANNER_SHOWN" ]] && return 0
+    export DOTFILES_PASTEL_BANNER_SHOWN=1
+    
+    # Pastel aesthetic banner with soft colors
+    echo
+    echo -e "${PASTEL_CURSOR}╭───────────────────────────────────────────────────────────────╮${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}                                                               ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}   ${PASTEL_BRIGHT_PINK}██${NC} ${PASTEL_BRIGHT_YELLOW}██${NC} ${PASTEL_BRIGHT_GREEN}██████${NC} ${PASTEL_BRIGHT_BLUE}██████${NC} ${PASTEL_BRIGHT_PURPLE}██${NC} ${PASTEL_BRIGHT_CYAN}██${NC}     ${PASTEL_PINK}██████${NC}   ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}   ${PASTEL_BRIGHT_PINK}██${NC} ${PASTEL_BRIGHT_YELLOW}██${NC} ${PASTEL_BRIGHT_GREEN}   ██${NC} ${PASTEL_BRIGHT_BLUE}   ██${NC} ${PASTEL_BRIGHT_PURPLE}██${NC} ${PASTEL_BRIGHT_CYAN}██${NC}     ${PASTEL_PINK}   ██${NC}   ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}   ${PASTEL_BRIGHT_PINK}██████${NC} ${PASTEL_BRIGHT_GREEN}   ██${NC} ${PASTEL_BRIGHT_BLUE}   ██${NC} ${PASTEL_BRIGHT_PURPLE}██${NC} ${PASTEL_BRIGHT_CYAN}██${NC}     ${PASTEL_PINK}██████${NC}   ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}   ${PASTEL_BRIGHT_PINK}██${NC} ${PASTEL_BRIGHT_YELLOW}██${NC} ${PASTEL_BRIGHT_GREEN}   ██${NC} ${PASTEL_BRIGHT_BLUE}   ██${NC} ${PASTEL_BRIGHT_PURPLE}██${NC} ${PASTEL_BRIGHT_CYAN}██${NC}     ${PASTEL_PINK}   ██${NC}   ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}   ${PASTEL_BRIGHT_PINK}██${NC} ${PASTEL_BRIGHT_YELLOW}██${NC} ${PASTEL_BRIGHT_GREEN}██████${NC} ${PASTEL_BRIGHT_BLUE}██████${NC} ${PASTEL_BRIGHT_PURPLE}██████${NC}     ${PASTEL_PINK}██████${NC}   ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}                                                               ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}      ${PASTEL_FG}✨ ${PASTEL_BRIGHT_PURPLE}Dreamy Terminal Configuration${NC} ${PASTEL_FG}✨${NC}          ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}                                                               ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}     ${PASTEL_BRIGHT_PINK}🌸 Pastel${NC} ${PASTEL_CURSOR}•${NC} ${PASTEL_BRIGHT_YELLOW}Soft${NC} ${PASTEL_CURSOR}•${NC} ${PASTEL_BRIGHT_GREEN}Aesthetic${NC} ${PASTEL_CURSOR}•${NC} ${PASTEL_BRIGHT_BLUE}Modern${NC} ${PASTEL_CURSOR}•${NC} ${PASTEL_BRIGHT_PURPLE}Dreamy${NC}      ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}                                                               ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}               ${PASTEL_BRIGHT_PURPLE}Version ${DOTFILES_VERSION:-'unknown'}${NC} ${PASTEL_CURSOR}│${NC} ${PASTEL_BRIGHT_YELLOW}$(date +'%H:%M')${NC}                ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}│${NC}                                                               ${PASTEL_CURSOR}│${NC}"
+    echo -e "${PASTEL_CURSOR}╰───────────────────────────────────────────────────────────────╯${NC}"
+    echo
+    # Quick status indicators with pastel colors
+    echo -e "${PASTEL_BRIGHT_PURPLE} ${PASTEL_FG}Shell: ${SHELL##*/}${NC} ${PASTEL_BRIGHT_BLUE} ${PASTEL_FG}OS: $(uname -s)${NC} ${PASTEL_BRIGHT_PINK} ${PASTEL_FG}User: $USER${NC}"
+    echo
+}
+
+# Add pastel color helper functions
+function echo.pastel() {
+    echo -e "${PASTEL_CURSOR}$@${NC}"
+}
+
+function echo.pastel_pink() {
+    echo -e "${PASTEL_BRIGHT_PINK}$@${NC}"
+}
+
+function echo.pastel_blue() {
+    echo -e "${PASTEL_BRIGHT_BLUE}$@${NC}"
+}
+
+function echo.pastel_purple() {
+    echo -e "${PASTEL_BRIGHT_PURPLE}$@${NC}"
+}
+
+function echo.pastel_green() {
+    echo -e "${PASTEL_BRIGHT_GREEN}$@${NC}"
+}
+
+function echo.pastel_yellow() {
+    echo -e "${PASTEL_BRIGHT_YELLOW}$@${NC}"
+}
+
+# Add alias for convenience
+alias e.pastel='echo.pastel_banner'
+alias e.dreamy='echo.pastel_banner'
