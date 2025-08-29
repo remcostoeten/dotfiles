@@ -29,22 +29,54 @@ function starshipDevApi(): Plugin {
         const tmpPath = path.join(tmpDir, `starship-preview-${Date.now()}.toml`)
         try {
           fs.writeFileSync(tmpPath, toml, 'utf8')
-          const env = { ...process.env, STARSHIP_CONFIG: tmpPath }
-          const child = spawn('starship', ['prompt'], { cwd: cwd && typeof cwd === 'string' ? cwd : process.cwd(), env })
+          const baseEnv = { ...(process.env as NodeJS.ProcessEnv), STARSHIP_CONFIG: tmpPath } as NodeJS.ProcessEnv
+          const candidates = [
+            process.env.STARSHIP_BIN,
+            '/usr/local/bin/starship',
+            '/usr/bin/starship',
+            'starship',
+          ].filter(Boolean) as string[]
           let stdout = ''
           let stderr = ''
-          child.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
-          child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
-          child.on('close', (code: number) => {
+          let responded = false
+          function safeEnd(status: number, payload: any) {
+            if (responded) return
+            responded = true
             fs.unlink(tmpPath, () => {})
             res.setHeader('Content-Type', 'application/json')
-            if (code === 0) {
-              res.end(JSON.stringify({ ok: true, output: stdout }))
+            if (status === 200) {
+              res.end(JSON.stringify(payload))
             } else {
-              res.statusCode = 500
-              res.end(JSON.stringify({ ok: false, error: stderr || `starship exited with code ${code}` }))
+              res.statusCode = status
+              res.end(JSON.stringify(payload))
             }
-          })
+          }
+          function runWith(index: number) {
+            if (index >= candidates.length) {
+              safeEnd(500, { ok: false, error: 'starship not found', code: 'ENOENT' })
+              return
+            }
+            const bin = candidates[index]
+            const env = { ...baseEnv, PATH: `${(baseEnv.PATH || '')}:/usr/local/bin:/usr/bin` } as NodeJS.ProcessEnv
+            const child = spawn(bin, ['prompt'], { cwd: cwd && typeof cwd === 'string' ? cwd : process.cwd(), env })
+            child.on('error', (err: any) => {
+              if (String(err?.code || '') === 'ENOENT') {
+                runWith(index + 1)
+                return
+              }
+              safeEnd(500, { ok: false, error: String(err?.message || 'starship error'), code: err?.code || 'ERR' })
+            })
+            child.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
+            child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+            child.on('close', (code: number) => {
+              if (code === 0) {
+                safeEnd(200, { ok: true, output: stdout })
+              } else {
+                safeEnd(500, { ok: false, error: stderr || `starship exited with code ${code}` })
+              }
+            })
+          }
+          runWith(0)
         } catch (e: any) {
           try { fs.unlinkSync(tmpPath) } catch {}
           res.statusCode = 500
