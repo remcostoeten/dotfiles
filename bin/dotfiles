@@ -241,6 +241,11 @@ function dotfiles_help() {
     echo "  logs       View error logs"
     echo "  studio     Launch Dotfiles Studio (dev) or deploy"
     echo
+    echo.cyan "Quick Shortcuts (from banner):"
+    echo "  reload     Reload dotfiles configuration"
+    echo "  doctor     Run comprehensive health check"
+    echo "  envs       Environment & secrets manager"
+    echo
     dotfiles_aliases_help
     echo
     echo "For command help, use: dotfiles <command> help"
@@ -292,21 +297,61 @@ function dotfiles_studio_deploy() {
     fi
     echo.success "Deployed: $deploy_url"
     local alias="dotfiles-studio"
+    local chosen_alias=""
     if (cd "$app_dir" && vercel alias set "$deploy_url" "$alias" >/dev/null 2>&1); then
+        chosen_alias="$alias"
         echo.success "Alias set: https://$alias.vercel.app"
     else
         local fallback1="${alias}-$(whoami)"
         if (cd "$app_dir" && vercel alias set "$deploy_url" "$fallback1" >/dev/null 2>&1); then
+            chosen_alias="$fallback1"
             echo.success "Alias set: https://$fallback1.vercel.app"
         else
             local fallback2="${alias}-$(date +%s)"
             if (cd "$app_dir" && vercel alias set "$deploy_url" "$fallback2" >/dev/null 2>&1); then
+                chosen_alias="$fallback2"
                 echo.success "Alias set: https://$fallback2.vercel.app"
             else
                 echo.warning "Could not set alias; use deployed URL above"
             fi
         fi
     fi
+    if [[ -n "$chosen_alias" ]]; then
+        echo "$chosen_alias" > "$DOTFILES_ROOT/logs/studio.alias"
+    fi
+}
+
+function dotfiles_studio_stop() {
+    local pid_file="$DOTFILES_ROOT/logs/studio.pid"
+    if [[ ! -f "$pid_file" ]]; then
+        echo.warning "Studio is not running (no PID file)"
+        return 0
+    fi
+    local pid=$(cat "$pid_file")
+    if kill -0 "$pid" >/dev/null 2>&1; then
+        kill "$pid" >/dev/null 2>&1 && echo.success "Stopped studio (pid $pid)" || echo.warning "Failed to stop pid $pid"
+    else
+        echo.info "No running process for pid $pid"
+    fi
+    rm -f "$pid_file"
+}
+
+function dotfiles_studio_open() {
+    local alias_arg="${1:-}"
+    local alias_file="$DOTFILES_ROOT/logs/studio.alias"
+    local alias_name=""
+    if [[ -n "$alias_arg" ]]; then
+        alias_name="$alias_arg"
+    elif [[ -f "$alias_file" ]]; then
+        alias_name=$(cat "$alias_file")
+    else
+        alias_name="dotfiles-studio"
+    fi
+    local url="https://$alias_name.vercel.app"
+    echo.info "Opening $url"
+    if command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 &
+    elif command -v open >/dev/null 2>&1; then open "$url" >/dev/null 2>&1 &
+    else echo "$url"; fi
 }
 
 case "${1:-help}" in
@@ -391,11 +436,18 @@ case "${1:-help}" in
             start|dev)
                 dotfiles_studio_start
                 ;;
+            stop)
+                dotfiles_studio_stop
+                ;;
             deploy)
                 dotfiles_studio_deploy
                 ;;
+            open)
+                shift 2
+                dotfiles_studio_open "$@"
+                ;;
             *)
-                echo.error "Usage: dotfiles studio [start|deploy]"
+                echo.error "Usage: dotfiles studio [start|stop|deploy|open [alias]]"
                 ;;
         esac
         ;;

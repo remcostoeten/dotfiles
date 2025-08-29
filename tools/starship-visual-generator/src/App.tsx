@@ -30,6 +30,7 @@ export default function App() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [activeFeature, setActiveFeature] = useState<TFeatureKey>('starship');
   const [currentVariant, setCurrentVariant] = useState<string>('');
+  const [variantRefreshMs] = useState<number>(10000);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
   const [applyPath, setApplyPath] = useState('/home/remcostoeten/.config/dotfiles/configs/starship.toml');
@@ -90,7 +91,20 @@ export default function App() {
   }
 
   function fetchCurrentVariant(): void {
-    fetch('/api/current-variant').then(function r(x){ return x.json(); }).then(function d(data){ setCurrentVariant(String(data?.variant || '')); }).catch(function(){ setCurrentVariant(''); });
+    fetch('/api/current-variant')
+      .then(function r(x){ return x.json(); })
+      .then(function d(data){ setCurrentVariant(String(data?.variant || '')); })
+      .catch(function(){ setCurrentVariant(''); });
+  }
+
+  function handleOpenProd(): void {
+    fetch('/api/prod-url')
+      .then(function r(x){ return x.json(); })
+      .then(function d(data){
+        const url = String(data?.url || 'https://dotfiles-studio.vercel.app');
+        window.open(url, '_blank');
+      })
+      .catch(function(){ window.open('https://dotfiles-studio.vercel.app', '_blank'); });
   }
 
   return (
@@ -110,6 +124,9 @@ export default function App() {
           </div>
           <div className="flex items-center space-x-3">
             <ThemeToggle onThemeChange={function(){}} />
+            <div className="flex items-center space-x-2">
+              <button onClick={handleOpenProd} className="px-3 py-1 text-sm rounded-lg border dark:border-haptic.border">Open Prod</button>
+            </div>
             <div className="flex items-center space-x-2">
               <Palette size={16} className="text-gray-600" />
               <select value={promptState.palette.name} onChange={function onChange(e){ setPalette(defaultPalettes[e.target.value]); }} className="border border-gray-300 rounded px-3 py-1 text-sm">
@@ -200,6 +217,9 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Auto-refresh current variant */}
+      {/* eslint-disable-next-line react-hooks/exhaustive-deps */}
+      {(() => { setTimeout(fetchCurrentVariant, variantRefreshMs); return null; })()}
     </div>
   );
 }

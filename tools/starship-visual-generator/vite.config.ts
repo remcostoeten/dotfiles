@@ -91,6 +91,24 @@ function starshipDevApi(): Plugin {
           res.end(JSON.stringify({ templates: [] }))
         }
       })
+      server.middlewares.use('/api/prod-url', async (_req, res) => {
+        try {
+          const fs = await import('fs')
+          const path = await import('path')
+          const os = await import('os')
+          const aliasFile = path.join(os.homedir(), '.config/dotfiles/logs/studio.alias')
+          let url = 'https://dotfiles-studio.vercel.app'
+          if (fs.existsSync(aliasFile)) {
+            const alias = String(fs.readFileSync(aliasFile, 'utf8')).trim()
+            if (alias) url = `https://${alias}.vercel.app`
+          }
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ url }))
+        } catch {
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ url: 'https://dotfiles-studio.vercel.app' }))
+        }
+      })
       server.middlewares.use('/api/apply', async (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
         const fs = await import('fs')
