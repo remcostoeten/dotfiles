@@ -1,46 +1,47 @@
 function echo.dotfiles_banner() {
-    # Prevent duplicate banner display
     [[ -n "$DOTFILES_BANNER_SHOWN" ]] && return 0
     export DOTFILES_BANNER_SHOWN=1
     
-    # Gruvbox-inspired colors for aesthetic appeal (using 256-color codes)
-    local orange='\033[38;5;208m'        # Gruvbox orange
-    local aqua='\033[38;5;108m'          # Gruvbox aqua  
-    local bright_yellow='\033[38;5;214m' # Gruvbox yellow
-    local bright_green='\033[38;5;142m'  # Gruvbox green
-    local bright_blue='\033[38;5;109m'   # Gruvbox blue
-    local bright_red='\033[38;5;167m'    # Gruvbox red
-    local dim='\033[2;37m'               # Dimmed text
-    local bright_fg='\033[38;5;223m'     # Gruvbox foreground
+    # Pastel colors (soft, muted palette)
+    local pastel_pink='\033[38;5;218m'      # soft pink
+    local pastel_blue='\033[38;5;117m'      # soft blue
+    local pastel_green='\033[38;5;158m'     # soft green
+    local pastel_yellow='\033[38;5;230m'    # soft yellow
+    local pastel_purple='\033[38;5;183m'    # soft purple
+    local pastel_aqua='\033[38;5;152m'      # soft aqua
+    local pastel_orange='\033[38;5;223m'    # soft orange
+    local dim_gray='\033[38;5;245m'         # dim text
+    local light_fg='\033[38;5;254m'         # light foreground
     
-    # Modern aesthetic banner with Gruvbox colors matching Starship
+    # Get timestamp in requested format: month-day + time
+    local last_update
+    if git --no-pager log -1 --format='%ci' 2>/dev/null >/dev/null 2>&1; then
+        local git_date=$(git --no-pager log -1 --format='%ci' 2>/dev/null | cut -d' ' -f1,2)
+        local month_day=$(echo "$git_date" | cut -d' ' -f1 | cut -d'-' -f2,3 | tr '-' '-')
+        local time_part=$(echo "$git_date" | cut -d' ' -f2 | cut -d':' -f1,2 | sed 's/:/:/')
+        last_update="${month_day} ${time_part}"
+    else
+        last_update="n/a"
+    fi
+    
     echo
-    echo -e "${aqua}╭─────────────────────────────────────────────────────────────────╮${NC}"
-    echo -e "${aqua}│${NC}                                                                 ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}    ${orange}██████╗  ${bright_yellow}██████╗${NC} ${bright_green}████████╗${NC}${bright_blue}███████╗${NC}${PURPLE}██╗${NC}${bright_red}██╗     ${NC}${aqua}███████╗${NC}   ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}    ${orange}██╔══██╗${NC}${bright_yellow}██╔═══██╗${NC}${bright_green}╚══██╔══╝${NC}${bright_blue}██╔════╝${NC}${PURPLE}██║${NC}${bright_red}██║     ${NC}${aqua}██╔════╝${NC}   ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}    ${orange}██║  ██║${NC}${bright_yellow}██║   ██║${NC}${bright_green}   ██║   ${NC}${bright_blue}█████╗  ${NC}${PURPLE}██║${NC}${bright_red}██║     ${NC}${aqua}█████╗${NC}     ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}    ${orange}██║  ██║${NC}${bright_yellow}██║   ██║${NC}${bright_green}   ██║   ${NC}${bright_blue}██╔══╝  ${NC}${PURPLE}██║${NC}${bright_red}██║     ${NC}${aqua}██╔══╝${NC}     ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}    ${orange}██████╔╝${NC}${bright_yellow}╚██████╔╝${NC}${bright_green}   ██║   ${NC}${bright_blue}██║     ${NC}${PURPLE}██║${NC}${bright_red}███████╗${NC}${aqua}███████╗${NC}   ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}    ${dim}╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝${NC}   ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}                                                                 ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}           ${bright_fg}✨ Terminal Configuration Framework ✨${NC}            ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}                                                                 ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}        ${PURPLE}🚀 Aesthetic${NC} ${orange}•${NC} ${YELLOW}Modular${NC} ${orange}•${NC} ${GREEN}ZSH-First${NC} ${orange}•${NC} ${BLUE}Modern${NC}         ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}                                                                 ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}                    ${PURPLE}Version ${DOTFILES_VERSION:-'unknown'}${NC} ${orange}│${NC} ${bright_yellow}$(date +'%H:%M')${NC}                     ${aqua}│${NC}"
-    echo -e "${aqua}│${NC}                                                                 ${aqua}│${NC}"
-    echo -e "${aqua}╰─────────────────────────────────────────────────────────────────╯${NC}"
-    echo
-    # Quick status indicators with modern styling
-    echo -e "${dim}▌${NC}${bright_fg} Shell: ${CYAN}${SHELL##*/}${NC} ${dim}▌${NC}${bright_fg} OS: ${GREEN}$(uname -s)${NC} ${dim}▌${NC}${bright_fg} User: ${PURPLE}$USER${NC} ${dim}▌${NC}"
+    echo -e "${pastel_aqua}╔═══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}   ${pastel_orange}██████╗  ${pastel_yellow}██████╗${NC} ${pastel_green}████████╗${NC}${pastel_blue}███████╗${NC}${pastel_purple}██╗${NC}${pastel_pink}██╗     ${NC}${pastel_aqua}███████╗${NC}   ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}   ${pastel_orange}██╔══██╗${NC}${pastel_yellow}██╔═══██╗${NC}${pastel_green}╚══██╔══╝${NC}${pastel_blue}██╔════╝${NC}${pastel_purple}██║${NC}${pastel_pink}██║     ${NC}${pastel_aqua}██╔════╝${NC}   ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}   ${pastel_orange}██║  ██║${NC}${pastel_yellow}██║   ██║${NC}${pastel_green}   ██║   ${NC}${pastel_blue}█████╗  ${NC}${pastel_purple}██║${NC}${pastel_pink}██║     ${NC}${pastel_aqua}█████╗${NC}     ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}   ${pastel_orange}██║  ██║${NC}${pastel_yellow}██║   ██║${NC}${pastel_green}   ██║   ${NC}${pastel_blue}██╔══╝  ${NC}${pastel_purple}██║${NC}${pastel_pink}██║     ${NC}${pastel_aqua}██╔══╝${NC}     ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}   ${pastel_orange}██████╔╝${NC}${pastel_yellow}╚██████╔╝${NC}${pastel_green}   ██║   ${NC}${pastel_blue}██║     ${NC}${pastel_purple}██║${NC}${pastel_pink}███████╗${NC}${pastel_aqua}███████╗${NC}   ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}   ${dim_gray}╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝${NC}   ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}                    ${light_fg}Remco Stoeten's dotfiles${NC}                    ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}        ${pastel_purple}🚀 Aesthetic${NC} ${pastel_orange}•${NC} ${pastel_yellow}Modular${NC} ${pastel_orange}•${NC} ${pastel_green}ZSH-First${NC} ${pastel_orange}•${NC} ${pastel_blue}Modern${NC}         ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}        ${pastel_purple}ver. ${DOTFILES_VERSION:-'unknown'}${NC} ${pastel_orange}│${NC} ${pastel_yellow}last update ${last_update}${NC} ${pastel_orange}│${NC} ${dim_gray}shortcuts: dotfiles${NC}        ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo
 }
 
-# Source pastel banner functions
-if [[ -f "${DOTFILES_ROOT:-$HOME/.config/dotfiles}/assets/ascii/pastel" ]]; then
-    source "${DOTFILES_ROOT:-$HOME/.config/dotfiles}/assets/ascii/pastel"
-fi
-
-# Add alias for convenience
 alias e.banner='echo.dotfiles_banner'
