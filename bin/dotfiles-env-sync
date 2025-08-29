@@ -182,12 +182,40 @@ function env_sync_push() {
         
         echo.success "Environment variables pushed to GitHub gist"
     elif [[ "$sync_url" == file://* ]]; then
-        # Copy to file location
+        # Handle file location (with git support)
         local file_path="${sync_url#file://}"
-        mkdir -p "$(dirname "$file_path")"
+        mkdir -p "$file_path"
+        
+        # Copy files to the directory
         cp "$ENCRYPTED_BACKUP" "$file_path/env.vault"
         cp "$metadata_temp" "$file_path/sync_metadata.json"
-        echo.success "Environment variables pushed to $file_path"
+        
+        # If it's a git repository, commit and push changes
+        if [[ -d "$file_path/.git" ]]; then
+            echo.info "Git repository detected - committing changes..."
+            cd "$file_path"
+            
+            # Check if there are changes to commit
+            if ! git diff --quiet HEAD -- env.vault sync_metadata.json 2>/dev/null; then
+                git add env.vault sync_metadata.json
+                git commit -m "Update encrypted environment vault: $timestamp from $(hostname)"
+                
+                # Push to remote if configured
+                if git remote get-url origin &>/dev/null; then
+                    echo.info "Pushing to remote repository..."
+                    git push origin HEAD
+                    echo.success "Environment variables pushed and synced to git remote"
+                else
+                    echo.success "Environment variables committed to local git repository"
+                fi
+            else
+                echo.info "No changes detected in vault files"
+            fi
+            
+            cd - > /dev/null
+        else
+            echo.success "Environment variables pushed to $file_path"
+        fi
     else
         # Upload via curl
         curl -s -X PUT --data-binary "@$ENCRYPTED_BACKUP" "$sync_url" > /dev/null
@@ -216,7 +244,28 @@ function env_sync_pull() {
         curl -s "$sync_url" -o "$ENCRYPTED_BACKUP"
     elif [[ "$sync_url" == file://* ]]; then
         local file_path="${sync_url#file://}"
-        cp "$file_path/env.vault" "$ENCRYPTED_BACKUP"
+        
+        # If it's a git repository, pull latest changes first
+        if [[ -d "$file_path/.git" ]]; then
+            echo.info "Git repository detected - pulling latest changes..."
+            cd "$file_path"
+            
+            # Pull latest changes if remote is configured
+            if git remote get-url origin &>/dev/null; then
+                git pull origin HEAD
+                echo.info "Latest changes pulled from remote repository"
+            fi
+            
+            cd - > /dev/null
+        fi
+        
+        # Copy the vault file
+        if [[ -f "$file_path/env.vault" ]]; then
+            cp "$file_path/env.vault" "$ENCRYPTED_BACKUP"
+        else
+            echo.error "No env.vault file found at $file_path"
+            return 1
+        fi
     else
         curl -s "$sync_url" -o "$ENCRYPTED_BACKUP"
     fi
@@ -335,6 +384,53 @@ function env_sync_bootstrap() {
     fi
 }
 
+# Setup private repository sync
+function env_sync_setup_repo() {
+    local repo_path="$1"
+    
+    if [[ -z "$repo_path" ]]; then
+        echo.info "Setting up sync with your private dotfiles-meta repository..."
+        
+        # Check if we have a local clone already
+        local default_path="${HOME}/tmp/dotfiles-meta"
+        if [[ -d "$default_path" ]]; then
+            echo.info "Found existing dotfiles-meta clone at $default_path"
+            repo_path="$default_path"
+        else
+            echo.info "Cloning your private dotfiles-meta repository..."
+            mkdir -p "${HOME}/tmp"
+            cd "${HOME}/tmp"
+            
+            if gh repo clone remcostoeten/dotfiles-meta; then
+                repo_path="${HOME}/tmp/dotfiles-meta"
+                echo.success "Repository cloned to $repo_path"
+            else
+                echo.error "Failed to clone repository. Make sure you have access to remcostoeten/dotfiles-meta"
+                return 1
+            fi
+        fi
+    fi
+    
+    # Validate the path is a git repository
+    if [[ ! -d "$repo_path/.git" ]]; then
+        echo.error "$repo_path is not a git repository"
+        return 1
+    fi
+    
+    # Set up the sync URL
+    mkdir -p "$ENV_SYNC_DIR"
+    chmod 700 "$ENV_SYNC_DIR"
+    echo "file://$repo_path" > "$SYNC_URL_FILE"
+    
+    echo.success "Environment sync configured to use private repository:"
+    echo.info "  Repository: $repo_path"
+    echo.info "  Sync URL: file://$repo_path"
+    echo
+    echo.info "Next steps:"
+    echo "1. Run 'dotfiles env-sync push' to encrypt and sync your environment variables"
+    echo "2. Your changes will be automatically committed and pushed to the private repo"
+}
+
 # Auto-sync on dotfiles operations
 function env_sync_auto() {
     if [[ -f "$SYNC_URL_FILE" ]] && [[ "${DOTFILES_AUTO_SYNC:-0}" == "1" ]]; then
@@ -370,6 +466,9 @@ function main() {
         "bootstrap")
             env_sync_bootstrap
             ;;
+        "setup-repo")
+            env_sync_setup_repo "$@"
+            ;;
         "help"|"--help"|"-h"|"")
             echo.header "Dotfiles Environment Sync"
             echo
@@ -384,6 +483,8 @@ function main() {
             echo "       - Download and decrypt environment variables"
             echo.cyan "  status" | tr '\n' ' '
             echo "       - Show sync configuration"
+            echo.cyan "  setup-repo" | tr '\n' ' '
+            echo "       - Setup sync with private repository (dotfiles-meta)"
             echo.cyan "  help" | tr '\n' ' '
             echo "       - Show this help"
             echo
