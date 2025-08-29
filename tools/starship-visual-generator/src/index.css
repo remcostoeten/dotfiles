@@ -13,3 +13,13 @@ body {
   min-height: 100vh;
   background-color: #f8fafc;
 }
+
+:root {
+  color-scheme: light;
+}
+
+.dark :root,
+.dark body {
+  color-scheme: dark;
+  background-color: #0B0F14;
+}

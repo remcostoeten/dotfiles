@@ -51,6 +51,46 @@ function starshipDevApi(): Plugin {
           res.end(JSON.stringify({ ok: false, error: e?.message || 'Internal error' }))
         }
       })
+      server.middlewares.use('/api/current-variant', async (_req, res) => {
+        try {
+          const os = await import('os')
+          const fs = await import('fs')
+          const path = await import('path')
+          const file = path.join(os.homedir(), '.config/dotfiles/starship-variants/.current')
+          let variant = ''
+          if (fs.existsSync(file)) {
+            variant = String(fs.readFileSync(file, 'utf8')).trim()
+          }
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ variant }))
+        } catch {
+          res.statusCode = 500
+          res.end(JSON.stringify({ variant: '' }))
+        }
+      })
+      server.middlewares.use('/api/templates', async (_req, res) => {
+        try {
+          const os = await import('os')
+          const fs = await import('fs')
+          const path = await import('path')
+          const dir = path.join(os.homedir(), '.config/dotfiles/starship-variants')
+          const out: any[] = []
+          if (fs.existsSync(dir)) {
+            const files = fs.readdirSync(dir).filter((f: string) => f.endsWith('.toml'))
+            for (let i = 0; i < files.length; i++) {
+              const f = files[i]
+              const p = path.join(dir, f)
+              const toml = fs.readFileSync(p, 'utf8')
+              out.push({ name: f.replace(/\.toml$/, ''), path: p, toml })
+            }
+          }
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ templates: out }))
+        } catch {
+          res.statusCode = 500
+          res.end(JSON.stringify({ templates: [] }))
+        }
+      })
       server.middlewares.use('/api/apply', async (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return }
         const fs = await import('fs')

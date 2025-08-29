@@ -6,6 +6,8 @@ import { ModuleCanvas } from './features/starship/components/ModuleCanvas';
 import { TerminalPreview } from './features/starship/components/TerminalPreview';
 import { TomlEditor } from './features/starship/components/TomlEditor';
 import { FeatureSidebar } from './shared/components/FeatureSidebar';
+import { ThemeToggle } from './shared/components/ThemeToggle';
+import { TemplatesModal } from './features/starship/components/TemplatesModal';
 import { useStore, defaultPalettes, defaultScenarios } from './features/starship/store';
 import './App.css';
 
@@ -25,7 +27,9 @@ export default function App() {
   } = useStore();
   const [showExportModal, setShowExportModal] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [activeFeature, setActiveFeature] = useState<TFeatureKey>('starship');
+  const [currentVariant, setCurrentVariant] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
   const [applyPath, setApplyPath] = useState('/home/remcostoeten/.config/dotfiles/configs/starship.toml');
@@ -85,19 +89,27 @@ export default function App() {
     }
   }
 
+  function fetchCurrentVariant(): void {
+    fetch('/api/current-variant').then(function r(x){ return x.json(); }).then(function d(data){ setCurrentVariant(String(data?.variant || '')); }).catch(function(){ setCurrentVariant(''); });
+  }
+
   return (
-    <div className="app h-screen bg-gray-50 flex flex-col">
+    <div className="app h-screen bg-gray-50 dark:bg-haptic.bg flex flex-col">
       <input ref={fileInputRef} type="file" accept=".toml" className="hidden" onChange={handleImportChange} />
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
+      <header className="bg-white dark:bg-haptic.surface border-b border-gray-200 dark:border-haptic.border px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button onClick={toggleSidebar} className="p-2 hover:bg-gray-100 rounded-lg"><Menu size={20} /></button>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Starship Visual Generator</h1>
-              <p className="text-sm text-gray-600">Design your perfect terminal prompt visually</p>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-haptic.text">Starship Visual Generator</h1>
+              <p className="text-sm text-gray-600 dark:text-haptic.subtext">Design your perfect terminal prompt visually</p>
+              {currentVariant && (
+                <div className="mt-1 text-xs px-2 py-0.5 rounded inline-block bg-blue-100 dark:bg-haptic.muted text-blue-800 dark:text-haptic.text border dark:border-haptic.border">Current variant: {currentVariant}</div>
+              )}
             </div>
           </div>
           <div className="flex items-center space-x-3">
+            <ThemeToggle onThemeChange={function(){}} />
             <div className="flex items-center space-x-2">
               <Palette size={16} className="text-gray-600" />
               <select value={promptState.palette.name} onChange={function onChange(e){ setPalette(defaultPalettes[e.target.value]); }} className="border border-gray-300 rounded px-3 py-1 text-sm">
@@ -114,7 +126,8 @@ export default function App() {
               {ui.previewMode === 'live' ? (<><Play size={14} className="inline mr-1" />Live</>) : (<><Pause size={14} className="inline mr-1" />Static</>)}
             </button>
             <div className="flex items-center space-x-2">
-              <button onClick={function open(){ setShowEditor(true); }} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"><Edit3 size={16} /><span>Edit TOML</span></button>
+              <button onClick={function open(){ setShowTemplates(true); fetchCurrentVariant(); }} className="px-4 py-2 border border-gray-300 dark:border-haptic.border rounded-lg hover:bg-gray-50 dark:hover:bg-haptic.muted transition-colors flex items-center space-x-2"><Edit3 size={16} /><span>Templates</span></button>
+              <button onClick={function open(){ setShowEditor(true); }} className="px-4 py-2 border border-gray-300 dark:border-haptic.border rounded-lg hover:bg-gray-50 dark:hover:bg-haptic.muted transition-colors flex items-center space-x-2"><Edit3 size={16} /><span>Edit TOML</span></button>
               <button onClick={function open(){ setShowExportModal(true); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"><Download size={16} /><span>Export</span></button>
               <button onClick={handleOpenImport} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"><Upload size={16} /><span>Import</span></button>
               <button onClick={function open(){ setApplyOpen(true); }} className="px-4 py-2 border border-emerald-300 text-emerald-700 rounded-lg hover:bg-emerald-50 transition-colors flex items-center space-x-2"><CheckCircle size={16} /><span>Apply to system</span></button>
@@ -122,13 +135,13 @@ export default function App() {
           </div>
         </div>
       </header>
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden text-gray-900 dark:text-haptic.text">
         <FeatureSidebar active={activeFeature} onSelect={function onSelect(k){ setActiveFeature(k as TFeatureKey); }} />
         {activeFeature === 'starship' && (
           <>
             <ModuleLibrary />
             <div className="flex-1 flex overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-haptic.bg">
                 <ModuleCanvas />
               </div>
               <div className="w-1/2 border-l border-gray-200">
@@ -163,6 +176,7 @@ export default function App() {
           </div>
         </div>
       )}
+      <TemplatesModal open={showTemplates} onClose={function close(){ setShowTemplates(false); }} />
       <TomlEditor open={showEditor} onClose={function close(){ setShowEditor(false); }} />
       {applyOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
