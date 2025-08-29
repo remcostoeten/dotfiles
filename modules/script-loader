@@ -8,7 +8,7 @@ function load_scripts() {
         return 0
     fi
     
-    echo.info "Loading scripts..."
+    echo.debug "Loading scripts..."
     
     local count=0
     local failed=0
@@ -19,24 +19,22 @@ function load_scripts() {
         local filename=$(basename "$script_file")
         
         if [[ "$filename" == *.disabled ]]; then
-            echo.dim "  ⊗ $filename (disabled)"
+            echo.debug "  ⊗ $filename (disabled)"
             continue
         fi
         
         count=$((count + 1))
         
         if safe_source "$script_file"; then
-            echo.success "  $filename"
+            echo.debug "  ✓ $filename"
         else
             failed=$((failed + 1))
-            echo.error "  $filename"
+            echo.error "  ✗ Failed to load $filename"
         fi
     done
     
-    if [[ $count -eq 0 ]]; then
-        echo.warning "  No scripts found"
-    else
-        echo.info "  Loaded $((count - failed))/$count script files"
+    if [[ $count -gt 0 ]]; then
+        echo.debug "Loaded $((count - failed))/$count script files"
     fi
 }
 

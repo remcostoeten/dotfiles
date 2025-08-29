@@ -20,16 +20,10 @@ alias reload='exec ${SHELL}'
 alias cdf='cd ${DOTFILES_ROOT}'
 
 if [[ -t 1 ]]; then
-    echo
-    echo.success "Dotfiles v${DOTFILES_VERSION} loaded"
     echo.info "Type $(echo.cyan 'dotfiles help') for available commands"
-    echo
 fi
-# Load environment variables & secrets
-# Use dotfiles env to manage encrypted environment variables and OAuth tokens
-
-# Export environment variables and secrets
-dotfiles env export 2>/dev/null || true
+# Load environment variables & secrets silently
+dotfiles env export >/dev/null 2>&1 || true
 
 # Personal Startpage - Auto command tracking
 source /home/remcostoeten/current/personal-startpage/shell-integration.sh

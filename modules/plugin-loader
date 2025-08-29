@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+# Ensure echo.* helpers are available
+if ! declare -f echo.debug >/dev/null 2>&1; then
+    source "${DOTFILES_ROOT:-$HOME/.config/dotfiles}/core/_colors" 2>/dev/null || {
+        function echo.debug() { [[ "${DOTFILES_DEBUG}" == "1" ]] && echo "[DEBUG] $*" >&2; }
+        function echo.error() { echo "[ERROR] $*" >&2; }
+        function echo.success() { echo "[SUCCESS] $*"; }
+    }
+fi
+
 function load_plugins() {
     local plugin_dir="$DOTFILES_MODULES/plugins"
     
@@ -8,7 +17,7 @@ function load_plugins() {
         return 0
     fi
     
-    echo.info "Loading plugins..."
+    echo.debug "Loading plugins..."
     
     local count=0
     local failed=0
@@ -19,24 +28,22 @@ function load_plugins() {
         local filename=$(basename "$plugin_file")
         
         if [[ "$filename" == *.disabled ]]; then
-            echo.dim "  ⊗ $filename (disabled)"
+            echo.debug "  ⊗ $filename (disabled)"
             continue
         fi
         
         count=$((count + 1))
         
         if safe_source "$plugin_file"; then
-            echo.success "  $filename"
+            echo.debug "  ✓ $filename"
         else
             failed=$((failed + 1))
-            echo.error "  $filename"
+            echo.error "  ✗ Failed to load $filename"
         fi
     done
     
-    if [[ $count -eq 0 ]]; then
-        echo.warning "  No plugins found"
-    else
-        echo.info "  Loaded $((count - failed))/$count plugin files"
+    if [[ $count -gt 0 ]]; then
+        echo.debug "Loaded $((count - failed))/$count plugin files"
     fi
     
     load_plugin_configs
@@ -51,17 +58,9 @@ function load_plugin_configs() {
         fi
     fi
     
-    if command -v zoxide &>/dev/null; then
-        eval "$(zoxide init "$DOTFILES_SHELL" 2>/dev/null)" && echo.success "  zoxide"
-    fi
+    # Note: zoxide is now handled via the alias loader (zoxide.aliases)
     
-    if command -v starship &>/dev/null; then
-        eval "$(starship init "$DOTFILES_SHELL" 2>/dev/null)" && echo.success "  starship prompt"
-    fi
-    
-    if command -v direnv &>/dev/null; then
-        eval "$(direnv hook "$DOTFILES_SHELL" 2>/dev/null)" && echo.success "  direnv"
-    fi
+    # Note: starship and direnv are initialized in bootstrap to avoid duplication
 }
 
 load_plugins

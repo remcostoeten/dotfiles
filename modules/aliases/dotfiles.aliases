@@ -1,0 +1,31 @@
+# @alias envs
+# @desc Shorthand for dotfiles environment variable manager
+alias envs='dotfiles-env'
+
+# @alias df-env
+# @desc Alias for dotfiles environment manager
+alias df-env='dotfiles-env'
+
+# @alias df-reload  
+# @desc Reload dotfiles configuration
+alias df-reload='dotfiles reload'
+
+# @alias df-doctor
+# @desc Run dotfiles health check
+alias df-doctor='dotfiles doctor'
+
+# @alias df-version
+# @desc Show dotfiles version information
+alias df-version='dotfiles version'
+
+# @alias df-update
+# @desc Update dotfiles from repository
+alias df-update='dotfiles update'
+
+# @alias df-links
+# @desc Manage dotfiles symlinks
+alias df-links='dotfiles-link'
+
+# @alias reload
+# @desc Quick reload of shell configuration
+alias reload='exec $SHELL'

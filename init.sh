@@ -268,13 +268,47 @@ setup_github_auth() {
 
 setup_secrets_sync() {
     log_header "Setting up Secrets Sync"
-    # This function's logic remains complex and is kept as a placeholder.
-    # It would use `gh` which is installed as a critical dependency.
-    log_info "Running secrets sync setup..."
-    if [[ -f "$DOTFILES_DIR/bin/dotfiles-secrets-sync" ]]; then
-        "$DOTFILES_DIR/bin/dotfiles" secrets-sync init || log_warning "Secret sync setup had issues."
+    
+    # Check if GitHub CLI is authenticated
+    if ! gh auth status &>/dev/null; then
+        log_warning "GitHub CLI not authenticated - skipping secrets sync"
+        log_info "You can set up secrets later with: dotfiles-secrets-bootstrap setup"
+        return 0
+    fi
+    
+    log_info "GitHub CLI is authenticated - setting up secrets sync..."
+    
+    # Ask if user wants to set up secrets sync
+    echo -e "\n${BOLD}${PURPLE}Setup secrets sync with GitHub gists?${NC}"
+    echo -e "This will:"
+    echo -e "• Search for existing secrets gists"
+    echo -e "• Allow you to sync secrets across machines"
+    echo -e "• Encrypt secrets locally before uploading"
+    echo
+    read -p "Setup secrets sync? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        log_info "Skipping secrets sync setup"
+        log_info "You can set up secrets later with: dotfiles-secrets-bootstrap setup"
+        return 0
+    fi
+    
+    # Use the new enhanced bootstrap command
+    if [[ -f "$DOTFILES_DIR/bin/dotfiles-secrets-bootstrap" ]]; then
+        log_info "Running enhanced secrets bootstrap..."
+        if "$DOTFILES_DIR/bin/dotfiles-secrets-bootstrap" setup; then
+            log_success "Secrets sync configured successfully!"
+        else
+            log_warning "Secrets sync setup had issues - you can retry later"
+            log_info "Manual setup: dotfiles-secrets-bootstrap setup"
+        fi
     else
-        log_warning "dotfiles-secrets-sync script not found."
+        log_warning "Enhanced secrets bootstrap not found - using fallback"
+        if [[ -f "$DOTFILES_DIR/bin/dotfiles-env-sync" ]]; then
+            "$DOTFILES_DIR/bin/dotfiles-env-sync" init || log_warning "Fallback secret sync setup had issues."
+        else
+            log_warning "No secrets sync tools found."
+        fi
     fi
 }
 

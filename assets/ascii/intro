@@ -36,9 +36,7 @@ function echo.dotfiles_banner() {
     echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
     echo -e "${pastel_aqua}║${NC}                    ${light_fg}Remco Stoeten's dotfiles${NC}                    ${pastel_aqua}║${NC}"
     echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
-    echo -e "${pastel_aqua}║${NC}        ${pastel_purple}🚀 Aesthetic${NC} ${pastel_orange}•${NC} ${pastel_yellow}Modular${NC} ${pastel_orange}•${NC} ${pastel_green}ZSH-First${NC} ${pastel_orange}•${NC} ${pastel_blue}Modern${NC}         ${pastel_aqua}║${NC}"
-    echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
-    echo -e "${pastel_aqua}║${NC}        ${pastel_purple}ver. ${DOTFILES_VERSION:-'unknown'}${NC} ${pastel_orange}│${NC} ${pastel_yellow}last update ${last_update}${NC} ${pastel_orange}│${NC} ${dim_gray}shortcuts: dotfiles${NC}        ${pastel_aqua}║${NC}"
+    echo -e "${pastel_aqua}║${NC}        ${pastel_purple}ver. ${DOTFILES_VERSION:-'unknown'}${NC} ${pastel_orange}│${NC} ${pastel_yellow}last update ${last_update}${NC} ${pastel_orange}│${NC} ${dim_gray}reload • doctor • envs${NC}         ${pastel_aqua}║${NC}"
     echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
     echo -e "${pastel_aqua}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo

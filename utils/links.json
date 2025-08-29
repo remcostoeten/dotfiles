@@ -1,1 +1,6 @@
-{}
+{
+  "/home/remcostoeten/.config/kitty/kitty.conf": {
+    "source": "/home/remcostoeten/.config/dotfiles/configs/kitty/kitty.conf",
+    "created": "2025-08-29T01:09:53+02:00"
+  }
+}

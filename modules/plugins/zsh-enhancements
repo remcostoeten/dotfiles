@@ -6,7 +6,13 @@
 # Date: 2024-08-26
 
 function install_zsh_enhancements() {
-    echo.info "Installing ZSH enhancement plugins..."
+    echo.debug "Installing ZSH enhancement plugins..."
+    
+    # Check if git is available
+    if ! command -v git &>/dev/null; then
+        echo.debug "Git not available - skipping zsh-enhancements installation"
+        return 1
+    fi
     
     local plugins_dir="$HOME/.local/share/zsh-plugins"
     ensure_dir "$plugins_dir"
@@ -83,12 +89,6 @@ function configure_zsh_enhancements() {
     bindkey '^[[1;5D' backward-word   # Ctrl+Left
     bindkey '^H' backward-kill-word   # Ctrl+Backspace
     bindkey '^[[3;5~' kill-word       # Ctrl+Delete
-    
-    # Initialize Starship prompt
-    if command -v starship &>/dev/null; then
-        eval "$(starship init zsh)"
-        echo.debug "Initialized Starship prompt"
-    fi
     
     # Configure FZF if available
     if command -v fzf &>/dev/null; then

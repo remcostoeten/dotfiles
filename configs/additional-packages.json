@@ -44,5 +44,13 @@
     "commands": [
       { "manager": "npm", "command": "npm i -g wrangler" }
     ]
+  },
+  {
+    "name": "mmdc",
+    "description": "Mermaid CLI for rendering diagrams",
+    "docs": "https://github.com/mermaid-js/mermaid-cli",
+    "commands": [
+      { "manager": "npm", "command": "npm i -g @mermaid-js/mermaid-cli" }
+    ]
   }
 ]

@@ -1,4 +1,14 @@
 # @alias z
 # @desc Zoxide (smarter cd)
 
-eval "$(zoxide init zsh)"
+if command -v zoxide &>/dev/null; then
+    if [[ "$DOTFILES_SHELL" == "zsh" ]]; then
+        eval "$(zoxide init zsh 2>/dev/null)" || echo.warning "Failed to initialize zoxide for zsh"
+    elif [[ "$DOTFILES_SHELL" == "bash" ]]; then
+        eval "$(zoxide init bash 2>/dev/null)" || echo.warning "Failed to initialize zoxide for bash"
+    else
+        eval "$(zoxide init "${SHELL##*/}" 2>/dev/null)" || echo.warning "Failed to initialize zoxide for ${SHELL##*/}"
+    fi
+else
+    echo.debug "zoxide not found, skipping initialization"
+fi

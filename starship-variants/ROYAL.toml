@@ -1,6 +1,9 @@
 format = """
 [](#4B0082)\
 $username\
+[](bg:#6A1B9A fg:#[0-9A-Fa-f]*)\
+$custom.dotfiles_version\
+[](bg:#[0-9A-Fa-f]* fg:#6A1B9A)\
 [](bg:#8A2BE2 fg:#4B0082)\
 $directory\
 [](fg:#8A2BE2 bg:#9370DB)\

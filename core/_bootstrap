@@ -83,9 +83,18 @@ function dotfiles_load_modules() {
     
     safe_source_dir "$DOTFILES_MODULES/enabled" "*.sh" "enabled modules"
     
-    [[ -f "$DOTFILES_MODULES/alias-loader" ]] && safe_source "$DOTFILES_MODULES/alias-loader" "alias loader"
-    [[ -f "$DOTFILES_MODULES/plugin-loader" ]] && safe_source "$DOTFILES_MODULES/plugin-loader" "plugin loader"
-    [[ -f "$DOTFILES_MODULES/script-loader" ]] && safe_source "$DOTFILES_MODULES/script-loader" "script loader"
+    # Load loaders silently - they handle their own output
+    if [[ -f "$DOTFILES_MODULES/alias-loader" ]]; then
+        source "$DOTFILES_MODULES/alias-loader" 2>/dev/null || echo.debug "Alias loader completed"
+    fi
+    
+    if [[ -f "$DOTFILES_MODULES/plugin-loader" ]]; then
+        source "$DOTFILES_MODULES/plugin-loader" 2>/dev/null || echo.debug "Plugin loader completed"
+    fi
+    
+    if [[ -f "$DOTFILES_MODULES/script-loader" ]]; then
+        source "$DOTFILES_MODULES/script-loader" 2>/dev/null || echo.debug "Script loader completed"
+    fi
     
     safe_source_dir "$HOME/.config/dotfiles-local/modules" "*.sh" "local modules"
 }

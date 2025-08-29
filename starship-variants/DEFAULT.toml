@@ -3,6 +3,9 @@ format = """
 $os\
 [](bg:color_yellow fg:color_orange)\
 $username\
+[](bg:#6A1B9A fg:#[0-9A-Fa-f]*)\
+$custom.dotfiles_version\
+[](bg:#[0-9A-Fa-f]* fg:#6A1B9A)\
 [](bg:color_aqua fg:color_yellow)\
 $directory\
 [](fg:color_aqua bg:color_blue)\

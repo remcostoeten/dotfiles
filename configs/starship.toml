@@ -3,7 +3,9 @@ format = """
 $os\
 [](bg:color_yellow fg:color_orange)\
 $username\
-[](bg:color_aqua fg:color_yellow)\
+[](bg:#6A1B9A fg:color_yellow)\
+$custom.dotfiles_version\
+[](bg:color_aqua fg:#6A1B9A)\
 $directory\
 [](fg:color_aqua bg:color_blue)\
 $git_branch\

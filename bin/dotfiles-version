@@ -22,22 +22,30 @@ function version_increment() {
     local major minor patch
     read -r major minor patch <<< "$parsed"
     
-    # Increment patch version
-    ((patch++))
-    
-    # Handle overflow: 0.0.7999 -> 0.1.0 after incrementing to 8000
-    if [[ $patch -eq 8000 ]]; then
-        ((minor++))
-        patch=0
-        echo.info "Build number reached 8000, incrementing minor version"
+    # Increment patch version as build number
+    # If patch has only 1 digit (0-9), append 1 to make it 01, 11, 21, etc.
+    # If patch has 2+ digits, just increment normally
+    if [[ $patch -lt 10 ]]; then
+        # Single digit: 7 -> 71, 8 -> 81, 9 -> 91
+        patch="${patch}1"
+    else
+        # Multi-digit: increment normally
+        ((patch++))
     fi
     
-    # Handle minor overflow: 0.7999.x -> 1.0.0 after incrementing to 8000
-    if [[ $minor -eq 8000 ]]; then
+    # Handle overflow: when patch reaches 999, increment minor and reset patch
+    if [[ $patch -eq 1000 ]]; then
+        ((minor++))
+        patch=0
+        echo.info "Build number reached 1000, incrementing minor version"
+    fi
+    
+    # Handle minor overflow: when minor reaches 100, increment major
+    if [[ $minor -eq 100 ]]; then
         ((major++))
         minor=0
         patch=0
-        echo.info "Minor version reached 8000, incrementing major version"
+        echo.info "Minor version reached 100, incrementing major version"
     fi
     
     echo "${major}.${minor}.${patch}"
@@ -151,9 +159,10 @@ function version_help() {
     echo "  help           Show this help message"
     echo
     echo.cyan "Auto-increment rules:"
-    echo "  • Normal: 0.0.1 → 0.0.2"
-    echo "  • Minor overflow: 0.0.7999 → 0.1.0"  
-    echo "  • Major overflow: 0.7999.x → 1.0.0"
+    echo "  • Single digit: 0.0.7 → 0.0.71 (append 1)"
+    echo "  • Multi-digit: 0.0.71 → 0.0.72 (increment)"
+    echo "  • Build overflow: 0.0.999 → 0.1.0 (at 1000)"
+    echo "  • Minor overflow: 0.99.x → 1.0.0 (at 100)"
     echo
     echo.cyan "Integration:"
     echo "  • Pre-commit hook auto-increments on git commit"

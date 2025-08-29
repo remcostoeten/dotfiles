@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+# Pastel Banner Module
+# Provides pastel-colored aesthetic banners for dotfiles
+
+function pastel_banner_init() {
+    echo.debug "Initializing pastel banner module"
+    
+    # Source pastel ASCII art functions if available
+    if [[ -f "${DOTFILES_ROOT:-$HOME/.config/dotfiles}/assets/ascii/pastel" ]]; then
+        source "${DOTFILES_ROOT:-$HOME/.config/dotfiles}/assets/ascii/pastel"
+        echo.debug "Loaded pastel banner functions"
+    else
+        echo.warning "Pastel banner file not found"
+        return 1
+    fi
+}
+
+function pastel_banner_help() {
+    echo.header "Pastel Banner Help"
+    echo "Available pastel banner commands:"
+    echo ""
+    echo "  ${PASTEL_BRIGHT_PURPLE}echo.pastel_banner${NC}    Full pastel banner (same as e.pastel, e.dreamy)"
+    echo "  ${PASTEL_BRIGHT_PINK}echo.pastel_mini${NC}      Compact pastel banner (same as e.mini)"
+    echo "  ${PASTEL_BRIGHT_CYAN}echo.kawaii_banner${NC}    Kawaii-style banner (same as e.kawaii)"
+    echo ""
+    echo "  ${PASTEL_FG}Aliases:${NC}"
+    echo "  ${PASTEL_BRIGHT_GREEN}e.pastel${NC}              Full pastel banner"
+    echo "  ${PASTEL_BRIGHT_GREEN}e.dreamy${NC}              Full pastel banner (alias)"
+    echo "  ${PASTEL_BRIGHT_GREEN}e.kawaii${NC}              Kawaii banner"
+    echo "  ${PASTEL_BRIGHT_GREEN}e.mini${NC}                Mini banner"
+    echo ""
+    echo "  ${PASTEL_FG}Color functions:${NC}"
+    echo "  ${PASTEL_BRIGHT_PINK}echo.pastel_pink 'text'${NC}     Pink text"
+    echo "  ${PASTEL_BRIGHT_BLUE}echo.pastel_blue 'text'${NC}     Blue text"
+    echo "  ${PASTEL_BRIGHT_PURPLE}echo.pastel_purple 'text'${NC}   Purple text"
+    echo "  ${PASTEL_BRIGHT_GREEN}echo.pastel_green 'text'${NC}    Green text"
+    echo "  ${PASTEL_BRIGHT_YELLOW}echo.pastel_yellow 'text'${NC}   Yellow text"
+    echo "  ${PASTEL_CURSOR}echo.pastel 'text'${NC}        Cursor/accent color"
+    echo ""
+    echo.info "To switch to pastel banner as default, edit your shell config or bootstrap"
+}
+
+# Quick banner preview function
+function pastel_preview() {
+    echo.header "Pastel Banner Previews"
+    
+    echo.info "Full Pastel Banner:"
+    unset DOTFILES_PASTEL_BANNER_SHOWN
+    echo.pastel_banner
+    
+    echo.info "Mini Banner:"
+    echo.pastel_mini
+    
+    echo.info "Kawaii Banner:"
+    echo.kawaii_banner
+}
+
+# Initialize the module
+pastel_banner_init
+
+# Add convenience aliases specific to this module
+alias pastel-preview='pastel_preview'
+alias banner-help='pastel_banner_help'

@@ -1,0 +1,19 @@
+flowchart TD
+  A0[Start: ./init.sh] --> A1[Detect OS + package manager]
+  A1 --> A2[Install critical packages]
+  A2 --> A3[Install core tools: gh, fzf]
+  A3 --> A4{Dotfiles repo exists?}
+  A4 -- No --> A5[Clone $DOTFILES_REPO -> $DOTFILES_DIR]
+  A4 -- Yes --> A6[Update repo (git pull)]
+  A5 --> A7[Proceed]
+  A6 --> A7[Proceed]
+  A7 --> A8{--barebones?}
+  A8 -- Yes --> Z1[End: barebones ready]
+  A8 -- No --> B1[Install additional packages (interactive)]
+  B1 --> C1[GitHub auth (gh auth login --scopes gist)]
+  C1 --> C2{Setup secrets sync?}
+  C2 -- Skip --> D1[dotfiles install]
+  C2 -- Setup --> C3[secrets bootstrap (discover/select/create gist)]
+  C3 --> C4[optional: pull secrets now]
+  C4 --> D1
+  D1 --> Z2[Done: reload terminal / dotfiles help]
