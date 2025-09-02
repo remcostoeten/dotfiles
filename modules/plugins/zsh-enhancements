@@ -4,15 +4,14 @@
 # Description: Fish-like features for ZSH (autosuggestions, syntax highlighting, better completions)
 # Dependencies: zsh, git
 # Date: 2024-08-26
-
-# Only run under ZSH
-if [[ "$DOTFILES_SHELL" != "zsh" && "${0##*/}" != "bash" ]]; then
+# Only abort if explicitly not running under ZSH
+if [[ -n "${DOTFILES_SHELL:-}" && "$DOTFILES_SHELL" != "zsh" ]]; then
     return 0 2>/dev/null || exit 0
 fi
 
 # Ensure echo.* functions are available
 if ! declare -f echo.debug >/dev/null 2>&1; then
-    function echo.debug() { [[ "${DOTFILES_DEBUG}" == "1" ]] && echo "[DEBUG] $*" >&2; }
+    function echo.debug() { [[ "${DOTFILES_DEBUG:-}" == "1" ]] && echo "[DEBUG] $*" >&2; }
     function echo.error() { echo "[ERROR] $*" >&2; }
     function echo.success() { echo "[SUCCESS] $*"; }
     function echo.warning() { echo "[WARNING] $*" >&2; }
@@ -66,23 +65,43 @@ function install_zsh_enhancements() {
         echo.success "Installed fzf-tab"
     fi
     
+    # Install zsh-history-substring-search for fish-like history
+    if [[ ! -d "$plugins_dir/zsh-history-substring-search" ]]; then
+        echo.info "Installing zsh-history-substring-search..."
+        git clone https://github.com/zsh-users/zsh-history-substring-search "$plugins_dir/zsh-history-substring-search"
+        echo.success "Installed zsh-history-substring-search"
+    fi
+    
     echo.success "All ZSH enhancements installed"
 }
 
 function configure_zsh_enhancements() {
-    if [[ "$DOTFILES_SHELL" != "zsh" ]]; then
+    if [[ "${DOTFILES_SHELL:-}" != "zsh" ]]; then
         return 0
     fi
     
-    # Configure autosuggestions
-    export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#585858'
-    export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+    # Fish-like autosuggestions configuration
+    export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=240'  # Light grey like fish
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        export ZSH_AUTOSUGGEST_STRATEGY=(history completion)  # Use both history and completions
+    else
+        export ZSH_AUTOSUGGEST_STRATEGY='history completion'  # Bash-compatible format
+    fi
     export ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
     export ZSH_AUTOSUGGEST_USE_ASYNC=1
+    export ZSH_AUTOSUGGEST_MANUAL_REBIND=1
     
     # Configure syntax highlighting with beautiful colors
-    export ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor)
-    typeset -A ZSH_HIGHLIGHT_STYLES
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        export ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor)
+    else
+        export ZSH_HIGHLIGHT_HIGHLIGHTERS='main brackets pattern cursor'
+    fi
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        typeset -A ZSH_HIGHLIGHT_STYLES
+    else
+        declare -A ZSH_HIGHLIGHT_STYLES 2>/dev/null || return 0
+    fi
     ZSH_HIGHLIGHT_STYLES[command]='fg=magenta,bold'
     ZSH_HIGHLIGHT_STYLES[alias]='fg=cyan,bold'
     ZSH_HIGHLIGHT_STYLES[builtin]='fg=yellow,bold'
@@ -95,25 +114,51 @@ function configure_zsh_enhancements() {
     ZSH_HIGHLIGHT_STYLES[bracket-level-3]='fg=magenta,bold'
     ZSH_HIGHLIGHT_STYLES[cursor-matchingbracket]='bg=blue'
     
-    # Better history search
-    bindkey '^[[A' history-substring-search-up
-    bindkey '^[[B' history-substring-search-down
-    bindkey '^P' history-substring-search-up
-    bindkey '^N' history-substring-search-down
+    # Fish-like key bindings for autosuggestions (ZSH only)
+    if [[ -n "${ZSH_VERSION:-}" ]] && command -v bindkey &>/dev/null; then
+        bindkey '^[[C' autosuggest-accept          # Right arrow accepts suggestion
+        bindkey '^F' autosuggest-accept            # Ctrl+F accepts suggestion (fish-like)
+        bindkey '^[[1;5C' autosuggest-execute      # Ctrl+Right executes suggestion
+        bindkey '^E' autosuggest-execute           # Ctrl+E executes suggestion
+        
+        # History substring search (fish-like up/down behavior)
+        bindkey '^[[A' history-substring-search-up     # Up arrow
+        bindkey '^[[B' history-substring-search-down   # Down arrow
+        bindkey '^P' history-substring-search-up       # Ctrl+P
+        bindkey '^N' history-substring-search-down     # Ctrl+N
+        
+        # Enhanced editing (consistent with fish)
+        bindkey '^[[1;5C' forward-word    # Ctrl+Right
+        bindkey '^[[1;5D' backward-word   # Ctrl+Left
+        bindkey '^H' backward-kill-word   # Ctrl+Backspace
+        bindkey '^[[3;5~' kill-word       # Ctrl+Delete
+        bindkey '^W' backward-kill-word   # Ctrl+W (fish-like)
+        bindkey '^U' backward-kill-line   # Ctrl+U (fish-like)
+        bindkey '^K' kill-line            # Ctrl+K (fish-like)
+    fi
     
-    # Fish-like accept suggestions
-    bindkey '^ ' autosuggest-accept
-    bindkey '^f' autosuggest-accept
-    
-    # Enhanced editing
-    bindkey '^[[1;5C' forward-word    # Ctrl+Right
-    bindkey '^[[1;5D' backward-word   # Ctrl+Left
-    bindkey '^H' backward-kill-word   # Ctrl+Backspace
-    bindkey '^[[3;5~' kill-word       # Ctrl+Delete
-    
-    # Configure FZF if available
+    # FZF-tab configuration for fish-like tab completion
     if command -v fzf &>/dev/null; then
-        export FZF_DEFAULT_OPTS='--height 40% --layout=reverse --border --color=bg+:#3c4142,bg:#1e2326,spinner:#84a0c6,hl:#719cd6,fg:#ddc7a1,header:#719cd6,info:#7daea3,pointer:#84a0c6,marker:#84a0c6,fg+:#ddc7a1,prompt:#84a0c6,hl+:#719cd6'
+        # Enhanced fzf-tab configuration (ZSH only)
+        if [[ -n "${ZSH_VERSION:-}" ]] && command -v zstyle &>/dev/null; then
+            zstyle ':fzf-tab:complete:*:*' fzf-preview 'less ${(Q)realpath}'
+            zstyle ':fzf-tab:complete:*:options' fzf-preview 
+            zstyle ':fzf-tab:complete:*:argument-1' fzf-preview
+            
+            # File preview with bat or cat fallback
+            zstyle ':fzf-tab:complete:*' fzf-preview '([[ -f $realpath ]] && (bat --style=numbers --color=always $realpath 2>/dev/null || cat $realpath 2>/dev/null)) || ([[ -d $realpath ]] && (eza --tree --level=1 --icons $realpath 2>/dev/null || ls -la $realpath)) || echo $realpath'
+            
+            # Better fzf-tab display
+            zstyle ':fzf-tab:*' switch-group ',' '.'
+            zstyle ':fzf-tab:*' fzf-command fzf
+            zstyle ':fzf-tab:*' fzf-flags '--height=~50%' '--layout=reverse' '--border=sharp' '--cycle'
+            zstyle ':completion:*:descriptions' format '[%d]'
+            zstyle ':completion:*' format ' %F{yellow}-- %d --%f'
+            zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza -1 --color=always $realpath 2>/dev/null || ls -1 $realpath'
+        fi
+        
+        # Configure general FZF settings
+        export FZF_DEFAULT_OPTS='--height 40% --layout=reverse --border=sharp --cycle --color=bg+:#3c4142,bg:#1e2326,spinner:#84a0c6,hl:#719cd6,fg:#ddc7a1,header:#719cd6,info:#7daea3,pointer:#84a0c6,marker:#84a0c6,fg+:#ddc7a1,prompt:#84a0c6,hl+:#719cd6'
         
         if command -v fd &>/dev/null || command -v fdfind &>/dev/null; then
             export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
@@ -123,36 +168,51 @@ function configure_zsh_enhancements() {
             export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
         fi
         
-        # Load FZF key bindings
-        if [[ -f /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
-            source /usr/share/doc/fzf/examples/key-bindings.zsh
-        elif [[ -f ~/.fzf/shell/key-bindings.zsh ]]; then
-            source ~/.fzf/shell/key-bindings.zsh
+        # Load FZF key bindings (only in ZSH to avoid subshell issues)
+        if [[ -n "${ZSH_VERSION:-}" ]]; then
+            if [[ -f /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
+                source /usr/share/doc/fzf/examples/key-bindings.zsh 2>/dev/null || true
+            elif [[ -f ~/.fzf/shell/key-bindings.zsh ]]; then
+                source ~/.fzf/shell/key-bindings.zsh 2>/dev/null || true
+            fi
+            
+            # Load FZF completion
+            if [[ -f /usr/share/doc/fzf/examples/completion.zsh ]]; then
+                source /usr/share/doc/fzf/examples/completion.zsh 2>/dev/null || true
+            elif [[ -f ~/.fzf/shell/completion.zsh ]]; then
+                source ~/.fzf/shell/completion.zsh 2>/dev/null || true
+            fi
         fi
-        
-        # Load FZF completion
-        if [[ -f /usr/share/doc/fzf/examples/completion.zsh ]]; then
-            source /usr/share/doc/fzf/examples/completion.zsh
-        elif [[ -f ~/.fzf/shell/completion.zsh ]]; then
-            source ~/.fzf/shell/completion.zsh
-        fi
-    fi
-
-    # Load secrets into the environment
-    if command -v dotfiles-secrets &>/dev/null; then
-        eval "$(dotfiles-secrets export)"
     fi
     
-    echo.debug "Configured ZSH enhancements with aesthetic improvements"
+    echo.debug "Configured ZSH enhancements with Fish-like autocompletion"
 }
 
 function load_zsh_enhancements() {
-    if [[ "$DOTFILES_SHELL" != "zsh" ]]; then
-        echo.debug "Not running ZSH, skipping enhancements"
+    # Only load ZSH-specific plugins if we're actually running under ZSH
+    if [[ -z "${ZSH_VERSION:-}" ]]; then
+        echo.debug "Not running under ZSH shell, skipping plugin loading"
+        return 0
+    fi
+    
+    if [[ "${DOTFILES_SHELL:-}" != "zsh" ]]; then
+        echo.debug "DOTFILES_SHELL not set to zsh, skipping enhancements"
         return 0
     fi
     
     local plugins_dir="$HOME/.local/share/zsh-plugins"
+    
+    # Load additional completions first (so they're available for other plugins)
+    if [[ -d "$plugins_dir/zsh-completions/src" ]] && [[ -n "${ZSH_VERSION:-}" ]]; then
+        fpath=("$plugins_dir/zsh-completions/src" $fpath)
+        echo.debug "Added zsh-completions to fpath"
+    fi
+    
+    # Load fzf-tab BEFORE autosuggestions (proper order for fish-like behavior)
+    if [[ -f "$plugins_dir/fzf-tab/fzf-tab.plugin.zsh" ]]; then
+        source "$plugins_dir/fzf-tab/fzf-tab.plugin.zsh"
+        echo.debug "Loaded fzf-tab"
+    fi
     
     # Load autosuggestions
     if [[ -f "$plugins_dir/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
@@ -160,32 +220,33 @@ function load_zsh_enhancements() {
         echo.debug "Loaded zsh-autosuggestions"
     fi
     
-    # Load syntax highlighting (must be loaded after all other plugins)
+    # Load history substring search
+    if [[ -f "$plugins_dir/zsh-history-substring-search/zsh-history-substring-search.zsh" ]]; then
+        source "$plugins_dir/zsh-history-substring-search/zsh-history-substring-search.zsh"
+        echo.debug "Loaded zsh-history-substring-search"
+    fi
+    
+    # Load syntax highlighting LAST (must be loaded after all other plugins)
     if [[ -f "$plugins_dir/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]]; then
         source "$plugins_dir/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
         echo.debug "Loaded zsh-syntax-highlighting"
     fi
     
-    # Load additional completions
-    if [[ -d "$plugins_dir/zsh-completions/src" ]]; then
-        fpath=("$plugins_dir/zsh-completions/src" $fpath)
-        echo.debug "Added zsh-completions to fpath"
-    fi
-    
-    # Load fzf-tab
-    if [[ -f "$plugins_dir/fzf-tab/fzf-tab.plugin.zsh" ]]; then
-        source "$plugins_dir/fzf-tab/fzf-tab.plugin.zsh"
-        echo.debug "Loaded fzf-tab"
-    fi
-    
+    # Configure after loading plugins
     configure_zsh_enhancements
+    
+    # Mark as successfully loaded
+    export ZSH_ENHANCEMENTS_LOADED=1
+    echo.debug "Fish-like ZSH enhancements fully loaded"
 }
 
 # Auto-install if not present
-if [[ "$DOTFILES_SHELL" == "zsh" ]]; then
-    if [[ ! -d "$HOME/.local/share/zsh-plugins/zsh-autosuggestions" ]]; then
+# If DOTFILES_SHELL is not set or is 'zsh', attempt to install and load
+if [[ -z "${DOTFILES_SHELL:-}" || "${DOTFILES_SHELL:-}" == "zsh" ]]; then
+    plugins_dir="$HOME/.local/share/zsh-plugins"
+    if [[ ! -d "$plugins_dir/zsh-autosuggestions" ]]; then
         echo.warning "ZSH enhancements not installed. Installing..."
-        install_zsh_enhancements
+        install_zsh_enhancements || echo.warning "Install failed; continuing without enhancements"
     fi
-    load_zsh_enhancements
+    load_zsh_enhancements >/dev/null 2>&1 || true
 fi

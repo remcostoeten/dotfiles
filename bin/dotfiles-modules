@@ -1,0 +1,368 @@
+#!/usr/bin/env bash
+
+source "${HOME}/.config/dotfiles/core/_env"
+source "${HOME}/.config/dotfiles/core/_colors"
+source "${HOME}/.config/dotfiles/core/_safety"
+
+MODULES_CONFIG="$DOTFILES_UTILS/modules.json"
+
+function ensure_modules_config() {
+    if [[ ! -f "$MODULES_CONFIG" ]]; then
+        echo.error "Module configuration not found: $MODULES_CONFIG"
+        echo.info "Run 'dotfiles-modules init' to create initial configuration"
+        return 1
+    fi
+}
+
+function modules_get_enabled() {
+    local type="${1:-all}"
+    
+    if [[ "$type" == "all" ]]; then
+        jq -r '.modules, .plugins, .aliases | to_entries[] | select(.value.enabled == true) | .key' "$MODULES_CONFIG" 2>/dev/null
+    else
+        jq -r ".${type} | to_entries[] | select(.value.enabled == true) | .key" "$MODULES_CONFIG" 2>/dev/null
+    fi
+}
+
+function modules_get_disabled() {
+    local type="${1:-all}"
+    
+    if [[ "$type" == "all" ]]; then
+        jq -r '.modules, .plugins, .aliases | to_entries[] | select(.value.enabled == false) | .key' "$MODULES_CONFIG" 2>/dev/null
+    else
+        jq -r ".${type} | to_entries[] | select(.value.enabled == false) | .key" "$MODULES_CONFIG" 2>/dev/null
+    fi
+}
+
+function modules_get_type() {
+    local name="$1"
+    
+    # Check in each section to find the type
+    for section in modules plugins aliases; do
+        if jq -e ".${section}.\"${name}\"" "$MODULES_CONFIG" >/dev/null 2>&1; then
+            echo "$section"
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
+function modules_get_info() {
+    local name="$1"
+    local type=$(modules_get_type "$name")
+    
+    if [[ -n "$type" ]]; then
+        jq -r ".${type}.\"${name}\"" "$MODULES_CONFIG" 2>/dev/null
+    else
+        return 1
+    fi
+}
+
+function modules_set_state() {
+    local name="$1"
+    local enabled="$2"
+    local type=$(modules_get_type "$name")
+    
+    if [[ -z "$type" ]]; then
+        echo.error "Module '$name' not found"
+        return 1
+    fi
+    
+    # Create temporary file with updated configuration
+    local temp_config=$(mktemp)
+    jq ".${type}.\"${name}\".enabled = ${enabled}" "$MODULES_CONFIG" > "$temp_config"
+    
+    if [[ $? -eq 0 ]]; then
+        mv "$temp_config" "$MODULES_CONFIG"
+        echo.success "Module '$name' $([ "$enabled" == "true" ] && echo "enabled" || echo "disabled")"
+        return 0
+    else
+        rm -f "$temp_config"
+        echo.error "Failed to update module configuration"
+        return 1
+    fi
+}
+
+function modules_add() {
+    local name="$1"
+    local type="${2:-modules}"
+    local description="${3:-Auto-generated module}"
+    
+    if [[ -z "$name" ]]; then
+        echo.error "Module name required"
+        return 1
+    fi
+    
+    # Check if module already exists
+    if modules_get_type "$name" >/dev/null 2>&1; then
+        echo.warning "Module '$name' already exists"
+        return 1
+    fi
+    
+    # Create new module entry
+    local temp_config=$(mktemp)
+    local module_data='{
+        "enabled": true,
+        "type": "'$type'",
+        "description": "'$description'",
+        "dependencies": [],
+        "auto_enable": false
+    }'
+    
+    if [[ "$type" == "aliases" ]]; then
+        module_data=$(echo "$module_data" | jq '. + {"file": "'$name'.aliases"}')
+    fi
+    
+    jq ".${type}.\"${name}\" = $module_data" "$MODULES_CONFIG" > "$temp_config"
+    
+    if [[ $? -eq 0 ]]; then
+        mv "$temp_config" "$MODULES_CONFIG"
+        echo.success "Added module '$name' to $type"
+        return 0
+    else
+        rm -f "$temp_config"
+        echo.error "Failed to add module"
+        return 1
+    fi
+}
+
+function modules_remove() {
+    local name="$1"
+    local type=$(modules_get_type "$name")
+    
+    if [[ -z "$type" ]]; then
+        echo.error "Module '$name' not found"
+        return 1
+    fi
+    
+    # Create temporary file without the module
+    local temp_config=$(mktemp)
+    jq "del(.${type}.\"${name}\")" "$MODULES_CONFIG" > "$temp_config"
+    
+    if [[ $? -eq 0 ]]; then
+        mv "$temp_config" "$MODULES_CONFIG"
+        echo.success "Removed module '$name'"
+        return 0
+    else
+        rm -f "$temp_config"
+        echo.error "Failed to remove module"
+        return 1
+    fi
+}
+
+function modules_list() {
+    local show_type="${1:-all}"
+    local show_status="${2:-all}"
+    
+    ensure_modules_config || return 1
+    
+    echo.header "Module Configuration"
+    echo
+    
+    for section in modules plugins aliases; do
+        if [[ "$show_type" != "all" && "$show_type" != "$section" ]]; then
+            continue
+        fi
+        
+        echo.cyan "$(echo "${section^}" | sed 's/s$//'):"
+        
+        # Get all items in this section
+        jq -r ".${section} | to_entries[] | \"\\(.key)|\\(.value.enabled)|\\(.value.description // \"No description\")\"" "$MODULES_CONFIG" 2>/dev/null | \
+        while IFS='|' read -r name enabled desc; do
+            if [[ "$show_status" == "enabled" && "$enabled" != "true" ]]; then
+                continue
+            fi
+            if [[ "$show_status" == "disabled" && "$enabled" != "false" ]]; then
+                continue
+            fi
+            
+            local status_icon="❌"
+            local status_color="red"
+            if [[ "$enabled" == "true" ]]; then
+                status_icon="✅"
+                status_color="green"
+            fi
+            
+            printf "  %s %-20s %s\\n" "$status_icon" "$name" "$desc"
+        done
+        echo
+    done
+}
+
+function modules_status() {
+    ensure_modules_config || return 1
+    
+    echo.header "Module Status Summary"
+    echo
+    
+    local total_modules=$(jq -r '[.modules, .plugins, .aliases] | map(length) | add' "$MODULES_CONFIG")
+    local enabled_modules=$(jq -r '[.modules, .plugins, .aliases] | map(to_entries[] | select(.value.enabled == true)) | length' "$MODULES_CONFIG")
+    local disabled_modules=$((total_modules - enabled_modules))
+    
+    echo "  Total modules: $total_modules"
+    echo "  Enabled: $enabled_modules"
+    echo "  Disabled: $disabled_modules"
+    echo
+    
+    # Show breakdown by type
+    for section in modules plugins aliases; do
+        local section_total=$(jq -r ".${section} | length" "$MODULES_CONFIG")
+        local section_enabled=$(jq -r ".${section} | to_entries[] | select(.value.enabled == true)" "$MODULES_CONFIG" | jq -s 'length')
+        
+        echo "  $(echo "${section^}" | sed 's/s$//'): $section_enabled/$section_total enabled"
+    done
+}
+
+function modules_check_dependencies() {
+    local name="$1"
+    local info=$(modules_get_info "$name")
+    
+    if [[ -z "$info" ]]; then
+        echo.error "Module '$name' not found"
+        return 1
+    fi
+    
+    local dependencies=$(echo "$info" | jq -r '.dependencies[]?' 2>/dev/null)
+    
+    if [[ -z "$dependencies" ]]; then
+        echo.success "No dependencies required for '$name'"
+        return 0
+    fi
+    
+    echo.info "Checking dependencies for '$name':"
+    local missing=0
+    
+    while read -r dep; do
+        if command -v "$dep" >/dev/null 2>&1; then
+            echo.success "  ✓ $dep"
+        else
+            echo.error "  ✗ $dep (missing)"
+            ((missing++))
+        fi
+    done <<< "$dependencies"
+    
+    if [[ $missing -gt 0 ]]; then
+        echo.warning "Module '$name' has $missing missing dependencies"
+        return 1
+    else
+        echo.success "All dependencies satisfied"
+        return 0
+    fi
+}
+
+function modules_init() {
+    echo.header "Initializing Module Configuration"
+    
+    if [[ -f "$MODULES_CONFIG" ]]; then
+        echo.warning "Configuration already exists at: $MODULES_CONFIG"
+        read -p "Overwrite? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo.info "Cancelled"
+            return 0
+        fi
+    fi
+    
+    # Create basic configuration
+    cat > "$MODULES_CONFIG" << 'EOF'
+{
+  "version": "1.0.0",
+  "modules": {},
+  "plugins": {},
+  "aliases": {},
+  "metadata": {
+    "last_updated": "",
+    "managed_by": "dotfiles",
+    "config_format": "json"
+  }
+}
+EOF
+    
+    # Update metadata
+    local temp_config=$(mktemp)
+    jq ".metadata.last_updated = \"$(date -Iseconds)\" | .metadata.managed_by = \"dotfiles v$DOTFILES_VERSION\"" "$MODULES_CONFIG" > "$temp_config"
+    mv "$temp_config" "$MODULES_CONFIG"
+    
+    echo.success "Module configuration initialized"
+    echo.info "Add modules with: dotfiles-modules add <name> [type] [description]"
+}
+
+function modules_help() {
+    echo.header "Module Management"
+    echo
+    echo "Usage: dotfiles-modules <command> [arguments]"
+    echo
+    echo "Commands:"
+    echo "  list [type] [status]     List modules (type: modules|plugins|aliases, status: enabled|disabled)"
+    echo "  status                   Show module status summary"
+    echo "  enable <name>           Enable a module"
+    echo "  disable <name>          Disable a module"
+    echo "  add <name> [type] [desc] Add new module"
+    echo "  remove <name>           Remove module from configuration"
+    echo "  info <name>             Show module information"
+    echo "  check <name>            Check module dependencies"
+    echo "  init                    Initialize module configuration"
+    echo
+    echo "Examples:"
+    echo "  dotfiles-modules list enabled"
+    echo "  dotfiles-modules enable aesthetic"
+    echo "  dotfiles-modules add my-module modules 'Custom module'"
+    echo "  dotfiles-modules check zsh-enhancements"
+}
+
+function main() {
+    local command="${1:-list}"
+    
+    case "$command" in
+        list|ls)
+            modules_list "$2" "$3"
+            ;;
+        status|stat)
+            modules_status
+            ;;
+        enable|on)
+            ensure_modules_config || return 1
+            modules_set_state "$2" "true"
+            ;;
+        disable|off)
+            ensure_modules_config || return 1
+            modules_set_state "$2" "false"
+            ;;
+        add|new)
+            ensure_modules_config || return 1
+            modules_add "$2" "$3" "$4"
+            ;;
+        remove|rm|del)
+            ensure_modules_config || return 1
+            modules_remove "$2"
+            ;;
+        info|show)
+            ensure_modules_config || return 1
+            local info=$(modules_get_info "$2")
+            if [[ -n "$info" ]]; then
+                echo.header "Module: $2"
+                echo "$info" | jq .
+            else
+                echo.error "Module '$2' not found"
+            fi
+            ;;
+        check|deps)
+            ensure_modules_config || return 1
+            modules_check_dependencies "$2"
+            ;;
+        init)
+            modules_init
+            ;;
+        help|--help|-h)
+            modules_help
+            ;;
+        *)
+            echo.error "Unknown command: $command"
+            modules_help
+            return 1
+            ;;
+    esac
+}
+
+main "$@"

@@ -1,5 +1,47 @@
 #!/usr/bin/env bash
 
+# Set DOTFILES_MODULES if not already set
+if [[ -z "$DOTFILES_MODULES" ]]; then
+    # Try to determine DOTFILES_ROOT
+    if [[ -z "$DOTFILES_ROOT" ]]; then
+        # Get the directory containing this script (cross-shell compatible)
+        if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+            DOTFILES_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd .. && pwd)"
+        elif [[ -n "${ZSH_VERSION:-}" ]]; then
+            DOTFILES_ROOT="$(cd "$(dirname "${(%):-%x}")" && cd .. && pwd)"
+        else
+            # Fallback: assume we're in the dotfiles root
+            DOTFILES_ROOT="$(cd "$(pwd)/.." && pwd)"
+        fi
+    fi
+    export DOTFILES_MODULES="$DOTFILES_ROOT/modules"
+fi
+
+# Fallback functions if core functions aren't loaded yet
+if ! command -v echo.debug >/dev/null 2>&1; then
+    function echo.debug() {
+        [[ "${DOTFILES_DEBUG}" == "1" ]] && echo "DEBUG: $*" >&2 || true
+    }
+fi
+
+if ! command -v echo.error >/dev/null 2>&1; then
+    function echo.error() {
+        echo "ERROR: $*" >&2
+    }
+fi
+
+if ! command -v safe_source >/dev/null 2>&1; then
+    function safe_source() {
+        local file="$1"
+        if [[ -f "$file" ]]; then
+            source "$file" || true
+        else
+            echo.error "File not found: $file"
+            return 1
+        fi
+    }
+fi
+
 function load_aliases() {
     local alias_dir="$DOTFILES_MODULES/aliases"
     
@@ -58,6 +100,12 @@ function help() {
     fi
 }
 
-alias help=help
+# Create help alias only if help function exists
+if declare -F help >/dev/null 2>&1; then
+    alias help=help
+fi
 
 load_aliases
+
+# Ensure successful completion
+return 0 2>/dev/null || true

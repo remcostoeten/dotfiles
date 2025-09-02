@@ -44,12 +44,7 @@ This document tracks security-related changes and best practices for the dotfile
 
 ## Incident Response
 
-### If Secrets are Exposed
-1. Immediately rotate all affected credentials
-2. Delete or make private any public repositories/gists
-3. Search for hardcoded references in codebase
-4. Update documentation with incident details
-5. Review and improve access controls
+
 
 ### If Dotfiles are Compromised
 1. Run `dotfiles doctor` for health check

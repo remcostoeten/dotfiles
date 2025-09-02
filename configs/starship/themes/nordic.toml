@@ -1,0 +1,171 @@
+format = """
+[](color_frost1)\
+$os\
+$username\
+[](bg:color_frost2 fg:color_frost1)\
+$directory\
+[](fg:color_frost2 bg:color_frost3)\
+$git_branch\
+$git_status\
+[](fg:color_frost3 bg:color_aurora1)\
+$c\
+$rust\
+$golang\
+$nodejs\
+$php\
+$java\
+$kotlin\
+$haskell\
+$python\
+[](fg:color_aurora1 bg:color_polar2)\
+$docker_context\
+$conda\
+[](fg:color_polar2 bg:color_polar1)\
+$time\
+[ ](fg:color_polar1)\
+$line_break$character"""
+
+palette = 'nordic'
+
+[palettes.nordic]
+color_snow0 = '#d8dee9'
+color_snow1 = '#e5e9f0'
+color_snow2 = '#eceff4'
+color_polar0 = '#2e3440'
+color_polar1 = '#3b4252'
+color_polar2 = '#434c5e'
+color_polar3 = '#4c566a'
+color_frost0 = '#8fbcbb'
+color_frost1 = '#88c0d0'
+color_frost2 = '#81a1c1'
+color_frost3 = '#5e81ac'
+color_aurora0 = '#bf616a'
+color_aurora1 = '#d08770'
+color_aurora2 = '#ebcb8b'
+color_aurora3 = '#a3be8c'
+color_aurora4 = '#b48ead'
+
+[os]
+disabled = false
+style = "bg:color_frost1 fg:color_polar0"
+
+[os.symbols]
+Windows = "󰍲"
+Ubuntu = "󰕈"
+SUSE = ""
+Raspbian = "󰐿"
+Mint = "󰣭"
+Macos = "󰀵"
+Manjaro = ""
+Linux = "󰌽"
+Gentoo = "󰣨"
+Fedora = "󰣛"
+Alpine = ""
+Amazon = ""
+Android = ""
+Arch = "󰣇"
+Artix = "󰣇"
+CentOS = ""
+Debian = "󰣚"
+Redhat = "󱄛"
+RedHatEnterprise = "󱄛"
+
+[username]
+show_always = true
+style_user = "bg:color_frost1 fg:color_polar0"
+style_root = "bg:color_frost1 fg:color_polar0"
+format = '[ $user ]($style)'
+
+[directory]
+style = "fg:color_snow2 bg:color_frost2"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = "󰝚 "
+"Pictures" = " "
+"Developer" = "󰲋 "
+
+[git_branch]
+symbol = ""
+style = "bg:color_frost3"
+format = '[[ $symbol $branch ](fg:color_snow2 bg:color_frost3)]($style)'
+
+[git_status]
+style = "bg:color_frost3"
+format = '[[($all_status$ahead_behind )](fg:color_snow2 bg:color_frost3)]($style)'
+
+[nodejs]
+symbol = ""
+style = "bg:color_aurora1"
+format = '[[ $symbol( $version) ](fg:color_polar0 bg:color_aurora1)]($style)'
+
+[c]
+symbol = " "
+style = "bg:color_aurora1"
+format = '[[ $symbol( $version) ](fg:color_polar0 bg:color_aurora1)]($style)'
+
+[rust]
+symbol = ""
+style = "bg:color_aurora1"
+format = '[[ $symbol( $version) ](fg:color_polar0 bg:color_aurora1)]($style)'
+
+[golang]
+symbol = ""
+style = "bg:color_aurora1"
+format = '[[ $symbol( $version) ](fg:color_polar0 bg:color_aurora1)]($style)'
+
+[php]
+symbol = ""
+style = "bg:color_aurora1"
+format = '[[ $symbol( $version) ](fg:color_polar0 bg:color_aurora1)]($style)'
+
+[java]
+symbol = " "
+style = "bg:color_aurora1"
+format = '[[ $symbol( $version) ](fg:color_polar0 bg:color_aurora1)]($style)'
+
+[kotlin]
+symbol = ""
+style = "bg:color_aurora1"
+format = '[[ $symbol( $version) ](fg:color_polar0 bg:color_aurora1)]($style)'
+
+[haskell]
+symbol = ""
+style = "bg:color_aurora1"
+format = '[[ $symbol( $version) ](fg:color_polar0 bg:color_aurora1)]($style)'
+
+[python]
+symbol = ""
+style = "bg:color_aurora1"
+format = '[[ $symbol( $version) ](fg:color_polar0 bg:color_aurora1)]($style)'
+
+[docker_context]
+symbol = ""
+style = "bg:color_polar2"
+format = '[[ $symbol( $context) ](fg:color_frost0 bg:color_polar2)]($style)'
+
+[conda]
+style = "bg:color_polar2"
+format = '[[ $symbol( $environment) ](fg:color_frost0 bg:color_polar2)]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:color_polar1"
+format = '[[  $time ](fg:color_snow0 bg:color_polar1)]($style)'
+
+[line_break]
+disabled = false
+
+[character]
+disabled = false
+success_symbol = '[](bold fg:color_aurora3)'
+error_symbol = '[](bold fg:color_aurora0)'
+vimcmd_symbol = '[](bold fg:color_aurora3)'
+vimcmd_replace_one_symbol = '[](bold fg:color_aurora4)'
+vimcmd_replace_symbol = '[](bold fg:color_aurora4)'
+vimcmd_visual_symbol = '[](bold fg:color_aurora2)'

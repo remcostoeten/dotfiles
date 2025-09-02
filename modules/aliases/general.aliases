@@ -1,18 +1,26 @@
-# @alias ls
+alias d='cd ~/.config/dotfiles'
+alias dotfiles='d'
+
+alias vimd='vim ~/.config/dotfiles'
+alias cursord='cursor d'
+
+# @alias l
+# @desc list only dirr or file  + extension
+alias l='exa --icons --git --oneline'
+alis ls='exa --icons --git --oneline'
+
+
+# # @alias ls
 # @desc List files with colors
-alias ls='ls --color=auto'
+alias ls='exa'
 
 # @alias ll
 # @desc List all files in long format
-alias ll='ls -alF'
+alias ll='exa -alF'
 
 # @alias la
 # @desc List all files including hidden
-alias la='ls -A'
-
-# @alias l
-# @desc List files in one column
-alias l='ls -CF'
+alias la='ll -A'
 
 # @alias grep
 # @desc Grep with colors
@@ -28,23 +36,19 @@ alias egrep='egrep --color=auto'
 
 # @alias md
 # @desc Create directory recursively
-alias md='mkdir -p'
-
-# @alias rd
-# @desc Remove directory
-alias rd='rmdir'
+alias mkdir='mkdir -p'
 
 # @alias cls
 # @desc Clear screen
-alias cls='clear'
+alias c='clear'
+
+# @alias e 
+# @desc exit
+alias x='exit'
 
 # @alias h
 # @desc Show history
 alias h='history'
-
-# @alias j
-# @desc Show jobs
-alias j='jobs -l'
 
 # @alias which
 # @desc Show all matching commands
@@ -60,7 +64,15 @@ alias now='date +"%T"'
 
 # @alias nowdate
 # @desc Show current date
-alias nowdate='date +"%Y-%m-%d"'
+alias now='date +"%Y-%m-%d"'
+
+# @alias vi
+# @desc Edit file with default editor
+alias vi='${EDITOR}'
+
+# @alias v
+# @desc Edit file with default editor
+alias vi='${EDITOR}'
 
 # @alias vi
 # @desc Edit file with default editor
@@ -70,33 +82,13 @@ alias vi='${EDITOR}'
 # @desc Edit file with default editor
 alias vim='${EDITOR}'
 
-# @alias svi
-# @desc Edit file with default editor as root
-alias svi='sudo ${EDITOR}'
-
-# @alias ports
-# @desc Show open ports
-alias ports='netstat -tulanp'
-
-# @alias mount
-# @desc Show mounted filesystems
-alias mount='mount | column -t'
-
-# @alias meminfo
-# @desc Show memory info
-alias meminfo='free -m -l -t'
+# @alias cursor 
+# @desc Open cursor editor
+alias cursor='~/appimages/cursor.AppImage'
 
 # @alias psmem
 # @desc Show processes sorted by memory usage
-alias psmem='ps auxf | sort -nr -k 4'
-
-# @alias pscpu
-# @desc Show processes sorted by cpu usage
-alias pscpu='ps auxf | sort -nr -k 3'
-
-# @alias wget
-# @desc Wget with continue option
-alias wget='wget -c'
+alias mem='ps auxf | sort -nr -k 4'
 
 # @alias df
 # @desc Show disk usage
@@ -118,6 +110,6 @@ alias ..='cd ..'
 # @desc Go up two directories
 alias ...='cd ../..'
 
-# @alias promptc
-# @desc Starship prompt helper
-alias promptc="prompt"
+alias .='open .'
+
+alias web='brave-browser'

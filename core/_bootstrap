@@ -64,39 +64,92 @@ function dotfiles_setup_shell() {
         autoload -Uz compinit && compinit -i
         autoload -Uz bashcompinit && bashcompinit
         
-        zstyle ':completion:*' menu select
+        # Fish-like completion configuration
+        zstyle ':completion:*' menu select                    # Arrow key navigation
         zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|=*' 'l:|=* r:|=*'
-        zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+        zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"  # Use LS_COLORS for consistency
         zstyle ':completion:*' rehash true
         zstyle ':completion:*' accept-exact '*(N)'
         zstyle ':completion:*' use-cache on
         zstyle ':completion:*' cache-path ~/.cache/zsh
-        zstyle ':completion:*:descriptions' format '%U%B%d%b%u'
-        zstyle ':completion:*:warnings' format '%BSorry, no matches for: %d%b'
+        zstyle ':completion:*' group-name ''                  # Group completions
+        zstyle ':completion:*' verbose yes                    # Verbose descriptions
+        zstyle ':completion:*' special-dirs true              # Complete ./ and ../
+        zstyle ':completion:*' squeeze-slashes true           # Clean up paths
+        
+        # Fish-like formatting with colors
+        zstyle ':completion:*:descriptions' format '%F{cyan}[%d]%f'
+        zstyle ':completion:*:warnings' format '%F{red}No matches found%f'
+        zstyle ':completion:*:messages' format '%F{yellow}%d%f'
+        zstyle ':completion:*:corrections' format '%F{magenta}%d (errors: %e)%f'
+        
+        # Better process completion (like fish)
+        zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#) ([0-9a-z-]#)*=01;34=0=01'
+        zstyle ':completion:*:*:*:*:processes' command "ps -u $USER -o pid,user,comm -w -w"
+        
+        # Enhanced directory navigation
+        zstyle ':completion:*:*:cd:*' tag-order local-directories directory-stack path-directories
+        zstyle ':completion:*:*:cd:*:directory-stack' menu yes select
+        zstyle ':completion:*:-tilde-:*' group-order 'named-directories' 'path-directories' 'users' 'expand'
+        zstyle ':completion:*' users remcostoeten root
     fi
 }
 
 function dotfiles_load_modules() {
     echo.debug "Loading modules..."
     
+    local modules_config="$DOTFILES_UTILS/modules.json"
+    
+    # Load traditional loaders first for backward compatibility
     safe_source_dir "$DOTFILES_MODULES/loaders" "*.sh" "module loaders"
     
-    safe_source_dir "$DOTFILES_MODULES/enabled" "*.sh" "enabled modules"
-    
-    # Load loaders silently - they handle their own output
-    if [[ -f "$DOTFILES_MODULES/alias-loader" ]]; then
-        source "$DOTFILES_MODULES/alias-loader" 2>/dev/null || echo.debug "Alias loader completed"
-    fi
-    
-    if [[ -f "$DOTFILES_MODULES/plugin-loader" ]]; then
-        source "$DOTFILES_MODULES/plugin-loader" 2>/dev/null || echo.debug "Plugin loader completed"
-    fi
-    
-    if [[ -f "$DOTFILES_MODULES/script-loader" ]]; then
-        source "$DOTFILES_MODULES/script-loader" 2>/dev/null || echo.debug "Script loader completed"
+    # Load configuration-based modules if config exists
+    if [[ -f "$modules_config" ]]; then
+        echo.debug "Using configuration-based module loading"
+        
+        # Load enabled modules
+        local enabled_modules=$(jq -r '.modules | to_entries[] | select(.value.enabled == true) | .key' "$modules_config" 2>/dev/null)
+        while read -r module; do
+            [[ -n "$module" ]] && safe_source "$DOTFILES_MODULES/$module" "module: $module"
+        done <<< "$enabled_modules"
+        
+        # Load enabled plugins
+        local enabled_plugins=$(jq -r '.plugins | to_entries[] | select(.value.enabled == true) | .key' "$modules_config" 2>/dev/null)
+        while read -r plugin; do
+            [[ -n "$plugin" ]] && safe_source "$DOTFILES_MODULES/plugins/$plugin" "plugin: $plugin"
+        done <<< "$enabled_plugins"
+        
+        # Load enabled alias files
+        local enabled_aliases=$(jq -r '.aliases | to_entries[] | select(.value.enabled == true) | .value.file // .key' "$modules_config" 2>/dev/null)
+        while read -r alias_file; do
+            [[ -n "$alias_file" ]] && safe_source "$DOTFILES_MODULES/aliases/$alias_file" "aliases: $alias_file"
+        done <<< "$enabled_aliases"
+        
+    else
+        echo.debug "Using legacy module loading (enabled/disabled directories)"
+        # Fallback to old method if config doesn't exist
+        safe_source_dir "$DOTFILES_MODULES/enabled" "*" "enabled modules"
+        
+        # Load loaders silently - they handle their own output
+        if [[ -f "$DOTFILES_MODULES/alias-loader" ]]; then
+            source "$DOTFILES_MODULES/alias-loader" 2>/dev/null || echo.debug "Alias loader completed"
+        fi
+        
+        if [[ -f "$DOTFILES_MODULES/plugin-loader" ]]; then
+            source "$DOTFILES_MODULES/plugin-loader" 2>/dev/null || echo.debug "Plugin loader completed"
+        fi
+        
+        if [[ -f "$DOTFILES_MODULES/script-loader" ]]; then
+            source "$DOTFILES_MODULES/script-loader" 2>/dev/null || echo.debug "Script loader completed"
+        fi
     fi
     
     safe_source_dir "$HOME/.config/dotfiles-local/modules" "*.sh" "local modules"
+}
+
+function dotfiles_load_sourcers() {
+    echo.debug "Loading sourcers..."
+    safe_source_dir "$DOTFILES_ROOT/sourcers" "*" "sourcers"
 }
 
 function dotfiles_load_configs() {
@@ -106,15 +159,9 @@ function dotfiles_load_configs() {
 
 
 function dotfiles_setup_prompt() {
-    # Initialize Starship prompt if available (works with both bash and zsh)
-    if command -v starship &>/dev/null; then
-        if [[ "$DOTFILES_SHELL" == "bash" ]]; then
-            eval "$(starship init bash)"
-            echo.debug "Initialized Starship prompt for bash"
-        elif [[ "$DOTFILES_SHELL" == "zsh" ]]; then
-            eval "$(starship init zsh)"
-            echo.debug "Initialized Starship prompt for zsh"
-        fi
+    # Skip prompt setup if starship is managing it
+    if [[ "$DOTFILES_PROMPT_MANAGER" == "starship" ]]; then
+        echo.debug "Prompt managed by starship, skipping fallback setup"
         return 0
     fi
     
@@ -136,12 +183,50 @@ function dotfiles_setup_prompt() {
     fi
 }
 
+function dotfiles_check_sync_status() {
+    local warnings=()
+    
+    # Check for uncommitted git changes (use subshell to preserve current directory)
+    if (cd "$DOTFILES_ROOT" 2>/dev/null && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
+        if (cd "$DOTFILES_ROOT" && ! git diff --quiet 2>/dev/null) || (cd "$DOTFILES_ROOT" && ! git diff --cached --quiet 2>/dev/null); then
+            warnings+=("📝 Uncommitted changes")
+        fi
+        
+        # Check for untracked files
+        if [[ -n "$(cd "$DOTFILES_ROOT" && git ls-files --others --exclude-standard 2>/dev/null)" ]]; then
+            warnings+=("🆕 Untracked files")
+        fi
+    fi
+    
+    # Check for unsynced environment variables
+    if [[ -f "$DOTFILES_ENV_DB" ]]; then
+        local env_count=$(jq 'length' "$DOTFILES_ENV_DB" 2>/dev/null || echo 0)
+        if [[ "$env_count" -gt 0 ]]; then
+            # Check if there's a sync marker indicating env vars need syncing
+            if [[ -f "$DOTFILES_UTILS/sync-needed" ]]; then
+                warnings+=("🔄 Environment sync needed")
+            fi
+        fi
+    fi
+    
+    # Export warnings for banner use
+    if [[ ${#warnings[@]} -gt 0 ]]; then
+        export DOTFILES_SYNC_WARNINGS="$(printf '%s; ' "${warnings[@]}" | sed 's/; $//')"
+        return 1
+    else
+        unset DOTFILES_SYNC_WARNINGS
+        return 0
+    fi
+}
+
 function dotfiles_bootstrap() {
     ensure_dir "$DOTFILES_LOGS"
     ensure_dir "$DOTFILES_UTILS"
     ensure_dir "$DOTFILES_BIN"
-    ensure_dir "$DOTFILES_MODULES/enabled"
-    ensure_dir "$DOTFILES_MODULES/disabled"
+    ensure_dir "$DOTFILES_MODULES"
+    ensure_dir "$DOTFILES_MODULES/aliases"
+    ensure_dir "$DOTFILES_MODULES/plugins"
+    ensure_dir "$DOTFILES_MODULES/scripts"
     ensure_dir "$DOTFILES_CONFIG"
     ensure_dir "$DOTFILES_TEMPLATES"
     
@@ -152,6 +237,7 @@ function dotfiles_bootstrap() {
     dotfiles_add_to_path
     dotfiles_setup_shell
     dotfiles_load_configs
+    dotfiles_load_sourcers
     dotfiles_load_modules
     dotfiles_setup_prompt
     
@@ -165,5 +251,13 @@ function dotfiles_bootstrap() {
     
     if [[ -f "$HOME/.config/dotfiles-local/init" ]]; then
         safe_source "$HOME/.config/dotfiles-local/init" "local customizations"
+    fi
+    
+    # Check sync status before showing banner
+    dotfiles_check_sync_status >/dev/null 2>&1 || true
+    
+    # Show banner if available
+    if command -v echo.dotfiles_banner >/dev/null 2>&1; then
+        echo.dotfiles_banner
     fi
 }

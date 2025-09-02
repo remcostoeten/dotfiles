@@ -26,7 +26,7 @@ function complete_setup() {
     echo.success "✅ Aesthetic terminal setup complete!"
     echo
     echo.cyan "🎨 Features enabled:"
-    echo "  • Starship prompt with beautiful colors"
+    
     echo "  • ZSH with fish-like autosuggestions"
     echo "  • Syntax highlighting"
     echo "  • Enhanced ls (eza) with icons"

@@ -12,7 +12,6 @@ This is a sophisticated **personal dotfiles management system** designed for **Z
 - **`cfg`** - Main entry point that bootstraps the entire system
 - Gets symlinked to `~/.zshrc` (primary) or `~/.bashrc` (fallback)
 - Executes core boot sequence: `_env` → `_colors` → `_safety` → `_bootstrap`
-- Includes secrets/tokens integration and personal dashboard hooks
 
 ### Core Boot Sequence
 The system follows a strict initialization order through private core files:
@@ -119,34 +118,32 @@ dotfiles-link fix
 dotfiles-link sync
 ```
 
-### Environment Variables & Secrets Manager
+### Environment Variables Manager
 ```bash
-# List all stored environment variables and secrets
+# List all stored environment variables
 dotfiles-env list
 # Shorthand alias:
 envs list
 
 # Set persistent environment variable
 dotfiles-env set MY_VAR "value"
-# Set encrypted secret with type and description
-dotfiles-env set API_KEY "secret-value" api --desc "My API Key"
 
 # Get variable value (automatically copies to clipboard)
 dotfiles-env get MY_VAR
 # Interactive selection with fzf (if available)
 dotfiles-env get
 
-# Remove variable or secret
+# Remove variable
 dotfiles-env remove MY_VAR      # Direct removal
 dotfiles-env remove             # Interactive picker (requires fzf)
 
-# Generate random secrets
-dotfiles-env generate RANDOM_SECRET 32 password
+# Generate random values
+dotfiles-env generate RANDOM_VALUE 32
 
 # Generate OAuth key pairs
 dotfiles-env generate-oauth GITHUB_OAUTH rsa 4096 "GitHub OAuth App"
 
-# Search variables and secrets
+# Search variables
 dotfiles-env search "api"
 
 # Export/import from files
@@ -213,7 +210,7 @@ zsh
 - Auto-completion with menu selection and case-insensitive matching
 - Advanced history management (dedup, sharing, verification)
 - Extended globbing and smart directory navigation
-- Integration with modern tools (starship, zoxide, direnv)
+- Integration with modern tools (zoxide, direnv)
 
 **ZSH Options Automatically Enabled:**
 - `AUTO_CD`, `AUTO_PUSHD` - Smart directory navigation
@@ -225,10 +222,7 @@ zsh
 ### Modern Tool Integration
 The system automatically configures these tools when available:
 
-**Starship Prompt**: Beautiful cross-shell prompt with git integration
-```bash
-eval "$(starship init zsh)"
-```
+
 
 **Zoxide**: Smart directory jumping (z/zi commands)
 ```bash
@@ -326,7 +320,7 @@ git_extras_init
 1. **Scaffold**: `dotfiles-new plugin <name>` creates wrapper in `modules/plugins/`
 2. **Functions**: Each plugin includes `install_<name>()`, `configure_<name>()`, `load_<name>()`
 3. **Lazy Loading**: Plugins check for installation before loading
-4. **Integration**: Plugin loader handles modern tools (fzf, zoxide, starship)
+4. **Integration**: Plugin loader handles modern tools (fzf, zoxide)
 
 **Plugin Template Structure:**
 ```bash
@@ -425,7 +419,7 @@ The system automatically sources all modules in `modules/enabled/` on shell star
 This setup includes a full aesthetic ricer terminal configuration via the `aesthetic` module in `modules/enabled/aesthetic`:
 
 **🎨 Visual Enhancements:**
-- **Starship Prompt**: Beautiful, modern prompt with git integration and language icons
+
 - **ZSH with Fish-like Features**: Auto-suggestions, syntax highlighting, enhanced completions
 - **Colorful Syntax Highlighting**: Commands, aliases, functions highlighted in different colors
 - **Icons and Colors**: File listings with beautiful icons via `eza`

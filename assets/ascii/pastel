@@ -13,10 +13,6 @@ function echo.pastel_banner() {
     echo -e "${PASTEL_CURSOR}│${NC}  ${PASTEL_BRIGHT_PINK}█${NC}   ${PASTEL_BRIGHT_PINK}█${NC} ${PASTEL_BRIGHT_YELLOW}█${NC}   ${PASTEL_BRIGHT_YELLOW}█${NC} ${PASTEL_BRIGHT_YELLOW}█${NC} ${PASTEL_BRIGHT_GREEN}   █${NC}   ${PASTEL_BRIGHT_BLUE}█${NC}     ${PASTEL_BRIGHT_BLUE}█${NC} ${PASTEL_BRIGHT_PURPLE}█${NC} ${PASTEL_BRIGHT_CYAN}█${NC}     ${PASTEL_PINK}█${NC}       ${PASTEL_CURSOR}│${NC}"
     echo -e "${PASTEL_CURSOR}│${NC}  ${PASTEL_BRIGHT_PINK}▀▀▀▀▀${NC} ${PASTEL_BRIGHT_YELLOW}▀▀▀▀▀▀▀${NC} ${PASTEL_BRIGHT_GREEN}   ▀${NC}   ${PASTEL_BRIGHT_BLUE}▀${NC}     ${PASTEL_BRIGHT_BLUE}▀${NC} ${PASTEL_BRIGHT_PURPLE}▀${NC} ${PASTEL_BRIGHT_CYAN}▀▀▀▀▀▀▀${NC} ${PASTEL_PINK}▀▀▀▀▀▀▀${NC}  ${PASTEL_CURSOR}│${NC}"
     echo -e "${PASTEL_CURSOR}│${NC}                                                                 ${PASTEL_CURSOR}│${NC}"
-    echo -e "${PASTEL_CURSOR}│${NC}           ${PASTEL_FG}🌸 ${PASTEL_BRIGHT_PURPLE}Dreamy Terminal Configuration${NC} ${PASTEL_FG}🌸${NC}            ${PASTEL_CURSOR}│${NC}"
-    echo -e "${PASTEL_CURSOR}│${NC}                                                                 ${PASTEL_CURSOR}│${NC}"
-    echo -e "${PASTEL_CURSOR}│${NC}        ${PASTEL_BRIGHT_PINK}✨ Pastel${NC} ${PASTEL_CURSOR}•${NC} ${PASTEL_BRIGHT_YELLOW}Soft${NC} ${PASTEL_CURSOR}•${NC} ${PASTEL_BRIGHT_GREEN}Aesthetic${NC} ${PASTEL_CURSOR}•${NC} ${PASTEL_BRIGHT_BLUE}Dreamy${NC} ${PASTEL_CURSOR}•${NC} ${PASTEL_BRIGHT_PURPLE}Modern${NC}         ${PASTEL_CURSOR}│${NC}"
-    echo -e "${PASTEL_CURSOR}│${NC}                                                                 ${PASTEL_CURSOR}│${NC}"
     echo -e "${PASTEL_CURSOR}│${NC}                    ${PASTEL_BRIGHT_PURPLE}Version ${DOTFILES_VERSION:-'unknown'}${NC} ${PASTEL_CURSOR}│${NC} ${PASTEL_BRIGHT_YELLOW}$(date +'%H:%M')${NC}                     ${PASTEL_CURSOR}│${NC}"
     echo -e "${PASTEL_CURSOR}│${NC}                                                                 ${PASTEL_CURSOR}│${NC}"
     echo -e "${PASTEL_CURSOR}╰─────────────────────────────────────────────────────────────────╯${NC}"
@@ -37,23 +33,6 @@ function echo.pastel_mini() {
     echo
 }
 
-# Kawaii-style banner with extra cuteness
-function echo.kawaii_banner() {
-    echo
-    echo -e "${PASTEL_CURSOR}   ･ﾟ✧*:･ﾟ✧ ${PASTEL_FG}DOTFILES${NC} ✧ﾟ･: *✧ﾟ･${NC}"
-    echo
-    echo -e "        ${PASTEL_BRIGHT_PINK}(｡◕‿◕｡)${NC} ${PASTEL_BRIGHT_YELLOW}~kawaii~${NC} ${PASTEL_BRIGHT_BLUE}(◡‿◡)${NC}"
-    echo
-    echo -e "   ${PASTEL_BRIGHT_GREEN}✧${NC} ${PASTEL_BRIGHT_PURPLE}dreamy terminal setup${NC} ${PASTEL_BRIGHT_GREEN}✧${NC}"
-    echo -e "   ${PASTEL_BRIGHT_CYAN}✧${NC} ${PASTEL_BRIGHT_PINK}pastel colors everywhere${NC} ${PASTEL_BRIGHT_CYAN}✧${NC}"
-    echo -e "   ${PASTEL_BRIGHT_YELLOW}✧${NC} ${PASTEL_BRIGHT_BLUE}soft & aesthetic vibes${NC} ${PASTEL_BRIGHT_YELLOW}✧${NC}"
-    echo
-    echo -e "${PASTEL_CURSOR}        ･ﾟ✧*:･ﾟ✧*:･ﾟ✧*:･ﾟ✧${NC}"
-    echo
-}
-
 # Add aliases for convenience
 alias e.pastel='echo.pastel_banner'
-alias e.dreamy='echo.pastel_banner'
-alias e.kawaii='echo.kawaii_banner'
 alias e.mini='echo.pastel_mini'

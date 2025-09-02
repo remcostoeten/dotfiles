@@ -7,14 +7,7 @@ A sophisticated dotfiles management system designed in a way to allow full custo
 
 ### Current features:
 - 
-- Secrerts managementInteractive CLI for handling encrypted secrets synced to a private GitHub Gist vault. Supports listing, prefix-based copying (e.g. DATABASE_URL=), open related link, and environment export for global shell access.
-<details>
-  <summary>View gif example </summary>
-   todo
-  ```
-</details>
-
- There's a encrypted   with encrypted secrets sync, modern CLI tools, and cross-shell compatibility.
+- A sophisticated dotfiles management system with modern CLI tools, and cross-shell compatibility.
 
 
 
@@ -42,33 +35,9 @@ This will automatically:
 - 🔧 Install all dependencies (git, jq, curl, fzf, bat, eza, etc.)
 - 🔐 Setup GitHub CLI and authenticate
 - 📦 Install modern CLI tools
-- 🔄 Configure secrets sync with GitHub gists
 - ⚙️ Install shell configurations
-- 🔑 Pull your encrypted secrets automatically
 
 ## 🎯 What You Get
-
-### 🔑 **Secrets Management**
-- **Encrypted storage** with AES-256-CBC
-- **GitHub gist sync** - seamlessly sync secrets across machines  
-- **Interactive selection** with fzf
-- **Clipboard integration** - secrets copied automatically
-- **Prefix support** - export as `MYAPI_KEY=value`
-
-```bash
-# Store secrets
-dotfiles secrets set GITHUB_TOKEN "ghp_..." api --desc "GitHub API token"
-
-# Get secrets (copies to clipboard)
-dotfiles secrets get GITHUB_TOKEN
-
-# Export all secrets to environment
-eval "$(dotfiles secrets export)"
-
-# Sync across machines
-dotfiles sync push    # Upload encrypted secrets
-dotfiles sync pull    # Download on new machine
-```
 
 ### 🛠️ **Modern CLI Tools**
 - **fzf** - Fuzzy finder for everything
@@ -76,7 +45,7 @@ dotfiles sync pull    # Download on new machine
 - **eza** - Enhanced ls with icons
 - **ripgrep** - Ultra-fast search
 - **zoxide** - Smart directory jumping
-- **starship** - Beautiful prompt
+
 
 ### 🔗 **Smart Symlink Management**
 ```bash
@@ -92,40 +61,6 @@ dotfiles modules enable git-enhanced
 dotfiles modules disable old-module
 ```
 
-## 🔐 Secrets Sync Workflow
-
-### Initial Setup (Main Machine)
-```bash
-# 1. Store your secrets
-dotfiles secrets set OPENAI_API_KEY "sk-..." api
-dotfiles secrets set DATABASE_URL "postgres://..." db
-
-# 2. Setup sync (creates private GitHub gist)
-dotfiles sync init
-
-# 3. Push to sync
-dotfiles sync push
-```
-
-### New Machine Setup
-```bash
-# 1. Run the init script (does everything automatically)
-./init.sh
-
-# 2. Secrets are automatically pulled and ready to use
-eval "$(dotfiles secrets export)"
-echo $OPENAI_API_KEY  # Works immediately!
-```
-
-## 🛡️ Security Features
-
-- ✅ **AES-256-CBC encryption** - Military-grade security
-- ✅ **100,000 PBKDF2 iterations** - Brute-force resistant  
-- ✅ **Master password protected** - Only you can decrypt
-- ✅ **Private GitHub gists** - Not publicly accessible
-- ✅ **Git ignored** - Secrets never committed accidentally
-- ✅ **Auto-backup** - Previous secrets backed up before sync
-
 ## 📚 Commands Reference
 
 ### Core Commands
@@ -134,25 +69,6 @@ dotfiles help              # Show all commands
 dotfiles version           # System information
 dotfiles doctor            # Health check
 dotfiles reload            # Restart shell
-```
-
-### Secrets Management
-```bash
-dotfiles secrets list                                    # List all secrets
-dotfiles secrets set KEY "value" type --desc "info"     # Store secret
-dotfiles secrets get KEY                                 # Get (copies to clipboard)
-dotfiles secrets get --prefix=MY KEY                    # Get as MY=value
-dotfiles secrets remove KEY                             # Delete secret
-dotfiles secrets search query                          # Search secrets
-dotfiles secrets export                                # Export all as env vars
-```
-
-### Secrets Sync
-```bash
-dotfiles sync init         # Initialize sync system
-dotfiles sync push         # Upload encrypted secrets  
-dotfiles sync pull         # Download and decrypt
-dotfiles sync status       # Show sync configuration
 ```
 
 ### Utilities
@@ -164,9 +80,6 @@ dotfiles modules enable <module>       # Enable module
 
 ## 🔧 Configuration
 
-### Auto-sync Secrets
-Set `DOTFILES_AUTO_SYNC=1` in your environment to automatically sync secrets when modified.
-
 ### Custom Repository
 Set `DOTFILES_REPO` environment variable before running init.sh:
 ```bash
@@ -177,19 +90,11 @@ export DOTFILES_REPO="https://github.com/yourusername/dotfiles"
 ## 🎨 Aesthetic Setup
 
 The system includes a full aesthetic terminal setup:
-- **Starship prompt** with git integration
+
 - **ZSH with fish-like features** 
 - **Syntax highlighting** for commands
 - **Icons and colors** in file listings
 - **Modern alternatives** to standard tools
-
-## 🔄 Synchronization
-
-Your dotfiles are stored in git (public), but secrets are stored in private encrypted gists:
-
-- **Public repo**: Shell configs, aliases, scripts, themes
-- **Private gists**: Encrypted secrets only (API keys, tokens, etc.)
-- **Perfect security**: Public dotfiles, private secrets
 
 ## 🚨 Troubleshooting
 
@@ -200,9 +105,6 @@ dotfiles doctor
 
 # View logs
 tail -f /tmp/dotfiles-init.log
-
-# Retry secrets sync
-dotfiles sync pull
 ```
 
 ### Missing Dependencies

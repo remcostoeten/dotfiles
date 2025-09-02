@@ -1,11 +1,66 @@
-# @alias gco
-# @desc Checkout a git branch
-alias gco='git checkout'
+# @alias g
+# @desc Shortcut for git command
+alias g='git'
 
-# @alias ga
-# @desc Add all changes to git
-alias ga='git add .'
+# @alias push
+# @desc Push commits to the remote repository
+alias push='git push'
 
-# @alias gc
-# @desc Commit changes
-alias gc='git commit -m'
+# @alias pull
+# @desc Pull latest changes from the remote repository
+alias pull='git pull'
+
+# @alias checkout
+# @desc Switch branches or restore working tree files
+alias checkout='git checkout'
+
+# @alias add
+# @desc Stage all changes for commit
+alias add='git add .'
+
+# @alias reset
+# @desc Reset current branch to last commit, discarding changes
+alias reset='git reset --hard'
+
+# @alias head
+# @desc Move HEAD back by one commit
+alias head='git reset ~HEAD-1'
+
+# @alias newbranch
+# @desc Create and switch to a new branch
+alias newbranch='git checkout -b'
+
+# @alias status
+# @desc Show the working tree status
+alias status='git status'
+
+# @alias log
+# @desc Show commit logs
+alias log='git log --oneline --graph --all --decorate'
+
+# @alias diff
+# @desc Show changes between commits, commit and working tree, etc.
+alias diff='git diff'
+
+# @alias stash
+# @desc Stash current changes
+alias stash='git stash'
+
+# @alias stash-pop
+# @desc Apply and remove the latest stash
+alias stash-pop='git stash pop'
+
+# @alias fetch
+# @desc Fetch updates from the remote repository
+alias fetch='git fetch'
+
+# @alias branch
+# @desc List, create, or delete branches
+alias branch='git branch'
+
+alias select='gh select'
+
+alias repo='gh repo view -w'
+
+alias cpgit='copy-remote'
+alias cpremote='copy-remote'

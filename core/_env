@@ -4,7 +4,7 @@ export DOTFILES_ROOT="${DOTFILES_ROOT:-${HOME}/.config/dotfiles}"
 
 source "${DOTFILES_ROOT}/core/_constants"
 
-export DOTFILES_TEMPLATES="${DOTFILES_ROOT}/templates"
+export DOTFILES_TEMPLATES="${DOTFILES_ROOT}/core/_internal-tools/templates"
 export DOTFILES_CORE="${DOTFILES_ROOT}/core"
 
 if [[ -n "${ZSH_VERSION}" ]]; then
@@ -54,15 +54,15 @@ export XDG_STATE_HOME="${XDG_STATE_HOME:-${HOME}/.local/state}"
 [[ ! -f "$DOTFILES_STATE" ]] && echo '{"version":"'$DOTFILES_VERSION'","last_update":"'$(date -Iseconds)'"}' > "$DOTFILES_STATE"
 
 function dotfiles_load_custom_env() {
-    if [[ -f "$DOTFILES_ENV_DB" ]]; then
+    if [[ -f "$DOTFILES_ENV_DB" ]] && command -v jq >/dev/null 2>&1; then
         while IFS='=' read -r key value; do
             [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-            export "$key=$value"
-        done < <(jq -r 'to_entries | .[] | .key + "=" + .value' "$DOTFILES_ENV_DB" 2>/dev/null || true)
+            [[ -n "$key" && -n "$value" ]] && export "$key=$value"
+        done < <(jq -r 'to_entries | .[] | .key + "=" + .value' "$DOTFILES_ENV_DB" 2>/dev/null || echo "")
     fi
     
-    [[ -f "${HOME}/.env" ]] && source "${HOME}/.env"
-    [[ -f "${DOTFILES_ROOT}/.env.local" ]] && source "${DOTFILES_ROOT}/.env.local"
+    [[ -f "${HOME}/.env" ]] && source "${HOME}/.env" 2>/dev/null || true
+    [[ -f "${DOTFILES_ROOT}/.env.local" ]] && source "${DOTFILES_ROOT}/.env.local" 2>/dev/null || true
 }
 
-dotfiles_load_custom_env
+dotfiles_load_custom_env 2>/dev/null || true

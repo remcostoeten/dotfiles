@@ -1,31 +1,50 @@
-# @alias envs
-# @desc Shorthand for dotfiles environment variable manager
-alias envs='dotfiles-env'
+# ------------------------
+# Base variable
+# ------------------------
+export DF="dotfiles"
 
-# @alias df-env
-# @desc Alias for dotfiles environment manager
-alias df-env='dotfiles-env'
+# ------------------------
+# Helper to define command variants
+# ------------------------
+define_cmd_variants() {
+    local cmd="$1"; shift
+    for name in "$@"; do
+        eval "$name() { $DF $cmd \"\$@\"; }"
+    done
+}
 
-# @alias df-reload  
-# @desc Reload dotfiles configuration
-alias df-reload='dotfiles reload'
+# ------------------------
+# Environment manager
+# ------------------------
+define_cmd_variants env env df d e envs
 
-# @alias df-doctor
-# @desc Run dotfiles health check
-alias df-doctor='dotfiles doctor'
+# ------------------------
+# Dotfiles commands
+# ------------------------
+define_cmd_variants env df-env
+define_cmd_variants reload df-reload r reload
+define_cmd_variants doctor df-doctor doc
+define_cmd_variants version df-version v ver
+define_cmd_variants update df-update up
+define_cmd_variants link df-links l
 
-# @alias df-version
-# @desc Show dotfiles version information
-alias df-version='dotfiles version'
+# ------------------------
+# Dashboard aliases
+# ------------------------
+define_cmd_variants dashboard dashboard pct track dsh
 
-# @alias df-update
-# @desc Update dotfiles from repository
-alias df-update='dotfiles update'
+# ------------------------
+# Source all aliases
+# ------------------------
+source_all() {
+    for file in "$DOTFILES_ROOT/aliases"/*.aliases; do
+        [[ -f "$file" ]] && echo "Sourcing $(basename "$file")" && source "$file"
+    done
+}
+alias sa='source_all'
 
-# @alias df-links
-# @desc Manage dotfiles symlinks
-alias df-links='dotfiles-link'
+# ------------------------
+# Quick reload of shell
+# ------------------------
+alias reload-shell='exec $SHELL'
 
-# @alias reload
-# @desc Quick reload of shell configuration
-alias reload='exec $SHELL'

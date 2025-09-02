@@ -1,0 +1,728 @@
+#!/usr/bin/env bash
+
+# dotfiles-gen-alias-help - Generate aesthetic help menus from alias files
+# Part of the dotfiles system by remcostoeten
+
+set -euo pipefail
+
+# --- Setup ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+HELPERS_DIR="$DOTFILES_ROOT/helpers/alias-help"
+
+# Source color functions
+source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || {
+    echo "ERROR: Could not load color functions from core/_colors" >&2
+    exit 1
+}
+
+# --- Global Variables ---
+ALIAS_FILE=""
+REBUILD_MODE=false
+TEMP_DATA_FILE=""
+
+# --- Usage ---
+function usage() {
+    echo.header "Dotfiles Alias Help Generator"
+    echo
+    echo.info "Generate beautiful, aesthetic help menus from alias files"
+    echo
+    echo.cyan "Usage:"
+    echo "  $(basename "$0") --file <alias-file>    Generate help for specific file"
+    echo "  $(basename "$0") --folder <folder>     Select aliases from a folder"
+    echo "  $(basename "$0") --interactive         Interactive file picker"
+    echo "  $(basename "$0") --rebuild             Rebuild all existing help files"
+    echo "  $(basename "$0") -h|--help             Show this help"
+    echo
+    echo.cyan "Examples:"
+    echo "  $(basename "$0") --file modules/aliases/git.aliases"
+    echo "  $(basename "$0") --folder modules/aliases"
+    echo "  $(basename "$0") --interactive"
+    echo
+    echo.purple "🎯 Searches within: $DOTFILES_ROOT"
+    echo.pastel_purple "✨ Creates beautiful help menus in helpers/alias-help/"
+    echo
+}
+
+# --- File Discovery ---
+function find_alias_files() {
+    local search_dir="${1:-$DOTFILES_ROOT}"
+    
+    # Ensure search_dir is within DOTFILES_ROOT
+    if [[ "$search_dir" != "$DOTFILES_ROOT"* ]]; then
+        echo.warning "Search directory must be within dotfiles: $DOTFILES_ROOT"
+        search_dir="$DOTFILES_ROOT"
+    fi
+    
+    find "$search_dir" -name "*.aliases" -type f 2>/dev/null | sort
+}
+
+function interactive_file_picker() {
+    echo.header "🌸 Interactive Alias File Picker"
+    echo.info "Searching for .aliases files in: $DOTFILES_ROOT"
+    echo
+    
+    local -a alias_files=()
+    local -a display_files=()
+    
+    # Find all alias files
+    while IFS= read -r file; do
+        if [[ -f "$file" ]]; then
+            alias_files+=("$file")
+            # Create display name relative to dotfiles root
+            local display_name="${file#$DOTFILES_ROOT/}"
+            display_files+=("$display_name")
+        fi
+    done < <(find_alias_files)
+    
+    if [[ ${#alias_files[@]} -eq 0 ]]; then
+        echo.warning "No .aliases files found in $DOTFILES_ROOT"
+        return 1
+    fi
+    
+    echo.cyan "Found ${#alias_files[@]} alias files:"
+    echo
+    
+    # Display options
+    for i in "${!display_files[@]}"; do
+        local num=$((i + 1))
+        echo.purple "  [$num] ${display_files[$i]}"
+    done
+    
+    echo
+    echo.cyan "Enter the number of the file you want to process:"
+    read -r selection
+    
+    # Validate selection
+    if [[ ! "$selection" =~ ^[0-9]+$ ]] || [[ $selection -lt 1 ]] || [[ $selection -gt ${#alias_files[@]} ]]; then
+        echo.error "Invalid selection: $selection"
+        return 1
+    fi
+    
+    local selected_index=$((selection - 1))
+    ALIAS_FILE="${alias_files[$selected_index]}"
+    
+    echo.success "Selected: ${display_files[$selected_index]}"
+    echo
+}
+
+function folder_picker() {
+    local folder="$1"
+    
+    # Convert relative path to absolute within dotfiles
+    if [[ "$folder" != /* ]]; then
+        folder="$DOTFILES_ROOT/$folder"
+    fi
+    
+    if [[ ! -d "$folder" ]]; then
+        echo.error "Folder not found: $folder"
+        return 1
+    fi
+    
+    echo.header "📁 Folder Selection: $(basename "$folder")"
+    echo.info "Searching for .aliases files in: ${folder#$DOTFILES_ROOT/}"
+    echo
+    
+    local -a alias_files=()
+    local -a display_files=()
+    
+    # Find alias files in the specified folder
+    while IFS= read -r file; do
+        if [[ -f "$file" ]]; then
+            alias_files+=("$file")
+            local display_name=$(basename "$file")
+            display_files+=("$display_name")
+        fi
+    done < <(find_alias_files "$folder")
+    
+    if [[ ${#alias_files[@]} -eq 0 ]]; then
+        echo.warning "No .aliases files found in $folder"
+        return 1
+    fi
+    
+    if [[ ${#alias_files[@]} -eq 1 ]]; then
+        ALIAS_FILE="${alias_files[0]}"
+        echo.success "Found one file: $(basename "$ALIAS_FILE")"
+        echo
+        return 0
+    fi
+    
+    echo.cyan "Found ${#alias_files[@]} alias files:"
+    echo
+    
+    # Display options
+    for i in "${!display_files[@]}"; do
+        local num=$((i + 1))
+        echo.purple "  [$num] ${display_files[$i]}"
+    done
+    
+    echo
+    echo.cyan "Enter the number of the file you want to process:"
+    read -r selection
+    
+    # Validate selection
+    if [[ ! "$selection" =~ ^[0-9]+$ ]] || [[ $selection -lt 1 ]] || [[ $selection -gt ${#alias_files[@]} ]]; then
+        echo.error "Invalid selection: $selection"
+        return 1
+    fi
+    
+    local selected_index=$((selection - 1))
+    ALIAS_FILE="${alias_files[$selected_index]}"
+    
+    echo.success "Selected: $(basename "$ALIAS_FILE")"
+    echo
+}
+
+# --- Argument Parsing ---
+function parse_arguments() {
+    local interactive_mode=false
+    local folder_mode=false
+    local target_folder=""
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --file)
+                ALIAS_FILE="$2"
+                # Convert relative path to absolute within dotfiles if needed
+                if [[ "$ALIAS_FILE" != /* ]] && [[ "$ALIAS_FILE" != ~* ]]; then
+                    ALIAS_FILE="$DOTFILES_ROOT/$ALIAS_FILE"
+                fi
+                
+                # Ensure file is within DOTFILES_ROOT for security
+                local resolved_path=$(realpath "$ALIAS_FILE" 2>/dev/null || echo "$ALIAS_FILE")
+                if [[ "$resolved_path" != "$DOTFILES_ROOT"* ]]; then
+                    echo.error "File must be within dotfiles directory: $DOTFILES_ROOT"
+                    echo.error "Provided: $ALIAS_FILE"
+                    exit 1
+                fi
+                shift 2
+                ;;
+            --folder)
+                folder_mode=true
+                target_folder="$2"
+                shift 2
+                ;;
+            --interactive)
+                interactive_mode=true
+                shift
+                ;;
+            --rebuild)
+                REBUILD_MODE=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo.error "Unknown option: $1"
+                usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Handle different modes
+    if [[ "$interactive_mode" == true ]]; then
+        if ! interactive_file_picker; then
+            exit 1
+        fi
+    elif [[ "$folder_mode" == true ]]; then
+        if ! folder_picker "$target_folder"; then
+            exit 1
+        fi
+    elif [[ -z "$ALIAS_FILE" ]] && [[ "$REBUILD_MODE" == false ]]; then
+        echo.warning "No file specified, entering interactive mode..."
+        echo
+        if ! interactive_file_picker; then
+            exit 1
+        fi
+    fi
+    
+    # Final validation
+    if [[ -n "$ALIAS_FILE" ]] && [[ ! -f "$ALIAS_FILE" ]]; then
+        echo.error "File not found: $ALIAS_FILE"
+        exit 1
+    fi
+}
+
+# --- Alias Parser ---
+function parse_aliases() {
+    local file="$1"
+    local -a aliases=()
+    
+    echo.info "Parsing aliases from: $(basename "$file")"
+    
+    # Create temporary data file
+    TEMP_DATA_FILE=$(mktemp)
+    
+    local count=0
+    
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        
+        # Look for alias definitions
+        if [[ "$line" =~ ^[[:space:]]*alias[[:space:]]+([^=]+)=(.+) ]]; then
+            local alias_name="${BASH_REMATCH[1]// /}"  # Remove spaces
+            local alias_command="${BASH_REMATCH[2]}"
+            
+            # Clean up command (remove quotes)
+            alias_command="${alias_command#\'}"
+            alias_command="${alias_command%\'}"
+            alias_command="${alias_command#\"}"
+            alias_command="${alias_command%\"}"
+            
+            # Store in temp file
+            echo "$alias_name|$alias_command" >> "$TEMP_DATA_FILE"
+            ((count++))
+        fi
+    done < "$file"
+    
+    if [[ $count -eq 0 ]]; then
+        echo.warning "No aliases found in $file"
+        return 1
+    fi
+    
+    echo.success "Found $count aliases"
+    return 0
+}
+
+# --- Interactive Description Collector ---
+function collect_descriptions() {
+    echo.header "Interactive Description Collection"
+    echo.pastel_purple "For each alias, provide a short, helpful description"
+    echo.pastel_yellow "Press Ctrl+C to cancel at any time"
+    echo
+    
+    local -A descriptions=()
+    local total_aliases=$(wc -l < "$TEMP_DATA_FILE")
+    local current=1
+    
+    while IFS='|' read -r alias_name alias_command; do
+        echo.pastel_cyan "[$current/$total_aliases]"
+        echo -n "  "
+        echo.pastel_pink "$alias_name"
+        echo -n "  "
+        echo.pastel_blue "'$alias_command'"
+        echo -n "  "
+        echo.pastel_purple "→ Description: "
+        
+        local description
+        read -r description
+        
+        descriptions["$alias_name"]="$description"
+        ((current++))
+        echo
+    done < "$TEMP_DATA_FILE"
+    
+    # Save descriptions back to temp file with descriptions
+    local temp_file=$(mktemp)
+    while IFS='|' read -r alias_name alias_command; do
+        echo "$alias_name|$alias_command|${descriptions[$alias_name]}" >> "$temp_file"
+    done < "$TEMP_DATA_FILE"
+    
+    mv "$temp_file" "$TEMP_DATA_FILE"
+}
+
+# --- Docstring Generation ---
+function generate_file_docstring() {
+    local alias_file="$1"
+    local file_description="$2"
+    local file_category="$3"
+    local filename=$(basename "$alias_file")
+    local file_base="${filename%.aliases}"
+    
+    cat << EOF
+#!/usr/bin/env bash
+# ============================================================================
+# ${file_base^} Aliases - ${file_description}
+# ============================================================================
+# 
+# @file         $filename
+# @description  $file_description
+# @author       $(whoami)
+# @created      $(date +'%Y-%m-%d')
+# @category     $file_category
+# @generator    dotfiles-gen-alias-help v1.0
+# 
+# This file contains carefully curated ${file_base} aliases that enhance
+# productivity and provide shortcuts for common operations.
+# ============================================================================
+
+EOF
+}
+
+function categorize_aliases() {
+    local temp_file="$1"
+    local -A categories=()
+    local -A alias_categories=()
+    
+    # Define category patterns
+    local -A category_patterns=(
+        ["Basic Operations"]="^(ls|ll|la|cd|cp|mv|rm|mkdir|rmdir|pwd|clear|cls)$"
+        ["Git Operations"]="^g[a-z]*$|git"
+        ["Directory Navigation"]="^(\.\.|\.\.\.|z|zi|cd)$"
+        ["File Management"]="^(find|grep|cat|less|more|head|tail|du|df)$"
+        ["System Info"]="^(ps|top|htop|free|uname|who|w)$"
+        ["Network"]="^(ping|curl|wget|ssh|scp)$"
+        ["Development"]="^(npm|yarn|node|python|pip|cargo|go)$"
+        ["Docker"]="^(docker|d[a-z]+)$"
+        ["Utilities"]=".*"
+    )
+    
+    # Categorize each alias
+    while IFS='|' read -r alias_name alias_command description; do
+        local matched_category="Utilities"  # Default category
+        
+        for category in "${!category_patterns[@]}"; do
+            if [[ "$alias_name" =~ ${category_patterns[$category]} ]]; then
+                matched_category="$category"
+                break
+            fi
+        done
+        
+        alias_categories["$alias_name"]="$matched_category"
+        
+        # Add to category list
+        if [[ -z "${categories[$matched_category]:-}" ]]; then
+            categories["$matched_category"]="$alias_name|$alias_command|$description"
+        else
+            categories["$matched_category"]+="\n$alias_name|$alias_command|$description"
+        fi
+    done < "$temp_file"
+    
+    # Output categorized aliases
+    for category in "Basic Operations" "Git Operations" "Directory Navigation" "File Management" "System Info" "Network" "Development" "Docker" "Utilities"; do
+        if [[ -n "${categories[$category]:-}" ]]; then
+            echo "# === $category ==="
+            echo "${categories[$category]}" | while IFS='|' read -r name cmd desc; do
+                echo "# @alias $name"
+                echo "# @desc $desc"
+                echo "alias $name='$cmd'"
+                echo
+            done
+            echo
+        fi
+    done
+}
+
+function update_original_file() {
+    local original_file="$1"
+    local file_description="$2"
+    local file_category="$3"
+    
+    echo.info "Updating original file with docstring and categories..."
+    
+    # Create backup
+    cp "$original_file" "${original_file}.backup-$(date +%s)"
+    
+    # Generate new file content
+    local temp_organized=$(mktemp)
+    
+    # Add file docstring
+    generate_file_docstring "$original_file" "$file_description" "$file_category" > "$temp_organized"
+    
+    # Add categorized aliases
+    categorize_aliases "$TEMP_DATA_FILE" >> "$temp_organized"
+    
+    # Replace original file
+    mv "$temp_organized" "$original_file"
+    
+    echo.success "✨ Enhanced $(basename "$original_file") with beautiful docstrings!"
+}
+
+# --- Individual Help File Generator ---
+function generate_individual_help_files() {
+    echo.info "Generating individual help files..."
+    
+    while IFS='|' read -r alias_name alias_command description; do
+        local help_file="$HELPERS_DIR/${alias_name}.help"
+        
+        cat > "$help_file" << EOF
+#!/usr/bin/env bash
+# Help file for alias: $alias_name
+# Generated by dotfiles-gen-alias-help
+
+ALIAS_NAME="$alias_name"
+ALIAS_COMMAND="$alias_command"
+ALIAS_DESCRIPTION="$description"
+ALIAS_CATEGORY="general"
+ALIAS_ICON="⚡"
+
+function show_help() {
+    source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || return 1
+    
+    echo.pastel_purple "┌─ \${ALIAS_ICON} \${ALIAS_NAME} ─"
+    echo.pastel_cyan   "│"
+    echo.pastel_cyan   "│ Command: \${ALIAS_COMMAND}"
+    echo.pastel_cyan   "│ Description: \${ALIAS_DESCRIPTION}"
+    echo.pastel_cyan   "│ Category: \${ALIAS_CATEGORY}"
+    echo.pastel_purple "└─"
+    echo
+}
+
+# Show help if called directly
+[[ "\${BASH_SOURCE[0]}" == "\${0}" ]] && show_help
+EOF
+        
+        chmod +x "$help_file"
+        echo.debug "  ✓ Generated $help_file"
+    done < "$TEMP_DATA_FILE"
+}
+
+# --- Consolidated Help Menu Generator ---
+function generate_consolidated_help() {
+    echo.info "Generating consolidated help menu..."
+    
+    local all_help_file="$HELPERS_DIR/_all.help"
+    local max_width=0
+    
+    # Calculate max alias name width for alignment
+    while IFS='|' read -r alias_name alias_command description; do
+        [[ ${#alias_name} -gt $max_width ]] && max_width=${#alias_name}
+    done < "$TEMP_DATA_FILE"
+    
+    # Add some padding
+    ((max_width += 4))
+    
+    cat > "$all_help_file" << 'EOF'
+#!/usr/bin/env bash
+# Consolidated alias help menu
+# Generated by dotfiles-gen-alias-help
+
+DOTFILES_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || {
+    echo "ERROR: Could not load colors" >&2
+    exit 1
+}
+
+function show_all_help() {
+    echo.pastel_banner
+    echo.header "🌸 Aesthetic Alias Help Menu"
+    echo
+    
+    echo.pastel_purple "╭────────────────────────────────────────────────────────────────╮"
+    echo.pastel_purple "│                        ✨ Available Aliases ✨                    │"
+    echo.pastel_purple "├────────────────────────────────────────────────────────────────┤"
+    echo.pastel_purple "│                                                                │"
+EOF
+    
+    # Add each alias with proper formatting
+    while IFS='|' read -r alias_name alias_command description; do
+        local padding_length=$((max_width - ${#alias_name}))
+        local padding=""
+        
+        # Create padding string
+        for ((i=0; i<padding_length; i++)); do
+            padding+=" "
+        done
+        
+        cat >> "$all_help_file" << EOF
+    echo.pastel_purple "│  ⚡ "
+    echo.pastel_pink -n "$alias_name"
+    echo.pastel_purple -n "$padding→ "
+    echo.pastel_cyan "$description"
+    echo.pastel_gray "│    ↳ $alias_command"
+    echo.pastel_purple "│                                                                │"
+EOF
+    done < "$TEMP_DATA_FILE"
+    
+    cat >> "$all_help_file" << 'EOF'
+    echo.pastel_purple "╰────────────────────────────────────────────────────────────────╯"
+    echo
+    echo.pastel_yellow "💡 Use 'alias-help <name>' for detailed info about a specific alias"
+    echo.pastel_cyan "🔍 Use 'alias-help -s <term>' to search aliases"
+    echo
+}
+
+# Show help if called directly or with no arguments
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]] || [[ $# -eq 0 ]]; then
+    show_all_help
+fi
+EOF
+    
+    chmod +x "$all_help_file"
+    echo.success "Generated consolidated help at $all_help_file"
+}
+
+# --- Runtime Viewer Script ---
+function generate_viewer_script() {
+    echo.info "Generating runtime viewer script..."
+    
+    local viewer_script="$HELPERS_DIR/alias-help"
+    
+    cat > "$viewer_script" << 'EOF'
+#!/usr/bin/env bash
+# Aesthetic alias help viewer
+# Part of the dotfiles system
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Source colors
+source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || {
+    echo "ERROR: Could not load colors" >&2
+    exit 1
+}
+
+function usage() {
+    echo.header "Alias Help Viewer"
+    echo
+    echo.cyan "Usage:"
+    echo "  alias-help              Show all aliases"
+    echo "  alias-help <name>       Show specific alias help"
+    echo "  alias-help -s <term>    Search aliases"
+    echo "  alias-help -h           Show this help"
+    echo
+}
+
+function search_aliases() {
+    local search_term="$1"
+    echo.header "🔍 Searching for: $search_term"
+    echo
+    
+    local found=false
+    
+    for help_file in "$SCRIPT_DIR"/*.help; do
+        [[ ! -f "$help_file" ]] && continue
+        [[ "$(basename "$help_file")" == "_all.help" ]] && continue
+        
+        local alias_name=$(basename "$help_file" .help)
+        
+        # Search in alias name, command, or description
+        if source "$help_file" 2>/dev/null; then
+            if [[ "$ALIAS_NAME" =~ $search_term ]] || \
+               [[ "$ALIAS_COMMAND" =~ $search_term ]] || \
+               [[ "$ALIAS_DESCRIPTION" =~ $search_term ]]; then
+                show_help
+                found=true
+            fi
+        fi
+    done
+    
+    if [[ "$found" == false ]]; then
+        echo.warning "No aliases found matching: $search_term"
+    fi
+}
+
+function show_specific_help() {
+    local alias_name="$1"
+    local help_file="$SCRIPT_DIR/${alias_name}.help"
+    
+    if [[ -f "$help_file" ]]; then
+        source "$help_file"
+        show_help
+    else
+        echo.error "No help found for alias: $alias_name"
+        echo.info "Available aliases:"
+        for file in "$SCRIPT_DIR"/*.help; do
+            [[ ! -f "$file" ]] && continue
+            [[ "$(basename "$file")" == "_all.help" ]] && continue
+            echo "  • $(basename "$file" .help)"
+        done
+        exit 1
+    fi
+}
+
+# Parse arguments
+case "${1:-}" in
+    "")
+        # Show all aliases
+        source "$SCRIPT_DIR/_all.help"
+        show_all_help
+        ;;
+    -h|--help)
+        usage
+        ;;
+    -s|--search)
+        [[ -z "${2:-}" ]] && { echo.error "Search term required"; usage; exit 1; }
+        search_aliases "$2"
+        ;;
+    *)
+        show_specific_help "$1"
+        ;;
+esac
+EOF
+    
+    chmod +x "$viewer_script"
+    echo.success "Generated viewer script at $viewer_script"
+}
+
+# --- Cleanup ---
+function cleanup() {
+    [[ -n "$TEMP_DATA_FILE" ]] && [[ -f "$TEMP_DATA_FILE" ]] && rm -f "$TEMP_DATA_FILE"
+}
+
+trap cleanup EXIT
+
+# --- Main Function ---
+function main() {
+    parse_arguments "$@"
+    
+    echo.header "🌸 Dotfiles Alias Help Generator"
+    echo.pastel_purple "Creating beautiful help menus with aesthetic flair..."
+    echo
+    
+    # Ensure helpers directory exists
+    mkdir -p "$HELPERS_DIR"
+    
+    if [[ "$REBUILD_MODE" == true ]]; then
+        echo.warning "Rebuild mode not implemented yet"
+        exit 1
+    fi
+    
+    # Parse the alias file
+    if ! parse_aliases "$ALIAS_FILE"; then
+        exit 1
+    fi
+    
+    # Collect descriptions interactively
+    collect_descriptions
+    
+    # Collect file metadata for docstring
+    echo.header "File Documentation"
+    echo.info "Let's add a beautiful docstring to your alias file!"
+    echo
+    
+    echo.cyan "Enter a description for this alias file:"
+    echo.purple "(e.g., 'Enhanced Git workflow commands', 'System navigation shortcuts')"
+    read -r file_description
+    
+    echo.cyan "Enter the main category for this file:"
+    echo.purple "(e.g., 'git', 'system', 'development', 'navigation')"
+    read -r file_category
+    
+    echo
+    echo.info "📝 Will add docstring to: $(basename "$ALIAS_FILE")"
+    echo.cyan "   Description: $file_description"
+    echo.cyan "   Category: $file_category"
+    echo
+    
+    echo.warning "This will update your original alias file (backup will be created)"
+    read -r -p "Continue? [Y/n] " confirm
+    confirm=${confirm:-Y}
+    
+    if [[ "$confirm" == "Y" || "$confirm" == "y" ]]; then
+        update_original_file "$ALIAS_FILE" "$file_description" "$file_category"
+    else
+        echo.info "Skipped updating original file"
+    fi
+    
+    # Generate help files
+    generate_individual_help_files
+    generate_consolidated_help
+    generate_viewer_script
+    
+    echo.success "✨ Help generation complete!"
+    echo
+    echo.pastel_cyan "📁 Generated files in: $HELPERS_DIR"
+    echo.pastel_yellow "🚀 Try: alias-help"
+    echo.pastel_pink "🔍 Or: alias-help -s git"
+    echo
+}
+
+# Run main function
+main "$@"

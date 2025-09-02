@@ -15,10 +15,6 @@
     "source": "/home/remcostoeten/.config/dotfiles/configs/git/gitconfig",
     "created": "2025-08-26T14:49:34+02:00"
   },
-  "/home/remcostoeten/.config/starship.toml": {
-    "source": "/home/remcostoeten/.config/dotfiles/configs/starship.toml",
-    "created": "2025-08-26T14:50:42+02:00"
-  },
   "/home/remcostoeten/.config/neofetch": {
     "source": "/home/remcostoeten/.config/dotfiles/configs/neofetch",
     "created": "2025-08-26T14:52:27+02:00"

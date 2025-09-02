@@ -8,24 +8,22 @@ source "${DOTFILES_ROOT}/core/_env"
 
 source "${DOTFILES_ROOT}/core/_colors"
 
-[[ -f "${DOTFILES_ROOT}/assets/ascii/intro" ]] && source "${DOTFILES_ROOT}/assets/ascii/intro" && echo.dotfiles_banner 2>/dev/null || true
+# Source banner functions but let bootstrap handle display
+[[ -f "${DOTFILES_ROOT}/assets/ascii/intro" ]] && source "${DOTFILES_ROOT}/assets/ascii/intro" 2>/dev/null || true
 
 source "${DOTFILES_ROOT}/core/_safety"
 
 source "${DOTFILES_ROOT}/core/_bootstrap"
 
-dotfiles_bootstrap
+source "${DOTFILES_ROOT}/sourcers/alias-sourcer"
 
 alias reload='exec ${SHELL}'
 alias cdf='cd ${DOTFILES_ROOT}'
+alias tour='dotfiles tour'
+alias dotfiles='noglob dotfiles'
 
 if [[ -t 1 ]]; then
-    echo.info "Type $(echo.cyan 'dotfiles help') for available commands"
+  echo.info "Type $(echo.cyan 'dotfiles help') for available commands"
 fi
-# Load environment variables & secrets silently
+# Load environment variables silently
 dotfiles env export >/dev/null 2>&1 || true
-
-# Personal Startpage - Auto command tracking
-source /home/remcostoeten/current/personal-startpage/shell-integration.sh
-alias pct="personal-dashboard"
-alias dashboard="personal-dashboard"

@@ -70,7 +70,7 @@ function load_plugin_configs() {
     
     # Note: zoxide is now handled via the alias loader (zoxide.aliases)
     
-    # Note: starship and direnv are initialized in bootstrap to avoid duplication
+    # Note: direnv is initialized in bootstrap to avoid duplication
 }
 
 load_plugins

@@ -12,8 +12,17 @@ function dotfiles_version() {
     echo "  OS: $DOTFILES_OS ($DOTFILES_ARCH)"
     echo
     echo "Components:"
-    echo "  • $(ls $DOTFILES_MODULES/enabled 2>/dev/null | wc -l) enabled modules"
-    echo "  • $(ls $DOTFILES_MODULES/disabled 2>/dev/null | wc -l) disabled modules"
+    
+    # Show module counts from configuration if available
+    local modules_config="$DOTFILES_UTILS/modules.json"
+    if [[ -f "$modules_config" ]]; then
+        local total_modules=$(jq -r '[.modules, .plugins, .aliases] | map(length) | add' "$modules_config" 2>/dev/null || echo 0)
+        local enabled_modules=$(jq -r '[.modules, .plugins, .aliases] | map(to_entries[] | select(.value.enabled == true)) | length' "$modules_config" 2>/dev/null || echo 0)
+        echo "  • $enabled_modules/$total_modules modules enabled"
+    else
+        echo "  • $(find $DOTFILES_MODULES -maxdepth 1 -type f 2>/dev/null | wc -l) legacy modules"
+    fi
+    
     echo "  • $(ls $DOTFILES_BIN 2>/dev/null | wc -l) commands"
     echo "  • $(jq 'length' $DOTFILES_LINKS_DB 2>/dev/null || echo 0) symlinks"
     echo "  • $(jq 'length' $DOTFILES_ENV_DB 2>/dev/null || echo 0) env variables"
@@ -63,7 +72,7 @@ function dotfiles_doctor() {
     
     # Check directories
     echo.info "Checking directories..."
-    for dir in bin modules utils configs templates logs; do
+    for dir in bin modules utils configs logs; do
         if [[ ! -d "$DOTFILES_ROOT/$dir" ]]; then
             echo.warning "  ✗ Missing directory: $dir"
             mkdir -p "$DOTFILES_ROOT/$dir"
@@ -131,7 +140,16 @@ function dotfiles_install() {
 }
 
 function dotfiles_modules() {
-    echo.header "Module Manager"
+    # Check if new module management system is available
+    if command -v dotfiles-modules >/dev/null 2>&1; then
+        echo.info "Using new module management system"
+        dotfiles-modules "${@:2}"
+        return $?
+    fi
+    
+    # Fallback to legacy system
+    echo.header "Module Manager (Legacy)"
+    echo.warning "Consider running 'dotfiles-modules init' to use the new configuration system"
     
     case "${2:-list}" in
         list|ls)
@@ -180,6 +198,7 @@ function dotfiles_modules() {
         *)
             echo.error "Unknown command: ${2}"
             echo "Usage: dotfiles modules [list|enable|disable] [module]"
+            echo "       or use: dotfiles-modules [command] for full features"
             ;;
     esac
 }
@@ -205,55 +224,197 @@ function dotfiles_aliases_help() {
     done
 }
 
+function dotfiles_personal_dashboard() {
+    local API_URL="http://localhost:3451"
+    
+    if command -v xdg-open &>/dev/null; then
+        xdg-open "$API_URL" 2>/dev/null
+    elif command -v open &>/dev/null; then
+        open "$API_URL" 2>/dev/null
+    else
+        echo.info "Open your browser to: $API_URL"
+    fi
+}
+
+function dotfiles_track_project() {
+    local path="${1:-$PWD}"
+    local language="${2:-}"
+    local git_remote=""
+    local git_branch=""
+    local API_URL="http://localhost:3451"
+    local API_TOKEN="dev-token"
+    
+    echo.debug "Tracking project: $path"
+    
+    # Check if API server is available
+    if ! curl -s --connect-timeout 1 "$API_URL/health" >/dev/null 2>&1; then
+        echo.warning "Personal dashboard API not available at $API_URL"
+        return 1
+    fi
+    
+    # Auto-detect git info if in git repo
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git_remote=$(git remote get-url origin 2>/dev/null || echo "")
+        git_branch=$(git branch --show-current 2>/dev/null || echo "")
+    fi
+    
+    # Auto-detect language from common files
+    if [[ -z "$language" ]]; then
+        if [[ -f "package.json" ]]; then
+            language="JavaScript/TypeScript"
+        elif [[ -f "go.mod" ]]; then
+            language="Go"
+        elif [[ -f "Cargo.toml" ]]; then
+            language="Rust"
+        elif [[ -f "requirements.txt" || -f "pyproject.toml" ]]; then
+            language="Python"
+        elif [[ -f "pom.xml" ]]; then
+            language="Java"
+        fi
+    fi
+    
+    # Send to API
+    if curl -s -X POST \
+        -H "Authorization: Bearer $API_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"path\":\"$path\",\"git_remote\":\"$git_remote\",\"git_branch\":\"$git_branch\",\"language\":\"$language\"}" \
+        "$API_URL/api/projects" > /dev/null 2>&1; then
+        echo.success "Project tracked: $path"
+    else
+        echo.error "Failed to track project"
+        return 1
+    fi
+}
+
+function dotfiles_sync() {
+    echo.header "Dotfiles Sync"
+    
+    local has_changes=false
+    
+    # Check and commit git changes
+    cd "$DOTFILES_ROOT" || return 1
+    
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+            echo.info "Found uncommitted changes..."
+            git add -A
+            git commit -m "Auto-sync: $(date +'%Y-%m-%d %H:%M:%S')" 
+            echo.success "Changes committed"
+            has_changes=true
+        fi
+        
+        # Check for untracked files
+        if [[ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]]; then
+            echo.info "Found untracked files..."
+            git add .
+            git commit -m "Add untracked files: $(date +'%Y-%m-%d %H:%M:%S')" 
+            echo.success "Untracked files added"
+            has_changes=true
+        fi
+    fi
+    
+    # Remove sync-needed marker if it exists
+    [[ -f "$DOTFILES_UTILS/sync-needed" ]] && rm -f "$DOTFILES_UTILS/sync-needed"
+    
+    if [[ "$has_changes" == "true" ]]; then
+        echo.success "Dotfiles synchronized successfully!"
+        echo.info "Restart shell to see updated status"
+    else
+        echo.success "Dotfiles already in sync!"
+    fi
+}
+
+function dotfiles_tour() {
+    echo.header "Dotfiles Tour & Sync"
+    echo.info "This will guide you through synchronizing your dotfiles..."
+    echo
+    
+    # Run sync
+    dotfiles_sync
+    
+    echo
+    echo.info "Quick tour of available commands:"
+    echo "  • $(echo.cyan 'reload')     - Restart shell with updated config"
+    echo "  • $(echo.cyan 'dotfiles doctor') - Run health diagnostics"
+    echo "  • $(echo.cyan 'envs list')  - Manage environment variables"
+    echo "  • $(echo.cyan 'z <dir>')    - Jump to directories with zoxide"
+    echo
+}
+
 function dotfiles_help() {
-    echo.header "Dotfiles Management System"
+    # Check if new help system is available
+    local help_cmd="$DOTFILES_BIN/dotfiles-help"
+    if [[ -x "$help_cmd" ]]; then
+        echo.info "🌸 Using comprehensive help system"
+        "$help_cmd" "${@:2}"
+        return $?
+    fi
+    
+    # Fallback to legacy help
+    echo.header "🔧 Dotfiles Management System (Legacy Mode)"
     echo
-    echo "Usage: dotfiles <command> [args]"
+    echo.cyan "Usage: dotfiles <command> [args]"
     echo
-    echo.cyan "Core Commands:"
-    echo "  help       Show this help"
-    echo "  version    Show version information"
-    echo "  reload     Reload dotfiles configuration"
-    echo "  update     Update dotfiles from git"
-    echo "  doctor     Run health check"
-    echo "  install    Install dotfiles symlinks"
+    echo.purple "⚡ Core Commands:"
+    echo "  $(echo.cyan 'help')       Show this help (or use new system: dotfiles help)"
+    echo "  $(echo.cyan 'version')    Show version information"
+    echo "  $(echo.cyan 'reload')     Reload dotfiles configuration"
+    echo "  $(echo.cyan 'update')     Update dotfiles from git"
+    echo "  $(echo.cyan 'doctor')     Run health check"
+    echo "  $(echo.cyan 'install')    Install dotfiles symlinks"
+    echo "  $(echo.cyan 'sync')       Synchronize dotfiles (commit changes)"
+    echo "  $(echo.cyan 'tour')       Guided sync and tour of features"
     echo
-    echo.cyan "Module Commands:"
-    echo "  modules    Manage modules"
-    echo "  new        Create new module/plugin/script"
+    echo.purple "📦 Module Commands:"
+    echo "  $(echo.cyan 'modules')    Manage modules"
+    echo "  $(echo.cyan 'new')        Create new module/plugin/script"
     echo
-    echo.cyan "Management Commands:"
-    echo "  link       Symlink manager (dotfiles-link)"
-    echo "  env        Environment variables & secrets manager (dotfiles-env)"
-    echo "  sync       Environment sync across machines (dotfiles-env-sync)"
-    echo "  secrets    Secrets discovery & setup for new machines (dotfiles-secrets-bootstrap)"
-    echo "  visualize  Render diagrams (Mermaid)"
-    echo "  packages   Manage additional packages (dotfiles-packages)"
+    echo.purple "🔗 Management Commands:"
+    echo "  $(echo.cyan 'link')       Symlink manager (dotfiles-link)"
+    echo "  $(echo.cyan 'env')        Environment variables manager (dotfiles-env)"
+    echo "  $(echo.cyan 'sync')       Environment sync across machines (dotfiles-env-sync)"
+    echo "  $(echo.cyan 'packages')   Manage additional packages (dotfiles-packages)"
     echo
-    echo.cyan "Version Commands:"
-    echo "  version    Show version information"
-    echo "  version bump    Auto-increment version"
-    echo "  version set <v> Set specific version"
+    echo.purple "🛠️ Development Tools:"
+    echo "  $(echo.cyan 'generate')   Code generators (source-all scripts, alias help menus)"
+    echo "  $(echo.cyan 'templates')  Show available templates"
     echo
-    echo.cyan "Quick Actions:"
-    echo "  cd         Go to dotfiles directory"
-    echo "  edit       Edit dotfiles in $EDITOR"
-    echo "  logs       View error logs"
-    echo "  studio     Launch Dotfiles Studio (dev) or deploy"
+    echo.purple "📋 Version Commands:"
+    echo "  $(echo.cyan 'version')         Show version information"
+    echo "  $(echo.cyan 'version bump')    Auto-increment version"
+    echo "  $(echo.cyan 'version set <v>') Set specific version"
     echo
-    echo.cyan "Quick Shortcuts (from banner):"
-    echo "  reload     Reload dotfiles configuration"
-    echo "  doctor     Run comprehensive health check"
-    echo "  envs       Environment & secrets manager"
+    echo.purple "⚡ Quick Actions:"
+    echo "  $(echo.cyan 'cd')         Go to dotfiles directory"
+    echo "  $(echo.cyan 'edit')       Edit dotfiles in $EDITOR"
+    echo "  $(echo.cyan 'logs')       View error logs"
+    echo "  $(echo.cyan 'studio')     Launch Dotfiles Studio (dev) or deploy"
+    echo
+    echo.purple "📊 Personal Dashboard:"
+    echo "  $(echo.cyan 'dashboard')  Open personal dashboard"
+    echo "  $(echo.cyan 'track')      Track current project in dashboard"
+    echo
+    echo.purple "🚀 Quick Shortcuts (from banner):"
+    echo "  $(echo.cyan 'reload')     Reload dotfiles configuration"
+    echo "  $(echo.cyan 'doctor')     Run comprehensive health check"
+    echo "  $(echo.cyan 'envs')       Environment variable manager"
     echo
     dotfiles_aliases_help
     echo
-    echo "For command help, use: dotfiles <command> help"
-    echo "Example: dotfiles link help"
+    echo.purple "✨ Examples:"
+    echo.success "  ✓ dotfiles doctor           # Health check"
+    echo.success "  ✓ dotfiles link add src dst # Create symlink"
+    echo.success "  ✓ dotfiles env set API_KEY  # Store secret"
+    echo.success "  ✓ dotfiles new module git   # Create module"
+    echo
+    echo.info "💡 For command help, use: dotfiles <command> help"
+    echo.info "📖 Example: dotfiles link help"
+    echo
+    echo.info "🎆 Upgrade to the new comprehensive help: dotfiles help"
 }
 
 function dotfiles_studio_start() {
-    local app_dir="$DOTFILES_ROOT/tools/starship-visual-generator"
+    local app_dir="$DOTFILES_ROOT/core/_internal-tools/starship-visual-generator"
     if [[ ! -d "$app_dir" ]]; then
         echo.error "Studio app not found at $app_dir"
         return 1
@@ -276,7 +437,7 @@ function dotfiles_studio_start() {
 }
 
 function dotfiles_studio_deploy() {
-    local app_dir="$DOTFILES_ROOT/tools/starship-visual-generator"
+    local app_dir="$DOTFILES_ROOT/core/_internal-tools/starship-visual-generator"
     if [[ ! -d "$app_dir" ]]; then
         echo.error "Studio app not found at $app_dir"
         return 1
@@ -354,6 +515,140 @@ function dotfiles_studio_open() {
     else echo "$url"; fi
 }
 
+function dotfiles_generate() {
+    echo.header "🛠️ Dotfiles Code Generators"
+    echo
+    echo.info "Choose a generator to create helpful scripts and documentation:"
+    echo
+    
+    echo.purple "╭─────────────────────────────────────────────────────────────╮"
+    echo.purple "│                    ✨ Available Generators ✨                │"
+    echo.purple "├─────────────────────────────────────────────────────────────┤"
+    echo.purple "│                                                             │"
+    echo.purple "│  [1] 📄 Source-All Script Generator                        │"
+    echo.cyan   "│      Create scripts that auto-source .sh files             │"
+    echo.purple "│                                                             │"
+    echo.purple "│  [2] 🌸 Alias Help Generator                               │"
+    echo.cyan   "│      Generate aesthetic help menus from alias files        │"
+    echo.purple "│                                                             │"
+    echo.purple "│  [q] ❌ Quit                                               │"
+    echo.purple "│                                                             │"
+    echo.purple "╰─────────────────────────────────────────────────────────────╯"
+    echo
+    
+    echo -n "[38;2;255;211;146mChoose an option [1-2, q]: [0m"
+    read -r choice
+    
+    case "$choice" in
+        1)
+            echo.header "📄 Source-All Script Generator"
+            echo
+            echo.info "This tool creates scripts that automatically source all .sh files in a directory"
+            echo.info "Perfect for modular configurations and dynamic script loading"
+            echo
+            
+            local generator="$DOTFILES_ROOT/core/_internal-tools/generate-source-all"
+            if [[ -x "$generator" ]]; then
+                "$generator"
+            else
+                echo.error "Generator not found or not executable: $generator"
+                return 1
+            fi
+            ;;
+        2)
+            echo.header "🌸 Alias Help Generator"
+            echo
+            echo.info "Generate beautiful, aesthetic help menus from alias files"
+            echo.info "Creates searchable, colorized documentation for your aliases"
+            echo.info "Automatically adds docstrings and organizes by category"
+            echo
+            
+            local alias_generator="$DOTFILES_BIN/dotfiles-gen-alias-help"
+            if [[ -x "$alias_generator" ]]; then
+                echo.cyan "Choose your approach:"
+                echo.purple "  [1] Interactive file picker (recommended)"
+                echo.purple "  [2] Select from specific folder"
+                echo.purple "  [3] Specify exact file path"
+                echo
+                read -r approach
+                
+                case "$approach" in
+                    1)
+                        "$alias_generator" --interactive
+                        ;;
+                    2)
+                        echo.cyan "Enter folder path (relative to dotfiles):"
+                        echo.purple "(e.g., 'modules/aliases', 'configs')"
+                        read -r folder_path
+                        "$alias_generator" --folder "$folder_path"
+                        ;;
+                    3)
+                        echo.cyan "Enter the full path to your alias file:"
+                        read -r alias_file
+                        
+                        if [[ -f "$alias_file" ]]; then
+                            "$alias_generator" --file "$alias_file"
+                        else
+                            echo.error "File not found: $alias_file"
+                            return 1
+                        fi
+                        ;;
+                    *)
+                        echo.warning "Invalid choice, using interactive mode..."
+                        "$alias_generator" --interactive
+                        ;;
+                esac
+            else
+                echo.error "Alias help generator not found: $alias_generator"
+                return 1
+            fi
+            ;;
+        q|Q|quit|exit)
+            echo.info "Exiting generator menu"
+            return 0
+            ;;
+        *)
+            echo.error "Invalid choice: $choice"
+            echo.info "Please choose 1, 2, or q"
+            return 1
+            ;;
+    esac
+}
+
+function dotfiles_templates() {
+    echo.header "Available Templates"
+    echo
+    
+    local templates_dir="$DOTFILES_ROOT/core/_internal-tools/templates"
+    if [[ -d "$templates_dir" ]]; then
+        echo.info "Templates directory: $templates_dir"
+        echo
+        
+        for template in "$templates_dir"/*; do
+            if [[ -f "$template" ]]; then
+                local name=$(basename "$template")
+                echo.cyan "📄 $name"
+                
+                # Show first few lines as preview
+                head -n 3 "$template" 2>/dev/null | sed 's/^/    /'
+                echo "    ..."
+                echo
+            fi
+        done
+        
+        echo.info "To use a template: cp $templates_dir/<template> <destination>"
+    else
+        echo.warning "Templates directory not found: $templates_dir"
+        
+        # Show alternative location
+        local alt_templates="$DOTFILES_ROOT/templates"
+        if [[ -d "$alt_templates" ]]; then
+            echo.info "Found alternative templates at: $alt_templates"
+            ls -la "$alt_templates"
+        fi
+    fi
+}
+
 case "${1:-help}" in
     version|v)
         if [[ -n "$2" ]]; then
@@ -403,20 +698,10 @@ case "${1:-help}" in
         "$DOTFILES_BIN/dotfiles-env" "$@"
         ;;
     sync)
-        shift
-        "$DOTFILES_BIN/dotfiles-env-sync" "$@"
+        dotfiles_sync
         ;;
-    secrets|secrets-bootstrap)
-        shift
-        "$DOTFILES_BIN/dotfiles-secrets-bootstrap" "$@"
-        ;;
-    visualize|viz|diagram)
-        shift
-        if [[ $# -eq 0 ]]; then
-            bash "$DOTFILES_ROOT/scripts/dotfiles-visualize-secrets.sh" secrets
-        else
-            bash "$DOTFILES_ROOT/scripts/dotfiles-visualize-secrets.sh" "$@"
-        fi
+    tour)
+        dotfiles_tour
         ;;
     cd)
         cd "$DOTFILES_ROOT"
@@ -430,6 +715,18 @@ case "${1:-help}" in
         else
             echo.info "No error logs found"
         fi
+        ;;
+    dashboard|dash)
+        dotfiles_personal_dashboard
+        ;;
+    track)
+        dotfiles_track_project "$@"
+        ;;
+    generate|gen)
+        dotfiles_generate
+        ;;
+    templates|tmpl|t)
+        dotfiles_templates
         ;;
     studio)
         case "${2:-start}" in
@@ -451,12 +748,14 @@ case "${1:-help}" in
                 ;;
         esac
         ;;
-    help|h|--help|-h)
-        dotfiles_help
-        ;;
-    *)
-        echo.error "Unknown command: $1"
-        dotfiles_help
-        exit 1
-        ;;
+help|h|--help|-h)
+    dotfiles_help "$@"
+    ;;
+*)
+    echo.error "Unknown command: $1"
+    dotfiles_help
+    exit 1
+    ;;
 esac
+
+
