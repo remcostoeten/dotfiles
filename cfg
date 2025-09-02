@@ -15,7 +15,8 @@ source "${DOTFILES_ROOT}/core/_safety"
 
 source "${DOTFILES_ROOT}/core/_bootstrap"
 
-source "${DOTFILES_ROOT}/sourcers/alias-sourcer"
+# Run the bootstrap process (this displays the banner at the end)
+dotfiles_bootstrap
 
 alias reload='exec ${SHELL}'
 alias cdf='cd ${DOTFILES_ROOT}'

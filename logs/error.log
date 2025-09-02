@@ -2428,3 +2428,5 @@
 2025-09-02 23:51:57 [ERROR] Failed to source: /home/remcostoeten/.config/dotfiles/modules/starship (exit code: 1)
 2025-09-02 23:51:57 [ERROR] Failed to source: /home/remcostoeten/.config/dotfiles/modules/plugins/secrets-sync (exit code: 126)
 2025-09-02 23:56:09 [ERROR] Failed to source: /home/remcostoeten/.config/dotfiles/modules/plugins/secrets-sync (exit code: 1)
+2025-09-03 01:24:42 [ERROR] Failed to source: /home/remcostoeten/.config/dotfiles/modules/aesthetic (exit code: 126)
+2025-09-03 01:24:42 [ERROR] Failed to source: /home/remcostoeten/.config/dotfiles/modules/plugins/secrets-sync (exit code: 126)
