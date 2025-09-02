@@ -1,3 +1,22 @@
+# Ignore environment files
+.env
+
+# Ignore node modules
+node_modules/
+
+# Ignore logs
+*.log
+
+# Ignore build output
+/dist
+
+# Ignore IDE/editor configs
+.vscode/
+.idea/
+
+# Ignore Mac OS files
+.DS_Store
+
 # Environment variables and encryption keys - NEVER commit these
 utils/env.json
 utils/.env.key
