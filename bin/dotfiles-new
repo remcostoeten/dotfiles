@@ -6,14 +6,18 @@ source "${HOME}/.config/dotfiles/core/_safety"
 
 function new_module() {
     local name="$1"
+    local description="${2:-TODO: Add description}"
     
     if [[ -z "$name" ]]; then
         echo -n "Module name: "
         read -r name
+        echo -n "Module description: "
+        read -r description
+        description="${description:-TODO: Add description}"
     fi
     
     name="${name%.sh}"
-    local file="$DOTFILES_MODULES/enabled/${name}"
+    local file="$DOTFILES_MODULES/${name}"
     
     if [[ -f "$file" ]]; then
         echo.error "Module already exists: $file"
@@ -32,12 +36,19 @@ function MODULE_NAME_init() {
     echo.debug "Initializing MODULE_NAME"
 }
 
-function MODULE_NAME_help() {
-    echo.header "MODULE_NAME Help"
+function MODULE_NAME_help() { # 🎨 Enhanced help menu
+    echo.header "📦 MODULE_NAME Help"
     echo
-    echo "Available commands:"
-    echo "  MODULE_NAME <command>    Main command"
+    echo.cyan "Usage: MODULE_NAME <command> [options]"
     echo
+    echo.purple "⚡ Available commands:"
+    echo "  $(echo.cyan 'MODULE_NAME <command>')    Main command"
+    echo "  $(echo.cyan 'help')                     Show this help"
+    echo
+    echo.purple "✨ Examples:"
+    echo.success "  ✓ MODULE_NAME help    # Show help"
+    echo
+    echo.info "💡 This module is part of the dotfiles system"
 }
 
 alias MODULE_SHORT='MODULE_NAME'
@@ -47,21 +58,31 @@ EOF
     
     sed -i "s/MODULE_NAME/$name/g" "$file"
     sed -i "s/MODULE_SHORT/${name:0:2}/g" "$file"
-    sed -i "s/MODULE_DESCRIPTION/TODO: Add description/g" "$file"
+    sed -i "s/MODULE_DESCRIPTION/$description/g" "$file"
     sed -i "s/MODULE_AUTHOR/$(whoami)/g" "$file"
     sed -i "s/MODULE_DATE/$(date +%Y-%m-%d)/g" "$file"
     
     chmod +x "$file"
+    
+    # Register in configuration if available
+    if command -v dotfiles-modules >/dev/null 2>&1; then
+        dotfiles-modules add "$name" modules "$description"
+    fi
+    
     echo.success "Created module: $file"
     echo.info "Edit the module and customize as needed"
 }
 
 function new_plugin() {
     local name="$1"
+    local description="${2:-TODO: Add description}"
     
     if [[ -z "$name" ]]; then
         echo -n "Plugin name: "
         read -r name
+        echo -n "Plugin description: "
+        read -r description
+        description="${description:-TODO: Add description}"
     fi
     
     name="${name%.sh}"
@@ -116,13 +137,18 @@ fi
 EOF
     
     sed -i "s/PLUGIN_NAME/$name/g" "$file"
-    sed -i "s/PLUGIN_DESCRIPTION/TODO: Add description/g" "$file"
+    sed -i "s/PLUGIN_DESCRIPTION/$description/g" "$file"
     sed -i "s/PLUGIN_DEPS/none/g" "$file"
     sed -i "s/PLUGIN_DATE/$(date +%Y-%m-%d)/g" "$file"
     
     chmod +x "$file"
+    
+    # Register in configuration if available
+    if command -v dotfiles-modules >/dev/null 2>&1; then
+        dotfiles-modules add "$name" plugins "$description"
+    fi
+    
     echo.success "Created plugin: $file"
-    echo.info "To enable: ln -s $file $DOTFILES_MODULES/enabled/"
 }
 
 function new_script() {
@@ -155,18 +181,21 @@ source "${HOME}/.config/dotfiles/core/_env"
 source "${HOME}/.config/dotfiles/core/_colors"
 source "${HOME}/.config/dotfiles/core/_safety"
 
-function usage() {
-    echo.header "SCRIPT_NAME"
+function usage() { # 🎨 Enhanced help menu
+    echo.header "🛠️ SCRIPT_NAME"
     echo
-    echo "Usage: SCRIPT_NAME [options] <args>"
+    echo.cyan "Usage: SCRIPT_NAME [options] <args>"
     echo
-    echo "Options:"
-    echo "  -h, --help     Show this help"
-    echo "  -v, --verbose  Verbose output"
-    echo "  -d, --debug    Debug mode"
+    echo.purple "🔧 Options:"
+    echo "  $(echo.cyan '-h, --help')     Show this help"
+    echo "  $(echo.cyan '-v, --verbose')  Verbose output"
+    echo "  $(echo.cyan '-d, --debug')    Debug mode"
     echo
-    echo "Examples:"
-    echo "  SCRIPT_NAME example"
+    echo.purple "✨ Examples:"
+    echo.success "  ✓ SCRIPT_NAME example    # Basic usage"
+    echo.success "  ✓ SCRIPT_NAME --verbose # Verbose mode"
+    echo
+    echo.info "💡 This script uses the dotfiles framework for enhanced functionality"
 }
 
 function main() {
@@ -224,10 +253,14 @@ EOF
 
 function new_alias() {
     local name="$1"
+    local description="${2:-TODO: Add description}"
     
     if [[ -z "$name" ]]; then
         echo -n "Alias file name: "
         read -r name
+        echo -n "Alias description: "
+        read -r description
+        description="${description:-TODO: Add description}"
     fi
     
     name="${name%.sh}"
@@ -259,45 +292,56 @@ EOF
     
     sed -i "s/ALIAS_NAME/$name/g" "$file"
     sed -i "s/ALIAS_PREFIX/${name:0:2}/g" "$file"
-    sed -i "s/ALIAS_DESCRIPTION/TODO: Add description/g" "$file"
+    sed -i "s/ALIAS_DESCRIPTION/$description/g" "$file"
     sed -i "s/ALIAS_DATE/$(date +%Y-%m-%d)/g" "$file"
     
     chmod +x "$file"
-    echo.success "Created alias file: $file"
-    echo.info "To enable: ln -s $file $DOTFILES_MODULES/enabled/"
+    
+    # Add .aliases extension
+    local alias_file="${file}.aliases"
+    mv "$file" "$alias_file"
+    
+    # Register in configuration if available
+    if command -v dotfiles-modules >/dev/null 2>&1; then
+        dotfiles-modules add "$name" aliases "$description"
+    fi
+    
+    echo.success "Created alias file: $alias_file"
 }
 
-function new_help() {
-    echo.header "Dotfiles Module Creator"
+function new_help() { # 🎨 Enhanced help menu
+    echo.header "🛠️ Dotfiles Module Creator"
     echo
-    echo "Usage: dotfiles-new <type> [name]"
+    echo.cyan "Usage: dotfiles-new <type> [name] [description]"
     echo
-    echo "Types:"
-    echo "  module    Create a new module"
-    echo "  plugin    Create a new plugin wrapper"
-    echo "  script    Create a new script"
-    echo "  alias     Create a new alias file"
-    echo "  help      Show this help"
+    echo.purple "⚡ Types:"
+    echo "  $(echo.cyan 'module')    Create a new module"
+    echo "  $(echo.cyan 'plugin')    Create a new plugin wrapper"
+    echo "  $(echo.cyan 'script')    Create a new script"
+    echo "  $(echo.cyan 'alias')     Create a new alias file"
+    echo "  $(echo.cyan 'help')      Show this help"
     echo
-    echo "Examples:"
-    echo "  dotfiles-new module git-extras"
-    echo "  dotfiles-new plugin fzf"
-    echo "  dotfiles-new script backup"
-    echo "  dotfiles-new alias docker"
+    echo.purple "✨ Examples:"
+    echo.success "  ✓ dotfiles-new module git-extras 'Extra Git utilities'   # Create module"
+    echo.success "  ✓ dotfiles-new plugin fzf 'Fuzzy finder integration'    # Create plugin"
+    echo.success "  ✓ dotfiles-new script backup 'Automated backup script'  # Create script"
+    echo.success "  ✓ dotfiles-new alias docker 'Docker shortcuts'          # Create aliases"
+    echo
+    echo.info "💡 All new components use modern templates with best practices"
 }
 
 case "${1:-help}" in
     module|mod|m)
-        new_module "$2"
+        new_module "$2" "$3"
         ;;
     plugin|plug|p)
-        new_plugin "$2"
+        new_plugin "$2" "$3"
         ;;
     script|scr|s)
         new_script "$2"
         ;;
     alias|ali|a)
-        new_alias "$2"
+        new_alias "$2" "$3"
         ;;
     help|--help|-h)
         new_help

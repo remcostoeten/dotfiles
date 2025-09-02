@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+
+# Dotfiles Help Menu Colorizer
+# Utility to enhance help menus with consistent colors and formatting
+# Part of the dotfiles management system
+
+set -euo pipefail
+
+source "${HOME}/.config/dotfiles/core/_env"
+source "${HOME}/.config/dotfiles/core/_colors"
+source "${HOME}/.config/dotfiles/core/_safety"
+
+function colorize_help_usage() {
+    echo.header "🎨 Help Menu Colorizer"
+    echo
+    echo.cyan "Usage: $(basename "$0") [options] <script-file>"
+    echo
+    echo.purple "✨ Options:"
+    echo "  $(echo.cyan '-h, --help')      Show this help"
+    echo "  $(echo.cyan '-n, --dry-run')   Preview changes without applying"
+    echo "  $(echo.cyan '-b, --backup')    Create backup before modifying"
+    echo "  $(echo.cyan '-v, --verbose')   Show detailed output"
+    echo "  $(echo.cyan '--template')     Generate colorized help template"
+    echo
+    echo.purple "🎯 Examples:"
+    echo "  $(echo.cyan "$(basename "$0") bin/dotfiles-link")     # Colorize single script"
+    echo "  $(echo.cyan "$(basename "$0") --dry-run bin/env")     # Preview changes"
+    echo "  $(echo.cyan "$(basename "$0") --template > help.sh") # Generate template"
+    echo
+    echo.purple "🌈 Color Scheme:"
+    echo "  $(echo.cyan "Commands/Options:")  Cyan"
+    echo "  $(echo.purple "Categories/Headers:")  Purple with icons"
+    echo "  $(echo.success "Examples:")  Green with check marks"
+    echo "  $(echo.warning "Warnings:")  Yellow with icons"
+    echo "  $(echo.error "Errors:")  Red with X marks"
+}
+
+function generate_colorized_help_template() {
+    cat << 'EOF'
+function SCRIPT_help() {
+    echo.header "🔧 SCRIPT_TITLE"
+    echo
+    echo.cyan "Usage: SCRIPT_NAME [options] <args>"
+    echo
+    echo.purple "⚡ Commands:"
+    echo "  $(echo.cyan 'command1')     Description of command1"
+    echo "  $(echo.cyan 'command2')     Description of command2"
+    echo "  $(echo.cyan 'help')        Show this help message"
+    echo
+    echo.purple "🛠️ Options:"
+    echo "  $(echo.cyan '-h, --help')      Show this help"
+    echo "  $(echo.cyan '-v, --verbose')   Verbose output"
+    echo "  $(echo.cyan '-q, --quiet')     Quiet mode"
+    echo
+    echo.purple "✨ Examples:"
+    echo.success "  ✓ SCRIPT_NAME command1 arg1    # Basic usage"
+    echo.success "  ✓ SCRIPT_NAME --verbose         # Verbose mode"
+    echo.success "  ✓ SCRIPT_NAME help              # Show help"
+    echo
+    echo.info "💡 For more information, see: dotfiles help SCRIPT_NAME"
+    echo
+}
+EOF
+}
+
+function colorize_existing_help() {
+    local script_file="$1"
+    local dry_run="${2:-false}"
+    local create_backup="${3:-false}"
+    local verbose="${4:-false}"
+    
+    if [[ ! -f "$script_file" ]]; then
+        echo.error "Script file not found: $script_file"
+        return 1
+    fi
+    
+    [[ "$verbose" == "true" ]] && echo.info "Processing: $script_file"
+    
+    # Create backup if requested
+    if [[ "$create_backup" == "true" ]]; then
+        cp "$script_file" "${script_file}.backup"
+        echo.success "Created backup: ${script_file}.backup"
+    fi
+    
+    # Read the file
+    local content
+    content=$(cat "$script_file")
+    
+    # Apply colorization patterns
+    local enhanced_content
+    enhanced_content=$(enhance_help_function "$content")
+    
+    if [[ "$dry_run" == "true" ]]; then
+        echo.warning "DRY RUN - Changes that would be applied:"
+        echo "----------------------------------------"
+        echo "$enhanced_content" | head -20
+        echo "... (truncated)"
+        return 0
+    fi
+    
+    # Write enhanced content back
+    echo "$enhanced_content" > "$script_file"
+    echo.success "Enhanced help menu in: $script_file"
+}
+
+function enhance_help_function() {
+    local content="$1"
+    
+    # Enhance function headers
+    content=$(echo "$content" | sed 's/function \([a-zA-Z_-]*\)_help()/function \1_help() { # 🎨 Enhanced help menu/')
+    
+    # Enhance basic echo statements to use colors
+    content=$(echo "$content" | sed 's/echo "Usage:/echo.cyan "Usage:/')
+    content=$(echo "$content" | sed 's/echo "Commands:/echo.purple "⚡ Commands:/')
+    content=$(echo "$content" | sed 's/echo "Options:/echo.purple "🛠️ Options:/')
+    content=$(echo "$content" | sed 's/echo "Examples:/echo.purple "✨ Examples:/')
+    
+    # Enhance command listings (look for indented lines with descriptions)
+    content=$(echo "$content" | sed 's/    echo "\([a-zA-Z-]*\)\(.*\)"/    echo "  $(echo.cyan \"\1\")\2"/')
+    
+    # Enhance option listings 
+    content=$(echo "$content" | sed 's/    echo "  \(-[a-zA-Z-,]*\)\(.*\)"/    echo "  $(echo.cyan \"\1\")\2"/')
+    
+    # Convert plain examples to success format
+    content=$(echo "$content" | sed 's/    echo "  \([^$]*\)"/    echo.success "  ✓ \1"/')
+    
+    echo "$content"
+}
+
+function colorize_all_scripts() {
+    local script_dir="${1:-$DOTFILES_BIN}"
+    local dry_run="${2:-false}"
+    local create_backup="${3:-false}"
+    local verbose="${4:-false}"
+    
+    echo.header "🎨 Colorizing All Help Menus"
+    echo.info "Processing scripts in: $script_dir"
+    echo
+    
+    local count=0
+    local enhanced=0
+    
+    for script in "$script_dir"/*; do
+        [[ ! -f "$script" ]] && continue
+        [[ ! -x "$script" ]] && continue
+        
+        ((count++))
+        
+        # Check if script has a help function
+        if grep -q "function.*help\|.*_help()" "$script"; then
+            [[ "$verbose" == "true" ]] && echo.info "Found help function in: $(basename "$script")"
+            
+            if colorize_existing_help "$script" "$dry_run" "$create_backup" "$verbose"; then
+                ((enhanced++))
+            fi
+        fi
+    done
+    
+    echo
+    echo.success "Processed $count scripts, enhanced $enhanced help menus"
+}
+
+function main() {
+    local dry_run=false
+    local create_backup=false
+    local verbose=false
+    local template_mode=false
+    local script_file=""
+    local all_scripts=false
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                colorize_help_usage
+                exit 0
+                ;;
+            -n|--dry-run)
+                dry_run=true
+                shift
+                ;;
+            -b|--backup)
+                create_backup=true
+                shift
+                ;;
+            -v|--verbose)
+                verbose=true
+                shift
+                ;;
+            --template)
+                template_mode=true
+                shift
+                ;;
+            --all)
+                all_scripts=true
+                shift
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                echo.error "Unknown option: $1"
+                colorize_help_usage
+                exit 1
+                ;;
+            *)
+                script_file="$1"
+                shift
+                ;;
+        esac
+    done
+    
+    # Handle different modes
+    if [[ "$template_mode" == "true" ]]; then
+        generate_colorized_help_template
+        exit 0
+    fi
+    
+    if [[ "$all_scripts" == "true" ]]; then
+        colorize_all_scripts "$DOTFILES_BIN" "$dry_run" "$create_backup" "$verbose"
+        exit 0
+    fi
+    
+    if [[ -z "$script_file" ]]; then
+        echo.error "No script file specified"
+        colorize_help_usage
+        exit 1
+    fi
+    
+    # Convert relative paths to absolute
+    if [[ "$script_file" != /* ]]; then
+        if [[ -f "$DOTFILES_BIN/$script_file" ]]; then
+            script_file="$DOTFILES_BIN/$script_file"
+        elif [[ -f "$DOTFILES_ROOT/$script_file" ]]; then
+            script_file="$DOTFILES_ROOT/$script_file"
+        fi
+    fi
+    
+    colorize_existing_help "$script_file" "$dry_run" "$create_backup" "$verbose"
+}
+
+# Run if called directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

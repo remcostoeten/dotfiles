@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+
+# Simple Dotfiles Help System
+# Clean, fast, and covers all aliases
+
+set -euo pipefail
+
+# Setup
+DOTFILES_ROOT="${DOTFILES_ROOT:-$HOME/.config/dotfiles}"
+source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || {
+    function echo.cyan() { echo -e "\033[0;36m$*\033[0m"; }
+    function echo.purple() { echo -e "\033[0;35m$*\033[0m"; }
+    function echo.success() { echo -e "\033[0;32m✓\033[0m $*"; }
+    function echo.header() { echo -e "\n\033[1;34m$*\033[0m\n"; }
+}
+
+# Global arrays
+declare -A ALIASES=()
+declare -A ALIAS_DESCRIPTIONS=()
+declare -A ALIAS_CATEGORIES=()
+
+# Load all aliases
+function load_aliases() {
+    local aliases_dir="$DOTFILES_ROOT/modules/aliases"
+    [[ ! -d "$aliases_dir" ]] && return
+    
+    for file in "$aliases_dir"/*.aliases; do
+        [[ ! -f "$file" ]] && continue
+        
+        local category=$(basename "$file" .aliases)
+        local pending_alias=""
+        local pending_desc=""
+        
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Handle comment lines with @alias/@desc annotations
+            if [[ "$line" =~ ^#[[:space:]]*@alias[[:space:]]+(.+)$ ]]; then
+                pending_alias="${BASH_REMATCH[1]// /}"
+                continue
+            elif [[ "$line" =~ ^#[[:space:]]*@desc[[:space:]]+(.+)$ ]]; then
+                pending_desc="${BASH_REMATCH[1]}"
+                continue
+            fi
+            
+            # Skip empty lines and other comments
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+            
+            # Parse actual alias lines
+            if [[ "$line" =~ ^[[:space:]]*alias[[:space:]]+([^=]+)=(.+)$ ]]; then
+                local alias_name="${BASH_REMATCH[1]// /}"
+                local alias_command="${BASH_REMATCH[2]}"
+                
+                # Clean up command (remove quotes)
+                alias_command="${alias_command#\"}"
+                alias_command="${alias_command%\"}"
+                alias_command="${alias_command#\'}"
+                alias_command="${alias_command%\'}"
+                
+                # Use pending description or generate one
+                local description="${pending_desc:-"Executes: $alias_command"}"
+                
+                # Store alias info
+                ALIASES["$alias_name"]="$alias_command"
+                ALIAS_DESCRIPTIONS["$alias_name"]="$description"
+                ALIAS_CATEGORIES["$alias_name"]="$category"
+                
+                # Reset pending
+                pending_alias=""
+                pending_desc=""
+            fi
+        done < "$file"
+    done
+}
+
+# Show all aliases in static format
+function show_static() {
+    echo.header "📋 Dotfiles Aliases"
+    
+    # Group by category
+    declare -A categories=()
+    for alias in "${!ALIASES[@]}"; do
+        local cat="${ALIAS_CATEGORIES[$alias]}"
+        if [[ -z "${categories[$cat]:-}" ]]; then
+            categories[$cat]="$alias"
+        else
+            categories[$cat]+=" $alias"
+        fi
+    done
+    
+    # Display each category
+    for category in $(printf '%s\n' "${!categories[@]}" | sort); do
+        echo.purple "━━━ $category ━━━"
+        
+        # Get all aliases for this category and sort them
+        local aliases_in_category=()
+        for alias in "${!ALIASES[@]}"; do
+            if [[ "${ALIAS_CATEGORIES[$alias]}" == "$category" ]]; then
+                aliases_in_category+=("$alias")
+            fi
+        done
+        
+        # Sort and display aliases
+        IFS=$'\n' sorted=($(sort <<<"${aliases_in_category[*]}"))
+        
+        for alias_name in "${sorted[@]}"; do
+            local cmd="${ALIASES[$alias_name]}"
+            local desc="${ALIAS_DESCRIPTIONS[$alias_name]}"
+            printf "  %-15s → %-30s %s\n" "$(echo.cyan "$alias_name")" "$cmd" "$desc"
+        done
+    done
+    
+    echo.success "Total: ${#ALIASES[@]} aliases across ${#categories[@]} categories"
+}
+
+# Interactive mode with fzf
+function show_interactive() {
+    if ! command -v fzf >/dev/null; then
+        echo "⚠ fzf not available, showing static view"
+        show_static
+        return
+    fi
+    
+    echo.header "🔍 Interactive Alias Browser"
+    echo "Use fuzzy search to find and preview aliases..."
+    echo
+    
+    # Create searchable list
+    local temp_file=$(mktemp)
+    for alias_name in "${!ALIASES[@]}"; do
+        local cmd="${ALIASES[$alias_name]}"
+        local desc="${ALIAS_DESCRIPTIONS[$alias_name]}"
+        local cat="${ALIAS_CATEGORIES[$alias_name]}"
+        echo "$alias_name | $cat | $cmd | $desc" >> "$temp_file"
+    done
+    
+    # Run fzf with preview
+    local selected
+    selected=$(sort "$temp_file" | fzf \
+        --height 70% \
+        --layout=reverse \
+        --border=rounded \
+        --prompt="🔍 Search aliases: " \
+        --header="Press Enter to see details, Esc to quit" \
+        --delimiter=' | ' \
+        --preview='echo -e "\033[1;36m{1}\033[0m\n\033[0;35mCategory:\033[0m {2}\n\033[0;33mCommand:\033[0m {3}\n\033[0;32mDescription:\033[0m {4}"' \
+        --preview-window=up:4:wrap
+    )
+    
+    rm -f "$temp_file"
+    
+    if [[ -n "$selected" ]]; then
+        local alias_name=$(echo "$selected" | cut -d'|' -f1 | xargs)
+        echo
+        echo.header "⚡ $alias_name"
+        echo.cyan "Command: ${ALIASES[$alias_name]}"
+        echo.purple "Description: ${ALIAS_DESCRIPTIONS[$alias_name]}"
+        echo.success "Category: ${ALIAS_CATEGORIES[$alias_name]}"
+        echo
+    fi
+}
+
+# Search aliases
+function search_aliases() {
+    local query="$1"
+    echo.header "🔍 Search Results: '$query'"
+    
+    local found=false
+    for alias_name in "${!ALIASES[@]}"; do
+        local cmd="${ALIASES[$alias_name]}"
+        local desc="${ALIAS_DESCRIPTIONS[$alias_name]}"
+        
+        if [[ "$alias_name" =~ $query ]] || [[ "$cmd" =~ $query ]] || [[ "$desc" =~ $query ]]; then
+            found=true
+            printf "  %-12s → %-25s %s\n" "$(echo.cyan "$alias_name")" "$cmd" "$desc"
+        fi
+    done
+    
+    if [[ "$found" == false ]]; then
+        echo "No aliases found matching: $query"
+    fi
+}
+
+# Show specific alias
+function show_alias() {
+    local alias_name="$1"
+    
+    if [[ -z "${ALIASES[$alias_name]:-}" ]]; then
+        echo "Alias '$alias_name' not found"
+        echo
+        echo "Available aliases:"
+        printf '%s\n' "${!ALIASES[@]}" | sort | head -10
+        [[ ${#ALIASES[@]} -gt 10 ]] && echo "... and $((${#ALIASES[@]} - 10)) more"
+        return 1
+    fi
+    
+    echo.header "⚡ $alias_name"
+    echo.cyan "Command: ${ALIASES[$alias_name]}"
+    echo.purple "Description: ${ALIAS_DESCRIPTIONS[$alias_name]}" 
+    echo.success "Category: ${ALIAS_CATEGORIES[$alias_name]}"
+}
+
+# Usage help
+function usage() {
+    echo.header "📖 Help Usage"
+    echo "Usage: help [options] [alias-name]"
+    echo
+    echo "Options:"
+    echo "  (none)           Show all aliases (static)"
+    echo "  -i, --interactive Interactive browser with fzf"
+    echo "  -s, --search     Search aliases"
+    echo "  -h, --help       Show this help"
+    echo
+    echo "Examples:"
+    echo "  help             # Show all aliases"
+    echo "  help -i          # Interactive browser"  
+    echo "  help -s git      # Search for 'git'"
+    echo "  help ls          # Show specific alias 'ls'"
+    echo
+}
+
+# Main function
+function main() {
+    # Load all aliases first
+    load_aliases
+    
+    case "${1:-}" in
+        -h|--help)
+            usage
+            ;;
+        -i|--interactive)
+            show_interactive
+            ;;
+        -s|--search)
+            [[ -z "${2:-}" ]] && { echo "Search term required"; exit 1; }
+            search_aliases "$2"
+            ;;
+        "")
+            show_static
+            ;;
+        *)
+            show_alias "$1"
+            ;;
+    esac
+}
+
+main "$@"

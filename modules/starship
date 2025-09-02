@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+
+readonly STARSHIP_CONFIG_DIR="$DOTFILES_ROOT/configs/starship"
+readonly STARSHIP_VARIANTS_DIR="$STARSHIP_CONFIG_DIR/variants"
+readonly STARSHIP_CURRENT_FILE="$STARSHIP_CONFIG_DIR/.current"
+readonly STARSHIP_CONFIG_PATH="$STARSHIP_CONFIG_DIR/starship.toml"
+readonly STARSHIP_HOME_CONFIG="$HOME/.config/starship.toml"
+
+function starship_init() {
+    echo.debug "Initializing starship module"
+    
+    ensure_command "starship" "curl -sS https://starship.rs/install.sh | sh"
+    
+    ensure_dir "$STARSHIP_CONFIG_DIR"
+    ensure_dir "$STARSHIP_VARIANTS_DIR"
+    ensure_file "$STARSHIP_CURRENT_FILE" "pastel-powerline"
+    
+    starship_update_config
+    starship_setup_prompt
+}
+
+function starship_setup_prompt() {
+    if command -v starship >/dev/null 2>&1; then
+        export STARSHIP_CONFIG="$STARSHIP_HOME_CONFIG"
+        export DOTFILES_PROMPT_MANAGER="starship"
+        
+        if [[ "$DOTFILES_SHELL" == "zsh" ]]; then
+            eval "$(starship init zsh)"
+        elif [[ "$DOTFILES_SHELL" == "bash" ]]; then
+            eval "$(starship init bash)"
+        fi
+        echo.debug "Starship prompt initialized for $DOTFILES_SHELL"
+    fi
+}
+
+function starship_update_config() {
+    local current_variant
+    current_variant=$(cat "$STARSHIP_CURRENT_FILE" 2>/dev/null || echo "pastel-powerline")
+    
+    local variant_file="$STARSHIP_VARIANTS_DIR/$current_variant.toml"
+    
+    if [[ -f "$variant_file" ]]; then
+        safe_link "$variant_file" "$STARSHIP_CONFIG_PATH"
+        safe_link "$STARSHIP_CONFIG_PATH" "$STARSHIP_HOME_CONFIG"
+        echo.debug "Starship config linked: $current_variant"
+    else
+        echo.error "Starship variant not found: $current_variant"
+        return 1
+    fi
+}
+
+function starship_switch() {
+    local variant="${1:-}"
+    
+    if [[ -z "$variant" ]]; then
+        echo.error "Usage: starship-switch <variant>"
+        starship_list_variants
+        return 1
+    fi
+    
+    local variant_file="$STARSHIP_VARIANTS_DIR/$variant.toml"
+    
+    if [[ ! -f "$variant_file" ]]; then
+        echo.error "Starship variant '$variant' not found"
+        starship_list_variants
+        return 1
+    fi
+    
+    echo "$variant" > "$STARSHIP_CURRENT_FILE"
+    starship_update_config
+    
+    echo.success "Switched to starship variant: $variant"
+    echo.info "Restart your shell or run 'reload' to see changes"
+}
+
+function starship_list_variants() {
+    echo.header "Available Starship Variants"
+    
+    local current_variant
+    current_variant=$(cat "$STARSHIP_CURRENT_FILE" 2>/dev/null || echo "none")
+    
+    if [[ -d "$STARSHIP_VARIANTS_DIR" ]]; then
+        for variant_file in "$STARSHIP_VARIANTS_DIR"/*.toml; do
+            if [[ -f "$variant_file" ]]; then
+                local variant_name
+                variant_name=$(basename "$variant_file" .toml)
+                
+                if [[ "$variant_name" == "$current_variant" ]]; then
+                    echo.info "  ✓ $variant_name (current)"
+                else
+                    echo "    $variant_name"
+                fi
+            fi
+        done
+    else
+        echo.warning "No variants directory found"
+    fi
+}
+
+function starship_current() {
+    local current_variant
+    current_variant=$(cat "$STARSHIP_CURRENT_FILE" 2>/dev/null || echo "none")
+    echo.info "Current starship variant: $current_variant"
+}
+
+function starship_help() {
+    echo.header "Starship Module Help"
+    echo "Manages starship prompt configurations and variants"
+    echo ""
+    echo "Available commands:"
+    echo "  starship-switch <variant>    Switch to a different starship variant"
+    echo "  starship-list               List all available variants"
+    echo "  starship-current            Show current active variant"
+    echo "  starship-help               Show this help"
+    echo ""
+    echo "Available variants:"
+    starship_list_variants
+}
+
+alias starship-switch='starship_switch'
+alias starship-list='starship_list_variants'
+alias starship-current='starship_current'
+alias starship-help='starship_help'
+
+starship_init

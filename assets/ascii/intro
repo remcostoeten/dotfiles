@@ -2,6 +2,11 @@ function echo.dotfiles_banner() {
     [[ -n "$DOTFILES_BANNER_SHOWN" ]] && return 0
     export DOTFILES_BANNER_SHOWN=1
     
+    # Check sync status before displaying banner
+    if declare -f dotfiles_check_sync_status >/dev/null 2>&1; then
+        dotfiles_check_sync_status >/dev/null 2>&1
+    fi
+    
     # Pastel colors (soft, muted palette)
     local pastel_pink='\033[38;5;218m'      # soft pink
     local pastel_blue='\033[38;5;117m'      # soft blue
@@ -36,9 +41,25 @@ function echo.dotfiles_banner() {
     echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
     echo -e "${pastel_aqua}║${NC}                    ${light_fg}Remco Stoeten's dotfiles${NC}                    ${pastel_aqua}║${NC}"
     echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
-    echo -e "${pastel_aqua}║${NC}        ${pastel_purple}ver. ${DOTFILES_VERSION:-'unknown'}${NC} ${pastel_orange}│${NC} ${pastel_yellow}last update ${last_update}${NC} ${pastel_orange}│${NC} ${dim_gray}reload • doctor • envs${NC}         ${pastel_aqua}║${NC}"
+    # Calculate centering for version line
+    local version_text="ver. ${DOTFILES_VERSION:-'unknown'} │ last update ${last_update}"
+    local text_length=${#version_text}
+    local box_width=59  # Total box width minus borders
+    local padding=$(( (box_width - text_length) / 2 ))
+    local left_spaces=$(printf "%*s" $padding "")
+    local right_spaces=$(printf "%*s" $(( box_width - text_length - padding )) "")
+    
+    echo -e "${pastel_aqua}║${NC}${left_spaces}${pastel_purple}ver. ${DOTFILES_VERSION:-'unknown'}${NC} ${pastel_orange}│${NC} ${pastel_yellow}last update ${last_update}${NC}${right_spaces}${pastel_aqua}║${NC}"
     echo -e "${pastel_aqua}║${NC}                                                           ${pastel_aqua}║${NC}"
     echo -e "${pastel_aqua}╚═══════════════════════════════════════════════════════════╝${NC}"
+    
+    # Display sync warnings if any exist
+    if [[ -n "$DOTFILES_SYNC_WARNINGS" ]]; then
+        echo
+        echo -e "${pastel_orange}⚠${NC} ${pastel_pink}Sync Status Warning:${NC} ${pastel_yellow}${DOTFILES_SYNC_WARNINGS}${NC}"
+        echo -e "${dim_gray}   Run ${pastel_blue}dotfiles sync${NC} ${dim_gray}or ${pastel_blue}tour${NC} ${dim_gray}to synchronize${NC}"
+    fi
+    
     echo
 }
 

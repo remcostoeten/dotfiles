@@ -1,13 +1,79 @@
 # @alias z
 # @desc Zoxide (smarter cd)
 
+# Fallback warning function if echo.warning is not available
+if ! declare -f echo.warning >/dev/null 2>&1; then
+    function echo.warning() { echo "[WARNING] $*" >&2; }
+fi
+if ! declare -f echo.debug >/dev/null 2>&1; then
+    function echo.debug() { [[ "${DOTFILES_DEBUG:-0}" == "1" ]] && echo "[DEBUG] $*" >&2; return 0; }
+fi
+
 if command -v zoxide &>/dev/null; then
-    if [[ "$DOTFILES_SHELL" == "zsh" ]]; then
-        eval "$(zoxide init zsh 2>/dev/null)" || echo.warning "Failed to initialize zoxide for zsh"
-    elif [[ "$DOTFILES_SHELL" == "bash" ]]; then
-        eval "$(zoxide init bash 2>/dev/null)" || echo.warning "Failed to initialize zoxide for bash"
+    # Properly detect current shell
+    current_shell=""
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        current_shell="zsh"
+    elif [[ -n "${BASH_VERSION:-}" ]]; then
+        current_shell="bash"
     else
-        eval "$(zoxide init "${SHELL##*/}" 2>/dev/null)" || echo.warning "Failed to initialize zoxide for ${SHELL##*/}"
+        current_shell="$(basename "${SHELL}")"
+    fi
+    
+    echo.debug "Initializing zoxide for ${current_shell}"
+    
+    # Always succeeds - use fallback if full init fails
+    {
+        # Try full initialization first
+        if eval "$(zoxide init "${current_shell}" 2>/dev/null)"; then
+            echo.debug "Successfully initialized zoxide with completions for ${current_shell}"
+        else
+            # Fallback: try without completions/interactive features
+            if eval "$(zoxide init "${current_shell}" --no-cmd 2>/dev/null)"; then
+                # Manually set up basic commands
+                function z() { __zoxide_z "$@"; }
+                function zi() { __zoxide_zi "$@"; }
+                echo.debug "Successfully initialized zoxide (basic mode) for ${current_shell}"
+            else
+                # Last resort: create minimal z function
+                function z() {
+                    if [[ $# -eq 0 ]]; then
+                        cd ~
+                    elif [[ -d "$1" ]]; then
+                        cd "$1"
+                    else
+                        local result
+                        result="$(command zoxide query --exclude "$(pwd)" -- "$@" 2>/dev/null)" && cd "$result" || {
+                            echo.warning "zoxide query failed for: $*"
+                            return 1
+                        }
+                    fi
+                }
+                function zi() {
+                    local result
+                    result="$(command zoxide query --interactive -- "$@" 2>/dev/null)" && cd "$result" || {
+                        echo.warning "zoxide interactive query failed"
+                        return 1
+                    }
+                }
+                echo.debug "Initialized minimal zoxide functions for ${current_shell}"
+            fi
+        fi
+    } 2>/dev/null || true
+    
+    # Ensure we always have some form of z function available
+    if ! declare -f z >/dev/null 2>&1; then
+        function z() {
+            if [[ $# -eq 0 ]]; then
+                cd ~
+            elif [[ -d "$1" ]]; then
+                cd "$1"
+            else
+                echo.warning "zoxide not properly initialized - falling back to cd"
+                cd "$1" 2>/dev/null || echo.error "Directory not found: $1"
+            fi
+        }
+        echo.debug "Created fallback z function"
     fi
 else
     echo.debug "zoxide not found, skipping initialization"

@@ -21,8 +21,18 @@ function safe_source() {
     fi
     
     (
-        set -euo pipefail
-        trap 'echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Failed to source: $file (line $LINENO)" >> "$DOTFILES_ERROR_LOG"' ERR
+        if [[ -n "${BASH_VERSION:-}" ]]; then
+            set -euo pipefail
+            trap 'echo "$(date "+%Y-%m-%d %H:%M:%S") [ERROR] Failed to source: $file (line $LINENO)" >> "$DOTFILES_ERROR_LOG"' ERR
+        elif [[ -n "${ZSH_VERSION:-}" ]]; then
+            set -e -u
+            setopt pipefail 2>/dev/null || true
+            trap 'echo "$(date "+%Y-%m-%d %H:%M:%S") [ERROR] Failed to source: $file (line $LINENO)" >> "$DOTFILES_ERROR_LOG"' ZERR
+        else
+            set -e -u
+            set -o pipefail 2>/dev/null || true
+            trap 'echo "$(date "+%Y-%m-%d %H:%M:%S") [ERROR] Failed to source: $file (line $LINENO)" >> "$DOTFILES_ERROR_LOG"' ERR
+        fi
         
         source "$file"
     ) 2>/dev/null
@@ -78,8 +88,18 @@ function safe_eval() {
     local description="${2:-command}"
     
     (
-        set -euo pipefail
-        trap 'echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Failed to eval: $command" >> "$DOTFILES_ERROR_LOG"' ERR
+        if [[ -n "${BASH_VERSION:-}" ]]; then
+            set -euo pipefail
+            trap 'echo "$(date "+%Y-%m-%d %H:%M:%S") [ERROR] Failed to eval: $command" >> "$DOTFILES_ERROR_LOG"' ERR
+        elif [[ -n "${ZSH_VERSION:-}" ]]; then
+            set -e -u
+            setopt pipefail 2>/dev/null || true
+            trap 'echo "$(date "+%Y-%m-%d %H:%M:%S") [ERROR] Failed to eval: $command" >> "$DOTFILES_ERROR_LOG"' ZERR
+        else
+            set -e -u
+            set -o pipefail 2>/dev/null || true
+            trap 'echo "$(date "+%Y-%m-%d %H:%M:%S") [ERROR] Failed to eval: $command" >> "$DOTFILES_ERROR_LOG"' ERR
+        fi
         
         eval "$command"
     ) 2>/dev/null

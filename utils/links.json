@@ -2,5 +2,13 @@
   "/home/remcostoeten/.config/kitty/kitty.conf": {
     "source": "/home/remcostoeten/.config/dotfiles/configs/kitty/kitty.conf",
     "created": "2025-08-29T01:09:53+02:00"
+  },
+  "/home/remcostoeten/.zshrc": {
+    "source": "/home/remcostoeten/.config/dotfiles/cfg",
+    "created": "2025-08-29T03:38:45+02:00"
+  },
+  "/home/remcostoeten/.config/dotfiles/configs/starship/variants/pastel-powerline.toml": {
+    "source": "/home/remcostoeten/.config/dotfiles/configs/starship/variants/pastel-powerline.toml",
+    "created": "2025-08-29T21:04:44+02:00"
   }
 }

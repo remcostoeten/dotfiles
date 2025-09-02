@@ -1,0 +1,297 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Source colors if available
+if [[ -f "${HOME}/.config/dotfiles/core/_colors" ]]; then
+    source "${HOME}/.config/dotfiles/core/_colors"
+else
+    # Fallback color functions
+    function echo.header() { echo "=== $* ==="; }
+    function echo.info() { echo "ℹ $*"; }
+    function echo.success() { echo "✓ $*"; }
+    function echo.error() { echo "✗ $*" >&2; }
+    function echo.warning() { echo "⚠ $*"; }
+    function echo.cyan() { echo "$*"; }
+    function echo.purple() { echo "$*"; }
+fi
+
+echo.header "📄 Interactive Source-All Script Generator"
+echo.info "Create scripts that automatically source files in directories"
+echo
+
+# Get sourcer name
+echo.cyan "Enter sourcer name:"
+read -r NAME
+[[ -z "$NAME" ]] && { echo.error "No name given"; exit 1; }
+
+# File type selection
+echo.header "🎯 File Type Selection"
+echo.info "What types of files should be sourced?"
+echo
+echo.purple "  [1] Shell files only (.sh)"
+echo.purple "  [2] Fish shell files only (.fish)"
+echo.purple "  [3] Bash files only (.bash)"
+echo.purple "  [4] ZSH files only (.zsh)"
+echo.purple "  [5] Extensionless files only"
+echo.purple "  [6] All shell files (.sh, .bash, .zsh)"
+echo.purple "  [7] Custom pattern (you specify)"
+echo
+echo.cyan "Choose file type [1-7]: "
+read -r file_choice
+
+case "$file_choice" in
+    1)
+        FILE_PATTERN="*.sh"
+        FILE_DESC="Shell files (.sh)"
+        SHELL_TYPE="sh"
+        ;;
+    2)
+        FILE_PATTERN="*.fish"
+        FILE_DESC="Fish shell files (.fish)"
+        SHELL_TYPE="fish"
+        ;;
+    3)
+        FILE_PATTERN="*.bash"
+        FILE_DESC="Bash files (.bash)"
+        SHELL_TYPE="bash"
+        ;;
+    4)
+        FILE_PATTERN="*.zsh"
+        FILE_DESC="ZSH files (.zsh)"
+        SHELL_TYPE="zsh"
+        ;;
+    5)
+        FILE_PATTERN="*"
+        FILE_DESC="Extensionless files"
+        SHELL_TYPE="sh"
+        EXTENSIONLESS_ONLY=true
+        ;;
+    6)
+        FILE_PATTERN="*.sh *.bash *.zsh"
+        FILE_DESC="All shell files (.sh, .bash, .zsh)"
+        SHELL_TYPE="bash"
+        MULTI_PATTERN=true
+        ;;
+    7)
+        echo.cyan "Enter custom file pattern (e.g., '*.conf', '*.env'):"
+        read -r FILE_PATTERN
+        FILE_DESC="Custom pattern ($FILE_PATTERN)"
+        SHELL_TYPE="sh"
+        ;;
+    *)
+        echo.warning "Invalid choice, defaulting to .sh files"
+        FILE_PATTERN="*.sh"
+        FILE_DESC="Shell files (.sh)"
+        SHELL_TYPE="sh"
+        ;;
+esac
+
+echo.success "Selected: $FILE_DESC"
+echo
+
+# Directory selection options
+echo.header "📁 Directory Selection"
+echo.info "Choose how to select the target directory:"
+echo
+echo.purple "  [1] Use fzf picker (if available)"
+echo.purple "  [2] Enter path manually"
+echo.purple "  [3] Use current directory ($(pwd))"
+echo
+echo.cyan "Choose method [1-3]: "
+read -r dir_choice
+
+case "$dir_choice" in
+    1)
+        if command -v fzf >/dev/null 2>&1; then
+            echo.info "Select target directory with fzf..."
+            TARGET_DIR=$(find "$HOME" -type d 2>/dev/null | fzf --prompt="Target dir> " --height=20 || true)
+        else
+            echo.warning "fzf not available, falling back to manual entry"
+            echo.cyan "Enter target directory path:"
+            read -r TARGET_DIR
+        fi
+        ;;
+    2)
+        echo.cyan "Enter target directory path:"
+        read -r TARGET_DIR
+        ;;
+    3)
+        TARGET_DIR=$(pwd)
+        echo.info "Using current directory: $TARGET_DIR"
+        ;;
+    *)
+        echo.warning "Invalid choice, using manual entry"
+        echo.cyan "Enter target directory path:"
+        read -r TARGET_DIR
+        ;;
+esac
+
+[[ -z "$TARGET_DIR" ]] && { echo.error "No directory selected"; exit 1; }
+[[ ! -d "$TARGET_DIR" ]] && { echo.error "Invalid directory: $TARGET_DIR"; exit 1; }
+
+echo.success "Target directory: $TARGET_DIR"
+echo
+
+# Save location selection
+echo.header "💾 Save Location"
+echo.info "Where should the sourcer script be saved?"
+echo
+echo.purple "  [1] Use fzf picker"
+echo.purple "  [2] Enter path manually"
+echo.purple "  [3] Save to ~/bin (if exists)"
+echo.purple "  [4] Save to current directory"
+echo
+echo.cyan "Choose save location [1-4]: "
+read -r save_choice
+
+case "$save_choice" in
+    1)
+        if command -v fzf >/dev/null 2>&1; then
+            echo.info "Select save directory with fzf..."
+            SAVE_DIR=$(find "$HOME" -type d 2>/dev/null | fzf --prompt="Save dir> " --height=20 || true)
+        else
+            echo.warning "fzf not available, falling back to manual entry"
+            echo.cyan "Enter save directory path:"
+            read -r SAVE_DIR
+        fi
+        ;;
+    2)
+        echo.cyan "Enter save directory path:"
+        read -r SAVE_DIR
+        ;;
+    3)
+        if [[ -d "$HOME/bin" ]]; then
+            SAVE_DIR="$HOME/bin"
+            echo.info "Using ~/bin directory"
+        else
+            echo.warning "~/bin doesn't exist, falling back to manual entry"
+            echo.cyan "Enter save directory path:"
+            read -r SAVE_DIR
+        fi
+        ;;
+    4)
+        SAVE_DIR=$(pwd)
+        echo.info "Using current directory: $SAVE_DIR"
+        ;;
+    *)
+        echo.warning "Invalid choice, using manual entry"
+        echo.cyan "Enter save directory path:"
+        read -r SAVE_DIR
+        ;;
+esac
+
+[[ -z "$SAVE_DIR" ]] && { echo.error "No save directory selected"; exit 1; }
+[[ ! -d "$SAVE_DIR" ]] && { echo.error "Invalid save directory: $SAVE_DIR"; exit 1; }
+
+SAVE_PATH="$SAVE_DIR/$NAME-sourcer"
+echo.success "Will save to: $SAVE_PATH"
+echo
+
+# Generate the sourcer script
+echo.header "🚀 Generating Sourcer Script"
+
+# Create the script content based on file type choice
+if [[ "${EXTENSIONLESS_ONLY:-}" == "true" ]]; then
+    # Extensionless files only
+    cat > "$SAVE_PATH" <<EOF
+#!/usr/bin/env $SHELL_TYPE
+# =============================================================================
+# Auto-generated sourcer for: $TARGET_DIR
+# File type: $FILE_DESC
+# Generated: $(date)
+# Generator: dotfiles source-all generator v2.0
+# =============================================================================
+
+SRC_DIR="$TARGET_DIR"
+[[ ! -d "\$SRC_DIR" ]] && exit 0
+
+echo "📄 Sourcing $FILE_DESC from \$SRC_DIR..."
+
+# Find extensionless files (no dots in basename)
+for file in \$(find "\$SRC_DIR" -type f -executable | grep -v '\\.' | sort); do
+    [[ -f "\$file" ]] || continue
+    echo "  ✓ Sourcing: \$(basename "\$file")"
+    # shellcheck disable=SC1090
+    source "\$file" 2>/dev/null || {
+        echo "  ✗ Failed to source: \$(basename "\$file")"
+    }
+done
+
+echo "✅ Finished sourcing $FILE_DESC"
+EOF
+elif [[ "${MULTI_PATTERN:-}" == "true" ]]; then
+    # Multiple file patterns
+    cat > "$SAVE_PATH" <<EOF
+#!/usr/bin/env $SHELL_TYPE
+# =============================================================================
+# Auto-generated sourcer for: $TARGET_DIR
+# File type: $FILE_DESC
+# Generated: $(date)
+# Generator: dotfiles source-all generator v2.0
+# =============================================================================
+
+SRC_DIR="$TARGET_DIR"
+[[ ! -d "\$SRC_DIR" ]] && exit 0
+
+echo "📄 Sourcing $FILE_DESC from \$SRC_DIR..."
+
+# Source multiple file types
+for pattern in $FILE_PATTERN; do
+    for file in \$(find "\$SRC_DIR" -type f -name "\$pattern" | sort); do
+        [[ -f "\$file" ]] || continue
+        [[ -x "\$file" ]] && continue  # Skip executable files
+        echo "  ✓ Sourcing: \$(basename "\$file")"
+        # shellcheck disable=SC1090
+        source "\$file" 2>/dev/null || {
+            echo "  ✗ Failed to source: \$(basename "\$file")"
+        }
+    done
+done
+
+echo "✅ Finished sourcing $FILE_DESC"
+EOF
+else
+    # Single file pattern
+    cat > "$SAVE_PATH" <<EOF
+#!/usr/bin/env $SHELL_TYPE
+# =============================================================================
+# Auto-generated sourcer for: $TARGET_DIR
+# File type: $FILE_DESC
+# Generated: $(date)
+# Generator: dotfiles source-all generator v2.0
+# =============================================================================
+
+SRC_DIR="$TARGET_DIR"
+[[ ! -d "\$SRC_DIR" ]] && exit 0
+
+echo "📄 Sourcing $FILE_DESC from \$SRC_DIR..."
+
+for file in \$(find "\$SRC_DIR" -type f -name "$FILE_PATTERN" | sort); do
+    [[ -f "\$file" ]] || continue
+    [[ -x "\$file" ]] && continue  # Skip executable files
+    echo "  ✓ Sourcing: \$(basename "\$file")"
+    # shellcheck disable=SC1090
+    source "\$file" 2>/dev/null || {
+        echo "  ✗ Failed to source: \$(basename "\$file")"
+    }
+done
+
+echo "✅ Finished sourcing $FILE_DESC"
+EOF
+fi
+
+chmod +x "$SAVE_PATH"
+
+echo.success "✨ Sourcer script created successfully!"
+echo
+echo.info "📁 Location: $SAVE_PATH"
+echo.info "🎯 Target: $TARGET_DIR"
+echo.info "📄 Files: $FILE_DESC"
+echo
+echo.cyan "To use the sourcer:"
+echo "  source $SAVE_PATH"
+echo "  # or"
+echo "  $SAVE_PATH"
+echo
+

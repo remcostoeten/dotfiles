@@ -1,0 +1,91 @@
+{
+  "version": "1.0.0",
+  "modules": {
+    "aesthetic": {
+      "enabled": true,
+      "type": "module",
+      "description": "Beautiful terminal setup with modern CLI tools",
+      "dependencies": [
+        "eza",
+        "bat",
+        "fzf",
+        "zoxide"
+      ],
+      "auto_enable": true
+    },
+    "keys-fishlike": {
+      "enabled": true,
+      "type": "module",
+      "description": "Fish-like key bindings for ZSH",
+      "dependencies": [],
+      "auto_enable": true
+    },
+    "pastel-banner": {
+      "enabled": false,
+      "type": "module",
+      "description": "Colorful startup banner",
+      "dependencies": [
+        "pastel"
+      ],
+      "auto_enable": false
+    },
+    "starship": {
+      "enabled": true,
+      "type": "module",
+      "description": "Cross-shell prompt customization",
+      "dependencies": [
+        "starship"
+      ],
+      "auto_enable": false
+    }
+  },
+  "plugins": {
+    "zsh-enhancements": {
+      "enabled": true,
+      "type": "plugin",
+      "description": "ZSH autosuggestions and syntax highlighting",
+      "dependencies": [
+        "git"
+      ],
+      "auto_enable": true
+    },
+    "secrets-sync": {
+      "enabled": true,
+      "type": "plugin",
+      "description": "Secure environment variable synchronization",
+      "dependencies": [],
+      "auto_enable": false
+    }
+  },
+  "aliases": {
+    "dotfiles": {
+      "enabled": true,
+      "type": "alias",
+      "description": "Dotfiles management aliases",
+      "file": "dotfiles.aliases"
+    },
+    "general": {
+      "enabled": true,
+      "type": "alias",
+      "description": "General purpose aliases",
+      "file": "general.aliases"
+    },
+    "git": {
+      "enabled": true,
+      "type": "alias",
+      "description": "Git shortcuts and enhancements",
+      "file": "git.aliases"
+    },
+    "zoxide": {
+      "enabled": true,
+      "type": "alias",
+      "description": "Smart directory jumping aliases",
+      "file": "zoxide.aliases"
+    }
+  },
+  "metadata": {
+    "last_updated": "2024-08-31T22:18:00Z",
+    "managed_by": "dotfiles v2.1.0",
+    "config_format": "json"
+  }
+}

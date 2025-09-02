@@ -1,0 +1,39 @@
+# Font
+font-family = JetBrainsMono Nerd Font
+font-size = 16 
+
+# Catppuccin Mocha colors
+background = #1e1e2e
+foreground = #cdd6f4
+selection-background = #f5e0dc
+selection-foreground = #1e1e2e
+cursor-color = #f38ba8
+palette = [
+  #45475a, #f38ba8, #a6e3a1, #f9e2af,
+  #89b4fa, #cba6f7, #94e2d5, #bac2de,
+  #585b70, #f38ba8, #a6e3a1, #f9e2af,
+  #89b4fa, #cba6f7, #94e2d5, #a6adc8
+]
+
+# Window
+window-padding-x = 8
+window-padding-y = 8
+window-border-width = 1
+window-border-color-active = #89b4fa
+window-border-color-inactive = #313244
+
+# Keybindings
+keybind = ctrl+space, split:horizontal
+keybind = ctrl+shift+space, split:vertical
+keybind = ctrl+w, close-pane
+keybind = ctrl+h, focus-pane:left
+keybind = ctrl+l, focus-pane:right
+keybind = ctrl+k, focus-pane:up
+keybind = ctrl+j, focus-pane:down
+
+# Resize panes
+keybind = ctrl+left, resize-pane:left
+keybind = ctrl+right, resize-pane:right
+keybind = ctrl+up, resize-pane:up
+keybind = ctrl+down, resize-pane:down
+

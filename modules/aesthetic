@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+
+# Module: aesthetic
+# Description: Aesthetic enhancements for a beautiful ricer terminal with Starship prompt
+# Author: remcostoeten
+# Date: 2025-08-26
+# Updated: 2025-08-31
+
+# Starship themes directory
+export STARSHIP_THEMES_DIR="$HOME/.config/dotfiles/configs/starship/themes"
+export STARSHIP_CONFIG="$HOME/.config/starship.toml"
+
+function aesthetic_init() {
+    # Safe debug output (fallback if echo.debug not available)
+    if command -v echo.debug >/dev/null 2>&1; then
+        echo.debug "Initializing aesthetic ricer module with Starship"
+    fi
+    
+    # Initialize Starship if available
+    if command -v starship >/dev/null 2>&1; then
+        if command -v echo.debug >/dev/null 2>&1; then
+            echo.debug "Loading Starship prompt"
+        fi
+        eval "$(starship init zsh)"
+        
+        # Ensure themes directory exists (safe fallback)
+        if command -v ensure_dir >/dev/null 2>&1; then
+            ensure_dir "$STARSHIP_THEMES_DIR"
+        else
+            [[ ! -d "$STARSHIP_THEMES_DIR" ]] && mkdir -p "$STARSHIP_THEMES_DIR"
+        fi
+        
+        if command -v echo.verbose >/dev/null 2>&1; then
+            echo.verbose "Starship prompt loaded successfully"
+        fi
+    else
+        if command -v echo.warning >/dev/null 2>&1; then
+            echo.warning "Starship not found. Install with: curl -sS https://starship.rs/install.sh | sh"
+        else
+            echo "⚠ Starship not found. Install with: curl -sS https://starship.rs/install.sh | sh"
+        fi
+    fi
+}
+
+function aesthetic_welcome() {
+    if [[ "$DOTFILES_VERBOSE" == "1" ]]; then
+        if command -v echo.header >/dev/null 2>&1; then
+            echo.header "✨ Aesthetic Terminal Loaded"
+            echo.info "🚀 Starship prompt: $(starship --version 2>/dev/null || echo 'Not installed')"
+            echo.info "🎨 Current theme: $(basename "$(readlink -f "$STARSHIP_CONFIG" 2>/dev/null || echo 'gruvbox')")"
+            echo.info "💡 Type 'ae help' for aesthetic commands"
+        else
+            echo "✨ Aesthetic Terminal Loaded"
+            echo "🚀 Starship prompt: $(starship --version 2>/dev/null || echo 'Not installed')"
+            echo "🎨 Current theme: $(basename "$(readlink -f "$STARSHIP_CONFIG" 2>/dev/null || echo 'gruvbox')")"
+            echo "💡 Type 'ae help' for aesthetic commands"
+        fi
+    fi
+}
+
+# Safe echo functions
+function _safe_echo_header() { if command -v echo.header >/dev/null 2>&1; then echo.header "$1"; else echo -e "\n\033[1;34m$1\033[0m"; fi }
+function _safe_echo_cyan() { if command -v echo.cyan >/dev/null 2>&1; then echo.cyan "$1"; else echo -e "\033[0;36m$1\033[0m"; fi }
+function _safe_echo_info() { if command -v echo.info >/dev/null 2>&1; then echo.info "$1"; else echo "ℹ $1"; fi }
+function _safe_echo_success() { if command -v echo.success >/dev/null 2>&1; then echo.success "$1"; else echo -e "\033[0;32m✓ $1\033[0m"; fi }
+function _safe_echo_error() { if command -v echo.error >/dev/null 2>&1; then echo.error "$1"; else echo -e "\033[0;31m✗ $1\033[0m"; fi }
+function _safe_echo_warning() { if command -v echo.warning >/dev/null 2>&1; then echo.warning "$1"; else echo -e "\033[0;33m⚠ $1\033[0m"; fi }
+function _safe_link() { if command -v safe_link >/dev/null 2>&1; then safe_link "$1" "$2"; else ln -sf "$1" "$2"; fi }
+
+function aesthetic_help() {
+    _safe_echo_header "🎨 Aesthetic Ricer Module Help"
+    echo ""
+    _safe_echo_cyan "Starship Prompt Commands:"
+    echo "  starship-theme [theme]   Switch between Starship themes"
+    echo "  starship-themes          List available themes"
+    echo "  starship-reload          Reload Starship configuration"
+    echo "  starship-edit            Edit current Starship config"
+    echo ""
+    _safe_echo_cyan "Available Themes:"
+    echo "  gruvbox                  Warm retro Gruvbox theme (default)"
+    echo "  tokyo-night              Vibrant Tokyo Night theme"
+    echo "  catppuccin               Soft pastel Catppuccin theme"
+    echo "  nordic                   Cool Nordic blue theme"
+    echo "  cyberpunk                Neon cyberpunk theme"
+    echo "  pastel-powerline         Original pastel powerline theme"
+    echo ""
+    _safe_echo_cyan "Quick Commands:"
+    echo "  ae                       Show this help"
+    echo "  ae themes                List themes"
+    echo "  ae reload                Reload Starship"
+}
+
+function starship_theme_switch() {
+    local theme="${1:-gruvbox}"
+    local theme_file="$STARSHIP_THEMES_DIR/${theme}.toml"
+    
+    if [[ ! -f "$theme_file" ]]; then
+        _safe_echo_error "Theme '$theme' not found. Available themes:"
+        starship_list_themes
+        return 1
+    fi
+    
+    _safe_echo_info "Switching to '$theme' theme..."
+    
+    # Backup current config if it's not a symlink
+    if [[ ! -L "$STARSHIP_CONFIG" && -f "$STARSHIP_CONFIG" ]]; then
+        cp "$STARSHIP_CONFIG" "$STARSHIP_CONFIG.backup"
+    fi
+    
+    # Create symlink to theme
+    _safe_link "$theme_file" "$STARSHIP_CONFIG"
+    
+    # Reload Starship
+    starship_reload
+    
+    _safe_echo_success "Switched to '$theme' theme! ✨"
+}
+
+function starship_list_themes() {
+    _safe_echo_header "🎨 Available Starship Themes"
+    
+    if [[ ! -d "$STARSHIP_THEMES_DIR" ]]; then
+        _safe_echo_warning "No themes directory found at $STARSHIP_THEMES_DIR"
+        return 1
+    fi
+    
+    local current_theme
+    current_theme="$(basename "$(readlink -f "$STARSHIP_CONFIG" 2>/dev/null)" .toml 2>/dev/null)"
+    
+    for theme_file in "$STARSHIP_THEMES_DIR"/*.toml; do
+        if [[ -f "$theme_file" ]]; then
+            local theme_name
+            theme_name="$(basename "$theme_file" .toml)"
+            if [[ "$theme_name" == "$current_theme" ]]; then
+                _safe_echo_success "  $theme_name (current) ⭐"
+            else
+                _safe_echo_info "  $theme_name"
+            fi
+        fi
+    done
+}
+
+function starship_reload() {
+    _safe_echo_info "Reloading Starship configuration..."
+    # Source the shell config to reload Starship
+    if [[ -n "$ZSH_VERSION" ]]; then
+        exec zsh
+    elif [[ -n "$BASH_VERSION" ]]; then
+        exec bash
+    fi
+}
+
+function starship_edit() {
+    local editor="${EDITOR:-nano}"
+    _safe_echo_info "Opening Starship config in $editor..."
+    "$editor" "$STARSHIP_CONFIG"
+}
+
+# Theme management convenience functions
+function ae() {
+    case "$1" in
+        themes|list)
+            starship_list_themes
+            ;;
+        reload|refresh)
+            starship_reload
+            ;;
+        edit)
+            starship_edit
+            ;;
+        theme)
+            starship_theme_switch "$2"
+            ;;
+        help|--help|-h|"")
+            aesthetic_help
+            ;;
+        *)
+            _safe_echo_error "Unknown command: $1"
+            _safe_echo_info "Type 'ae help' for available commands"
+            ;;
+    esac
+}
+
+# Aliases
+alias starship-theme='starship_theme_switch'
+alias starship-themes='starship_list_themes'
+alias starship-reload='starship_reload'
+alias starship-edit='starship_edit'
+
+# Quick theme switching aliases
+alias theme-gruvbox='starship_theme_switch gruvbox'
+alias theme-tokyo='starship_theme_switch tokyo-night'
+alias theme-cat='starship_theme_switch catppuccin'
+alias theme-nordic='starship_theme_switch nordic'
+alias theme-cyber='starship_theme_switch cyberpunk'
+
+# Show welcome message on first load
+if [[ -z "$AESTHETIC_LOADED" ]]; then
+    export AESTHETIC_LOADED=1
+    aesthetic_welcome
+fi
+
+aesthetic_init

@@ -32,10 +32,12 @@ function echo.info() {
 
 function echo.debug() {
     [[ "$DOTFILES_DEBUG" == "1" ]] && echo -e "${PURPLE}DEBUG:${NC} $@"
+    return 0
 }
 
 function echo.verbose() {
     [[ "$DOTFILES_VERBOSE" == "1" ]] && echo -e "${PURPLE}VERBOSE:${NC} $@"
+    return 0
 }
 
 function echo.header() {
@@ -52,7 +54,7 @@ function echo.purple() {
     echo -e "${PURPLE}$@${NC}"
 }
 
-# --- Gruvbox Dark Colors (matching Starship) ---
+# --- Gruvbox Dark Colors ---
 export GRUVBOX_FG0='\033[38;2;251;241;199m'   # #fbf1c7 - light foreground
 export GRUVBOX_BG1='\033[38;2;60;56;54m'      # #3c3836 - dark background
 export GRUVBOX_BG3='\033[38;2;102;92;84m'     # #665c54 - darker background

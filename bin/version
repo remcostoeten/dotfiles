@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+
+source "${HOME}/.config/dotfiles/core/_env"
+source "${HOME}/.config/dotfiles/core/_colors"
+source "${HOME}/.config/dotfiles/core/_safety"
+
+function version_parse() {
+    local version="$1"
+    if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]}"
+    else
+        echo.error "Invalid version format: $version (expected: x.y.z)"
+        return 1
+    fi
+}
+
+function version_increment() {
+    local current="$1"
+    local parsed
+    parsed=$(version_parse "$current") || return 1
+    
+    local major minor patch
+    read -r major minor patch <<< "$parsed"
+    
+    # Increment patch version as build number
+    # If patch has only 1 digit (0-9), append 1 to make it 01, 11, 21, etc.
+    # If patch has 2+ digits, just increment normally
+    if [[ $patch -lt 10 ]]; then
+        # Single digit: 7 -> 71, 8 -> 81, 9 -> 91
+        patch="${patch}1"
+    else
+        # Multi-digit: increment normally
+        ((patch++))
+    fi
+    
+    # Handle overflow: when patch reaches 999, increment minor and reset patch
+    if [[ $patch -eq 1000 ]]; then
+        ((minor++))
+        patch=0
+        echo.info "Build number reached 1000, incrementing minor version"
+    fi
+    
+    # Handle minor overflow: when minor reaches 100, increment major
+    if [[ $minor -eq 100 ]]; then
+        ((major++))
+        minor=0
+        patch=0
+        echo.info "Minor version reached 100, incrementing major version"
+    fi
+    
+    echo "${major}.${minor}.${patch}"
+}
+
+function version_set() {
+    local new_version="$1"
+    
+    # Validate version format
+    if ! version_parse "$new_version" >/dev/null; then
+        return 1
+    fi
+    
+    # Update constants file
+    local constants_file="$DOTFILES_ROOT/core/_constants"
+    if [[ ! -f "$constants_file" ]]; then
+        echo.error "Constants file not found: $constants_file"
+        return 1
+    fi
+    
+    # Create backup
+    cp "$constants_file" "${constants_file}.bak"
+    
+    # Update version in constants file
+    if sed -i "s/^export DOTFILES_VERSION=.*/export DOTFILES_VERSION=\"$new_version\"/" "$constants_file"; then
+        echo.success "Updated version to $new_version"
+        
+        # Update state file if it exists
+        local state_file="$DOTFILES_UTILS/state.json"
+        if [[ -f "$state_file" ]]; then
+            local temp_file
+            temp_file=$(mktemp)
+            jq --arg version "$new_version" --arg timestamp "$(date -Iseconds)" \
+               '.version = $version | .last_update = $timestamp' \
+               "$state_file" > "$temp_file" && mv "$temp_file" "$state_file"
+        fi
+        
+        # Clean up backup on success
+        rm -f "${constants_file}.bak"
+        return 0
+    else
+        echo.error "Failed to update version"
+        # Restore backup on failure
+        [[ -f "${constants_file}.bak" ]] && mv "${constants_file}.bak" "$constants_file"
+        return 1
+    fi
+}
+
+function version_get_current() {
+    # Re-source constants to get latest version
+    source "$DOTFILES_ROOT/core/_constants" 2>/dev/null
+    echo "${DOTFILES_VERSION:-0.0.1}"
+}
+
+function version_bump() {
+    local current
+    current=$(version_get_current)
+    
+    echo.info "Current version: $current"
+    
+    local new_version
+    new_version=$(version_increment "$current")
+    
+    if [[ $? -eq 0 ]] && [[ -n "$new_version" ]]; then
+        echo.info "Incrementing to: $new_version"
+        version_set "$new_version"
+    else
+        echo.error "Failed to increment version"
+        return 1
+    fi
+}
+
+function version_show() {
+    local current
+    current=$(version_get_current)
+    
+    echo.header "Version Information"
+    echo "Current version: $(echo.cyan "$current")"
+    
+    # Show what the next version would be
+    local next
+    next=$(version_increment "$current" 2>/dev/null)
+    if [[ -n "$next" ]]; then
+        echo "Next version:    $(echo.purple "$next")"
+    fi
+    
+    # Show git info if available
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        local commit_count
+        commit_count=$(git rev-list --count HEAD 2>/dev/null || echo "unknown")
+        local last_commit
+        last_commit=$(git log -1 --format="%h - %s" 2>/dev/null || echo "unknown")
+        
+        echo
+        echo "Git information:"
+        echo "  Commits: $(echo.cyan "$commit_count")"
+        echo "  Last:    $(echo.cyan "$last_commit")"
+    fi
+}
+
+function version_help() {
+    echo.header "Dotfiles Version Manager"
+    echo
+    echo "Manages semantic versioning with auto-increment support."
+    echo "Uses format: MAJOR.MINOR.PATCH (e.g., 0.0.1)"
+    echo
+    echo.cyan "Commands:"
+    echo "  show           Show current version information"
+    echo "  bump           Increment patch version automatically"
+    echo "  set <version>  Set specific version (e.g., 0.1.0)"
+    echo "  help           Show this help message"
+    echo
+    echo.cyan "Auto-increment rules:"
+    echo "  • Single digit: 0.0.7 → 0.0.71 (append 1)"
+    echo "  • Multi-digit: 0.0.71 → 0.0.72 (increment)"
+    echo "  • Build overflow: 0.0.999 → 0.1.0 (at 1000)"
+    echo "  • Minor overflow: 0.99.x → 1.0.0 (at 100)"
+    echo
+    echo.cyan "Integration:"
+    echo "  • Pre-commit hook auto-increments on git commit"
+    echo "  • Version displayed in dotfiles banner and CLI"
+}
+
+function main() {
+    case "${1:-show}" in
+        show|status)
+            version_show
+            ;;
+        bump|increment)
+            version_bump
+            ;;
+        set)
+            if [[ -z "$2" ]]; then
+                echo.error "Usage: dotfiles-version set <version>"
+                echo.info "Example: dotfiles-version set 0.1.0"
+                return 1
+            fi
+            version_set "$2"
+            ;;
+        help|--help|-h)
+            version_help
+            ;;
+        *)
+            echo.error "Unknown command: $1"
+            echo.info "Use 'dotfiles-version help' for available commands"
+            return 1
+            ;;
+    esac
+}
+
+main "$@"

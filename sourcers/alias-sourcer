@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Alias sourcer for: /home/remcostoeten/.config/dotfiles/modules/aliases
+# File type: .aliases files
+# Generated: Sun Sep  1 01:40:00 AM CEST 2025
+# Purpose: Source all .aliases files in the aliases directory
+# =============================================================================
+
+SRC_DIR="$DOTFILES_MODULES/aliases"
+if [[ ! -d "$SRC_DIR" ]]; then
+    exit 0
+fi
+
+if command -v echo.debug >/dev/null 2>&1; then
+    echo.debug "📂 Sourcing .aliases files from $SRC_DIR..."
+fi
+
+# Find all .aliases files and source them
+for file in "$SRC_DIR"/*.aliases; do
+    # Skip if no files match the pattern
+    if [[ ! -f "$file" ]]; then
+        continue
+    fi
+    
+    if command -v echo.debug >/dev/null 2>&1; then
+        echo.debug "  ✓ Sourcing: $(basename "$file")"
+    fi
+    
+    # shellcheck disable=SC1090
+    if ! source "$file" 2>/dev/null; then
+        if command -v echo.error >/dev/null 2>&1; then
+            echo.error "  ✗ Failed to source: $(basename "$file")"
+        else
+            echo "ERROR: Failed to source: $(basename "$file")"
+        fi
+    fi
+done
+
+if command -v echo.debug >/dev/null 2>&1; then
+    echo.debug "✅ Finished sourcing .aliases files"
+fi

@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+# Module: keys-fishlike
+# Description: Fish-like key bindings and navigation enhancements for ZSH
+# Dependencies: zsh-autosuggestions, zsh-history-substring-search, fzf-tab
+
+function keys_fishlike_init() {
+    echo.debug "Initializing Fish-like key bindings"
+}
+
+function keys_fishlike_help() {
+    echo.header "Fish-like Key Bindings Help"
+    echo "Navigation and autocompletion shortcuts:"
+    echo "  →  (Right Arrow)     Accept autosuggestion"
+    echo "  ↑  (Up Arrow)       History substring search up"
+    echo "  ↓  (Down Arrow)     History substring search down"
+    echo "  Tab                 Open fzf completion menu"
+    echo "  Ctrl+F              Accept autosuggestion (fish-style)"
+    echo "  Ctrl+R              Fuzzy history search"
+    echo "  Ctrl+T              Fuzzy file search"
+    echo "  Ctrl+Alt+T          Fuzzy directory search"
+    echo ""
+    echo "Editing shortcuts:"
+    echo "  Ctrl+W              Delete word backward"
+    echo "  Ctrl+U              Delete line backward"
+    echo "  Ctrl+K              Delete line forward"
+    echo "  Ctrl+Left/Right     Move by word"
+}
+
+function setup_fish_keybindings() {
+    if [[ "$DOTFILES_SHELL" != "zsh" ]]; then
+        return 0
+    fi
+
+    # Wait for plugins to be loaded
+    if [[ -z "$ZSH_ENHANCEMENTS_LOADED" ]]; then
+        echo.debug "ZSH enhancements not loaded yet, skipping key setup"
+        return 0
+    fi
+
+    # Fish-like navigation and suggestion acceptance
+    bindkey '^[[C' autosuggest-accept           # Right arrow → accept suggestion
+    bindkey '^F' autosuggest-accept             # Ctrl+F → accept suggestion (fish-style)
+    bindkey '^[[1;5C' autosuggest-execute       # Ctrl+Right → execute suggestion
+    bindkey '^E' autosuggest-execute            # Ctrl+E → execute suggestion
+
+    # Fish-like history search with up/down arrows
+    bindkey '^[[A' history-substring-search-up      # Up arrow
+    bindkey '^[[B' history-substring-search-down    # Down arrow
+    bindkey '^P' history-substring-search-up        # Ctrl+P
+    bindkey '^N' history-substring-search-down      # Ctrl+N
+
+    # Enhanced history search with fzf
+    bindkey '^R' fzf-history-widget             # Ctrl+R → fuzzy history search
+
+    # Fish-like editing commands
+    bindkey '^W' backward-kill-word             # Ctrl+W → delete word backward
+    bindkey '^U' backward-kill-line             # Ctrl+U → delete line backward  
+    bindkey '^K' kill-line                      # Ctrl+K → delete line forward
+    bindkey '^H' backward-kill-word             # Ctrl+Backspace → delete word
+
+    # Word navigation (consistent with fish)
+    bindkey '^[[1;5C' forward-word              # Ctrl+Right → word forward
+    bindkey '^[[1;5D' backward-word             # Ctrl+Left → word backward
+    bindkey '^[[3;5~' kill-word                 # Ctrl+Delete → delete word forward
+
+    # Tab completion with fzf-tab (if available)
+    if command -v fzf &>/dev/null && [[ -n "$functions[_fzf_tab_complete]" ]]; then
+        # Tab triggers fzf-tab completion
+        bindkey '^I' fzf-tab-complete
+        echo.debug "Enabled fzf-tab completion on Tab"
+    fi
+
+    echo.debug "Fish-like key bindings configured"
+}
+
+# Initialize and setup key bindings
+keys_fishlike_init
+
+# Setup after a brief delay to ensure plugins are loaded
+if [[ "$DOTFILES_SHELL" == "zsh" ]]; then
+    # Use a ZSH hook to setup keys after other plugins load
+    autoload -U add-zsh-hook
+    function _setup_fish_keys_on_precmd() {
+        setup_fish_keybindings
+        add-zsh-hook -d precmd _setup_fish_keys_on_precmd  # Remove hook after first run
+    }
+    add-zsh-hook precmd _setup_fish_keys_on_precmd
+fi

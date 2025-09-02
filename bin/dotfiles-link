@@ -123,25 +123,27 @@ function link_sync() {
     done
 }
 
-function link_help() {
-    echo.header "Dotfiles Link Manager"
+function link_help() { # 🎨 Enhanced help menu
+    echo.header "🔗 Dotfiles Link Manager"
     echo
-    echo "Usage: dotfiles-link <command> [args]"
+    echo.cyan "Usage: dotfiles-link <command> [args]"
     echo
-    echo "Commands:"
-    echo "  list      List all registered symlinks"
-    echo "  add       Add a new symlink"
-    echo "  remove    Remove a symlink"
-    echo "  fix       Fix broken symlinks"
-    echo "  sync      Sync config files"
-    echo "  help      Show this help"
+    echo.purple "⚡ Commands:"
+    echo "  $(echo.cyan 'list')      List all registered symlinks"
+    echo "  $(echo.cyan 'add')       Add a new symlink"
+    echo "  $(echo.cyan 'remove')    Remove a symlink"
+    echo "  $(echo.cyan 'fix')       Fix broken symlinks"
+    echo "  $(echo.cyan 'sync')      Sync config files"
+    echo "  $(echo.cyan 'help')      Show this help"
     echo
-    echo "Examples:"
-    echo "  dotfiles-link list"
-    echo "  dotfiles-link add ~/.config/dotfiles/configs/nvim ~/.config/nvim"
-    echo "  dotfiles-link remove ~/.config/nvim"
-    echo "  dotfiles-link fix"
-    echo "  dotfiles-link sync"
+    echo.purple "✨ Examples:"
+    echo.success "  ✓ dotfiles-link list                                    # Show all links"
+    echo.success "  ✓ dotfiles-link add ~/.dotfiles/nvim ~/.config/nvim     # Create symlink"
+    echo.success "  ✓ dotfiles-link remove ~/.config/nvim                  # Remove symlink"
+    echo.success "  ✓ dotfiles-link fix                                    # Fix broken links"
+    echo.success "  ✓ dotfiles-link sync                                   # Sync configs"
+    echo
+    echo.info "💡 All symlinks are tracked in the registry for easy management"
 }
 
 case "${1:-help}" in

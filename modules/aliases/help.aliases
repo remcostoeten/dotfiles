@@ -1,0 +1,11 @@
+# @alias help.aliases
+# @desc Beautiful aesthetic alias help menu
+alias help.aliases='alias-help'
+
+# @alias alias-gen
+# @desc Generate help documentation for alias files  
+alias alias-gen='dotfiles-gen-alias-help'
+
+# @alias ah
+# @desc Quick alias help shortcut
+alias ah='alias-help'

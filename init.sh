@@ -18,7 +18,6 @@ set -euo pipefail
 # --- Configuration ---
 DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/remcostoeten/dotfiles}"
 DOTFILES_DIR="$HOME/.config/dotfiles"
-SECRETS_GIST_ID_FILE="$HOME/.dotfiles-secrets-gist"
 CRITICAL_PACKAGES_FILE="$DOTFILES_DIR/configs/critical-packages.json"
 ADDITIONAL_PACKAGES_FILE="$DOTFILES_DIR/configs/additional-packages.json"
 
@@ -266,52 +265,6 @@ setup_github_auth() {
     gh auth login --web --scopes "gist"
 }
 
-setup_secrets_sync() {
-    log_header "Setting up Secrets Sync"
-    
-    # Check if GitHub CLI is authenticated
-    if ! gh auth status &>/dev/null; then
-        log_warning "GitHub CLI not authenticated - skipping secrets sync"
-        log_info "You can set up secrets later with: dotfiles-secrets-bootstrap setup"
-        return 0
-    fi
-    
-    log_info "GitHub CLI is authenticated - setting up secrets sync..."
-    
-    # Ask if user wants to set up secrets sync
-    echo -e "\n${BOLD}${PURPLE}Setup secrets sync with GitHub gists?${NC}"
-    echo -e "This will:"
-    echo -e "• Search for existing secrets gists"
-    echo -e "• Allow you to sync secrets across machines"
-    echo -e "• Encrypt secrets locally before uploading"
-    echo
-    read -p "Setup secrets sync? [Y/n] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
-        log_info "Skipping secrets sync setup"
-        log_info "You can set up secrets later with: dotfiles-secrets-bootstrap setup"
-        return 0
-    fi
-    
-    # Use the new enhanced bootstrap command
-    if [[ -f "$DOTFILES_DIR/bin/dotfiles-secrets-bootstrap" ]]; then
-        log_info "Running enhanced secrets bootstrap..."
-        if "$DOTFILES_DIR/bin/dotfiles-secrets-bootstrap" setup; then
-            log_success "Secrets sync configured successfully!"
-        else
-            log_warning "Secrets sync setup had issues - you can retry later"
-            log_info "Manual setup: dotfiles-secrets-bootstrap setup"
-        fi
-    else
-        log_warning "Enhanced secrets bootstrap not found - using fallback"
-        if [[ -f "$DOTFILES_DIR/bin/dotfiles-env-sync" ]]; then
-            "$DOTFILES_DIR/bin/dotfiles-env-sync" init || log_warning "Fallback secret sync setup had issues."
-        else
-            log_warning "No secrets sync tools found."
-        fi
-    fi
-}
-
 install_dotfiles() {
     log_header "Installing Dotfiles"
     cd "$DOTFILES_DIR"
@@ -342,7 +295,6 @@ main() {
         echo "• Install critical dependencies (git, jq, curl, etc.)"
         echo "• Install GitHub CLI and fzf"
         echo "• Clone and set up your dotfiles"
-        echo "• Configure secrets sync with GitHub gists"
         echo "• Interactively install additional CLI tools"
         echo ""
         read -p "Continue with setup? [Y/n] " -n 1 -r
@@ -373,9 +325,8 @@ main() {
     # 4. Additional Packages (Interactive)
     install_packages_from_file "$ADDITIONAL_PACKAGES_FILE" false true
 
-    # 5. GitHub Auth & Secrets
+    # 5. GitHub Auth
     setup_github_auth
-    setup_secrets_sync
 
     # 6. Install dotfiles configs
     install_dotfiles
