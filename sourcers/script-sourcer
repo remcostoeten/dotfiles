@@ -6,7 +6,7 @@
 # Purpose: Add all executable scripts in the scripts directory to PATH
 # =============================================================================
 
-SCRIPTS_DIR="$DOTFILES_ROOT/scripts"
+SCRIPTS_DIR="${DOTFILES_SCRIPTS:-$DOTFILES_ROOT/scripts}"
 if [[ ! -d "$SCRIPTS_DIR" ]]; then
     exit 0
 fi

@@ -71,6 +71,45 @@ function load_aliases() {
     done
 }
 
+# Sort categories with help-related categories at the top
+function sort_help_categories() {
+    local all_categories=("$@")
+    local priority_categories=("help" "helpme")
+    local sorted_categories=()
+    local remaining_categories=()
+    
+    # Add priority categories first if they exist
+    for priority_cat in "${priority_categories[@]}"; do
+        for cat in "${all_categories[@]}"; do
+            if [[ "$cat" == "$priority_cat" ]]; then
+                sorted_categories+=("$cat")
+                break
+            fi
+        done
+    done
+    
+    # Add remaining categories in alphabetical order
+    for cat in "${all_categories[@]}"; do
+        local is_priority=false
+        for priority_cat in "${priority_categories[@]}"; do
+            if [[ "$cat" == "$priority_cat" ]]; then
+                is_priority=true
+                break
+            fi
+        done
+        if [[ "$is_priority" == false ]]; then
+            remaining_categories+=("$cat")
+        fi
+    done
+    
+    # Sort remaining categories alphabetically and add to result
+    IFS=$'\n' sorted_remaining=($(printf '%s\n' "${remaining_categories[@]}" | sort))
+    sorted_categories+=("${sorted_remaining[@]}")
+    
+    # Output the sorted categories
+    printf '%s\n' "${sorted_categories[@]}"
+}
+
 # Show all aliases in static format
 function show_static() {
     echo.header "📋 Dotfiles Aliases"
@@ -86,8 +125,11 @@ function show_static() {
         fi
     done
     
-    # Display each category
-    for category in $(printf '%s\n' "${!categories[@]}" | sort); do
+    # Get all category names
+    local all_category_names=("${!categories[@]}")
+    
+    # Display each category in priority order (help/helpme first, then alphabetical)
+    while IFS= read -r category; do
         echo.purple "━━━ $category ━━━"
         
         # Get all aliases for this category and sort them
@@ -106,7 +148,7 @@ function show_static() {
             local desc="${ALIAS_DESCRIPTIONS[$alias_name]}"
             printf "  %-15s → %-30s %s\n" "$(echo.cyan "$alias_name")" "$cmd" "$desc"
         done
-    done
+    done < <(sort_help_categories "${all_category_names[@]}")
     
     echo.success "Total: ${#ALIASES[@]} aliases across ${#categories[@]} categories"
 }

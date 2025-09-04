@@ -146,6 +146,10 @@ function echo.pastel_yellow() {
     echo -e "${PASTEL_BRIGHT_YELLOW}$@${NC}"
 }
 
+function echo.pastel_cyan() {
+    echo -e "${PASTEL_BRIGHT_CYAN}$@${NC}"
+}
+
 # Add alias for convenience
 alias e.pastel='echo.pastel_banner'
 alias e.dreamy='echo.pastel_banner'

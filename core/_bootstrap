@@ -39,8 +39,8 @@ function dotfiles_setup_shell() {
         setopt AUTO_PUSHD
         setopt PUSHD_IGNORE_DUPS
         setopt PUSHD_SILENT
-        setopt CORRECT
-        setopt CORRECT_ALL
+        # setopt CORRECT          # Disabled: command correction
+        # setopt CORRECT_ALL      # Disabled: argument correction
         setopt GLOB_COMPLETE
         setopt EXTENDED_GLOB
         setopt NO_CASE_GLOB
