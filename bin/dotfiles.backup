@@ -764,16 +764,6 @@ case "${1:-help}" in
     templates|tmpl|t)
         dotfiles_templates
         ;;
-    prompt|p)
-        shift
-        if [[ -x "$DOTFILES_BIN/prompt" ]]; then
-            "$DOTFILES_BIN/prompt" "$@"
-        else
-            echo.error "Prompt command not found"
-            echo.info "Try: dotfiles doctor to check system health"
-            return 1
-        fi
-        ;;
     studio)
         case "${2:-start}" in
             start|dev)

@@ -1,0 +1,63 @@
+# Script Request Template
+
+## Core Request
+**Task:** {{REPLACE_ME_WITH_YOUR_REQUEST}}
+**Command Name:** {{REPLACE_ME_WITH_COMMAND_NAME}}
+
+## Behavior
+### Basic Usage
+- Typing `{{COMMAND_NAME}} {{BASIC_USAGE_EXAMPLE}}` runs:
+  `{{RESULTING_COMMAND}}`
+
+### With Arguments
+- Adding `{{ARG_FLAG}}` does `{{ARG_BEHAVIOR}}`. Example:
+  `{{COMMAND_NAME}} {{EXAMPLE_WITH_ARG}}`
+  translates to:
+  `{{RESULTING_COMMAND_WITH_ARG}}`
+
+### Additional Examples
+{{REPLACE_ME_WITH_MORE_EXAMPLES}}
+
+## Parsing Rules
+- {{REPLACE_ME_WITH_PARSING_RULE_1}}
+- {{REPLACE_ME_WITH_PARSING_RULE_2}}
+- Example:
+  `{{COMMAND_NAME}} {{PARSING_EXAMPLE}}`
+  translates to:
+  `{{PARSED_RESULT}}`
+
+## Edge Cases
+- {{REPLACE_ME_WITH_EDGE_CASE_1}}
+- {{REPLACE_ME_WITH_EDGE_CASE_2}}
+- Example:
+  `{{EDGE_CASE_EXAMPLE}}`
+
+## Custom Arguments (Replace These)
+{{REPLACE_ME_WITH_CUSTOM_ARGS}}
+
+---
+
+## Standard Arguments (Keep These)
+- `-p` `--p` `--push` → adds `; git push`
+- `-S` `--s` `--sign` → sign commit with GPG
+- `-v` `--v` `--verbose` → verbose output
+- `-h` `--h` `--help` → show helper menu
+
+## Output Requirements
+- {{REPLACE_ME_WITH_OUTPUT_REQUIREMENTS}}
+- Success message: `{{SUCCESS_MESSAGE}}`
+- Error handling: `{{ERROR_HANDLING}}`
+
+## Helper Menu Requirements (Keep These)
+- Create colorized helper menu using `~/.config/dotfiles` color helpers
+- Trigger with: `{{COMMAND_NAME}} help`, `{{COMMAND_NAME}} --h`, `{{COMMAND_NAME}} --help`
+- Integrate with dotfiles helper system:
+  - Show in `dotfiles help` or `dotfiles` menu
+  - Show in `dotfiles scripts help/--help/--h/?`
+  - Show in `scripts help/--help/--h/?`
+
+## File Structure Requirements (Keep These)
+- **Location:** `~/.config/dotfiles/scripts/{{COMMAND_NAME}}` (no extension)
+- **Shebang:** `#!/usr/bin/env zsh` (line 1)
+- **Sourcer:** Create/update `~/.config/dotfiles/sourcers/script-sourcer`
+- **Integration:** Add sourcer path to `~/.config/dotfiles/src`

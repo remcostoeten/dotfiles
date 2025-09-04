@@ -1,0 +1,31 @@
+#!/usr/bin/env zsh
+
+# Standalone Prompt Template Command
+# Usage: prompt [command] [options]
+
+# Ensure dotfiles environment is available
+source "${HOME}/.config/dotfiles/core/_env" 2>/dev/null || {
+    echo "Error: Could not load dotfiles environment" >&2
+    exit 1
+}
+source "${HOME}/.config/dotfiles/core/_colors" 2>/dev/null || {
+    echo "Error: Could not load dotfiles colors" >&2
+    exit 1
+}
+source "${HOME}/.config/dotfiles/core/_safety" 2>/dev/null || {
+    echo "Error: Could not load dotfiles safety functions" >&2
+    exit 1
+}
+
+# Load the prompt-template module
+local prompt_module="${DOTFILES_ROOT}/modules/enabled/prompt-template"
+if [[ -f "$prompt_module" ]]; then
+    source "$prompt_module"
+else
+    echo.error "Prompt template module not found at: $prompt_module"
+    echo.info "Try: dotfiles doctor to check system health"
+    exit 1
+fi
+
+# Use the module's main function
+prompt_main "$@"

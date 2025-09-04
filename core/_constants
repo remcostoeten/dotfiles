@@ -11,7 +11,7 @@ export DOTFILES_SCRIPTS="$DOTFILES_ROOT/scripts"
 
 export SHEBANG='#!/usr/bin/env bash'
 
-export DOTFILES_VERSION="0.0.94"
+export DOTFILES_VERSION="0.0.95"
 
 export DOTFILES_SHELL="${SHELL##*/}"
 if [[ "$DOTFILES_SHELL" == "bash" ]]; then

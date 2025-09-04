@@ -319,7 +319,8 @@ function collect_descriptions() {
     # Save descriptions back to temp file with descriptions
     local temp_file=$(mktemp)
     while IFS='|' read -r alias_name alias_command; do
-        echo "$alias_name|$alias_command|${descriptions[$alias_name]}" >> "$temp_file"
+        local desc="${descriptions[$alias_name]:-}"
+        echo "$alias_name|$alias_command|$desc" >> "$temp_file"
     done < "$TEMP_DATA_FILE"
     
     mv "$temp_file" "$TEMP_DATA_FILE"

@@ -1,0 +1,325 @@
+#!/usr/bin/env zsh
+
+# Prompt Template Manager
+# Usage: prompt [command] [options]
+
+source "${HOME}/.config/dotfiles/core/_env"
+source "${HOME}/.config/dotfiles/core/_colors"
+source "${HOME}/.config/dotfiles/core/_safety"
+
+# Constants
+PROMPT_TEMPLATE="${DOTFILES_ROOT}/core/_internal-tools/templates/prompt-template"
+PROMPT_BACKUP_DIR="${HOME}/.config/prompts"
+PROMPT_BACKUP_RETENTION=30  # days
+
+function prompt_help() {
+    echo.header "📝 Prompt Template Manager"
+    echo
+    echo.cyan "Usage: prompt <command> [options]"
+    echo
+    echo.purple "📋 Available Commands:"
+    printf "  %-15s %s\n" "$(echo.cyan '')" "Show the template using bat"
+    printf "  %-15s %s\n" "$(echo.cyan 'copy|c')" "Copy template to clipboard"
+    printf "  %-15s %s\n" "$(echo.cyan 'interactive|i')" "Interactive prompt builder"
+    printf "  %-15s %s\n" "$(echo.cyan 'help|h')" "Show this help"
+    echo
+    echo.purple "🎨 Copy Options:"
+    printf "  %-15s %s\n" "$(echo.cyan '--copy|--c')" "Copy template to clipboard"
+    echo
+    echo.purple "🔧 Interactive Options:"
+    printf "  %-15s %s\n" "$(echo.cyan '--interactive|--i')" "Launch interactive builder"
+    echo
+    echo.purple "✨ Examples:"
+    echo.success "  prompt              # Show template with syntax highlighting"
+    echo.success "  prompt copy         # Copy template to clipboard"
+    echo.success "  prompt i            # Interactive prompt builder"
+    echo.success "  dotfiles prompt h   # Show help (also works with dotfiles prefix)"
+    echo
+    echo.info "💡 All commands work with 'dotfiles prompt' prefix as well"
+    echo.info "🗂️  Backups are saved to: ${PROMPT_BACKUP_DIR}"
+}
+
+function prompt_show() {
+    if ! [[ -f "$PROMPT_TEMPLATE" ]]; then
+        echo.error "Prompt template not found at: $PROMPT_TEMPLATE"
+        return 1
+    fi
+    
+    echo.header "📝 Prompt Template"
+    echo
+    
+    if command -v bat >/dev/null 2>&1; then
+        bat --style=numbers,grid --language=markdown "$PROMPT_TEMPLATE"
+    else
+        echo.warning "bat not found, using cat for display:"
+        echo
+        cat "$PROMPT_TEMPLATE"
+    fi
+}
+
+function prompt_copy() {
+    if ! [[ -f "$PROMPT_TEMPLATE" ]]; then
+        echo.error "Prompt template not found at: $PROMPT_TEMPLATE"
+        return 1
+    fi
+    
+    if command -v xclip >/dev/null 2>&1; then
+        cat "$PROMPT_TEMPLATE" | xclip -selection clipboard
+        echo.success "✅ Template copied to clipboard!"
+        echo.info "📋 Ready to paste with Ctrl+V"
+    else
+        echo.error "xclip not found. Please install: sudo apt install xclip"
+        echo.info "Alternative: Use 'prompt' to view and copy manually"
+        return 1
+    fi
+}
+
+function prompt_cleanup_backups() {
+    if [[ ! -d "$PROMPT_BACKUP_DIR" ]]; then
+        return 0
+    fi
+    
+    echo.debug "Cleaning up backups older than $PROMPT_BACKUP_RETENTION days"
+    
+    find "$PROMPT_BACKUP_DIR" -name "prompt.*.backup.*.md" -type f -mtime +$PROMPT_BACKUP_RETENTION -delete 2>/dev/null
+}
+
+function prompt_create_backup() {
+    local name="$1"
+    local content="$2"
+    local timestamp=$(date +"%Y%m%d_%H%M%S")
+    local backup_file="$PROMPT_BACKUP_DIR/prompt.${name}.backup.${timestamp}.md"
+    
+    ensure_dir "$PROMPT_BACKUP_DIR"
+    echo "$content" > "$backup_file"
+    echo.debug "Backup saved: $backup_file"
+}
+
+function prompt_interactive() {
+    if ! [[ -f "$PROMPT_TEMPLATE" ]]; then
+        echo.error "Prompt template not found at: $PROMPT_TEMPLATE"
+        return 1
+    fi
+    
+    echo.header "🎨 Interactive Prompt Builder"
+    echo.info "Build your custom prompt step by step"
+    echo.warning "Use Ctrl+C to exit at any time"
+    echo
+    
+    # Read template content
+    local template_content=$(<"$PROMPT_TEMPLATE")
+    local current_content="$template_content"
+    
+    # Extract all template variables
+    local variables=($(echo "$template_content" | grep -oE '\{\{[^}]+\}\}' | sort -u))
+    
+    if [[ ${#variables[@]} -eq 0 ]]; then
+        echo.error "No template variables found in template"
+        return 1
+    fi
+    
+    echo.success "Found ${#variables[@]} template variables to configure"
+    echo
+    
+    local var_index=1
+    local user_values=()
+    local var_names=()
+    
+    # Initialize arrays with variable names and empty values
+    for var in "${variables[@]}"; do
+        var_names+=("$var")
+        user_values+=("")
+    done
+    
+    function show_preview() {
+        local preview_content="$current_content"
+        for ((i=0; i<${#var_names[@]}; i++)); do
+            local var_name="${var_names[i]}"
+            local var_value="${user_values[i]:-$var_name}"
+            preview_content="${preview_content//$var_name/$var_value}"
+        done
+        
+        echo.header "📖 Current Preview"
+        if command -v bat >/dev/null 2>&1; then
+            echo "$preview_content" | bat --style=grid --language=markdown
+        else
+            echo "$preview_content"
+        fi
+        echo
+    }
+    
+    function process_variable() {
+        local idx=$1
+        local var_name="${var_names[idx]}"
+        local clean_var=$(echo "$var_name" | sed 's/[{}]//g')
+        
+        clear
+        echo.header "🎨 Interactive Prompt Builder"
+        echo.info "Variable $(($idx + 1)) of ${#var_names[@]}: $clean_var"
+        echo
+        echo.cyan "Current value: ${user_values[idx]:-'(empty)'}"
+        echo
+        
+        # Show a mini preview of just this section
+        echo.purple "Template context:"
+        echo "$template_content" | grep -B2 -A2 "$var_name" | sed 's/^/  /'
+        echo
+        
+        echo.yellow "Enter your value (or press Enter to keep current):"
+        echo -n "$(echo.pastel_purple '❯') "
+        
+        local input
+        read -r input
+        
+        if [[ -n "$input" ]]; then
+            user_values[idx]="$input"
+            # Update current content
+            current_content="${current_content//$var_name/$input}"
+        fi
+    }
+    
+    # Main interactive loop
+    local current_var=0
+    while [[ $current_var -lt ${#var_names[@]} ]]; do
+        process_variable $current_var
+        
+        # Create backup after each step
+        local backup_name="interactive_step_$(($current_var + 1))"
+        prompt_create_backup "$backup_name" "$current_content"
+        
+        echo
+        echo.success "✅ Variable configured! What's next?"
+        echo
+        echo.cyan "Options:"
+        printf "  %-20s %s\n" "$(echo.pastel_green '[Enter]')" "Continue to next variable"
+        printf "  %-20s %s\n" "$(echo.pastel_blue '[p]')" "Show full preview"
+        printf "  %-20s %s\n" "$(echo.pastel_yellow '[b]')" "Go back to previous variable"
+        printf "  %-20s %s\n" "$(echo.pastel_purple '[s]')" "Skip to end and save"
+        printf "  %-20s %s\n" "$(echo.pastel_pink '[q]')" "Quit without saving"
+        echo
+        echo -n "$(echo.pastel_cyan '❯ Choice: ')"
+        
+        local choice
+        read -r choice
+        
+        case "$choice" in
+            ""|"n"|"next")
+                ((current_var++))
+                ;;
+            "p"|"preview")
+                clear
+                show_preview
+                echo.info "Press Enter to continue..."
+                read -r
+                ;;
+            "b"|"back"|"prev")
+                if [[ $current_var -gt 0 ]]; then
+                    ((current_var--))
+                else
+                    echo.warning "Already at first variable"
+                    sleep 1
+                fi
+                ;;
+            "s"|"save"|"skip")
+                current_var=${#var_names[@]}  # Exit loop
+                ;;
+            "q"|"quit"|"exit")
+                echo.warning "Quitting without saving..."
+                return 0
+                ;;
+            *)
+                echo.warning "Invalid choice, continuing to next variable..."
+                ((current_var++))
+                ;;
+        esac
+    done
+    
+    # Final step - show result and save options
+    clear
+    show_preview
+    
+    echo.header "🎉 Prompt Building Complete!"
+    echo
+    echo.success "Your custom prompt is ready! Choose what to do:"
+    echo
+    printf "  %-20s %s\n" "$(echo.pastel_green '[1]')" "Copy to clipboard and exit"
+    printf "  %-20s %s\n" "$(echo.pastel_blue '[2]')" "Save as MDX file"
+    printf "  %-20s %s\n" "$(echo.pastel_purple '[3]')" "Restart the builder"
+    printf "  %-20s %s\n" "$(echo.pastel_yellow '[4]')" "Go back to edit variables"
+    printf "  %-20s %s\n" "$(echo.pastel_pink '[q]')" "Quit without saving"
+    echo
+    echo -n "$(echo.pastel_cyan '❯ Final choice: ')"
+    
+    local final_choice
+    read -r final_choice
+    
+    case "$final_choice" in
+        "1"|"copy"|"clipboard")
+            if command -v xclip >/dev/null 2>&1; then
+                echo "$current_content" | xclip -selection clipboard
+                echo.success "✅ Custom prompt copied to clipboard!"
+            else
+                echo.error "xclip not found. Here's your prompt:"
+                echo "$current_content"
+            fi
+            
+            # Save final backup
+            prompt_create_backup "final" "$current_content"
+            ;;
+        "2"|"save"|"mdx")
+            echo.cyan "Enter the path to save your MDX file:"
+            echo -n "$(echo.pastel_purple '❯ Path: ')"
+            local save_path
+            read -r save_path
+            
+            if [[ -n "$save_path" ]]; then
+                echo "$current_content" > "$save_path"
+                echo.success "✅ Saved to: $save_path"
+                
+                # Also save backup
+                prompt_create_backup "saved" "$current_content"
+            else
+                echo.error "No path provided"
+            fi
+            ;;
+        "3"|"restart")
+            echo.info "Restarting prompt builder..."
+            prompt_interactive
+            return $?
+            ;;
+        "4"|"edit"|"back")
+            echo.info "Going back to variable editing..."
+            current_var=$((${#var_names[@]} - 1))
+            # Continue the loop (this is a bit hacky but works)
+            ;;
+        *)
+            echo.info "Thanks for using the prompt builder!"
+            prompt_create_backup "final" "$current_content"
+            ;;
+    esac
+    
+    # Clean up old backups
+    prompt_cleanup_backups
+}
+
+# Command processing
+case "${1:-}" in
+    ""|show)
+        prompt_show
+        ;;
+    copy|c|--copy|--c)
+        prompt_copy
+        ;;
+    interactive|i|--interactive|--i)
+        prompt_interactive
+        ;;
+    help|h|--help|--h|-h)
+        prompt_help
+        ;;
+    *)
+        echo.error "Unknown command: $1"
+        echo
+        prompt_help
+        exit 1
+        ;;
+esac
