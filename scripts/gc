@@ -1,0 +1,186 @@
+#!/usr/bin/env zsh
+
+# =============================================================================
+# Git Commit (gc) - Enhanced git commit wrapper
+# Author: Remco Stoeten
+# Description: Quick git commit with optional file staging and additional flags
+# =============================================================================
+
+# Source dotfiles environment if available
+if [[ -n "$DOTFILES_ROOT" && -f "$DOTFILES_ROOT/core/_colors" ]]; then
+    source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || true
+fi
+
+# Fallback color functions if dotfiles not available
+if ! command -v echo.error >/dev/null 2>&1; then
+    echo.error() { echo -e "\033[31m✗ $*\033[0m" >&2; }
+    echo.success() { echo -e "\033[32m✓ $*\033[0m"; }
+    echo.warning() { echo -e "\033[33m⚠ $*\033[0m"; }
+    echo.info() { echo -e "\033[36mℹ $*\033[0m"; }
+    echo.cyan() { echo -e "\033[36m$*\033[0m"; }
+    echo.purple() { echo -e "\033[35m$*\033[0m"; }
+    echo.header() { 
+        echo -e "\033[34m╭─────────────────────────────────────────────╮\033[0m"
+        echo -e "\033[34m│  $* \033[0m"
+        echo -e "\033[34m╰─────────────────────────────────────────────╯\033[0m"
+    }
+fi
+
+function show_help() {
+    echo.header "🚀 Git Commit (gc) - Enhanced Wrapper"
+    echo
+    echo.cyan "USAGE:"
+    echo "  gc <message> [options]"
+    echo
+    echo.purple "BASIC EXAMPLES:"
+    echo "  gc 'Add new feature'                      # Simple commit"
+    echo "  gc 'Fix bug in parser'                    # Commit with message"
+    echo
+    echo.purple "STAGING OPTIONS:"
+    echo "  gc 'Update docs' --a                      # Add ALL files, then commit"
+    echo "  gc 'Fix styles' --add file1.css file2.js  # Add specific files, then commit"
+    echo "  gc 'New module' -a src/ utils/helper.js   # Add folder and file, then commit"
+    echo
+    echo.purple "ADDITIONAL FLAGS:"
+    echo "  --push, --p, -p          Push after successful commit"
+    echo "  --sign, --s, -S          GPG sign the commit"
+    echo "  --verbose, --v, -v       Verbose git output"
+    echo "  --help, --h, -h, help    Show this help"
+    echo
+    echo.purple "COMBINED EXAMPLES:"
+    echo "  gc 'Release v1.0' --a --p --s             # Add all, commit, sign, and push"
+    echo "  gc 'Hotfix' --add src/bug.js --push       # Add specific file, commit and push"
+    echo "  gc 'Debug logs' --v                       # Commit with verbose output"
+    echo
+    echo.cyan "STAGING BEHAVIOR:"
+    echo "• Use --a, --add, or -a to enable staging"
+    echo "• If no files specified after staging flag: stages ALL files (git add .)"
+    echo "• If files specified: stages only those files"
+    echo "• Files can be individual files, directories, or glob patterns"
+    echo
+    echo.info "💡 Pro tip: gc must be followed by exactly one space before the message"
+    echo.warning "⚠  Make sure you're in a git repository before using gc"
+}
+
+function gc_main() {
+    # Check if we're in a git repository
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo.error "Not in a git repository"
+        return 1
+    fi
+
+    local message=""
+    local should_stage=false
+    local should_push=false
+    local should_sign=false
+    local should_verbose=false
+    local files_to_stage=()
+    local git_args=()
+    
+    # Handle help cases first
+    if [[ $# -eq 0 || "$1" == "help" || "$1" == "--help" || "$1" == "--h" || "$1" == "-h" ]]; then
+        show_help
+        return 0
+    fi
+    
+    # Parse arguments
+    local args=("$@")
+    local message_parts=()
+    local in_staging_mode=false
+    
+    for ((i=1; i<=${#args[@]}; i++)); do
+        local arg="${args[i]}"
+        
+        case "$arg" in
+            --add|--a|-a)
+                should_stage=true
+                in_staging_mode=true
+                ;;
+            --push|--p|-p)
+                should_push=true
+                ;;
+            --sign|--s|-S)
+                should_sign=true
+                ;;
+            --verbose|--v|-v)
+                should_verbose=true
+                ;;
+            *)
+                if [[ "$in_staging_mode" == true ]]; then
+                    files_to_stage+=("$arg")
+                else
+                    message_parts+=("$arg")
+                fi
+                ;;
+        esac
+    done
+    
+    # Reconstruct commit message from parts
+    message="${(j: :)message_parts}"
+    
+    if [[ -z "$message" ]]; then
+        echo.error "Commit message cannot be empty"
+        echo.info "Usage: gc 'your commit message' [options]"
+        return 1
+    fi
+
+    # Handle staging if requested
+    if [[ "$should_stage" == true ]]; then
+        echo.info "Staging files..."
+        
+        if [[ ${#files_to_stage[@]} -eq 0 ]]; then
+            # No specific files, add everything
+            echo.info "Adding all files (git add .)"
+            if ! git add .; then
+                echo.error "Failed to stage files"
+                return 1
+            fi
+        else
+            # Add specific files
+            echo.info "Adding specific files: ${files_to_stage[*]}"
+            for file in "${files_to_stage[@]}"; do
+                if ! git add "$file"; then
+                    echo.error "Failed to add: $file"
+                    return 1
+                fi
+            done
+        fi
+        echo.success "Files staged successfully"
+    fi
+
+    # Build git commit command
+    local git_cmd=("git" "commit" "-m" "$message")
+    
+    if [[ "$should_sign" == true ]]; then
+        git_cmd+=("-S")
+    fi
+    
+    if [[ "$should_verbose" == true ]]; then
+        git_cmd+=("--verbose")
+    fi
+    
+    # Execute commit
+    echo.info "Committing: $message"
+    if "${git_cmd[@]}"; then
+        echo.success "Commit successful"
+    else
+        echo.error "Commit failed"
+        return 1
+    fi
+    
+    # Push if requested
+    if [[ "$should_push" == true ]]; then
+        echo.info "Pushing to remote..."
+        if git push; then
+            echo.success "Push successful"
+        else
+            echo.warning "Push failed, but commit was successful"
+            return 1
+        fi
+    fi
+    
+    echo.success "All operations completed successfully!"
+}
+
+# Execute main function with all arguments
+gc_main "$@"

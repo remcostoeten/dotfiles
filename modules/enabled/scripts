@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+
+# =============================================================================
+# Scripts Module for Dotfiles Management System
+# Author: Remco Stoeten
+# Description: Help integration and management for custom scripts
+# =============================================================================
+
+function scripts_init() {
+    if command -v echo.debug >/dev/null 2>&1; then
+        echo.debug "Initializing scripts module"
+    fi
+}
+
+function scripts_help() {
+    if command -v echo.header >/dev/null 2>&1; then
+        echo.header "📜 Custom Scripts"
+    else
+        echo "=== Custom Scripts ==="
+    fi
+    echo
+    
+    local scripts_dir="$DOTFILES_ROOT/scripts"
+    if [[ ! -d "$scripts_dir" ]]; then
+        if command -v echo.warning >/dev/null 2>&1; then
+            echo.warning "Scripts directory not found: $scripts_dir"
+        else
+            echo "WARNING: Scripts directory not found: $scripts_dir"
+        fi
+        return 1
+    fi
+    
+    if command -v echo.cyan >/dev/null 2>&1; then
+        echo.cyan "Available Scripts:"
+    else
+        echo "Available Scripts:"
+    fi
+    echo
+    
+    local script_count=0
+    for script_file in "$scripts_dir"/*; do
+        if [[ -f "$script_file" && -x "$script_file" ]]; then
+            local script_name=$(basename "$script_file")
+            local script_description=""
+            
+            # Try to extract description from script file
+            script_description=$(grep -E "^#.*Description:" "$script_file" | head -n 1 | sed 's/.*Description:[[:space:]]*//' || echo "")
+            
+            # If no description found, provide default based on script name
+            if [[ -z "$script_description" ]]; then
+                case "$script_name" in
+                    gc)
+                        script_description="Enhanced git commit wrapper with staging and push options"
+                        ;;
+                    copy-remote)
+                        script_description="Copy git remote URL to clipboard"
+                        ;;
+                    *)
+                        script_description="Custom script"
+                        ;;
+                esac
+            fi
+            
+            printf "  %-15s %s\\n" "$script_name" "$script_description"
+            ((script_count++))
+        fi
+    done
+    
+    if [[ $script_count -eq 0 ]]; then
+        if command -v echo.info >/dev/null 2>&1; then
+            echo.info "No executable scripts found in $scripts_dir"
+        else
+            echo "No executable scripts found in $scripts_dir"
+        fi
+    else
+        echo
+        if command -v echo.purple >/dev/null 2>&1; then
+            echo.purple "Usage Examples:"
+        else
+            echo "Usage Examples:"
+        fi
+        echo "  gc 'commit message'          # Quick git commit"
+        echo "  gc 'message' --a --p         # Add all, commit, and push"
+        echo "  copy-remote                  # Copy git remote URL"
+        echo "  <script> --help              # Show help for specific script"
+        echo
+        if command -v echo.info >/dev/null 2>&1; then
+            echo.info "💡 All scripts are automatically available in your PATH"
+            echo.info "📖 Use '<script> help' or '<script> --help' for detailed usage"
+        else
+            echo "💡 All scripts are automatically available in your PATH"
+            echo "📖 Use '<script> help' or '<script> --help' for detailed usage"
+        fi
+    fi
+}
+
+function scripts_list() {
+    scripts_help
+}
+
+# Create global script command aliases that can be called directly
+function scripts() {
+    case "${1:-help}" in
+        help|--help|--h|-h|h)
+            scripts_help
+            ;;
+        list|ls|l)
+            scripts_list
+            ;;
+        *)
+            if command -v echo.error >/dev/null 2>&1; then
+                echo.error "Unknown scripts command: $1"
+            else
+                echo "ERROR: Unknown scripts command: $1"
+            fi
+            echo "Available commands: help, list"
+            return 1
+            ;;
+    esac
+}
+
+# Also support questions mark for help
+alias scripts\?='scripts help'
+
+# Initialize the scripts module
+scripts_init
