@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Script sourcer for: /home/remcostoeten/.config/dotfiles/scripts
+# File type: executable scripts
+# Generated: $(date)
+# Purpose: Add all executable scripts in the scripts directory to PATH
+# =============================================================================
+
+SCRIPTS_DIR="${DOTFILES_SCRIPTS:-$DOTFILES_ROOT/scripts}"
+if [[ ! -d "$SCRIPTS_DIR" ]]; then
+    exit 0
+fi
+
+if command -v echo.debug >/dev/null 2>&1; then
+    echo.debug "📂 Adding scripts from $SCRIPTS_DIR to PATH..."
+fi
+
+# Add scripts directory to PATH if not already present
+if [[ ":$PATH:" != *":$SCRIPTS_DIR:"* ]]; then
+    export PATH="$SCRIPTS_DIR:$PATH"
+    
+    if command -v echo.debug >/dev/null 2>&1; then
+        echo.debug "  ✓ Added $SCRIPTS_DIR to PATH"
+    fi
+else
+    if command -v echo.debug >/dev/null 2>&1; then
+        echo.debug "  ✓ $SCRIPTS_DIR already in PATH"
+    fi
+fi
+
+# Log available scripts
+if command -v echo.debug >/dev/null 2>&1; then
+    local script_count=0
+    for script in "$SCRIPTS_DIR"/*; do
+        # Skip if no files match the pattern or if it's a directory
+        if [[ ! -f "$script" || ! -x "$script" ]]; then
+            continue
+        fi
+        
+        local script_name=$(basename "$script")
+        echo.debug "  ✓ Script available: $script_name"
+        ((script_count++))
+    done
+    
+    if [[ $script_count -gt 0 ]]; then
+        echo.debug "✅ Finished adding $script_count executable scripts to PATH"
+    else
+        echo.debug "📄 No executable scripts found in $SCRIPTS_DIR"
+    fi
+fi

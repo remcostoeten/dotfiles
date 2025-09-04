@@ -326,52 +326,691 @@ restore_env_vars() {
     fi
 }
 
-# Show help
+# Show enhanced help
 show_help() {
-    echo.header "dotfiles-env - Environment Variable Manager"
-    cat << 'EOF'
+    echo.header "🔐 Environment Variable Manager (dotfiles-env)"
+    echo
+    echo.cyan "USAGE:"
+    echo "  dotfiles-env <command> [arguments]"
+    echo "  dotfiles-env interactive            # Interactive mode"
+    echo
+    echo.purple "INTERACTIVE MODE:"
+    echo "  env i                        # Start interactive mode"
+    echo "  env interactive              # Start interactive mode"
+    echo "  env --i                      # Start interactive mode"
+    echo "  env --interactive            # Start interactive mode"
+    echo
+    echo.purple "BASIC OPERATIONS:"
+    echo "  list                         List all environment variables"
+    echo "  get [key]                    Get environment variable (interactive if no key)"
+    echo "  set <key> <value> [desc]     Set environment variable with optional description"
+    echo "  remove [key]                 Remove environment variable (interactive if no key)"
+    echo "  search <query>               Search variables by key, value, or description"
+    echo
+    echo.purple "ADVANCED FEATURES:"
+    echo "  generate <key> [length]      Generate random secret (default: 32 chars)"
+    echo "  generate-oauth <name> [type] [bits] [desc]  Generate OAuth key pair"
+    echo
+    echo.purple "DATA MANAGEMENT:"
+    echo "  export <file>                Export to .env or .json format"
+    echo "  import <file>                Import from .env or .json file"
+    echo "  backup                       Create timestamped backup"
+    echo "  restore <backup_file>        Restore from backup file"
+    echo
+    echo.purple "BASIC EXAMPLES:"
+    echo "  env set API_KEY 'abc123' 'Production API key'"
+    echo "  env get API_KEY                              # Returns value + copies to clipboard"
+    echo "  env list                                     # Show all variables with details"
+    echo "  env search 'github'                         # Find GitHub-related variables"
+    echo
+    echo.purple "ADVANCED EXAMPLES:"
+    echo "  env generate SESSION_SECRET 64               # Generate 64-char random secret"
+    echo "  env generate-oauth GITHUB_APP rsa 4096 'App keys'  # Generate OAuth key pair"
+    echo "  env export ~/.env.backup                     # Export to .env format"
+    echo "  env import ~/.env.production                 # Import production variables"
+    echo
+    echo.purple "ALIASES & SHORTCUTS:"
+    echo "  envs list                    # Quick list command"
+    echo "  envs get [key]               # Quick get command (interactive if no key)"
+    echo "  envs set <key> <value>       # Quick set command"
+    echo
+    echo.cyan "INTERACTIVE FEATURES:"
+    echo "• Beautiful menu-driven interface with numbered options"
+    echo "• Smart fuzzy search integration (fzf) for variable selection"
+    echo "• Confirmation dialogs for destructive operations"
+    echo "• Built-in help for each operation"
+    echo "• Clipboard integration - retrieved values copied automatically"
+    echo
+    echo.cyan "FILE FORMATS:"
+    echo "• JSON: Full metadata preservation (recommended for backups)"
+    echo "• .env: Standard format for application configuration"
+    echo "• Auto-detection based on file extension"
+    echo
+    echo.info "💡 Pro tip: Use interactive mode (env i) for the best user experience!"
+    echo.warning "⚠  All values are stored as-is - consider encryption for sensitive data"
+}
 
-USAGE:
-    dotfiles-env <command> [arguments]
+# Wait for user input
+wait_for_input() {
+    echo
+    echo -n "$(echo.purple 'Press any key to continue...')" 
+    read -n 1 -s
+    echo
+}
 
-COMMANDS:
-    set <key> <value> [description]     Set environment variable
-    get [key]                           Get environment variable (interactive if no key)
-    remove [key]                        Remove environment variable (interactive if no key)
-    list                                List all environment variables
-    search <query>                      Search environment variables
+# Interactive mode main menu
+show_interactive_menu() {
+    clear
+    echo.header "🔐 Environment Variable Manager - Interactive Mode"
+    echo
     
-    generate <key> [length]             Generate random value (default: 32 chars)
-    generate-oauth <name> [type] [bits] [desc]  Generate OAuth key pair
+    local count
+    count=$(jq 'length' "$ENV_FILE" 2>/dev/null || echo "0")
+    echo.cyan "📊 Current Status: $count environment variables stored"
+    echo
     
-    export <file>                       Export to file (.json or .env format)
-    import <file>                       Import from file
-    backup                              Create backup
-    restore <backup_file>               Restore from backup
+    echo.purple "MAIN MENU:"
+    echo "  1) 📋 List all variables"
+    echo "  2) 🔍 Search variables"
+    echo "  3) ➕ Add new variable"
+    echo "  4) 📖 Get variable value"
+    echo "  5) ✏️  Edit/Update variable"
+    echo "  6) 🗑️  Remove variable"
+    echo
+    echo "  7) 🎲 Generate random secret"
+    echo "  8) 🔑 Generate OAuth key pair"
+    echo
+    echo "  9) 💾 Data management (backup, restore, import, export)"
+    echo "  0) ❓ Help"
+    echo
+    echo "  q) 🚪 Quit"
+    echo
+}
+
+# Interactive data management submenu
+show_data_management_menu() {
+    clear
+    echo.header "💾 Data Management"
+    echo
     
-    help                                Show this help
+    echo.purple "DATA OPERATIONS:"
+    echo "  1) 📤 Export variables"
+    echo "  2) 📥 Import variables"
+    echo "  3) 💾 Create backup"
+    echo "  4) 🔄 Restore from backup"
+    echo "  5) 📊 Show storage info"
+    echo
+    echo "  b) ⬅️  Back to main menu"
+    echo "  q) 🚪 Quit"
+    echo
+}
 
-EXAMPLES:
-    dotfiles-env set API_KEY "abc123" "Production API key"
-    dotfiles-env get API_KEY
-    dotfiles-env list
-    dotfiles-env search "api"
-    dotfiles-env generate RANDOM_SECRET 64
-    dotfiles-env generate-oauth GITHUB_OAUTH rsa 4096 "GitHub OAuth App"
-    dotfiles-env export ~/.env.backup
-    dotfiles-env import ~/.env
+# Interactive list with pagination
+interactive_list() {
+    clear
+    echo.header "📋 Environment Variables List"
+    echo
+    
+    init_env_file
+    validate_json
+    
+    local count
+    count=$(jq 'length' "$ENV_FILE")
+    
+    if [[ "$count" -eq 0 ]]; then
+        echo.info "No environment variables stored yet."
+        echo.cyan "Use option 3 from the main menu to add your first variable!"
+        wait_for_input
+        return 0
+    fi
+    
+    echo.cyan "Found $count environment variable(s):"
+    echo
+    
+    # Enhanced listing with better formatting
+    jq -r 'to_entries[] | 
+        "🔹 \(.key)\n  📝 Value: \(.value.value | if length > 60 then .[:57] + "..." else . end)\n  📖 Description: \(.value.description // "No description")\n  📅 Created: \(.value.created // "Unknown")\n  🔄 Updated: \(.value.updated // "Unknown")\n"' \
+        "$ENV_FILE"
+    
+    wait_for_input
+}
 
-ALIASES:
-    envs list                           Shorthand for list command
-    envs get [key]                      Shorthand for get command
-    envs set <key> <value> [desc]       Shorthand for set command
+# Interactive search
+interactive_search() {
+    clear
+    echo.header "🔍 Search Environment Variables"
+    echo
+    
+    echo.cyan "Enter search term (searches keys, values, and descriptions):"
+    echo -n "$(echo.purple 'Search'): "
+    read -r query
+    
+    if [[ -z "$query" ]]; then
+        echo.warning "Search query cannot be empty"
+        wait_for_input
+        return 1
+    fi
+    
+    echo
+    echo.info "Searching for: '$query'"
+    echo
+    
+    local results
+    results=$(jq -r --arg query "$query" '
+        to_entries[] | 
+        select(
+            (.key | ascii_downcase | contains($query | ascii_downcase)) or 
+            (.value.description // "" | ascii_downcase | contains($query | ascii_downcase)) or
+            (.value.value | ascii_downcase | contains($query | ascii_downcase))
+        ) |
+        "🔹 \(.key)\n  📝 Value: \(.value.value | if length > 60 then .[:57] + "..." else . end)\n  📖 Description: \(.value.description // "No description")\n"' \
+        "$ENV_FILE")
+    
+    if [[ -z "$results" ]]; then
+        echo.warning "No matches found for '$query'"
+    else
+        echo.success "Search results:"
+        echo
+        echo "$results"
+    fi
+    
+    wait_for_input
+}
 
-EOF
+# Interactive add variable
+interactive_add() {
+    clear
+    echo.header "➕ Add New Environment Variable"
+    echo
+    
+    local key value description
+    
+    # Get key
+    while true; do
+        echo -n "$(echo.cyan 'Variable name'): "
+        read -r key
+        
+        if [[ -z "$key" ]]; then
+            echo.error "Variable name cannot be empty"
+            continue
+        fi
+        
+        if [[ "$key" =~ [[:space:]] ]]; then
+            echo.error "Variable name cannot contain spaces"
+            continue
+        fi
+        
+        # Check if exists
+        if jq -e --arg key "$key" '.[$key]' "$ENV_FILE" > /dev/null 2>&1; then
+            echo.warning "Variable '$key' already exists"
+            echo -n "$(echo.purple 'Overwrite? (y/n)'): "
+            read -r overwrite
+            case "$overwrite" in
+                y|Y|yes|YES) break ;;
+                *) continue ;;
+            esac
+        fi
+        break
+    done
+    
+    # Get value
+    echo -n "$(echo.cyan 'Variable value'): "
+    read -r value
+    
+    if [[ -z "$value" ]]; then
+        echo.warning "Empty value - are you sure?"
+        echo -n "$(echo.purple 'Continue with empty value? (y/n)'): "
+        read -r continue_empty
+        case "$continue_empty" in
+            y|Y|yes|YES) ;;
+            *) echo.info "Cancelled"; wait_for_input; return 1 ;;
+        esac
+    fi
+    
+    # Get description
+    echo -n "$(echo.cyan 'Description (optional)'): "
+    read -r description
+    
+    # Confirm
+    echo
+    echo.header "Confirm Variable Details"
+    echo "  Name: $key"
+    echo "  Value: ${value:0:50}$([ ${#value} -gt 50 ] && echo '...')"
+    echo "  Description: ${description:-'(none)'}"
+    echo
+    
+    echo -n "$(echo.purple 'Save this variable? (y/n)'): "
+    read -r confirm
+    
+    case "$confirm" in
+        y|Y|yes|YES)
+            if set_env_var "$key" "$value" "$description"; then
+                echo.success "✅ Variable '$key' saved successfully!"
+            else
+                echo.error "❌ Failed to save variable"
+            fi
+            ;;
+        *)
+            echo.info "Cancelled"
+            ;;
+    esac
+    
+    wait_for_input
+}
+
+# Interactive get variable
+interactive_get() {
+    clear
+    echo.header "📖 Get Environment Variable Value"
+    echo
+    
+    # Use existing fzf integration if available
+    if command -v fzf >/dev/null 2>&1; then
+        echo.info "Use fuzzy search to select a variable:"
+        echo
+        get_env_var ""
+    else
+        echo.warning "fzf not available - showing all variables for manual selection"
+        echo
+        
+        local vars
+        vars=($(jq -r 'keys[]' "$ENV_FILE" 2>/dev/null))
+        
+        if [[ ${#vars[@]} -eq 0 ]]; then
+            echo.warning "No environment variables stored"
+            wait_for_input
+            return 1
+        fi
+        
+        echo.cyan "Available variables:"
+        for i in "${!vars[@]}"; do
+            echo "  $((i+1))) ${vars[i]}"
+        done
+        echo
+        
+        echo -n "$(echo.purple 'Enter variable name'): "
+        read -r key
+        
+        if [[ -n "$key" ]]; then
+            get_env_var "$key"
+        else
+            echo.warning "No variable specified"
+        fi
+    fi
+    
+    wait_for_input
+}
+
+# Interactive remove variable
+interactive_remove() {
+    clear
+    echo.header "🗑️ Remove Environment Variable"
+    echo
+    
+    # Use existing fzf integration if available
+    if command -v fzf >/dev/null 2>&1; then
+        echo.info "Use fuzzy search to select a variable to remove:"
+        echo.warning "⚠  This action cannot be undone!"
+        echo
+        remove_env_var ""
+    else
+        echo.warning "fzf not available - showing all variables for manual selection"
+        echo
+        
+        local vars
+        vars=($(jq -r 'keys[]' "$ENV_FILE" 2>/dev/null))
+        
+        if [[ ${#vars[@]} -eq 0 ]]; then
+            echo.warning "No environment variables stored"
+            wait_for_input
+            return 1
+        fi
+        
+        echo.cyan "Variables available for removal:"
+        for i in "${!vars[@]}"; do
+            echo "  $((i+1))) ${vars[i]}"
+        done
+        echo
+        echo.warning "⚠  This action cannot be undone!"
+        
+        echo -n "$(echo.purple 'Enter variable name to remove'): "
+        read -r key
+        
+        if [[ -n "$key" ]]; then
+            remove_env_var "$key"
+        else
+            echo.warning "No variable specified"
+        fi
+    fi
+    
+    wait_for_input
+}
+
+# Interactive generate random
+interactive_generate_random() {
+    clear
+    echo.header "🎲 Generate Random Secret"
+    echo
+    
+    local key length
+    
+    # Get key
+    echo -n "$(echo.cyan 'Variable name'): "
+    read -r key
+    
+    if [[ -z "$key" ]]; then
+        echo.error "Variable name cannot be empty"
+        wait_for_input
+        return 1
+    fi
+    
+    # Get length
+    echo -n "$(echo.cyan 'Secret length (default: 32)'): "
+    read -r length
+    length=${length:-32}
+    
+    if ! [[ "$length" =~ ^[0-9]+$ ]] || [[ $length -lt 1 ]]; then
+        echo.error "Length must be a positive number"
+        wait_for_input
+        return 1
+    fi
+    
+    # Generate and confirm
+    local value
+    value=$(generate_random "$length")
+    
+    echo
+    echo.header "Generated Secret Preview"
+    echo "  Name: $key"
+    echo "  Length: $length characters"
+    echo "  Value: ${value:0:20}...${value: -10}"  # Show first 20 and last 10 chars
+    echo
+    
+    echo -n "$(echo.purple 'Save this secret? (y/n)'): "
+    read -r confirm
+    
+    case "$confirm" in
+        y|Y|yes|YES)
+            if set_env_var "$key" "$value" "Generated random secret ($length chars)"; then
+                echo.success "✅ Random secret '$key' generated and saved!"
+            else
+                echo.error "❌ Failed to save secret"
+            fi
+            ;;
+        *)
+            echo.info "Cancelled - secret not saved"
+            ;;
+    esac
+    
+    wait_for_input
+}
+
+# Interactive generate OAuth
+interactive_generate_oauth() {
+    clear
+    echo.header "🔑 Generate OAuth Key Pair"
+    echo
+    
+    local name type bits description
+    
+    # Get name
+    echo -n "$(echo.cyan 'Key pair name (e.g., GITHUB_OAUTH)'): "
+    read -r name
+    
+    if [[ -z "$name" ]]; then
+        echo.error "Key pair name cannot be empty"
+        wait_for_input
+        return 1
+    fi
+    
+    # Get type
+    echo -n "$(echo.cyan 'Key type (rsa/default: rsa)'): "
+    read -r type
+    type=${type:-rsa}
+    
+    # Get bits
+    echo -n "$(echo.cyan 'Key size in bits (default: 4096)'): "
+    read -r bits
+    bits=${bits:-4096}
+    
+    if ! [[ "$bits" =~ ^[0-9]+$ ]] || [[ $bits -lt 1024 ]]; then
+        echo.error "Key size must be at least 1024 bits"
+        wait_for_input
+        return 1
+    fi
+    
+    # Get description
+    echo -n "$(echo.cyan 'Description (optional)'): "
+    read -r description
+    description=${description:-"OAuth Key Pair"}
+    
+    # Confirm
+    echo
+    echo.header "OAuth Key Pair Configuration"
+    echo "  Name: $name (will create ${name}_PRIVATE_KEY and ${name}_PUBLIC_KEY)"
+    echo "  Type: $type"
+    echo "  Size: $bits bits"
+    echo "  Description: $description"
+    echo
+    
+    echo -n "$(echo.purple 'Generate OAuth key pair? (y/n)'): "
+    read -r confirm
+    
+    case "$confirm" in
+        y|Y|yes|YES)
+            echo.info "Generating OAuth key pair (this may take a moment)..."
+            if generate_oauth "$name" "$type" "$bits" "$description"; then
+                echo.success "✅ OAuth key pair generated successfully!"
+            else
+                echo.error "❌ Failed to generate OAuth key pair"
+            fi
+            ;;
+        *)
+            echo.info "Cancelled - no keys generated"
+            ;;
+    esac
+    
+    wait_for_input
+}
+
+# Interactive data management
+interactive_data_management() {
+    while true; do
+        show_data_management_menu
+        echo -n "$(echo.cyan 'Choose an option'): "
+        read -r choice
+        
+        case "$choice" in
+            1)
+                clear
+                echo.header "📤 Export Variables"
+                echo
+                echo -n "$(echo.cyan 'Export file path (.json or .env)'): "
+                read -r export_file
+                
+                if [[ -n "$export_file" ]]; then
+                    if export_env_vars "$export_file"; then
+                        echo.success "✅ Variables exported successfully!"
+                    else
+                        echo.error "❌ Export failed"
+                    fi
+                    wait_for_input
+                fi
+                ;;
+            2)
+                clear
+                echo.header "📥 Import Variables"
+                echo
+                echo -n "$(echo.cyan 'Import file path'): "
+                read -r import_file
+                
+                if [[ -n "$import_file" ]]; then
+                    echo.warning "⚠  This will merge with existing variables (may overwrite)"
+                    echo -n "$(echo.purple 'Continue? (y/n)'): "
+                    read -r confirm
+                    
+                    case "$confirm" in
+                        y|Y|yes|YES)
+                            if import_env_vars "$import_file"; then
+                                echo.success "✅ Variables imported successfully!"
+                            else
+                                echo.error "❌ Import failed"
+                            fi
+                            ;;
+                        *)
+                            echo.info "Import cancelled"
+                            ;;
+                    esac
+                    wait_for_input
+                fi
+                ;;
+            3)
+                clear
+                echo.header "💾 Create Backup"
+                echo
+                if backup_env_vars; then
+                    echo.success "✅ Backup created successfully!"
+                else
+                    echo.error "❌ Backup failed"
+                fi
+                wait_for_input
+                ;;
+            4)
+                clear
+                echo.header "🔄 Restore from Backup"
+                echo
+                
+                # Show available backups
+                if [[ -d "$ENV_BACKUP_DIR" ]]; then
+                    local backups=("$ENV_BACKUP_DIR"/env_backup_*.json)
+                    if [[ -f "${backups[0]}" ]]; then
+                        echo.cyan "Available backups:"
+                        for backup in "${backups[@]}"; do
+                            local filename=$(basename "$backup")
+                            local date_part=${filename#env_backup_}
+                            local date_formatted=${date_part%.json}
+                            echo "  📄 $filename (${date_formatted})"
+                        done
+                        echo
+                    fi
+                fi
+                
+                echo -n "$(echo.cyan 'Backup file path'): "
+                read -r backup_file
+                
+                if [[ -n "$backup_file" ]]; then
+                    echo.warning "⚠  This will replace ALL current variables!"
+                    echo -n "$(echo.purple 'Are you sure? (y/n)'): "
+                    read -r confirm
+                    
+                    case "$confirm" in
+                        y|Y|yes|YES)
+                            if restore_env_vars "$backup_file"; then
+                                echo.success "✅ Variables restored successfully!"
+                            else
+                                echo.error "❌ Restore failed"
+                            fi
+                            ;;
+                        *)
+                            echo.info "Restore cancelled"
+                            ;;
+                    esac
+                    wait_for_input
+                fi
+                ;;
+            5)
+                clear
+                echo.header "📊 Storage Information"
+                echo
+                
+                local count size backup_count
+                count=$(jq 'length' "$ENV_FILE" 2>/dev/null || echo "0")
+                size=$(du -h "$ENV_FILE" 2>/dev/null | cut -f1 || echo "0B")
+                
+                echo.cyan "Environment Variables:"
+                echo "  📝 Variables stored: $count"
+                echo "  💾 Storage file size: $size"
+                echo "  📍 Storage location: $ENV_FILE"
+                echo
+                
+                if [[ -d "$ENV_BACKUP_DIR" ]]; then
+                    backup_count=$(find "$ENV_BACKUP_DIR" -name "env_backup_*.json" 2>/dev/null | wc -l)
+                    echo.cyan "Backups:"
+                    echo "  📦 Backup count: $backup_count"
+                    echo "  📂 Backup location: $ENV_BACKUP_DIR"
+                    
+                    if [[ $backup_count -gt 0 ]]; then
+                        local latest_backup
+                        latest_backup=$(find "$ENV_BACKUP_DIR" -name "env_backup_*.json" -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+                        if [[ -n "$latest_backup" ]]; then
+                            local backup_date
+                            backup_date=$(stat -c %y "$latest_backup" 2>/dev/null | cut -d' ' -f1)
+                            echo "  🕐 Latest backup: $backup_date"
+                        fi
+                    fi
+                else
+                    echo.cyan "Backups:"
+                    echo "  📦 No backups created yet"
+                fi
+                
+                wait_for_input
+                ;;
+            b|B|back|BACK)
+                break
+                ;;
+            q|Q|quit|QUIT|exit|EXIT)
+                echo.info "👋 Goodbye!"
+                exit 0
+                ;;
+            *)
+                echo.error "Invalid option: $choice"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# Main interactive mode
+interactive_mode() {
+    while true; do
+        show_interactive_menu
+        echo -n "$(echo.cyan 'Choose an option'): "
+        read -r choice
+        
+        case "$choice" in
+            1) interactive_list ;;
+            2) interactive_search ;;
+            3) interactive_add ;;
+            4) interactive_get ;;
+            5) interactive_add ;;  # Edit is same as add with overwrite
+            6) interactive_remove ;;
+            7) interactive_generate_random ;;
+            8) interactive_generate_oauth ;;
+            9) interactive_data_management ;;
+            0) show_help; wait_for_input ;;
+            q|Q|quit|QUIT|exit|EXIT)
+                echo.info "👋 Goodbye!"
+                exit 0
+                ;;
+            *)
+                echo.error "Invalid option: $choice"
+                sleep 1
+                ;;
+        esac
+    done
 }
 
 # Main function
 main() {
     local command="${1:-help}"
+    
+    # Check for interactive mode triggers first
+    case "$command" in
+        i|interactive|--i|--interactive)
+            interactive_mode
+            return $?
+            ;;
+    esac
     
     case "$command" in
         set)

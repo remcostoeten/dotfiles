@@ -7,10 +7,11 @@ export DOTFILES_BIN="$DOTFILES_ROOT/bin"
 export DOTFILES_UTILS="$DOTFILES_ROOT/utils"
 export DOTFILES_LOGS="$DOTFILES_ROOT/logs"
 export DOTFILES_ASSETS="$DOTFILES_ROOT/assets"
+export DOTFILES_SCRIPTS="$DOTFILES_ROOT/scripts"
 
 export SHEBANG='#!/usr/bin/env bash'
 
-export DOTFILES_VERSION="0.0.90"
+export DOTFILES_VERSION="0.0.94"
 
 export DOTFILES_SHELL="${SHELL##*/}"
 if [[ "$DOTFILES_SHELL" == "bash" ]]; then

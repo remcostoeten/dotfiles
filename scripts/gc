@@ -1,0 +1,578 @@
+#!/usr/bin/env zsh
+
+# =============================================================================
+# Git Commit (gc) - Enhanced git commit wrapper
+# Author: Remco Stoeten
+# Description: Quick git commit with optional file staging and additional flags
+# =============================================================================
+
+# Source dotfiles environment if available
+if [[ -n "$DOTFILES_ROOT" && -f "$DOTFILES_ROOT/core/_colors" ]]; then
+    source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || true
+fi
+
+# Fallback color functions if dotfiles not available
+if ! command -v echo.error >/dev/null 2>&1; then
+    echo.error() { echo -e "\033[31m✗ $*\033[0m" >&2; }
+    echo.success() { echo -e "\033[32m✓ $*\033[0m"; }
+    echo.warning() { echo -e "\033[33m⚠ $*\033[0m"; }
+    echo.info() { echo -e "\033[36mℹ $*\033[0m"; }
+    echo.cyan() { echo -e "\033[36m$*\033[0m"; }
+    echo.purple() { echo -e "\033[35m$*\033[0m"; }
+    echo.header() { 
+        echo -e "\033[34m╭─────────────────────────────────────────────╮\033[0m"
+        echo -e "\033[34m│  $* \033[0m"
+        echo -e "\033[34m╰─────────────────────────────────────────────╯\033[0m"
+    }
+fi
+
+function show_help() {
+    echo.header "🚀 Git Commit (gc) - Enhanced Wrapper"
+    echo
+    echo.cyan "USAGE:"
+    echo "  gc <message> [options]"
+    echo "  gc interactive              # Interactive mode"
+    echo
+    echo.purple "BASIC EXAMPLES:"
+    echo "  gc 'Add new feature'                      # Simple commit"
+    echo "  gc 'Fix bug in parser'                    # Commit with message"
+    echo
+    echo.purple "INTERACTIVE MODE:"
+    echo "  gc i                        # Start interactive mode"
+    echo "  gc interactive              # Start interactive mode"
+    echo "  gc -i                       # Start interactive mode"
+    echo "  gc --i                      # Start interactive mode"
+    echo
+    echo.purple "STAGING OPTIONS:"
+    echo "  gc 'Update docs' --a                      # Add ALL files, then commit"
+    echo "  gc 'Fix styles' --add file1.css file2.js  # Add specific files, then commit"
+    echo "  gc 'New module' -a src/ utils/helper.js   # Add folder and file, then commit"
+    echo
+    echo.purple "ADDITIONAL FLAGS:"
+    echo "  --push, --p, -p          Push after successful commit"
+    echo "  --sign, --s, -S          GPG sign the commit"
+    echo "  --verbose, --v, -v       Verbose git output"
+    echo "  --help, --h, -h, help    Show this help"
+    echo
+    echo.purple "COMBINED EXAMPLES:"
+    echo "  gc 'Release v1.0' --a --p --s             # Add all, commit, sign, and push"
+    echo "  gc 'Hotfix' --add src/bug.js --push       # Add specific file, commit and push"
+    echo "  gc 'Debug logs' --v                       # Commit with verbose output"
+    echo
+    echo.cyan "STAGING BEHAVIOR:"
+    echo "• Use --a, --add, or -a to enable staging"
+    echo "• If no files specified after staging flag: stages ALL files (git add .)"
+    echo "• If files specified: stages only those files"
+    echo "• Files can be individual files, directories, or glob patterns"
+    echo
+    echo.cyan "INTERACTIVE MODE:"
+    echo "• Displays current git status with numbered file options"
+    echo "• Select files to stage by number (1, 2, 3 or 1,3,5 or 1-3)"
+    echo "• Enter commit message interactively"
+    echo "• Review and confirm before committing"
+    echo
+    echo.info "💡 Pro tip: gc must be followed by exactly one space before the message"
+    echo.warning "⚠  Make sure you're in a git repository before using gc"
+}
+
+function get_git_status_files() {
+    local status_output
+    status_output=$(git status --porcelain 2>/dev/null)
+    
+    if [[ -z "$status_output" ]]; then
+        return 1
+    fi
+    
+    echo "$status_output"
+    return 0
+}
+
+function display_file_menu() {
+    local status_files=("${(@f)$(get_git_status_files)}")
+    
+    if [[ ${#status_files[@]} -eq 0 ]]; then
+        echo.info "No changes detected in repository"
+        return 1
+    fi
+    
+    local current_branch
+    current_branch=$(git branch --show-current 2>/dev/null || echo "detached HEAD")
+    
+    echo.header "🌟 Interactive Git Commit - Branch: $current_branch"
+    echo
+    echo.cyan "📋 Select files to stage:"
+    echo
+    
+    local counter=1
+    local file_paths=()
+    
+    for line in "${status_files[@]}"; do
+        local status_code="${line:0:2}"
+        local file_path="${line:3}"
+        local status_desc
+        
+        case "$status_code" in
+            "M "*) status_desc="🔵 Modified (staged)" ;;
+            " M") status_desc="🟡 Modified" ;;
+            "A "*) status_desc="🟢 Added (staged)" ;;
+            "??"*) status_desc="🆕 New file" ;;
+            "D "*) status_desc="🔴 Deleted (staged)" ;;
+            " D") status_desc="❌ Deleted" ;;
+            "R "*) status_desc="🔄 Renamed (staged)" ;;
+            "C "*) status_desc="📋 Copied (staged)" ;;
+            "MM"*) status_desc="🟠 Modified (staged + unstaged)" ;;
+            "AM"*) status_desc="🔵🟡 Added + modified" ;;
+            *) status_desc="❓ $status_code" ;;
+        esac
+        
+        printf "  %2d) %-50s %s\n" "$counter" "$file_path" "$status_desc"
+        file_paths+=("$file_path")
+        ((counter++))
+    done
+    
+    echo
+    echo.purple "OPTIONS:"
+    echo "  a) Add all files"
+    echo "  c) Continue to commit (stage selected files)"
+    echo "  q) Quit without committing"
+    echo "  h) Show help"
+    echo
+    echo.info "💡 Enter numbers (1 2 3), ranges (1-5), or letters for options above"
+    
+    # Return file paths as space-separated string for parsing
+    printf "%s\n" "${file_paths[@]}"
+}
+
+function parse_file_selection() {
+    local input="$1"
+    local max_files="$2"
+    local selected_indices=()
+    
+    # Handle special commands
+    case "$input" in
+        "a"|"all") 
+            for ((i=1; i<=max_files; i++)); do
+                selected_indices+=($i)
+            done
+            ;;
+        "c"|"continue")
+            echo "continue"
+            return 0
+            ;;
+        "q"|"quit"|"exit")
+            echo "quit"
+            return 0
+            ;;
+        "h"|"help")
+            echo "help"
+            return 0
+            ;;
+        *)
+            # Parse number selections
+            local parts=(${=input//,/ })  # Split by comma and space
+            
+            for part in "${parts[@]}"; do
+                if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                    # Range selection (e.g., "1-3")
+                    local start=$match[1]
+                    local end=$match[2]
+                    
+                    if [[ $start -le $end && $start -ge 1 && $end -le $max_files ]]; then
+                        for ((i=start; i<=end; i++)); do
+                            selected_indices+=($i)
+                        done
+                    else
+                        echo.error "Invalid range: $part (must be 1-$max_files)"
+                        return 1
+                    fi
+                elif [[ "$part" =~ ^[0-9]+$ ]]; then
+                    # Single number
+                    local num=$part
+                    if [[ $num -ge 1 && $num -le $max_files ]]; then
+                        selected_indices+=($num)
+                    else
+                        echo.error "Invalid file number: $num (must be 1-$max_files)"
+                        return 1
+                    fi
+                else
+                    echo.error "Invalid selection: $part"
+                    return 1
+                fi
+            done
+            ;;
+    esac
+    
+    # Remove duplicates and sort
+    selected_indices=($(printf "%s\n" "${selected_indices[@]}" | sort -n | uniq))
+    echo "${selected_indices[@]}"
+    return 0
+}
+
+function interactive_file_selection() {
+    # Get git status and parse files directly
+    local status_files=("${(@f)$(get_git_status_files)}")
+    
+    if [[ ${#status_files[@]} -eq 0 ]]; then
+        echo.info "No changes detected in repository"
+        return 1
+    fi
+    
+    local file_paths=()
+    for line in "${status_files[@]}"; do
+        local file_path="${line:3}"  # Extract file path (skip status code)
+        file_paths+=("$file_path")
+    done
+    
+    # Display the menu
+    display_file_menu >/dev/null  # Suppress the return value
+    
+    local max_files=${#file_paths[@]}
+    local selected_files=()
+    
+    while true; do
+        echo
+        echo -n "$(echo.cyan 'Select files')$(echo ' (or type h for help): ')"
+        read -r user_input
+        
+        if [[ -z "$user_input" ]]; then
+            echo.warning "Please enter a selection"
+            continue
+        fi
+        
+        local selection_result
+        selection_result=$(parse_file_selection "$user_input" "$max_files")
+        local parse_exit_code=$?
+        
+        if [[ $parse_exit_code -ne 0 ]]; then
+            continue
+        fi
+        
+        case "$selection_result" in
+            "continue")
+                if [[ ${#selected_files[@]} -eq 0 ]]; then
+                    echo.warning "No files selected yet. Select files first or choose 'a' for all files."
+                    continue
+                else
+                    break
+                fi
+                ;;
+            "quit")
+                echo.info "Exiting without committing"
+                return 1
+                ;;
+            "help")
+                echo
+                echo.cyan "HELP - File Selection:"
+                echo "• Enter file numbers: 1 2 3"
+                echo "• Enter ranges: 1-5 (files 1 through 5)"
+                echo "• Combine: 1 3-5 8 (files 1, 3, 4, 5, and 8)"
+                echo "• Use commas: 1,3,5 (files 1, 3, and 5)"
+                echo "• Special commands:"
+                echo "  - 'a' or 'all': select all files"
+                echo "  - 'c' or 'continue': proceed with selected files"
+                echo "  - 'q' or 'quit': exit without committing"
+                echo "  - 'h' or 'help': show this help"
+                echo
+                continue
+                ;;
+            *)
+                # Process selected indices
+                local indices=(${=selection_result})
+                local newly_selected=()
+                
+                for index in "${indices[@]}"; do
+                    local file_path="${file_paths[$index]}"
+                    newly_selected+=("$file_path")
+                done
+                
+                selected_files+=("${newly_selected[@]}")
+                
+                # Remove duplicates
+                selected_files=($(printf "%s\n" "${selected_files[@]}" | sort | uniq))
+                
+                echo.success "Selected ${#newly_selected[@]} file(s). Total selected: ${#selected_files[@]}"
+                echo.info "Current selection: ${selected_files[*]}"
+                ;;
+        esac
+    done
+    
+    # Stage selected files
+    echo
+    echo.info "Staging ${#selected_files[@]} selected file(s)..."
+    
+    for file in "${selected_files[@]}"; do
+        if git add "$file"; then
+            echo.success "✓ Staged: $file"
+        else
+            echo.error "✗ Failed to stage: $file"
+            return 1
+        fi
+    done
+    
+    echo.success "All selected files staged successfully!"
+    return 0
+}
+
+function get_commit_message() {
+    echo
+    echo.cyan "📝 Enter your commit message:"
+    echo.info "💡 Press Enter for single-line, or type 'multi' for multi-line message"
+    echo
+    
+    local commit_message=""
+    
+    while true; do
+        echo -n "$(echo.purple 'Commit message'): "
+        read -r message_input
+        
+        if [[ -z "$message_input" ]]; then
+            echo.warning "Commit message cannot be empty"
+            continue
+        elif [[ "$message_input" == "multi" ]]; then
+            echo
+            echo.info "Enter multi-line commit message. Type 'END' on a new line to finish:"
+            local line
+            commit_message=""
+            
+            while IFS= read -r line; do
+                if [[ "$line" == "END" ]]; then
+                    break
+                fi
+                if [[ -n "$commit_message" ]]; then
+                    commit_message="$commit_message\n$line"
+                else
+                    commit_message="$line"
+                fi
+            done
+            
+            if [[ -z "$commit_message" ]]; then
+                echo.warning "Commit message cannot be empty"
+                continue
+            fi
+            break
+        else
+            commit_message="$message_input"
+            break
+        fi
+    done
+    
+    echo
+    echo.cyan "📋 Commit message preview:"
+    echo "┌─────────────────────────────────────────────────────────────────┐"
+    echo -e "│ $commit_message"
+    echo "└─────────────────────────────────────────────────────────────────┘"
+    echo
+    
+    while true; do
+        echo -n "$(echo.purple 'Confirm commit? (y/n/e for edit)'): "
+        read -r confirm
+        
+        case "$confirm" in
+            y|Y|yes|YES)
+                echo "$commit_message"
+                return 0
+                ;;
+            n|N|no|NO)
+                echo.info "Commit cancelled"
+                return 1
+                ;;
+            e|E|edit|EDIT)
+                echo.info "Re-enter your commit message:"
+                return 2  # Signal to re-enter message
+                ;;
+            *)
+                echo.warning "Please enter 'y' (yes), 'n' (no), or 'e' (edit)"
+                ;;
+        esac
+    done
+}
+
+function interactive_commit() {
+    echo.header "🎯 Interactive Git Commit Mode"
+    echo
+    
+    # Step 1: Select and stage files
+    if ! interactive_file_selection; then
+        return 1
+    fi
+    
+    # Step 2: Get commit message
+    local commit_message
+    while true; do
+        commit_message=$(get_commit_message)
+        local message_result=$?
+        
+        if [[ $message_result -eq 0 ]]; then
+            break  # Message confirmed
+        elif [[ $message_result -eq 1 ]]; then
+            return 1  # User cancelled
+        fi
+        # If result is 2, loop to re-enter message
+    done
+    
+    # Step 3: Execute commit
+    echo.info "Executing commit..."
+    if git commit -m "$commit_message"; then
+        echo.success "✅ Commit successful!"
+        
+        # Ask about pushing
+        echo
+        echo -n "$(echo.purple 'Push to remote? (y/n)'): "
+        read -r push_confirm
+        
+        case "$push_confirm" in
+            y|Y|yes|YES)
+                echo.info "Pushing to remote..."
+                if git push; then
+                    echo.success "✅ Push successful!"
+                else
+                    echo.warning "⚠ Push failed, but commit was successful"
+                    return 1
+                fi
+                ;;
+            *)
+                echo.info "Skipping push"
+                ;;
+        esac
+        
+        echo.success "🎉 Interactive commit completed successfully!"
+        return 0
+    else
+        echo.error "❌ Commit failed"
+        return 1
+    fi
+}
+
+function gc_main() {
+    # Handle help cases first (works everywhere, no git repo required)
+    if [[ $# -eq 0 || "$1" == "help" || "$1" == "--help" || "$1" == "--h" || "$1" == "-h" ]]; then
+        show_help
+        return 0
+    fi
+    
+    # Check if we're in a git repository (required for all non-help operations)
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo.error "Not in a git repository"
+        echo.info "Use 'gc help' to see available commands"
+        return 1
+    fi
+
+    local message=""
+    local should_stage=false
+    local should_push=false
+    local should_sign=false
+    local should_verbose=false
+    local files_to_stage=()
+    local git_args=()
+    
+    # Check for interactive mode triggers (exact matches only)
+    if [[ $# -eq 1 ]]; then
+        case "$1" in
+            "i"|"interactive"|"-i"|"--i")
+                interactive_commit
+                return $?
+                ;;
+        esac
+    fi
+    
+    # Parse arguments
+    local args=("$@")
+    local message_parts=()
+    local in_staging_mode=false
+    
+    for ((i=1; i<=${#args[@]}; i++)); do
+        local arg="${args[i]}"
+        
+        case "$arg" in
+            --add|--a|-a)
+                should_stage=true
+                in_staging_mode=true
+                ;;
+            --push|--p|-p)
+                should_push=true
+                ;;
+            --sign|--s|-S)
+                should_sign=true
+                ;;
+            --verbose|--v|-v)
+                should_verbose=true
+                ;;
+            *)
+                if [[ "$in_staging_mode" == true ]]; then
+                    files_to_stage+=("$arg")
+                else
+                    message_parts+=("$arg")
+                fi
+                ;;
+        esac
+    done
+    
+    # Reconstruct commit message from parts
+    message="${(j: :)message_parts}"
+    
+    if [[ -z "$message" ]]; then
+        echo.error "Commit message cannot be empty"
+        echo.info "Usage: gc 'your commit message' [options]"
+        return 1
+    fi
+
+    # Handle staging if requested
+    if [[ "$should_stage" == true ]]; then
+        echo.info "Staging files..."
+        
+        if [[ ${#files_to_stage[@]} -eq 0 ]]; then
+            # No specific files, add everything
+            echo.info "Adding all files (git add .)"
+            if ! git add .; then
+                echo.error "Failed to stage files"
+                return 1
+            fi
+        else
+            # Add specific files
+            echo.info "Adding specific files: ${files_to_stage[*]}"
+            for file in "${files_to_stage[@]}"; do
+                if ! git add "$file"; then
+                    echo.error "Failed to add: $file"
+                    return 1
+                fi
+            done
+        fi
+        echo.success "Files staged successfully"
+    fi
+
+    # Build git commit command
+    local git_cmd=("git" "commit" "-m" "$message")
+    
+    if [[ "$should_sign" == true ]]; then
+        git_cmd+=("-S")
+    fi
+    
+    if [[ "$should_verbose" == true ]]; then
+        git_cmd+=("--verbose")
+    fi
+    
+    # Execute commit
+    echo.info "Committing: $message"
+    if "${git_cmd[@]}"; then
+        echo.success "Commit successful"
+    else
+        echo.error "Commit failed"
+        return 1
+    fi
+    
+    # Push if requested
+    if [[ "$should_push" == true ]]; then
+        echo.info "Pushing to remote..."
+        if git push; then
+            echo.success "Push successful"
+        else
+            echo.warning "Push failed, but commit was successful"
+            return 1
+        fi
+    fi
+    
+    echo.success "All operations completed successfully!"
+}
+
+# Execute main function with all arguments
+gc_main "$@"

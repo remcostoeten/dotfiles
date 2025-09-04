@@ -399,6 +399,7 @@ function dotfiles_help() {
     echo.purple "🔧 Management:"  
     printf "  %-12s %-20s %-12s %s\n" "$(echo.cyan 'modules')" "Manage modules" "$(echo.cyan 'link')" "Symlink manager"
     printf "  %-12s %-20s %-12s %s\n" "$(echo.cyan 'env')" "Environment vars" "$(echo.cyan 'new')" "Create module/script"
+    printf "  %-12s %-20s %-12s %s\n" "$(echo.cyan 'scripts')" "Custom scripts help" "$(echo.cyan 'templates')" "Available templates"
     printf "  %-12s %-20s %-12s %s\n" "$(echo.cyan 'generate')" "Code generators" "$(echo.cyan 'templates')" "Available templates"
     echo
     
@@ -429,7 +430,7 @@ function dotfiles_help() {
     
     # Examples - fewer lines
     echo.purple "✨ Quick Examples:"
-    echo.success "  dotfiles doctor • dotfiles env set KEY • dotfiles new module"
+    echo.success "  dotfiles doctor • dotfiles env set KEY • dotfiles new module • dotfiles generate"
     echo
     echo.info "💡 Use: dotfiles <command> help for detailed help"
     echo.info "🎆 Try: dotfiles help (comprehensive version)"
@@ -637,6 +638,7 @@ function dotfiles_generate() {
     esac
 }
 
+
 function dotfiles_templates() {
     echo.header "Available Templates"
     echo
@@ -670,6 +672,8 @@ function dotfiles_templates() {
         fi
     fi
 }
+
+
 
 case "${1:-help}" in
     version|v)
@@ -718,6 +722,16 @@ case "${1:-help}" in
     env|e)
         shift
         "$DOTFILES_BIN/dotfiles-env" "$@"
+        ;;
+    scripts|script)
+        shift
+        if command -v scripts >/dev/null 2>&1; then
+            scripts "$@"
+        else
+            echo.error "Scripts module not loaded"
+            echo.info "Try: reload or source ~/.zshrc"
+            return 1
+        fi
         ;;
     sync)
         dotfiles_sync
