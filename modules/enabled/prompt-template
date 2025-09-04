@@ -216,21 +216,19 @@ function prompt_interactive_builder() {
     echo.success "Found ${#variables[@]} template variables to configure"
     echo
     
-    local var_index=1
-    local user_values=()
-    local var_names=()
+    # Initialize associative arrays for better handling
+    typeset -A user_values
+    local var_names=("${variables[@]}")
     
-    # Initialize arrays with variable names and empty values
+    # Initialize all values as empty
     for var in "${variables[@]}"; do
-        var_names+=("$var")
-        user_values+=("")
+        user_values["$var"]=""
     done
     
     function show_preview() {
         local preview_content="$current_content"
-        for ((i=0; i<${#var_names[@]}; i++)); do
-            local var_name="${var_names[i]}"
-            local var_value="${user_values[i]:-$var_name}"
+        for var_name in "${var_names[@]}"; do
+            local var_value="${user_values[$var_name]:-$var_name}"
             preview_content="${preview_content//$var_name/$var_value}"
         done
         
@@ -245,14 +243,16 @@ function prompt_interactive_builder() {
     
     function process_variable() {
         local idx=$1
-        local var_name="${var_names[idx]}"
+        local var_name="${var_names[$idx]}"
         local clean_var=$(echo "$var_name" | sed 's/[{}]//g')
         
         clear
+        # Add padding from top
+        printf '\n%.0s' {1..5}
         echo.header "🎨 Interactive Prompt Builder"
-        echo.info "Variable $(($idx + 1)) of ${#var_names[@]}: $clean_var"
+        echo.info "Variable $idx of ${#var_names[@]}: $clean_var"
         echo
-        echo.cyan "Current value: ${user_values[idx]:-'(empty)'}"
+        echo.cyan "Current value: ${user_values[$var_name]:-'(empty)'}"
         echo
         
         # Show a mini preview of just this section
@@ -260,39 +260,39 @@ function prompt_interactive_builder() {
         echo "$template_content" | grep -B2 -A2 "$var_name" | sed 's/^/  /'
         echo
         
-        echo.yellow "Enter your value (or press Enter to keep current):"
-        echo -n "$(echo.pastel_purple '❯') "
+        echo.warning "Enter your value (or press Enter to keep current):"
+        echo -n "$(echo.purple '❯') "
         
         local input
         read -r input
         
         if [[ -n "$input" ]]; then
-            user_values[idx]="$input"
+            user_values["$var_name"]="$input"
             # Update current content
             current_content="${current_content//$var_name/$input}"
         fi
     }
     
     # Main interactive loop
-    local current_var=0
-    while [[ $current_var -lt ${#var_names[@]} ]]; do
+    local current_var=1
+    while [[ $current_var -le ${#var_names[@]} ]]; do
         process_variable $current_var
         
         # Create backup after each step
-        local backup_name="interactive_step_$(($current_var + 1))"
+        local backup_name="interactive_step_$current_var"
         prompt_create_backup "$backup_name" "$current_content"
         
         echo
         echo.success "✅ Variable configured! What's next?"
         echo
         echo.cyan "Options:"
-        printf "  %-20s %s\n" "$(echo.pastel_green '[Enter]')" "Continue to next variable"
-        printf "  %-20s %s\n" "$(echo.pastel_blue '[p]')" "Show full preview"
-        printf "  %-20s %s\n" "$(echo.pastel_yellow '[b]')" "Go back to previous variable"
-        printf "  %-20s %s\n" "$(echo.pastel_purple '[s]')" "Skip to end and save"
-        printf "  %-20s %s\n" "$(echo.pastel_pink '[q]')" "Quit without saving"
+        printf "  %-20s %s\n" "$(echo.cyan '[Enter]')" "Continue to next variable"
+        printf "  %-20s %s\n" "$(echo.cyan '[p]')" "Show full preview"
+        printf "  %-20s %s\n" "$(echo.cyan '[b]')" "Go back to previous variable"
+        printf "  %-20s %s\n" "$(echo.cyan '[s]')" "Skip to end and save"
+        printf "  %-20s %s\n" "$(echo.cyan '[q]')" "Quit without saving"
         echo
-        echo -n "$(echo.pastel_cyan '❯ Choice: ')"
+        echo -n "$(echo.cyan '❯ Choice: ')"
         
         local choice
         read -r choice
@@ -303,12 +303,14 @@ function prompt_interactive_builder() {
                 ;;
             "p"|"preview")
                 clear
+                # Add padding from top
+                printf '\n%.0s' {1..3}
                 show_preview
                 echo.info "Press Enter to continue..."
                 read -r
                 ;;
             "b"|"back"|"prev")
-                if [[ $current_var -gt 0 ]]; then
+                if [[ $current_var -gt 1 ]]; then
                     ((current_var--))
                 else
                     echo.warning "Already at first variable"
@@ -331,19 +333,21 @@ function prompt_interactive_builder() {
     
     # Final step - show result and save options
     clear
+    # Add padding from top
+    printf '\n%.0s' {1..3}
     show_preview
     
     echo.header "🎉 Prompt Building Complete!"
     echo
     echo.success "Your custom prompt is ready! Choose what to do:"
     echo
-    printf "  %-20s %s\n" "$(echo.pastel_green '[1]')" "Copy to clipboard and exit"
-    printf "  %-20s %s\n" "$(echo.pastel_blue '[2]')" "Save as MDX file"
-    printf "  %-20s %s\n" "$(echo.pastel_purple '[3]')" "Restart the builder"
-    printf "  %-20s %s\n" "$(echo.pastel_yellow '[4]')" "Go back to edit variables"
-    printf "  %-20s %s\n" "$(echo.pastel_pink '[q]')" "Quit without saving"
+    printf "  %-20s %s\n" "$(echo.cyan '[1]')" "Copy to clipboard and exit"
+    printf "  %-20s %s\n" "$(echo.cyan '[2]')" "Save as MDX file"
+    printf "  %-20s %s\n" "$(echo.cyan '[3]')" "Restart the builder"
+    printf "  %-20s %s\n" "$(echo.cyan '[4]')" "Go back to edit variables"
+    printf "  %-20s %s\n" "$(echo.cyan '[q]')" "Quit without saving"
     echo
-    echo -n "$(echo.pastel_cyan '❯ Final choice: ')"
+    echo -n "$(echo.cyan '❯ Final choice: ')"
     
     local final_choice
     read -r final_choice
@@ -362,7 +366,7 @@ function prompt_interactive_builder() {
             ;;
         "2"|"save"|"mdx")
             echo.cyan "Enter the path to save your MDX file:"
-            echo -n "$(echo.pastel_purple '❯ Path: ')"
+            echo -n "$(echo.purple '❯ Path: ')"
             local save_path
             read -r save_path
             

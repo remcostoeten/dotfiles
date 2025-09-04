@@ -165,7 +165,7 @@ function prompt_interactive() {
         echo "$template_content" | grep -B2 -A2 "$var_name" | sed 's/^/  /'
         echo
         
-        echo.yellow "Enter your value (or press Enter to keep current):"
+        echo.pastel_yellow "Enter your value (or press Enter to keep current):"
         echo -n "$(echo.pastel_purple '❯') "
         
         local input
