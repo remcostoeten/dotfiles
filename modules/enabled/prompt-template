@@ -92,30 +92,30 @@ function prompt_template_init() {
 
 # Help function
 function prompt_template_help() {
-    echo.header "📝 Prompt Template Manager"
+    echo.header "Prompt Template Manager"
     echo
     echo.cyan "Usage: prompt <command> [options]"
     echo
-    echo.purple "📋 Available Commands:"
+    echo.purple "Available Commands:"
     printf "  %-15s %s\n" "$(echo.cyan '')" "Show the template using bat"
     printf "  %-15s %s\n" "$(echo.cyan 'copy|c')" "Copy template to clipboard"
     printf "  %-15s %s\n" "$(echo.cyan 'interactive|i')" "Interactive prompt builder"
     printf "  %-15s %s\n" "$(echo.cyan 'help|h')" "Show this help"
     echo
-    echo.purple "🎨 Copy Options:"
+    echo.purple "Copy Options:"
     printf "  %-15s %s\n" "$(echo.cyan '--copy|--c')" "Copy template to clipboard"
     echo
-    echo.purple "🔧 Interactive Options:"
+    echo.purple "Interactive Options:"
     printf "  %-15s %s\n" "$(echo.cyan '--interactive|--i')" "Launch interactive builder"
     echo
-    echo.purple "✨ Examples:"
+    echo.purple "Examples:"
     echo.success "  prompt              # Show template with syntax highlighting"
     echo.success "  prompt copy         # Copy template to clipboard"
     echo.success "  prompt i            # Interactive prompt builder"
     echo.success "  dotfiles prompt h   # Show help (also works with dotfiles prefix)"
     echo
-    echo.info "💡 All commands work with 'dotfiles prompt' prefix as well"
-    echo.info "🗂️  Backups are saved to: ${PROMPT_BACKUP_DIR}"
+    echo.info "All commands work with 'dotfiles prompt' prefix as well"
+    echo.info "Backups are saved to: ${PROMPT_BACKUP_DIR}"
 }
 
 # Cross-platform clipboard function
@@ -148,7 +148,7 @@ function prompt_copy_to_clipboard() {
 
 # Show template function
 function prompt_show_template() {
-    echo.header "📝 Prompt Template"
+    echo.header "Prompt Template"
     echo
     
     if command -v bat >/dev/null 2>&1; then
@@ -163,8 +163,8 @@ function prompt_show_template() {
 # Copy template function
 function prompt_copy_template() {
     if prompt_copy_to_clipboard "$PROMPT_TEMPLATE_CONTENT"; then
-        echo.success "✅ Template copied to clipboard!"
-        echo.info "📋 Ready to paste with Ctrl+V"
+        echo.success "Template copied to clipboard"
+        echo.info "Ready to paste with Ctrl+V"
     else
         echo.error "Failed to copy template to clipboard"
         echo.info "Alternative: Use 'prompt' to view and copy manually"
@@ -197,7 +197,7 @@ function prompt_create_backup() {
 
 # Interactive prompt builder
 function prompt_interactive_builder() {
-    echo.header "🎨 Interactive Prompt Builder"
+    echo.header "Interactive Prompt Builder"
     echo.info "Build your custom prompt step by step"
     echo.warning "Use Ctrl+C to exit at any time"
     echo
@@ -232,7 +232,7 @@ function prompt_interactive_builder() {
             preview_content="${preview_content//$var_name/$var_value}"
         done
         
-        echo.header "📖 Current Preview"
+        echo.header "Current Preview"
         if command -v bat >/dev/null 2>&1; then
             echo "$preview_content" | bat --style=grid --language=markdown
         else
@@ -249,7 +249,7 @@ function prompt_interactive_builder() {
         clear
         # Add padding from top
         printf '\n%.0s' {1..5}
-        echo.header "🎨 Interactive Prompt Builder"
+        echo.header "Interactive Prompt Builder"
         echo.info "Variable $idx of ${#var_names[@]}: $clean_var"
         echo
         echo.cyan "Current value: ${user_values[$var_name]:-'(empty)'}"
@@ -261,7 +261,7 @@ function prompt_interactive_builder() {
         echo
         
         echo.warning "Enter your value (or press Enter to keep current):"
-        echo -n "$(echo.purple '❯') "
+        echo -n "$(echo.purple '> ') "
         
         local input
         read -r input
@@ -283,7 +283,7 @@ function prompt_interactive_builder() {
         prompt_create_backup "$backup_name" "$current_content"
         
         echo
-        echo.success "✅ Variable configured! What's next?"
+        echo.success "Variable configured. What's next?"
         echo
         echo.cyan "Options:"
         printf "  %-20s %s\n" "$(echo.cyan '[Enter]')" "Continue to next variable"
@@ -292,7 +292,7 @@ function prompt_interactive_builder() {
         printf "  %-20s %s\n" "$(echo.cyan '[s]')" "Skip to end and save"
         printf "  %-20s %s\n" "$(echo.cyan '[q]')" "Quit without saving"
         echo
-        echo -n "$(echo.cyan '❯ Choice: ')"
+        echo -n "$(echo.cyan '> Choice: ')"
         
         local choice
         read -r choice
@@ -337,9 +337,9 @@ function prompt_interactive_builder() {
     printf '\n%.0s' {1..3}
     show_preview
     
-    echo.header "🎉 Prompt Building Complete!"
+    echo.header "Prompt Building Complete"
     echo
-    echo.success "Your custom prompt is ready! Choose what to do:"
+    echo.success "Your custom prompt is ready. Choose what to do:"
     echo
     printf "  %-20s %s\n" "$(echo.cyan '[1]')" "Copy to clipboard and exit"
     printf "  %-20s %s\n" "$(echo.cyan '[2]')" "Save as MDX file"
@@ -347,7 +347,7 @@ function prompt_interactive_builder() {
     printf "  %-20s %s\n" "$(echo.cyan '[4]')" "Go back to edit variables"
     printf "  %-20s %s\n" "$(echo.cyan '[q]')" "Quit without saving"
     echo
-    echo -n "$(echo.cyan '❯ Final choice: ')"
+    echo -n "$(echo.cyan '> Final choice: ')"
     
     local final_choice
     read -r final_choice
@@ -355,7 +355,7 @@ function prompt_interactive_builder() {
     case "$final_choice" in
         "1"|"copy"|"clipboard")
             if prompt_copy_to_clipboard "$current_content"; then
-                echo.success "✅ Custom prompt copied to clipboard!"
+                echo.success "Custom prompt copied to clipboard"
             else
                 echo.error "Failed to copy. Here's your prompt:"
                 echo "$current_content"
@@ -366,13 +366,13 @@ function prompt_interactive_builder() {
             ;;
         "2"|"save"|"mdx")
             echo.cyan "Enter the path to save your MDX file:"
-            echo -n "$(echo.purple '❯ Path: ')"
+            echo -n "$(echo.purple '> Path: ')"
             local save_path
             read -r save_path
             
             if [[ -n "$save_path" ]]; then
                 echo "$current_content" > "$save_path"
-                echo.success "✅ Saved to: $save_path"
+                echo.success "Saved to: $save_path"
                 
                 # Also save backup
                 prompt_create_backup "saved" "$current_content"
