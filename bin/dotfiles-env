@@ -1,0 +1,470 @@
+#!/usr/bin/env bash
+
+# dotfiles-env - Environment Variable Manager
+# Provides CRUD operations for environment variables with JSON persistence
+# Usage: dotfiles-env <command> [args...]
+
+set -euo pipefail
+
+# Source core functions
+DOTFILES_ROOT="${DOTFILES_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || true
+source "$DOTFILES_ROOT/core/_safety" 2>/dev/null || true
+
+# Configuration
+ENV_FILE="${DOTFILES_ROOT}/utils/env.json"
+ENV_BACKUP_DIR="${DOTFILES_ROOT}/backups/env"
+
+# Ensure directories exist
+ensure_dir() {
+    [[ -d "$1" ]] || mkdir -p "$1"
+}
+
+# Initialize env.json if it doesn't exist
+init_env_file() {
+    if [[ ! -f "$ENV_FILE" ]]; then
+        ensure_dir "$(dirname "$ENV_FILE")"
+        echo '{}' > "$ENV_FILE"
+        echo.success "Initialized environment registry at $ENV_FILE"
+    fi
+}
+
+# Validate JSON file
+validate_json() {
+    if ! jq empty "$ENV_FILE" 2>/dev/null; then
+        echo.error "Invalid JSON in $ENV_FILE"
+        return 1
+    fi
+}
+
+# Generate random value
+generate_random() {
+    local length="${1:-32}"
+    openssl rand -hex "$length" 2>/dev/null || \
+    head -c "$length" /dev/urandom | base64 | tr -d '/+=' | head -c "$length"
+}
+
+# Generate OAuth key pair
+generate_oauth() {
+    local name="$1"
+    local type="${2:-rsa}"
+    local bits="${3:-4096}"
+    local description="${4:-OAuth Key Pair}"
+    
+    local private_key public_key
+    
+    case "$type" in
+        rsa)
+            private_key=$(openssl genrsa "$bits" 2>/dev/null | base64 -w 0)
+            public_key=$(echo "$private_key" | base64 -d | openssl rsa -pubout 2>/dev/null | base64 -w 0)
+            ;;
+        *)
+            echo.error "Unsupported key type: $type"
+            return 1
+            ;;
+    esac
+    
+    # Store both keys
+    set_env_var "${name}_PRIVATE_KEY" "$private_key" "OAuth Private Key - $description"
+    set_env_var "${name}_PUBLIC_KEY" "$public_key" "OAuth Public Key - $description"
+    
+    echo.success "Generated OAuth key pair: ${name}_PRIVATE_KEY and ${name}_PUBLIC_KEY"
+}
+
+# Set environment variable
+set_env_var() {
+    local key="$1"
+    local value="$2"
+    local description="${3:-}"
+    
+    init_env_file
+    validate_json
+    
+    local timestamp=$(date -Iseconds)
+    local entry
+    
+    if [[ -n "$description" ]]; then
+        entry=$(jq -n --arg key "$key" --arg value "$value" --arg desc "$description" --arg ts "$timestamp" \
+            '{key: $key, value: $value, description: $desc, created: $ts, updated: $ts}')
+    else
+        entry=$(jq -n --arg key "$key" --arg value "$value" --arg ts "$timestamp" \
+            '{key: $key, value: $value, created: $ts, updated: $ts}')
+    fi
+    
+    # Update or create entry
+    if jq -e --arg key "$key" '.[$key]' "$ENV_FILE" > /dev/null; then
+        # Update existing
+        local created=$(jq -r --arg key "$key" '.[$key].created // ""' "$ENV_FILE")
+        if [[ -n "$description" ]]; then
+            jq --arg key "$key" --arg value "$value" --arg desc "$description" --arg ts "$timestamp" --arg created "$created" \
+                '.[$key] = {key: $key, value: $value, description: $desc, created: ($created // $ts), updated: $ts}' \
+                "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+        else
+            jq --arg key "$key" --arg value "$value" --arg ts "$timestamp" --arg created "$created" \
+                '.[$key] = {key: $key, value: $value, created: ($created // $ts), updated: $ts}' \
+                "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+        fi
+        echo.success "Updated environment variable: $key"
+    else
+        # Create new
+        jq --arg key "$key" --argjson entry "$entry" '.[$key] = $entry' \
+            "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+        echo.success "Set environment variable: $key"
+    fi
+    
+    # Export for current session
+    export "$key=$value"
+}
+
+# Get environment variable
+get_env_var() {
+    local key="$1"
+    
+    init_env_file
+    validate_json
+    
+    local value
+    if [[ -n "$key" ]]; then
+        value=$(jq -r --arg key "$key" '.[$key].value // empty' "$ENV_FILE")
+        if [[ -n "$value" ]]; then
+            echo "$value"
+            # Copy to clipboard if available
+            if command -v xclip >/dev/null 2>&1; then
+                echo -n "$value" | xclip -selection clipboard
+                echo.info "Value copied to clipboard"
+            elif command -v pbcopy >/dev/null 2>&1; then
+                echo -n "$value" | pbcopy
+                echo.info "Value copied to clipboard"
+            fi
+        else
+            echo.error "Environment variable not found: $key"
+            return 1
+        fi
+    else
+        # Interactive selection with fzf if available
+        if command -v fzf >/dev/null 2>&1; then
+            local selected
+            selected=$(jq -r 'to_entries[] | "\(.key)\t\(.value.description // "No description")"' "$ENV_FILE" | \
+                fzf --delimiter='\t' --with-nth=1,2 --preview 'echo {2}' | cut -f1)
+            if [[ -n "$selected" ]]; then
+                get_env_var "$selected"
+            fi
+        else
+            echo.error "No key specified and fzf not available for interactive selection"
+            return 1
+        fi
+    fi
+}
+
+# Remove environment variable
+remove_env_var() {
+    local key="$1"
+    
+    init_env_file
+    validate_json
+    
+    if [[ -n "$key" ]]; then
+        if jq -e --arg key "$key" '.[$key]' "$ENV_FILE" > /dev/null; then
+            jq --arg key "$key" 'del(.[$key])' "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+            echo.success "Removed environment variable: $key"
+            # Unset from current session
+            unset "$key" 2>/dev/null || true
+        else
+            echo.error "Environment variable not found: $key"
+            return 1
+        fi
+    else
+        # Interactive selection with fzf if available
+        if command -v fzf >/dev/null 2>&1; then
+            local selected
+            selected=$(jq -r 'to_entries[] | "\(.key)\t\(.value.description // "No description")"' "$ENV_FILE" | \
+                fzf --delimiter='\t' --with-nth=1,2 --preview 'echo {2}' | cut -f1)
+            if [[ -n "$selected" ]]; then
+                remove_env_var "$selected"
+            fi
+        else
+            echo.error "No key specified and fzf not available for interactive selection"
+            return 1
+        fi
+    fi
+}
+
+# List environment variables
+list_env_vars() {
+    init_env_file
+    validate_json
+    
+    local count
+    count=$(jq 'length' "$ENV_FILE")
+    
+    if [[ "$count" -eq 0 ]]; then
+        echo.info "No environment variables stored"
+        return 0
+    fi
+    
+    echo.header "Environment Variables ($count)"
+    echo
+    
+    # Format output
+    jq -r 'to_entries[] | 
+        "\(.key):\n  Value: \(.value.value | if length > 50 then .[:47] + "..." else . end)\n  Description: \(.value.description // "No description")\n  Created: \(.value.created // "Unknown")\n  Updated: \(.value.updated // "Unknown")\n"' \
+        "$ENV_FILE"
+}
+
+# Search environment variables
+search_env_vars() {
+    local query="$1"
+    
+    init_env_file
+    validate_json
+    
+    echo.header "Search Results for: $query"
+    echo
+    
+    jq -r --arg query "$query" '
+        to_entries[] | 
+        select(
+            (.key | ascii_downcase | contains($query | ascii_downcase)) or 
+            (.value.description // "" | ascii_downcase | contains($query | ascii_downcase)) or
+            (.value.value | ascii_downcase | contains($query | ascii_downcase))
+        ) |
+        "\(.key):\n  Value: \(.value.value | if length > 50 then .[:47] + "..." else . end)\n  Description: \(.value.description // "No description")\n"' \
+        "$ENV_FILE"
+}
+
+# Export to file
+export_env_vars() {
+    local output_file="$1"
+    
+    init_env_file
+    validate_json
+    
+    case "${output_file##*.}" in
+        json)
+            cp "$ENV_FILE" "$output_file"
+            echo.success "Exported environment variables to: $output_file"
+            ;;
+        env)
+            jq -r 'to_entries[] | "\(.key)=\(.value.value)"' "$ENV_FILE" > "$output_file"
+            echo.success "Exported environment variables to: $output_file"
+            ;;
+        *)
+            # Default to .env format
+            jq -r 'to_entries[] | "\(.key)=\(.value.value)"' "$ENV_FILE" > "$output_file"
+            echo.success "Exported environment variables to: $output_file"
+            ;;
+    esac
+}
+
+# Import from file
+import_env_vars() {
+    local input_file="$1"
+    
+    if [[ ! -f "$input_file" ]]; then
+        echo.error "File not found: $input_file"
+        return 1
+    fi
+    
+    init_env_file
+    
+    local count=0
+    case "${input_file##*.}" in
+        json)
+            # Import JSON format
+            if jq empty "$input_file" 2>/dev/null; then
+                jq -s '.[0] * .[1]' "$ENV_FILE" "$input_file" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+                count=$(jq 'length' "$input_file")
+                echo.success "Imported $count environment variables from: $input_file"
+            else
+                echo.error "Invalid JSON file: $input_file"
+                return 1
+            fi
+            ;;
+        *)
+            # Import .env format
+            while IFS='=' read -r key value; do
+                if [[ -n "$key" && ! "$key" =~ ^# ]]; then
+                    set_env_var "$key" "$value" "Imported from $input_file"
+                    ((count++))
+                fi
+            done < "$input_file"
+            echo.success "Imported $count environment variables from: $input_file"
+            ;;
+    esac
+}
+
+# Backup environment variables
+backup_env_vars() {
+    ensure_dir "$ENV_BACKUP_DIR"
+    
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local backup_file="$ENV_BACKUP_DIR/env_backup_$timestamp.json"
+    
+    if [[ -f "$ENV_FILE" ]]; then
+        cp "$ENV_FILE" "$backup_file"
+        echo.success "Backup created: $backup_file"
+    else
+        echo.warning "No environment file to backup"
+    fi
+}
+
+# Restore from backup
+restore_env_vars() {
+    local backup_file="$1"
+    
+    if [[ ! -f "$backup_file" ]]; then
+        echo.error "Backup file not found: $backup_file"
+        return 1
+    fi
+    
+    if jq empty "$backup_file" 2>/dev/null; then
+        cp "$backup_file" "$ENV_FILE"
+        echo.success "Restored environment variables from: $backup_file"
+    else
+        echo.error "Invalid backup file: $backup_file"
+        return 1
+    fi
+}
+
+# Show help
+show_help() {
+    echo.header "dotfiles-env - Environment Variable Manager"
+    cat << 'EOF'
+
+USAGE:
+    dotfiles-env <command> [arguments]
+
+COMMANDS:
+    set <key> <value> [description]     Set environment variable
+    get [key]                           Get environment variable (interactive if no key)
+    remove [key]                        Remove environment variable (interactive if no key)
+    list                                List all environment variables
+    search <query>                      Search environment variables
+    
+    generate <key> [length]             Generate random value (default: 32 chars)
+    generate-oauth <name> [type] [bits] [desc]  Generate OAuth key pair
+    
+    export <file>                       Export to file (.json or .env format)
+    import <file>                       Import from file
+    backup                              Create backup
+    restore <backup_file>               Restore from backup
+    
+    help                                Show this help
+
+EXAMPLES:
+    dotfiles-env set API_KEY "abc123" "Production API key"
+    dotfiles-env get API_KEY
+    dotfiles-env list
+    dotfiles-env search "api"
+    dotfiles-env generate RANDOM_SECRET 64
+    dotfiles-env generate-oauth GITHUB_OAUTH rsa 4096 "GitHub OAuth App"
+    dotfiles-env export ~/.env.backup
+    dotfiles-env import ~/.env
+
+ALIASES:
+    envs list                           Shorthand for list command
+    envs get [key]                      Shorthand for get command
+    envs set <key> <value> [desc]       Shorthand for set command
+
+EOF
+}
+
+# Main function
+main() {
+    local command="${1:-help}"
+    
+    case "$command" in
+        set)
+            if [[ $# -lt 3 ]]; then
+                echo.error "Usage: dotfiles-env set <key> <value> [description]"
+                return 1
+            fi
+            set_env_var "$2" "$3" "${4:-}"
+            ;;
+        get)
+            get_env_var "${2:-}"
+            ;;
+        remove|rm)
+            remove_env_var "${2:-}"
+            ;;
+        list|ls)
+            list_env_vars
+            ;;
+        search)
+            if [[ $# -lt 2 ]]; then
+                echo.error "Usage: dotfiles-env search <query>"
+                return 1
+            fi
+            search_env_vars "$2"
+            ;;
+        generate)
+            if [[ $# -lt 2 ]]; then
+                echo.error "Usage: dotfiles-env generate <key> [length]"
+                return 1
+            fi
+            local value
+            value=$(generate_random "${3:-32}")
+            set_env_var "$2" "$value" "Generated random value"
+            ;;
+        generate-oauth)
+            if [[ $# -lt 2 ]]; then
+                echo.error "Usage: dotfiles-env generate-oauth <name> [type] [bits] [description]"
+                return 1
+            fi
+            generate_oauth "$2" "${3:-rsa}" "${4:-4096}" "${5:-OAuth Key Pair}"
+            ;;
+        export)
+            if [[ $# -lt 2 ]]; then
+                echo.error "Usage: dotfiles-env export <file>"
+                return 1
+            fi
+            export_env_vars "$2"
+            ;;
+        import)
+            if [[ $# -lt 2 ]]; then
+                echo.error "Usage: dotfiles-env import <file>"
+                return 1
+            fi
+            import_env_vars "$2"
+            ;;
+        backup)
+            backup_env_vars
+            ;;
+        restore)
+            if [[ $# -lt 2 ]]; then
+                echo.error "Usage: dotfiles-env restore <backup_file>"
+                return 1
+            fi
+            restore_env_vars "$2"
+            ;;
+        help|--help|-h)
+            show_help
+            ;;
+        *)
+            echo.error "Unknown command: $command"
+            show_help
+            return 1
+            ;;
+    esac
+}
+
+# Check dependencies
+check_dependencies() {
+    local missing_deps=()
+    
+    if ! command -v jq >/dev/null 2>&1; then
+        missing_deps+=(jq)
+    fi
+    
+    if [[ ${#missing_deps[@]} -gt 0 ]]; then
+        echo.error "Missing required dependencies: ${missing_deps[*]}"
+        echo.info "Install with: sudo apt install ${missing_deps[*]}"
+        return 1
+    fi
+}
+
+# Initialize and run
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    check_dependencies || exit 1
+    main "$@"
+fi

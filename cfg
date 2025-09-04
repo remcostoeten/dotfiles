@@ -6,6 +6,8 @@ export DOTFILES_ROOT="${HOME}/.config/dotfiles"
 
 source "${DOTFILES_ROOT}/core/_env"
 
+source "${DOTFILES_ROOT}/sourcers/alias-sourcer"
+
 source "${DOTFILES_ROOT}/core/_colors"
 
 # Source banner functions but let bootstrap handle display
@@ -28,3 +30,6 @@ if [[ -t 1 ]]; then
 fi
 # Load environment variables silently
 dotfiles env export >/dev/null 2>&1 || true
+
+# Turso
+export PATH="$PATH:/home/remcostoeten/.turso"

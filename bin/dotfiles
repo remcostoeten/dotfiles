@@ -204,24 +204,54 @@ function dotfiles_modules() {
 }
 
 function dotfiles_aliases_help() {
-    echo
-    echo.cyan "Available Aliases:"
+    echo.purple "🚀 Aliases:"
+    local alias_count=0
+    local max_per_category=3  # Limit to keep compact
+    
     for file in "$DOTFILES_ROOT/modules/aliases"/*.aliases; do
         if [[ -f "$file" ]]; then
             local category=$(basename "$file" .aliases)
-            echo "  --- $category ---"
+            local current_count=0
+            
+            # Show category header only if we have aliases to show
+            local has_aliases=false
             while IFS= read -r line; do
-                if [[ "$line" =~ ^#\ @alias\ (.+) ]]; then
-                    local alias_name="${BASH_REMATCH[1]}"
-                    read -r desc_line
-                    if [[ "$desc_line" =~ ^#\ @desc\ (.+) ]]; then
-                        local alias_desc="${BASH_REMATCH[1]}"
-                        printf "    %-15s %s\n" "$alias_name" "$alias_desc"
-                    fi
+                if [[ "$line" =~ ^#\ @alias\ (.+) ]] && [[ $current_count -lt $max_per_category ]]; then
+                    has_aliases=true
+                    break
                 fi
             done < "$file"
+            
+            if [[ "$has_aliases" == "true" ]]; then
+                [[ $alias_count -eq 0 ]] || echo  # Add spacing between categories
+                echo.cyan "  $category:"
+                
+                current_count=0
+                while IFS= read -r line; do
+                    if [[ "$line" =~ ^#\ @alias\ (.+) ]] && [[ $current_count -lt $max_per_category ]]; then
+                        local alias_name="${BASH_REMATCH[1]}"
+                        read -r desc_line
+                        if [[ "$desc_line" =~ ^#\ @desc\ (.+) ]]; then
+                            local alias_desc="${BASH_REMATCH[1]}"
+                            printf "    %-12s %s\n" "$alias_name" "$alias_desc"
+                            ((current_count++))
+                            ((alias_count++))
+                        fi
+                    fi
+                done < "$file"
+                
+                # Show "more available" if we truncated
+                local total_aliases=$(grep -c "^# @alias" "$file" 2>/dev/null || echo 0)
+                if [[ $total_aliases -gt $max_per_category ]]; then
+                    echo.info "    ... and $(($total_aliases - $max_per_category)) more"
+                fi
+            fi
         fi
     done
+    
+    if [[ $alias_count -eq 0 ]]; then
+        echo "  No documented aliases found"
+    fi
 }
 
 function dotfiles_personal_dashboard() {
@@ -351,66 +381,58 @@ function dotfiles_help() {
     fi
     
     # Fallback to legacy help
-    echo.header "🔧 Dotfiles Management System (Legacy Mode)"
-    echo
+    echo.header "🔧 Dotfiles Management System"
     echo.cyan "Usage: dotfiles <command> [args]"
     echo
+    
+    # Core Commands - most frequently used
     echo.purple "⚡ Core Commands:"
-    echo "  $(echo.cyan 'help')       Show this help (or use new system: dotfiles help)"
-    echo "  $(echo.cyan 'version')    Show version information"
-    echo "  $(echo.cyan 'reload')     Reload dotfiles configuration"
-    echo "  $(echo.cyan 'update')     Update dotfiles from git"
-    echo "  $(echo.cyan 'doctor')     Run health check"
-    echo "  $(echo.cyan 'install')    Install dotfiles symlinks"
-    echo "  $(echo.cyan 'sync')       Synchronize dotfiles (commit changes)"
-    echo "  $(echo.cyan 'tour')       Guided sync and tour of features"
+    printf "  %-12s %s\n" "$(echo.cyan 'help')" "Show this help"
+    printf "  %-12s %s\n" "$(echo.cyan 'version')" "Show version info"
+    printf "  %-12s %s\n" "$(echo.cyan 'reload')" "Reload config"
+    printf "  %-12s %s\n" "$(echo.cyan 'doctor')" "Health check"
+    printf "  %-12s %s\n" "$(echo.cyan 'sync')" "Commit changes"
+    printf "  %-12s %s\n" "$(echo.cyan 'tour')" "Guided setup"
     echo
-    echo.purple "📦 Module Commands:"
-    echo "  $(echo.cyan 'modules')    Manage modules"
-    echo "  $(echo.cyan 'new')        Create new module/plugin/script"
+    
+    # Management Commands - organized in columns
+    echo.purple "🔧 Management:"  
+    printf "  %-12s %-20s %-12s %s\n" "$(echo.cyan 'modules')" "Manage modules" "$(echo.cyan 'link')" "Symlink manager"
+    printf "  %-12s %-20s %-12s %s\n" "$(echo.cyan 'env')" "Environment vars" "$(echo.cyan 'new')" "Create module/script"
+    printf "  %-12s %-20s %-12s %s\n" "$(echo.cyan 'generate')" "Code generators" "$(echo.cyan 'templates')" "Available templates"
     echo
-    echo.purple "🔗 Management Commands:"
-    echo "  $(echo.cyan 'link')       Symlink manager (dotfiles-link)"
-    echo "  $(echo.cyan 'env')        Environment variables manager (dotfiles-env)"
-    echo "  $(echo.cyan 'sync')       Environment sync across machines (dotfiles-env-sync)"
-    echo "  $(echo.cyan 'packages')   Manage additional packages (dotfiles-packages)"
-    echo
-    echo.purple "🛠️ Development Tools:"
-    echo "  $(echo.cyan 'generate')   Code generators (source-all scripts, alias help menus)"
-    echo "  $(echo.cyan 'templates')  Show available templates"
-    echo
-    echo.purple "📋 Version Commands:"
-    echo "  $(echo.cyan 'version')         Show version information"
-    echo "  $(echo.cyan 'version bump')    Auto-increment version"
-    echo "  $(echo.cyan 'version set <v>') Set specific version"
-    echo
+    
+    # Quick Actions - single line each
     echo.purple "⚡ Quick Actions:"
-    echo "  $(echo.cyan 'cd')         Go to dotfiles directory"
-    echo "  $(echo.cyan 'edit')       Edit dotfiles in $EDITOR"
-    echo "  $(echo.cyan 'logs')       View error logs"
-    echo "  $(echo.cyan 'studio')     Launch Dotfiles Studio (dev) or deploy"
+    printf "  %-12s %-20s %-12s %-20s %-12s %s\n" \
+        "$(echo.cyan 'cd')" "Go to dotfiles" \
+        "$(echo.cyan 'edit')" "Edit in \$EDITOR" \
+        "$(echo.cyan 'logs')" "View error logs"
+    printf "  %-12s %-20s %-12s %-20s %-12s %s\n" \
+        "$(echo.cyan 'update')" "Git pull latest" \
+        "$(echo.cyan 'install')" "Setup symlinks" \
+        "$(echo.cyan 'studio')" "Dev tools"
     echo
-    echo.purple "📊 Personal Dashboard:"
-    echo "  $(echo.cyan 'dashboard')  Open personal dashboard"
-    echo "  $(echo.cyan 'track')      Track current project in dashboard"
+    
+    # Version & Dashboard - compact
+    echo.purple "📊 Tools:"
+    printf "  %-12s %-20s %-12s %s\n" \
+        "$(echo.cyan 'dashboard')" "Personal dashboard" \
+        "$(echo.cyan 'track')" "Track project"
+    printf "  %-20s %-20s\n" \
+        "$(echo.cyan 'version [bump|set]')" "Version management"
     echo
-    echo.purple "🚀 Quick Shortcuts (from banner):"
-    echo "  $(echo.cyan 'reload')     Reload dotfiles configuration"
-    echo "  $(echo.cyan 'doctor')     Run comprehensive health check"
-    echo "  $(echo.cyan 'envs')       Environment variable manager"
-    echo
+    
+    # Aliases - condensed
     dotfiles_aliases_help
     echo
-    echo.purple "✨ Examples:"
-    echo.success "  ✓ dotfiles doctor           # Health check"
-    echo.success "  ✓ dotfiles link add src dst # Create symlink"
-    echo.success "  ✓ dotfiles env set API_KEY  # Store secret"
-    echo.success "  ✓ dotfiles new module git   # Create module"
+    
+    # Examples - fewer lines
+    echo.purple "✨ Quick Examples:"
+    echo.success "  dotfiles doctor • dotfiles env set KEY • dotfiles new module"
     echo
-    echo.info "💡 For command help, use: dotfiles <command> help"
-    echo.info "📖 Example: dotfiles link help"
-    echo
-    echo.info "🎆 Upgrade to the new comprehensive help: dotfiles help"
+    echo.info "💡 Use: dotfiles <command> help for detailed help"
+    echo.info "🎆 Try: dotfiles help (comprehensive version)"
 }
 
 function dotfiles_studio_start() {
