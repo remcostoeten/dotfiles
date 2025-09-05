@@ -1,0 +1,44 @@
+[REQUEST TYPE]
+Code Refactoring
+
+[TITLE]
+{{REQUEST_TITLE}}
+
+[Refactor Goal]
+{{REFACTOR_GOAL}}
+
+[Non-Goals]
+{{NON_GOALS}}
+
+[Current Design]
+{{CURRENT_DESIGN}}
+
+[Target Design]
+{{TARGET_DESIGN}}
+
+[Smells / Issues]
+{{SMELLS}}
+
+[Constraints]
+{{CONSTRAINTS}}
+
+[Performance Targets]
+{{PERFORMANCE_TARGETS}}
+
+[Affected Files]
+{{AFFECTED_FILES}}
+
+[Current Code Context]
+{{CURRENT_CODE}}
+
+[Acceptance Criteria]
+{{ACCEPTANCE_CRITERIA}}
+
+[Project Rules]
+{{PROJECT_RULES}}
+
+[Response Instructions]
+- Preserve behavior; optimize structure, readability, and performance within constraints.
+- Use "type" only with T-prefixed type names. Prefer pure functions and immutability.
+- No comments. No tests unless requested.
+- Return code changes as BEGIN_FILE/END_FILE blocks only, plus a brief implementation plan above.

@@ -18,7 +18,7 @@ source "${HOME}/.config/dotfiles/core/_safety" 2>/dev/null || {
 }
 
 # Load the prompt-template module
-local prompt_module="${DOTFILES_ROOT}/modules/enabled/prompt-template"
+local prompt_module="${DOTFILES_ROOT}/modules/enabled/prompt-template/init"
 if [[ -f "$prompt_module" ]]; then
     source "$prompt_module"
 else

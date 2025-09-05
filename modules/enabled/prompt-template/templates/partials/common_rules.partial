@@ -1,0 +1,18 @@
+Project Code Rules (must follow exactly):
+- TypeScript types use "type" only; never "interface".
+- All type names are prefixed with T. If a file contains exactly one non-exported type, name it TProps.
+- React/Next.js: use function declarations only; no arrow functions; no classes; no "new" or "this".
+- Predictable functional style: pure functions, immutable patterns, no shared mutable state.
+- Exports: named exports only. Default exports are allowed only in Next.js pages and views.
+- Pages return a View and optional Metadata only; Views live in /views or src/views and are named *-view.tsx.
+- No comments in code. Prefer clear, self-explanatory names.
+- No tests unless explicitly requested.
+- Use bun exclusively when package tooling is required.
+
+Output Format (for code responses):
+- Provide a concise implementation plan first.
+- Then provide file blocks using these markers for each file:
+BEGIN_FILE path/to/file.ext
+...file content...
+END_FILE
+- Include only files that need to be created or changed.

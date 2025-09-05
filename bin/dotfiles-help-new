@@ -1,0 +1,492 @@
+#!/usr/bin/env bash
+
+# dotfiles-help-new - Unified help system for dotfiles aliases
+# Replaces multiple scattered help systems with a single, powerful CLI
+
+set -euo pipefail
+
+# Setup
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+UTILS_DIR="$DOTFILES_ROOT/utils"
+INDEX_FILE="${DOTFILES_HELP_INDEX_PATH:-$UTILS_DIR/aliases.index.json}"
+INDEXER="$SCRIPT_DIR/dotfiles-alias-indexer"
+
+# Source colors
+source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || {
+    function echo.header() { echo -e "\033[1;34m$*\033[0m"; }
+    function echo.cyan() { echo -e "\033[0;36m$*\033[0m"; }
+    function echo.purple() { echo -e "\033[0;35m$*\033[0m"; }
+    function echo.success() { echo -e "\033[0;32m✓\033[0m $*"; }
+    function echo.info() { echo -e "\033[0;34mℹ\033[0m $*"; }
+    function echo.warning() { echo -e "\033[0;33m⚠\033[0m $*"; }
+    function echo.error() { echo -e "\033[0;31m✗\033[0m $*"; }
+}
+
+# Global variables
+SECTION_FILTER=""
+QUERY_FILTER=""
+INTERACTIVE_MODE=false
+FZF_MODE=false
+JSON_MODE=false
+WIDE_MODE=false
+COMPACT_MODE=false
+REFRESH_INDEX=false
+
+# Usage
+function usage() {
+    echo.header "🔍 Dotfiles Help System"
+    echo
+    echo.cyan "Usage:"
+    echo "  $(basename "$0") [options] [section|query]"
+    echo
+    echo.purple "🔧 Modes:"
+    echo "  (default)                Static help display"
+    echo "  $(echo.cyan '-i, --interactive')     Interactive mode with keyboard shortcuts"
+    echo "  $(echo.cyan '--fzf')                Interactive mode with fzf (if available)"
+    echo "  $(echo.cyan '--json')               JSON output for programmatic use"
+    echo
+    echo.purple "🛠️ Options:"
+    echo "  $(echo.cyan '-s, --section') SECT   Filter by section name or description"  
+    echo "  $(echo.cyan '-q, --query') TERM     Filter by query (searches name, desc, command, tags)"
+    echo "  $(echo.cyan '--wide')               Show commands in wide format"
+    echo "  $(echo.cyan '--compact')            Compact display"
+    echo "  $(echo.cyan '--refresh')            Refresh index before showing"
+    echo "  $(echo.cyan '-h, --help')           Show this help"
+    echo
+    echo.purple "✨ Examples:"
+    echo.success "  ✓ $(basename "$0")                    # Show all aliases"
+    echo.success "  ✓ $(basename "$0") drizzle             # Show drizzle section"
+    echo.success "  ✓ $(basename "$0") -s migration        # Find aliases about migration"
+    echo.success "  ✓ $(basename "$0") -q migrate          # Search for 'migrate'"
+    echo.success "  ✓ $(basename "$0") -i                  # Interactive mode"
+    echo.success "  ✓ $(basename "$0") --refresh           # Refresh and show"
+    echo
+    echo.purple "⌨️  Interactive Keys:"
+    echo "  $(echo.cyan 'g')    → git section      $(echo.cyan 'd')    → drizzle section"
+    echo "  $(echo.cyan 'a')    → all sections     $(echo.cyan '/')    → search/filter"
+    echo "  $(echo.cyan 'r')    → refresh index    $(echo.cyan '?')    → help overlay"
+    echo "  $(echo.cyan 'q')    → quit"
+    echo
+    echo.info "💡 Index file: ${INDEX_FILE#$DOTFILES_ROOT/}"
+}
+
+# Parse command line arguments
+function parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -s|--section)
+                SECTION_FILTER="$2"
+                shift 2
+                ;;
+            -q|--query)
+                QUERY_FILTER="$2"
+                shift 2
+                ;;
+            -i|--interactive)
+                INTERACTIVE_MODE=true
+                shift
+                ;;
+            --fzf)
+                FZF_MODE=true
+                INTERACTIVE_MODE=true
+                shift
+                ;;
+            --json)
+                JSON_MODE=true
+                shift
+                ;;
+            --wide)
+                WIDE_MODE=true
+                shift
+                ;;
+            --compact)
+                COMPACT_MODE=true
+                shift
+                ;;
+            --refresh)
+                REFRESH_INDEX=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                # Treat as section or query
+                if [[ -z "$SECTION_FILTER" ]] && [[ -z "$QUERY_FILTER" ]]; then
+                    if [[ "$1" =~ ^[a-zA-Z]+$ ]]; then
+                        SECTION_FILTER="$1"
+                    else
+                        QUERY_FILTER="$1"
+                    fi
+                else
+                    echo.error "Unknown option: $1"
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+}
+
+# Ensure index exists and is up to date
+function ensure_index() {
+    if [[ "$REFRESH_INDEX" == true ]] || [[ ! -f "$INDEX_FILE" ]]; then
+        if [[ -x "$INDEXER" ]]; then
+            echo.info "Building alias index..." >&2
+            "$INDEXER" --quiet || {
+                echo.error "Failed to build index"
+                exit 1
+            }
+        else
+            echo.error "Indexer not found: $INDEXER"
+            exit 1
+        fi
+    fi
+}
+
+# Load and parse index
+function load_index() {
+    if [[ ! -f "$INDEX_FILE" ]]; then
+        echo.error "Index file not found: $INDEX_FILE"
+        echo.info "Run with --refresh to build the index"
+        exit 1
+    fi
+    
+    if ! jq -e '.aliases' "$INDEX_FILE" >/dev/null 2>&1; then
+        echo.error "Invalid index file format"
+        exit 1
+    fi
+}
+
+# Filter aliases based on section and query
+function filter_aliases() {
+    local jq_filter='.aliases'
+    
+    # Add section filter (searches both section name and description)
+    if [[ -n "$SECTION_FILTER" ]]; then
+        local section_lower
+        section_lower=$(echo "$SECTION_FILTER" | tr '[:upper:]' '[:lower:]')
+        jq_filter="$jq_filter | map(select(.section == \"$SECTION_FILTER\" or (.section | ascii_downcase | contains(\"$section_lower\")) or (.desc | ascii_downcase | contains(\"$section_lower\"))))"
+    fi
+    
+    # Add query filter
+    if [[ -n "$QUERY_FILTER" ]]; then
+        local query_lower
+        query_lower=$(echo "$QUERY_FILTER" | tr '[:upper:]' '[:lower:]')
+        jq_filter="$jq_filter | map(select(.name | ascii_downcase | contains(\"$query_lower\")) or (.desc | ascii_downcase | contains(\"$query_lower\")) or (.command | ascii_downcase | contains(\"$query_lower\")) or (.tags[]? | ascii_downcase | contains(\"$query_lower\")))"
+    fi
+    
+    printf '%s' "$jq_filter"
+}
+
+# Get terminal width
+function get_terminal_width() {
+    tput cols 2>/dev/null || echo 80
+}
+
+# JSON mode - just output filtered JSON
+function show_json() {
+    local filter
+    filter=$(filter_aliases)
+    jq "$filter" "$INDEX_FILE"
+}
+
+# Calculate column widths for display
+function calculate_columns() {
+    local width
+    width=$(get_terminal_width)
+    
+    # Reserve space for decoration
+    local usable_width=$((width - 6))  # Account for "  → " and padding
+    
+    if [[ "$WIDE_MODE" == true ]]; then
+        # Three columns: alias | desc | command
+        local alias_width=15
+        local desc_width=$((usable_width * 40 / 100))
+        local cmd_width=$((usable_width - alias_width - desc_width))
+        echo "$alias_width $desc_width $cmd_width"
+    else
+        # Two columns: alias | desc
+        local alias_width=18
+        local desc_width=$((usable_width - alias_width))
+        echo "$alias_width $desc_width 0"
+    fi
+}
+
+# Truncate text to fit column width
+function truncate_text() {
+    local text="$1"
+    local max_width="$2"
+    
+    if [[ ${#text} -le $max_width ]]; then
+        echo "$text"
+    else
+        echo "${text:0:$((max_width - 1))}…"
+    fi
+}
+
+# Display aliases in static mode
+function show_static() {
+    local filter
+    filter=$(filter_aliases)
+    
+    local total_count
+    total_count=$(jq -r "$filter | length" "$INDEX_FILE")
+    
+    if [[ $total_count -eq 0 ]]; then
+        echo.warning "No aliases found matching criteria"
+        return
+    fi
+    
+    # Header
+    local title="📋 Dotfiles Aliases"
+    if [[ -n "$SECTION_FILTER" ]]; then
+        title="$title - $SECTION_FILTER"
+    fi
+    if [[ -n "$QUERY_FILTER" ]]; then
+        title="$title - '$QUERY_FILTER'"
+    fi
+    echo.header "$title"
+    echo
+    
+    # Calculate column widths
+    local columns
+    columns=($(calculate_columns))
+    local alias_width=${columns[0]}
+    local desc_width=${columns[1]}
+    local cmd_width=${columns[2]}
+    
+    # Group by section
+    local sections
+    sections=($(jq -r "$filter | map(.section) | unique | .[]" "$INDEX_FILE" | sort))
+    
+    for section in "${sections[@]}"; do
+        if [[ "$COMPACT_MODE" == false ]]; then
+            echo.purple "━━━ $section ━━━"
+        fi
+        
+        # Get aliases for this section, sorted by name
+        while IFS='|' read -r name desc command; do
+            if [[ "$COMPACT_MODE" == true ]]; then
+                # Compact format
+                printf "  %s → %s\n" "$(echo.cyan "$name")" "$desc"
+            elif [[ "$WIDE_MODE" == true ]]; then
+                # Wide format with command
+                local truncated_desc
+                truncated_desc=$(truncate_text "$desc" $desc_width)
+                local truncated_cmd
+                truncated_cmd=$(truncate_text "$command" $cmd_width)
+                printf "  %-${alias_width}s → %-${desc_width}s %s\n" \
+                    "$(echo.cyan "$name")" \
+                    "$truncated_desc" \
+                    "$(echo -e "\033[2m$truncated_cmd\033[0m")"  # Dim command
+            else
+                # Standard format
+                local truncated_desc
+                truncated_desc=$(truncate_text "$desc" $desc_width)
+                printf "  %-${alias_width}s → %s\n" \
+                    "$(echo.cyan "$name")" \
+                    "$truncated_desc"
+            fi
+        done < <(jq -r --arg section "$section" "${filter} | map(select(.section == \$section)) | sort_by(.name) | .[] | \"\(.name)|\(.desc)|\(.command)\"" "$INDEX_FILE")
+        
+        if [[ "$COMPACT_MODE" == false ]]; then
+            echo
+        fi
+    done
+    
+    # Footer
+    local sections_count=${#sections[@]}
+    echo.success "Total: $total_count aliases across $sections_count sections"
+}
+
+# Interactive mode with fzf
+function show_fzf() {
+    if ! command -v fzf >/dev/null; then
+        echo.warning "fzf not available, falling back to static mode"
+        show_static
+        return
+    fi
+    
+    local filter
+    filter=$(filter_aliases)
+    
+    echo.header "🔍 Interactive Alias Browser (fzf)" >&2
+    echo "Use fuzzy search, arrow keys, and preview..." >&2
+    echo >&2
+    
+    # Create searchable list
+    local temp_file
+    temp_file=$(mktemp)
+    jq -r "$filter | .[] | \"\(.name) | \(.section) | \(.desc) | \(.command)\"" "$INDEX_FILE" > "$temp_file"
+    
+    local selected
+    selected=$(cat "$temp_file" | fzf \
+        --height 70% \
+        --layout=reverse \
+        --border=rounded \
+        --prompt="🔍 Search aliases: " \
+        --header="Tab: preview, Enter: details, Esc: quit" \
+        --delimiter=' | ' \
+        --preview='echo -e "\033[1;36m{1}\033[0m\n\033[0;35mSection:\033[0m {2}\n\033[0;32mDescription:\033[0m {3}\n\033[0;33mCommand:\033[0m {4}"' \
+        --preview-window=up:4:wrap \
+        --bind="alt-g:reload(jq -r '"'"'.aliases | map(select(.section == \"git\")) | .[] | \"\(.name) | \(.section) | \(.desc) | \(.command)\"'"'"' $INDEX_FILE)" \
+        --bind="alt-d:reload(jq -r '"'"'.aliases | map(select(.section == \"drizzle\")) | .[] | \"\(.name) | \(.section) | \(.desc) | \(.command)\"'"'"' $INDEX_FILE)" \
+        --bind="alt-a:reload(jq -r '"'"'.aliases | .[] | \"\(.name) | \(.section) | \(.desc) | \(.command)\"'"'"' $INDEX_FILE)"
+    )
+    
+    rm -f "$temp_file"
+    
+    if [[ -n "$selected" ]]; then
+        local alias_name
+        alias_name=$(echo "$selected" | cut -d'|' -f1 | xargs)
+        show_alias_details "$alias_name"
+    fi
+}
+
+# Show detailed info for a specific alias
+function show_alias_details() {
+    local alias_name="$1"
+    local alias_data
+    alias_data=$(jq -r ".aliases[] | select(.name == \"$alias_name\")" "$INDEX_FILE")
+    
+    if [[ -z "$alias_data" ]]; then
+        echo.error "Alias '$alias_name' not found"
+        return 1
+    fi
+    
+    echo
+    echo.header "⚡ $alias_name"
+    echo.cyan "Command: $(echo "$alias_data" | jq -r '.command')"
+    echo.purple "Description: $(echo "$alias_data" | jq -r '.desc')"
+    echo.success "Section: $(echo "$alias_data" | jq -r '.section')"
+    
+    local source
+    source=$(echo "$alias_data" | jq -r '.source')
+    echo.info "Source: $source:$(echo "$alias_data" | jq -r '.line')"
+    
+    local tags
+    tags=$(echo "$alias_data" | jq -r '.tags | join(", ")')
+    if [[ -n "$tags" && "$tags" != "" ]]; then
+        echo.info "Tags: $tags"
+    fi
+    
+    local see
+    see=$(echo "$alias_data" | jq -r '.see // empty')
+    if [[ -n "$see" ]]; then
+        echo.info "See also: $see"
+    fi
+    echo
+}
+
+# Simple interactive mode (without fzf)
+function show_interactive() {
+    local current_section=""
+    local current_query=""
+    
+    while true; do
+        clear
+        
+        # Show current filters
+        local title="🔍 Interactive Help"
+        if [[ -n "$current_section" ]]; then
+            title="$title - $current_section"
+        fi
+        if [[ -n "$current_query" ]]; then
+            title="$title - '$current_query'"
+        fi
+        
+        # Temporarily set filters
+        local old_section="$SECTION_FILTER"
+        local old_query="$QUERY_FILTER"
+        SECTION_FILTER="$current_section"
+        QUERY_FILTER="$current_query"
+        
+        # Show aliases
+        show_static
+        
+        # Restore filters
+        SECTION_FILTER="$old_section"
+        QUERY_FILTER="$old_query"
+        
+        # Show help
+        echo
+        echo.info "Press: $(echo.cyan 'g')=git $(echo.cyan 'd')=drizzle $(echo.cyan 'a')=all $(echo.cyan '/')=search $(echo.cyan 'r')=refresh $(echo.cyan '?')=help $(echo.cyan 'q')=quit"
+        
+        # Read single key
+        local key
+        read -rsn1 key
+        
+        case "$key" in
+            'g')
+                current_section="git"
+                current_query=""
+                ;;
+            'd')
+                current_section="drizzle"
+                current_query=""
+                ;;
+            'a')
+                current_section=""
+                current_query=""
+                ;;
+            '/')
+                echo
+                echo.cyan "Enter search term:"
+                read -r current_query
+                current_section=""
+                ;;
+            'r')
+                REFRESH_INDEX=true
+                ensure_index
+                ;;
+            '?')
+                clear
+                usage
+                echo
+                echo.info "Press any key to continue..."
+                read -rsn1
+                ;;
+            'q')
+                echo
+                echo.success "Goodbye!"
+                exit 0
+                ;;
+            *)
+                # Unknown key, continue
+                ;;
+        esac
+    done
+}
+
+# Main function
+function main() {
+    parse_args "$@"
+    
+    # Ensure index exists
+    ensure_index
+    load_index
+    
+    # Choose display mode
+    if [[ "$JSON_MODE" == true ]]; then
+        show_json
+    elif [[ "$FZF_MODE" == true ]]; then
+        show_fzf
+    elif [[ "$INTERACTIVE_MODE" == true ]]; then
+        show_interactive
+    else
+        # Static mode with optional paging
+        if [[ -t 1 ]] && command -v less >/dev/null; then
+            show_static | less -R
+        else
+            show_static
+        fi
+    fi
+}
+
+# Run if called directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

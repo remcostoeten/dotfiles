@@ -1,0 +1,41 @@
+[REQUEST TYPE]
+General Feature
+
+[TITLE]
+{{FEATURE_TITLE}}
+
+[Summary]
+{{SUMMARY}}
+
+[Requirements]
+{{REQUIREMENTS}}
+
+[Scope]
+{{SCOPE}}
+
+[Non-Goals]
+{{NON_GOALS}}
+
+[Affected Areas]
+{{AFFECTED_AREAS}}
+
+[Affected Files]
+{{AFFECTED_FILES}}
+
+[Current Code Context]
+{{CURRENT_CODE}}
+
+[Edge Cases]
+{{EDGE_CASES}}
+
+[Acceptance Criteria]
+{{ACCEPTANCE_CRITERIA}}
+
+[Project Rules]
+{{PROJECT_RULES}}
+
+[Response Instructions]
+- Implement the feature within scope and requirements.
+- Respect all project rules, exports policy, and functional style.
+- No comments. No tests unless requested.
+- Return code changes as BEGIN_FILE/END_FILE blocks only, plus a brief implementation plan above.

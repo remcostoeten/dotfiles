@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+
+# Simple Interactive Help - Working Version
+set -euo pipefail
+
+DOTFILES_ROOT="${DOTFILES_ROOT:-$HOME/.config/dotfiles}"
+
+# Color functions
+function echo.cyan() { echo -e "\033[0;36m$*\033[0m"; }
+function echo.purple() { echo -e "\033[0;35m$*\033[0m"; }
+function echo.success() { echo -e "\033[0;32m✓\033[0m $*"; }
+function echo.header() { echo -e "\n\033[1;34m$*\033[0m\n"; }
+
+# Load aliases from dotfiles
+declare -A ALIASES=()
+declare -A ALIAS_DESCRIPTIONS=()
+declare -A ALIAS_CATEGORIES=()
+
+function load_aliases() {
+    local aliases_dir="$DOTFILES_ROOT/modules/aliases"
+    [[ ! -d "$aliases_dir" ]] && return
+    
+    for file in "$aliases_dir"/*.aliases; do
+        [[ ! -f "$file" ]] && continue
+        
+        local category=$(basename "$file" .aliases)
+        
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Skip empty lines and comments
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+            
+            # Parse alias lines
+            if [[ "$line" =~ ^[[:space:]]*alias[[:space:]]+([^=]+)=(.+)$ ]]; then
+                local alias_name="${BASH_REMATCH[1]// /}"
+                local alias_command="${BASH_REMATCH[2]}"
+                
+                # Clean up command (remove quotes)
+                alias_command="${alias_command#\"}"
+                alias_command="${alias_command%\"}"
+                alias_command="${alias_command#\'}"
+                alias_command="${alias_command%\'}"
+                
+                # Store alias info
+                ALIASES["$alias_name"]="$alias_command"
+                ALIAS_DESCRIPTIONS["$alias_name"]="Executes: $alias_command"
+                ALIAS_CATEGORIES["$alias_name"]="$category"
+            fi
+        done < "$file"
+    done
+}
+
+function show_interactive() {
+    if ! command -v fzf >/dev/null; then
+        echo "⚠ fzf not available"
+        return 1
+    fi
+    
+    clear
+    
+    # Count unique categories
+    declare -A unique_categories=()
+    for alias_name in "${!ALIASES[@]}"; do
+        unique_categories["${ALIAS_CATEGORIES[$alias_name]}"]="1"
+    done
+    
+    # Show header
+    echo -e "\n\033[1;38;5;39m╭─────────────────────────────────────────────────────────╮\033[0m"
+    echo -e "\033[1;38;5;39m│\033[0m \033[1;38;5;226m🚀 Interactive Alias Browser\033[0m                     \033[1;38;5;39m│\033[0m"
+    echo -e "\033[1;38;5;39m│\033[0m \033[0;38;5;242m${#ALIASES[@]} aliases across ${#unique_categories[@]} categories\033[0m                        \033[1;38;5;39m│\033[0m"
+    echo -e "\033[1;38;5;39m╰─────────────────────────────────────────────────────────╯\033[0m"
+    echo
+    echo -e "\033[0;38;5;246m✨ Search by alias name, command, or description\033[0m"
+    echo -e "\033[0;38;5;246m⚡ Press Enter to select, Esc to quit\033[0m"
+    echo
+    
+    # Create temp files for fzf
+    local temp_list=$(mktemp)
+    local temp_data=$(mktemp)
+    
+    # Generate list for fzf
+    for alias_name in "${!ALIASES[@]}"; do
+        local cmd="${ALIASES[$alias_name]}"
+        local desc="${ALIAS_DESCRIPTIONS[$alias_name]}"
+        local cat="${ALIAS_CATEGORIES[$alias_name]}"
+        
+        # Get icon for category
+        local icon=""
+        case "$cat" in
+            "git") icon="🐙" ;;
+            "dev") icon="⚙️" ;;
+            "general") icon="📦" ;;
+            "dotfiles") icon="🏠" ;;
+            "drizzle") icon="🗄️" ;;
+            "help") icon="❓" ;;
+            *) icon="📋" ;;
+        esac
+        
+        # Create display line
+        printf "%-12s %s %-8s → %s\n" "$alias_name" "$icon" "[$cat]" "$cmd" >> "$temp_list"
+        
+        # Store data for lookup
+        echo "$alias_name|$cat|$cmd|$desc" >> "$temp_data"
+    done
+    
+    # Sort the display list
+    sort "$temp_list" > "${temp_list}.sorted"
+    mv "${temp_list}.sorted" "$temp_list"
+    
+    # Run fzf with simple config
+    local selected
+    selected=$(fzf \
+        --height=80% \
+        --layout=reverse \
+        --border=rounded \
+        --prompt="🔍 " \
+        --header="Search aliases..." \
+        --color=fg:#f8f8f2,bg:#282a36,hl:#8be9fd \
+        --color=fg+:#f8f8f2,bg+:#44475a,hl+:#8be9fd \
+        --color=info:#50fa7b,prompt:#ff79c6,pointer:#ff79c6 \
+        --color=marker:#50fa7b,spinner:#ffb86c,header:#6272a4 \
+        --preview-window=right:40% \
+        --preview='
+            alias_name=$(echo {} | awk "{print \$1}")
+            if [[ -n "$alias_name" ]]; then
+                line=$(grep "^$alias_name|" '"$temp_data"' | head -1)
+                if [[ -n "$line" ]]; then
+                    IFS="|" read -r name category command description <<< "$line"
+                    echo -e "\033[1;36m⚡ $name\033[0m"
+                    echo
+                    echo -e "\033[0;33mCategory:\033[0m $category"
+                    echo -e "\033[0;33mCommand:\033[0m $command"
+                    echo -e "\033[0;33mDescription:\033[0m $description"
+                fi
+            fi
+        ' < "$temp_list"
+    )
+    
+    # Cleanup temp files
+    rm -f "$temp_list" "$temp_data"
+    
+    if [[ -n "$selected" ]]; then
+        local alias_name=$(echo "$selected" | awk '{print $1}')
+        clear
+        echo
+        echo -e "\033[1;38;5;39m╭─────────────────────────────────────────╮\033[0m"
+        echo -e "\033[1;38;5;39m│\033[0m \033[1;38;5;226m⚡ Selected: $alias_name\033[0m \033[1;38;5;39m│\033[0m"
+        echo -e "\033[1;38;5;39m╰─────────────────────────────────────────╯\033[0m"
+        echo
+        echo -e "\033[0;38;5;50m📋 Command:\033[0m \033[1;38;5;228m${ALIASES[$alias_name]}\033[0m"
+        echo -e "\033[0;38;5;50m📝 Description:\033[0m \033[0;38;5;246m${ALIAS_DESCRIPTIONS[$alias_name]}\033[0m"
+        echo -e "\033[0;38;5;50m🏷️ Category:\033[0m \033[1;38;5;141m${ALIAS_CATEGORIES[$alias_name]}\033[0m"
+        echo
+        echo -e "\033[0;38;5;117m💡 You can now use: \033[1;38;5;228m$alias_name\033[0m"
+        echo
+    else
+        echo -e "\n\033[0;38;5;242m👋 Search cancelled\033[0m"
+    fi
+}
+
+# Main execution
+load_aliases
+show_interactive

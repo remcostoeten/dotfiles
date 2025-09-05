@@ -1,0 +1,53 @@
+format = """
+\"""
+$git_branch\\
+$git_status\\
+$line_break
+$aws\\
+$battery\\
+$conda\\
+$deno\\
+$character\"""\
+"""
+palette = "ice"
+
+[palettes.ice]
+color_fg0 = "#e6f3ff"
+color_bg1 = "#0d1a26"
+color_bg3 = "#1a334d"
+color_blue = "#4da6ff"
+color_aqua = "#66ccff"
+color_green = "#80dfff"
+color_orange = "#99e6ff"
+color_purple = "#b3f0ff"
+color_red = "#ff9999"
+color_yellow = "#ccf2ff"
+
+[git_branch]
+symbol = ""
+style = "bg:color_blue"
+format = "[[ $symbol $branch ](fg:color_fg0 bg:color_blue)]($style)"
+
+[git_status]
+style = "bg:color_blue"
+format = "[[($all_status$ahead_behind )](fg:color_fg0 bg:color_blue)]($style)"
+
+[line_break]
+disabled = false
+
+[aws]
+format = "[ $profile($region) ]($style)"
+style = "bold yellow"
+
+[battery]
+full_symbol = "🔋"
+charging_symbol = "⚡"
+discharging_symbol = "💀"
+
+[conda]
+format = "[ $environment ]($style)"
+style = "green bold"
+
+[deno]
+format = "[ $version ]($style)"
+style = "green bold"

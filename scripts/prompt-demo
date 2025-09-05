@@ -1,0 +1,151 @@
+#!/usr/bin/env zsh
+
+# Demo of Enhanced Interactive Prompt Builder
+# Shows the key features without requiring full interaction
+
+source "${HOME}/.config/dotfiles/core/_env"
+source "${HOME}/.config/dotfiles/core/_colors"
+source "${HOME}/.config/dotfiles/core/_safety"
+source "${HOME}/.config/dotfiles/modules/enabled/prompt-template"
+
+function demo_layout() {
+    echo.header "🎨 Enhanced Interactive Prompt Builder Demo"
+    echo.info "Your terminal: ${COLUMNS}×${LINES} (${TERM})"
+    echo
+    
+    # Demo layout calculation
+    setup_split_layout
+    
+    echo.success "Split Layout Configuration:"
+    echo.cyan "• Total columns: $LAYOUT_TOTAL_COLS"
+    echo.cyan "• Left panel: $LAYOUT_LEFT_COLS columns"
+    echo.cyan "• Right panel: $LAYOUT_RIGHT_COLS columns"
+    echo.cyan "• Divider at: $LAYOUT_DIVIDER_COL"
+    echo
+    
+    if [[ $LAYOUT_TOTAL_COLS -lt 100 ]]; then
+        echo.warning "⚠️  Terminal too narrow for split view"
+        echo.info "Would fall back to simple mode"
+    else
+        echo.success "✅ Terminal is wide enough for split view"
+        echo.info "Enhanced sidebar mode available"
+    fi
+    echo
+}
+
+function demo_sidebar_preview() {
+    echo.header "📊 Sidebar Preview Simulation"
+    echo
+    
+    # Extract template variables for demo
+    local variables=($(echo "$PROMPT_TEMPLATE_CONTENT" | grep -oE '\\{\\{[^}]+\\}\\}' | sort -u))
+    
+    echo.cyan "Template variables found: ${#variables[@]}"
+    local i=1
+    for var in "${variables[@]:0:5}"; do  # Show first 5
+        local clean_var=$(echo "$var" | sed 's/[{}]//g')
+        if [[ $i -le 2 ]]; then
+            echo.success "✓ $i. $clean_var (filled)"
+        elif [[ $i -eq 3 ]]; then
+            echo.warning "➤ $i. $clean_var (current)"
+        else
+            echo.info "  $i. $clean_var (pending)"
+        fi
+        ((i++))
+    done
+    
+    echo
+    echo.purple "Live Preview Features:"
+    echo "• Real-time updates as you type"
+    echo "• Color-coded variable states"
+    echo "• Progress tracking"
+    echo "• Context-aware scrolling"
+    echo
+}
+
+function demo_features() {
+    echo.header "✨ Key Features"
+    echo
+    
+    echo.purple "🎯 Split-Screen Interface:"
+    echo "• Left panel: Current step & input"
+    echo "• Right panel: Live preview sidebar"
+    echo "• Vertical divider with box drawing chars"
+    echo
+    
+    echo.purple "🎨 Visual Enhancements:"
+    echo "• $(echo.success 'Green') for completed variables"
+    echo "• $(echo.warning 'Yellow') for current variable"
+    echo "• $(echo.info 'Dim gray') for pending variables"
+    echo "• Progress indicators and step counters"
+    echo
+    
+    echo.purple "⌨️  Navigation:"
+    echo "• [Enter] Continue to next variable"
+    echo "• [t] Show full template overlay"
+    echo "• [b] Go back to previous variable"
+    echo "• [s] Skip to end and save"
+    echo "• [q] Quit without saving"
+    echo
+    
+    echo.purple "🔄 Responsive Design:"
+    echo "• Auto-detects terminal width"
+    echo "• Falls back to simple mode if < 100 columns"
+    echo "• Handles terminal resizing gracefully"
+    echo
+    
+    echo.purple "💾 Backup & Recovery:"
+    echo "• Auto-saves after each step"
+    echo "• Persistent backup directory"
+    echo "• Recovery from interrupted sessions"
+    echo
+}
+
+function demo_usage() {
+    echo.header "🚀 Usage Examples"
+    echo
+    
+    echo.cyan "Basic usage:"
+    echo.success "  prompt interactive"
+    echo.success "  prompt i"
+    echo
+    
+    echo.cyan "Other commands:"
+    echo.success "  prompt              # View template"
+    echo.success "  prompt copy         # Copy to clipboard"
+    echo.success "  prompt help         # Show help"
+    echo
+    
+    echo.info "💡 Tip: Try 'prompt i' to see the full interactive experience!"
+    echo
+}
+
+# Main demo
+case "${1:-all}" in
+    "layout"|"l")
+        demo_layout
+        ;;
+    "sidebar"|"s")
+        demo_sidebar_preview
+        ;;
+    "features"|"f")
+        demo_features
+        ;;
+    "usage"|"u")
+        demo_usage
+        ;;
+    "all"|"")
+        demo_layout
+        echo
+        demo_sidebar_preview
+        echo
+        demo_features
+        echo
+        demo_usage
+        ;;
+    *)
+        echo.error "Unknown demo: $1"
+        echo.info "Available demos: layout, sidebar, features, usage, all"
+        exit 1
+        ;;
+esac

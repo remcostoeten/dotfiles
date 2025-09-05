@@ -56,3 +56,8 @@ pastel_banner_init
 # Add convenience aliases specific to this module
 alias pastel-preview='pastel_preview'
 alias banner-help='pastel_banner_help'
+
+# Override the default dotfiles banner with the pastel one
+function echo.dotfiles_banner() {
+    echo.pastel_banner
+}

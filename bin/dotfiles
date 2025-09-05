@@ -420,8 +420,9 @@ function dotfiles_help() {
     printf "  %-12s %-20s %-12s %s\n" \
         "$(echo.cyan 'dashboard')" "Personal dashboard" \
         "$(echo.cyan 'track')" "Track project"
-    printf "  %-20s %-20s\n" \
-        "$(echo.cyan 'version [bump|set]')" "Version management"
+    printf "  %-12s %-20s %-12s %s\n" \
+        "$(echo.cyan 'fans')" "Fan control system" \
+        "$(echo.cyan 'version')" "Version management"
     echo
     
     # Aliases - condensed

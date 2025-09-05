@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Aesthetic alias help viewer
+# Part of the dotfiles system
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Source colors
+source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || {
+    echo "ERROR: Could not load colors" >&2
+    exit 1
+}
+
+function usage() {
+    echo.header "Alias Help Viewer"
+    echo
+    echo.cyan "Usage:"
+    echo "  alias-help              Show all aliases"
+    echo "  alias-help <name>       Show specific alias help"
+    echo "  alias-help -s <term>    Search aliases"
+    echo "  alias-help -h           Show this help"
+    echo
+}
+
+function search_aliases() {
+    local search_term="$1"
+    echo.header "🔍 Searching for: $search_term"
+    echo
+    
+    local found=false
+    
+    for help_file in "$SCRIPT_DIR"/*.help; do
+        [[ ! -f "$help_file" ]] && continue
+        [[ "$(basename "$help_file")" == "_all.help" ]] && continue
+        
+        local alias_name=$(basename "$help_file" .help)
+        
+        # Search in alias name, command, or description
+        if source "$help_file" 2>/dev/null; then
+            if [[ "$ALIAS_NAME" =~ $search_term ]] || \
+               [[ "$ALIAS_COMMAND" =~ $search_term ]] || \
+               [[ "$ALIAS_DESCRIPTION" =~ $search_term ]]; then
+                show_help
+                found=true
+            fi
+        fi
+    done
+    
+    if [[ "$found" == false ]]; then
+        echo.warning "No aliases found matching: $search_term"
+    fi
+}
+
+function show_specific_help() {
+    local alias_name="$1"
+    local help_file="$SCRIPT_DIR/${alias_name}.help"
+    
+    if [[ -f "$help_file" ]]; then
+        source "$help_file"
+        show_help
+    else
+        echo.error "No help found for alias: $alias_name"
+        echo.info "Available aliases:"
+        for file in "$SCRIPT_DIR"/*.help; do
+            [[ ! -f "$file" ]] && continue
+            [[ "$(basename "$file")" == "_all.help" ]] && continue
+            echo "  • $(basename "$file" .help)"
+        done
+        exit 1
+    fi
+}
+
+# Parse arguments
+case "${1:-}" in
+    "")
+        # Show all aliases
+        source "$SCRIPT_DIR/_all.help"
+        show_all_help
+        ;;
+    -h|--help)
+        usage
+        ;;
+    -s|--search)
+        [[ -z "${2:-}" ]] && { echo.error "Search term required"; usage; exit 1; }
+        search_aliases "$2"
+        ;;
+    *)
+        show_specific_help "$1"
+        ;;
+esac

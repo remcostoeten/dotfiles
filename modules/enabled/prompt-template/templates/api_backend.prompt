@@ -1,0 +1,63 @@
+[REQUEST TYPE]
+API/Backend Feature
+
+[TITLE]
+{{REQUEST_TITLE}}
+
+[SUMMARY]
+{{SUMMARY}}
+
+[Domain]
+- Feature name: {{FEATURE_NAME}}
+- Entity name: {{ENTITY_NAME}}
+- Drizzle schema path(s): {{SCHEMA_PATHS}}
+- Table(s): {{TABLE_NAMES}}
+
+[Endpoints / Server Actions]
+{{ENDPOINTS_SPEC}}
+
+[Data Contracts]
+Input types:
+{{INPUT_TYPES_SPEC}}
+Output types:
+{{OUTPUT_TYPES_SPEC}}
+
+[Validation]
+{{VALIDATION_SPEC}}
+
+[AuthN/AuthZ]
+{{AUTH_SPEC}}
+
+[Transactions and Error Handling]
+Transactions:
+{{TRANSACTION_SPEC}}
+Error handling:
+{{ERROR_HANDLING_SPEC}}
+
+[Side Effects and Integration]
+{{SIDE_EFFECTS_SPEC}}
+
+[Affected Files]
+{{AFFECTED_FILES}}
+
+[Current Code Context]
+{{CURRENT_CODE}}
+
+[Acceptance Criteria]
+{{ACCEPTANCE_CRITERIA}}
+
+[Project Rules]
+{{PROJECT_RULES}}
+
+[Backend-Specific Rules]
+- Use functional factories for Drizzle ORM per entity. Factories expose named async functions: create, read, update, destroy.
+- Factories are pure and handle only DB access/mapping; keep business logic outside.
+- Use strong generics. Return full entities on create/update.
+- No raw SQL strings; use Drizzle query builder only.
+- Export only named functions for factories and server actions; no default exports.
+
+[Response Instructions]
+- Implement server actions, endpoints, and factory code following the rules.
+- Use "type" aliases only; types prefixed with T.
+- No comments. No tests unless explicitly requested.
+- Return code changes as BEGIN_FILE/END_FILE blocks only, plus a brief implementation plan above.

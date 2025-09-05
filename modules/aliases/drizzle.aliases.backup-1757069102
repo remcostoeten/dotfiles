@@ -1,0 +1,16 @@
+#!/bin/bash
+
+export DK="drizzle-kit"
+
+alias dk="$DK"
+
+alias gen="$DK gen"
+
+alias push="$DK push"
+
+alias migrate="$DK migrate"
+
+alias studio="$DK studio"
+
+alias st="$DK studio"
+

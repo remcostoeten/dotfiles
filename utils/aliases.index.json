@@ -1,0 +1,717 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2025-09-05T12:08:06Z",
+  "aliases": [
+    {
+      "name": "dk",
+      "section": "drizzle",
+      "desc": "Drizzle Kit CLI wrapper",
+      "command": "$DK",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 13,
+      "tags": []
+    },
+    {
+      "name": "dk-gen",
+      "section": "drizzle",
+      "desc": "Generate SQL migrations from schema (verbose)",
+      "command": "$DK generate",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 34,
+      "tags": []
+    },
+    {
+      "name": "dk-migrate",
+      "section": "drizzle",
+      "desc": "Run pending migrations (verbose)",
+      "command": "$DK migrate",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 42,
+      "tags": []
+    },
+    {
+      "name": "dk-push",
+      "section": "drizzle",
+      "desc": "Push schema changes (verbose)",
+      "command": "$DK push",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 38,
+      "tags": []
+    },
+    {
+      "name": "dk-studio",
+      "section": "drizzle",
+      "desc": "Open Drizzle Studio (verbose)",
+      "command": "$DK studio",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 46,
+      "tags": []
+    },
+    {
+      "name": "dkg",
+      "section": "drizzle",
+      "desc": "Generate SQL migrations from schema",
+      "command": "$DK generate",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 17,
+      "tags": []
+    },
+    {
+      "name": "dkm",
+      "section": "drizzle",
+      "desc": "Run pending migrations",
+      "command": "$DK migrate",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 25,
+      "tags": []
+    },
+    {
+      "name": "dkp",
+      "section": "drizzle",
+      "desc": "Push schema changes (no migration files)",
+      "command": "$DK push",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 21,
+      "tags": []
+    },
+    {
+      "name": "dks",
+      "section": "drizzle",
+      "desc": "Open Drizzle Studio",
+      "command": "$DK studio",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 29,
+      "tags": []
+    },
+    {
+      "name": "gen",
+      "section": "drizzle",
+      "desc": "Generate SQL migrations (legacy)",
+      "command": "$DK generate",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 51,
+      "tags": []
+    },
+    {
+      "name": "migrate",
+      "section": "drizzle",
+      "desc": "Run pending migrations (legacy)",
+      "command": "$DK migrate",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 59,
+      "tags": []
+    },
+    {
+      "name": "push",
+      "section": "drizzle",
+      "desc": "Push schema changes (legacy)",
+      "command": "$DK push",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 55,
+      "tags": []
+    },
+    {
+      "name": "st",
+      "section": "drizzle",
+      "desc": "Open Drizzle Studio (short legacy)",
+      "command": "$DK studio",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 67,
+      "tags": []
+    },
+    {
+      "name": "studio",
+      "section": "drizzle",
+      "desc": "Open Drizzle Studio (legacy)",
+      "command": "$DK studio",
+      "source": "modules/aliases/drizzle.aliases",
+      "line": 63,
+      "tags": []
+    },
+    {
+      "name": ".",
+      "section": "general",
+      "desc": "Executes: open .",
+      "command": "open .",
+      "source": "modules/aliases/general.aliases",
+      "line": 113,
+      "tags": []
+    },
+    {
+      "name": "..",
+      "section": "general",
+      "desc": "Go up one directory",
+      "command": "cd ..",
+      "source": "modules/aliases/general.aliases",
+      "line": 107,
+      "tags": []
+    },
+    {
+      "name": "...",
+      "section": "general",
+      "desc": "Go up two directories",
+      "command": "cd ../..",
+      "source": "modules/aliases/general.aliases",
+      "line": 111,
+      "tags": []
+    },
+    {
+      "name": "add",
+      "section": "general",
+      "desc": "Stage all changes for commit",
+      "command": "git add .",
+      "source": "modules/aliases/git.aliases",
+      "line": 19,
+      "tags": []
+    },
+    {
+      "name": "ah",
+      "section": "general",
+      "desc": "Quick alias help shortcut",
+      "command": "alias-help",
+      "source": "modules/aliases/help.aliases",
+      "line": 11,
+      "tags": []
+    },
+    {
+      "name": "alias-gen",
+      "section": "general",
+      "desc": "Generate help documentation for alias files  ",
+      "command": "dotfiles-gen-alias-help",
+      "source": "modules/aliases/help.aliases",
+      "line": 7,
+      "tags": []
+    },
+    {
+      "name": "b",
+      "section": "general",
+      "desc": "Executes: bun run build",
+      "command": "bun run build",
+      "source": "modules/aliases/dev.aliases",
+      "line": 2,
+      "tags": []
+    },
+    {
+      "name": "branch",
+      "section": "general",
+      "desc": "List, create, or delete branches",
+      "command": "git branch",
+      "source": "modules/aliases/git.aliases",
+      "line": 59,
+      "tags": []
+    },
+    {
+      "name": "c",
+      "section": "general",
+      "desc": "Clear screen",
+      "command": "clear",
+      "source": "modules/aliases/general.aliases",
+      "line": 43,
+      "tags": []
+    },
+    {
+      "name": "checkout",
+      "section": "general",
+      "desc": "Switch branches or restore working tree files",
+      "command": "git checkout",
+      "source": "modules/aliases/git.aliases",
+      "line": 15,
+      "tags": []
+    },
+    {
+      "name": "cpgit",
+      "section": "general",
+      "desc": "Executes: copy-remote",
+      "command": "copy-remote",
+      "source": "modules/aliases/git.aliases",
+      "line": 65,
+      "tags": []
+    },
+    {
+      "name": "cpremote",
+      "section": "general",
+      "desc": "Executes: copy-remote",
+      "command": "copy-remote",
+      "source": "modules/aliases/git.aliases",
+      "line": 66,
+      "tags": []
+    },
+    {
+      "name": "cursor",
+      "section": "general",
+      "desc": "Open cursor editor",
+      "command": "~/appimages/cursor.AppImage",
+      "source": "modules/aliases/general.aliases",
+      "line": 87,
+      "tags": []
+    },
+    {
+      "name": "cursord",
+      "section": "general",
+      "desc": "Executes: cursor d",
+      "command": "cursor d",
+      "source": "modules/aliases/general.aliases",
+      "line": 5,
+      "tags": []
+    },
+    {
+      "name": "d",
+      "section": "general",
+      "desc": "Executes: cd ~/.config/dotfiles",
+      "command": "cd ~/.config/dotfiles",
+      "source": "modules/aliases/general.aliases",
+      "line": 1,
+      "tags": []
+    },
+    {
+      "name": "df",
+      "section": "general",
+      "desc": "Show disk usage",
+      "command": "df -H",
+      "source": "modules/aliases/general.aliases",
+      "line": 95,
+      "tags": []
+    },
+    {
+      "name": "diff",
+      "section": "general",
+      "desc": "Show changes between commits, commit and working tree, etc.",
+      "command": "git diff",
+      "source": "modules/aliases/git.aliases",
+      "line": 43,
+      "tags": []
+    },
+    {
+      "name": "dotfiles",
+      "section": "general",
+      "desc": "Executes: d",
+      "command": "d",
+      "source": "modules/aliases/general.aliases",
+      "line": 2,
+      "tags": []
+    },
+    {
+      "name": "du",
+      "section": "general",
+      "desc": "Show directory usage",
+      "command": "du -ch",
+      "source": "modules/aliases/general.aliases",
+      "line": 99,
+      "tags": []
+    },
+    {
+      "name": "egrep",
+      "section": "general",
+      "desc": "Egrep with colors",
+      "command": "egrep --color=auto",
+      "source": "modules/aliases/general.aliases",
+      "line": 35,
+      "tags": []
+    },
+    {
+      "name": "fetch",
+      "section": "general",
+      "desc": "Fetch updates from the remote repository",
+      "command": "git fetch",
+      "source": "modules/aliases/git.aliases",
+      "line": 55,
+      "tags": []
+    },
+    {
+      "name": "fgrep",
+      "section": "general",
+      "desc": "Fgrep with colors",
+      "command": "fgrep --color=auto",
+      "source": "modules/aliases/general.aliases",
+      "line": 31,
+      "tags": []
+    },
+    {
+      "name": "g",
+      "section": "general",
+      "desc": "Shortcut for git command",
+      "command": "git",
+      "source": "modules/aliases/git.aliases",
+      "line": 3,
+      "tags": []
+    },
+    {
+      "name": "grep",
+      "section": "general",
+      "desc": "Grep with colors",
+      "command": "grep --color=auto",
+      "source": "modules/aliases/general.aliases",
+      "line": 27,
+      "tags": []
+    },
+    {
+      "name": "h",
+      "section": "general",
+      "desc": "Show history",
+      "command": "history",
+      "source": "modules/aliases/general.aliases",
+      "line": 51,
+      "tags": []
+    },
+    {
+      "name": "head",
+      "section": "general",
+      "desc": "Move HEAD back by one commit",
+      "command": "git reset ~HEAD-1",
+      "source": "modules/aliases/git.aliases",
+      "line": 27,
+      "tags": []
+    },
+    {
+      "name": "help.aliases",
+      "section": "general",
+      "desc": "Beautiful aesthetic alias help menu",
+      "command": "alias-help",
+      "source": "modules/aliases/help.aliases",
+      "line": 3,
+      "tags": []
+    },
+    {
+      "name": "l",
+      "section": "general",
+      "desc": "list only dirr or file  + extension",
+      "command": "exa --icons --git --oneline",
+      "source": "modules/aliases/general.aliases",
+      "line": 9,
+      "tags": []
+    },
+    {
+      "name": "la",
+      "section": "general",
+      "desc": "List all files including hidden",
+      "command": "ll -A",
+      "source": "modules/aliases/general.aliases",
+      "line": 23,
+      "tags": []
+    },
+    {
+      "name": "ll",
+      "section": "general",
+      "desc": "List all files in long format",
+      "command": "exa -alF",
+      "source": "modules/aliases/general.aliases",
+      "line": 19,
+      "tags": []
+    },
+    {
+      "name": "log",
+      "section": "general",
+      "desc": "Show commit logs",
+      "command": "git log --oneline --graph --all --decorate",
+      "source": "modules/aliases/git.aliases",
+      "line": 39,
+      "tags": []
+    },
+    {
+      "name": "ls",
+      "section": "general",
+      "desc": "List files with colors",
+      "command": "exa",
+      "source": "modules/aliases/general.aliases",
+      "line": 15,
+      "tags": []
+    },
+    {
+      "name": "mem",
+      "section": "general",
+      "desc": "Show processes sorted by memory usage",
+      "command": "ps auxf | sort -nr -k 4",
+      "source": "modules/aliases/general.aliases",
+      "line": 91,
+      "tags": []
+    },
+    {
+      "name": "mkdir",
+      "section": "general",
+      "desc": "Create directory recursively",
+      "command": "mkdir -p",
+      "source": "modules/aliases/general.aliases",
+      "line": 39,
+      "tags": []
+    },
+    {
+      "name": "newbranch",
+      "section": "general",
+      "desc": "Create and switch to a new branch",
+      "command": "git checkout -b",
+      "source": "modules/aliases/git.aliases",
+      "line": 31,
+      "tags": []
+    },
+    {
+      "name": "now",
+      "section": "general",
+      "desc": "Show current time",
+      "command": "date +\"%T\"",
+      "source": "modules/aliases/general.aliases",
+      "line": 63,
+      "tags": []
+    },
+    {
+      "name": "now",
+      "section": "general",
+      "desc": "Show current date",
+      "command": "date +\"%Y-%m-%d\"",
+      "source": "modules/aliases/general.aliases",
+      "line": 67,
+      "tags": []
+    },
+    {
+      "name": "path",
+      "section": "general",
+      "desc": "Show path in a readable format",
+      "command": "echo -e ${PATH//:/\\n}",
+      "source": "modules/aliases/general.aliases",
+      "line": 59,
+      "tags": []
+    },
+    {
+      "name": "pull",
+      "section": "general",
+      "desc": "Pull latest changes from the remote repository",
+      "command": "git pull",
+      "source": "modules/aliases/git.aliases",
+      "line": 11,
+      "tags": []
+    },
+    {
+      "name": "push",
+      "section": "general",
+      "desc": "Push commits to the remote repository",
+      "command": "git push",
+      "source": "modules/aliases/git.aliases",
+      "line": 7,
+      "tags": []
+    },
+    {
+      "name": "r",
+      "section": "general",
+      "desc": "Executes: bun run dev",
+      "command": "bun run dev",
+      "source": "modules/aliases/dev.aliases",
+      "line": 1,
+      "tags": []
+    },
+    {
+      "name": "r1",
+      "section": "general",
+      "desc": "Executes: bun run dev --port 3001",
+      "command": "bun run dev --port 3001",
+      "source": "modules/aliases/dev.aliases",
+      "line": 4,
+      "tags": []
+    },
+    {
+      "name": "r2",
+      "section": "general",
+      "desc": "Executes: bun run dev --port 3002",
+      "command": "bun run dev --port 3002",
+      "source": "modules/aliases/dev.aliases",
+      "line": 5,
+      "tags": []
+    },
+    {
+      "name": "r3",
+      "section": "general",
+      "desc": "Executes: bun run dev --port 3003",
+      "command": "bun run dev --port 3003",
+      "source": "modules/aliases/dev.aliases",
+      "line": 6,
+      "tags": []
+    },
+    {
+      "name": "r4",
+      "section": "general",
+      "desc": "Executes: bun run dev --port 3004",
+      "command": "bun run dev --port 3004",
+      "source": "modules/aliases/dev.aliases",
+      "line": 7,
+      "tags": []
+    },
+    {
+      "name": "r5",
+      "section": "general",
+      "desc": "Executes: bun run dev --port 3005",
+      "command": "bun run dev --port 3005",
+      "source": "modules/aliases/dev.aliases",
+      "line": 8,
+      "tags": []
+    },
+    {
+      "name": "reb",
+      "section": "general",
+      "desc": "Executes: rm -rf node_modules .next ;bun run build",
+      "command": "rm -rf node_modules .next ;bun run build",
+      "source": "modules/aliases/dev.aliases",
+      "line": 3,
+      "tags": []
+    },
+    {
+      "name": "reload-shell",
+      "section": "general",
+      "desc": "Executes: exec $SHELL",
+      "command": "exec $SHELL",
+      "source": "modules/aliases/dotfiles.aliases",
+      "line": 49,
+      "tags": []
+    },
+    {
+      "name": "repo",
+      "section": "general",
+      "desc": "Executes: gh repo view -w",
+      "command": "gh repo view -w",
+      "source": "modules/aliases/git.aliases",
+      "line": 63,
+      "tags": []
+    },
+    {
+      "name": "reset",
+      "section": "general",
+      "desc": "Reset current branch to last commit, discarding changes",
+      "command": "git reset --hard",
+      "source": "modules/aliases/git.aliases",
+      "line": 23,
+      "tags": []
+    },
+    {
+      "name": "rs",
+      "section": "general",
+      "desc": "Executes: bun run start",
+      "command": "bun run start",
+      "source": "modules/aliases/dev.aliases",
+      "line": 9,
+      "tags": []
+    },
+    {
+      "name": "sa",
+      "section": "general",
+      "desc": "Executes: source_all",
+      "command": "source_all",
+      "source": "modules/aliases/dotfiles.aliases",
+      "line": 44,
+      "tags": []
+    },
+    {
+      "name": "select",
+      "section": "general",
+      "desc": "Executes: gh select",
+      "command": "gh select",
+      "source": "modules/aliases/git.aliases",
+      "line": 61,
+      "tags": []
+    },
+    {
+      "name": "stash",
+      "section": "general",
+      "desc": "Stash current changes",
+      "command": "git stash",
+      "source": "modules/aliases/git.aliases",
+      "line": 47,
+      "tags": []
+    },
+    {
+      "name": "stash-pop",
+      "section": "general",
+      "desc": "Apply and remove the latest stash",
+      "command": "git stash pop",
+      "source": "modules/aliases/git.aliases",
+      "line": 51,
+      "tags": []
+    },
+    {
+      "name": "status",
+      "section": "general",
+      "desc": "Show the working tree status",
+      "command": "git status",
+      "source": "modules/aliases/git.aliases",
+      "line": 35,
+      "tags": []
+    },
+    {
+      "name": "top",
+      "section": "general",
+      "desc": "Show processes with htop",
+      "command": "htop",
+      "source": "modules/aliases/general.aliases",
+      "line": 103,
+      "tags": []
+    },
+    {
+      "name": "vi",
+      "section": "general",
+      "desc": "Edit file with default editor",
+      "command": "${EDITOR}",
+      "source": "modules/aliases/general.aliases",
+      "line": 71,
+      "tags": []
+    },
+    {
+      "name": "vi",
+      "section": "general",
+      "desc": "Edit file with default editor",
+      "command": "${EDITOR}",
+      "source": "modules/aliases/general.aliases",
+      "line": 75,
+      "tags": []
+    },
+    {
+      "name": "vi",
+      "section": "general",
+      "desc": "Edit file with default editor",
+      "command": "${EDITOR}",
+      "source": "modules/aliases/general.aliases",
+      "line": 79,
+      "tags": []
+    },
+    {
+      "name": "vim",
+      "section": "general",
+      "desc": "Edit file with default editor",
+      "command": "${EDITOR}",
+      "source": "modules/aliases/general.aliases",
+      "line": 83,
+      "tags": []
+    },
+    {
+      "name": "vimd",
+      "section": "general",
+      "desc": "Executes: vim ~/.config/dotfiles",
+      "command": "vim ~/.config/dotfiles",
+      "source": "modules/aliases/general.aliases",
+      "line": 4,
+      "tags": []
+    },
+    {
+      "name": "web",
+      "section": "general",
+      "desc": "Executes: brave-browser",
+      "command": "brave-browser",
+      "source": "modules/aliases/general.aliases",
+      "line": 115,
+      "tags": []
+    },
+    {
+      "name": "which",
+      "section": "general",
+      "desc": "Show all matching commands",
+      "command": "type -a",
+      "source": "modules/aliases/general.aliases",
+      "line": 55,
+      "tags": []
+    },
+    {
+      "name": "x",
+      "section": "general",
+      "desc": "exit",
+      "command": "exit",
+      "source": "modules/aliases/general.aliases",
+      "line": 47,
+      "tags": []
+    }
+  ]
+}

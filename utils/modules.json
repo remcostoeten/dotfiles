@@ -21,7 +21,7 @@
       "auto_enable": true
     },
     "pastel-banner": {
-      "enabled": false,
+      "enabled": true,
       "type": "module",
       "description": "Colorful startup banner",
       "dependencies": [

@@ -1,0 +1,58 @@
+[REQUEST TYPE]
+React/Next.js Component Creation
+
+[TITLE]
+{{REQUEST_TITLE}}
+
+[SUMMARY]
+{{SUMMARY}}
+
+[Component]
+- Kind: {{COMPONENT_KIND}}  (component | view | page)
+- Name: {{COMPONENT_NAME}}
+- Target path: {{TARGET_PATH}}
+- Related files: {{RELATED_FILES}}
+
+[UI Specification]
+{{UI_SPEC}}
+
+[Props and Types]
+{{PROPS_SPEC}}
+
+[State and Events]
+State:
+{{STATE_SPEC}}
+Events/Handlers:
+{{EVENTS_SPEC}}
+
+[Styling]
+{{STYLING_SPEC}}
+
+[Accessibility]
+{{A11Y_SPEC}}
+
+[Dependencies]
+{{DEPENDENCIES_SPEC}}
+
+[Example Usage]
+{{EXAMPLE_USAGE}}
+
+[Current Code Context]
+{{CURRENT_CODE}}
+
+[Acceptance Criteria]
+{{ACCEPTANCE_CRITERIA}}
+
+[Project Rules]
+{{PROJECT_RULES}}
+
+[Additional Constraints]
+{{ADDITIONAL_CONSTRAINTS}}
+
+[Response Instructions]
+- Follow all Project Rules exactly.
+- If creating a page: default export is allowed for the page component only; the page must only return a View and optional Metadata. The View must be in /views or src/views, named *-view.tsx.
+- For component props: if the file has exactly one non-exported type, name it TProps. Use "type" and prefix other types with T.
+- Use function declarations only; no arrow functions; no classes.
+- Do not include comments.
+- Return code changes as BEGIN_FILE/END_FILE blocks only, plus a brief implementation plan above.

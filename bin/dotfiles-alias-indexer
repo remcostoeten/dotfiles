@@ -1,0 +1,317 @@
+#!/usr/bin/env bash
+
+# dotfiles-alias-indexer - Create JSON index from all .aliases files
+# Part of the unified dotfiles help system
+
+set -euo pipefail
+
+# Setup
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ALIASES_DIR="$DOTFILES_ROOT/modules/aliases"
+UTILS_DIR="$DOTFILES_ROOT/utils"
+OUTPUT_FILE="$UTILS_DIR/aliases.index.json"
+HASH_FILE="$UTILS_DIR/aliases.hash"
+SCHEMA_VERSION="1.0.0"
+
+# Source colors
+source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || {
+    function echo.info() { echo "ℹ $*"; }
+    function echo.success() { echo "✓ $*"; }
+    function echo.warning() { echo "⚠ $*"; }
+    function echo.error() { echo "✗ $*"; }
+    function echo.debug() { echo "🐛 $*"; }
+}
+
+# Usage
+function usage() {
+    cat << EOF
+Usage: $(basename "$0") [options]
+
+Options:
+  --out <file>     Output file (default: $OUTPUT_FILE)
+  --force          Force rebuild even if no changes detected
+  --quiet          Suppress non-error output
+  -h, --help       Show this help
+
+Creates a JSON index of all aliases from modules/aliases/*.aliases files.
+EOF
+}
+
+# Global variables
+FORCE_REBUILD=false
+QUIET=false
+
+# Parse arguments
+function parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --out)
+                OUTPUT_FILE="$2"
+                shift 2
+                ;;
+            --force)
+                FORCE_REBUILD=true
+                shift
+                ;;
+            --quiet)
+                QUIET=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                echo.error "Unknown option: $1"
+                usage
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# Log function that respects quiet mode
+function log() {
+    [[ "$QUIET" == true ]] || echo "$@"
+}
+
+# Calculate hash of all .aliases files
+function calculate_aliases_hash() {
+    find "$ALIASES_DIR" -name "*.aliases" -type f -exec sha256sum {} \; 2>/dev/null | \
+        sort | sha256sum | cut -d' ' -f1
+}
+
+# Check if rebuild is needed
+function needs_rebuild() {
+    [[ "$FORCE_REBUILD" == true ]] && return 0
+    [[ ! -f "$OUTPUT_FILE" ]] && return 0
+    [[ ! -f "$HASH_FILE" ]] && return 0
+    
+    local current_hash
+    current_hash=$(calculate_aliases_hash)
+    local stored_hash
+    stored_hash=$(cat "$HASH_FILE" 2>/dev/null || echo "")
+    
+    [[ "$current_hash" != "$stored_hash" ]]
+}
+
+# Parse a single alias file
+function parse_alias_file() {
+    local file="$1"
+    local filename
+    filename=$(basename "$file")
+    local relative_path="${file#$DOTFILES_ROOT/}"
+    
+    log "  Parsing: $filename"
+    
+    local section=""
+    local pending_alias=""
+    local pending_desc=""
+    local pending_tags=""
+    local pending_see=""
+    local line_num=0
+    
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        ((line_num++))
+        
+        # Handle metadata comments
+        if [[ "$line" =~ ^[[:space:]]*#[[:space:]]*@section[[:space:]]+(.+)$ ]]; then
+            section="${BASH_REMATCH[1]// /}"
+            continue
+        elif [[ "$line" =~ ^[[:space:]]*#[[:space:]]*@alias[[:space:]]+(.+)$ ]]; then
+            pending_alias="${BASH_REMATCH[1]// /}"
+            continue
+        elif [[ "$line" =~ ^[[:space:]]*#[[:space:]]*@desc[[:space:]]+(.+)$ ]]; then
+            pending_desc="${BASH_REMATCH[1]}"
+            continue
+        elif [[ "$line" =~ ^[[:space:]]*#[[:space:]]*@tags[[:space:]]+(.+)$ ]]; then
+            pending_tags="${BASH_REMATCH[1]}"
+            continue
+        elif [[ "$line" =~ ^[[:space:]]*#[[:space:]]*@see[[:space:]]+(.+)$ ]]; then
+            pending_see="${BASH_REMATCH[1]}"
+            continue
+        fi
+        
+        # Skip other comments and empty lines
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        
+        # Parse alias definition
+        if [[ "$line" =~ ^[[:space:]]*alias[[:space:]]+([^=]+)=(.+)$ ]]; then
+            local alias_name="${BASH_REMATCH[1]// /}"
+            local alias_command="${BASH_REMATCH[2]}"
+            
+            # Clean up command (remove quotes)
+            alias_command="${alias_command#\"}"
+            alias_command="${alias_command%\"}"
+            alias_command="${alias_command#\'}"
+            alias_command="${alias_command%\'}"
+            
+            # Use pending metadata or defaults
+            local final_section="${section:-general}"
+            local final_desc="${pending_desc:-Executes: $alias_command}"
+            
+            # Parse tags
+            local tags_json="[]"
+            if [[ -n "$pending_tags" ]]; then
+                IFS=',' read -ra tag_array <<< "$pending_tags"
+                local tag_json_parts=()
+                for tag in "${tag_array[@]}"; do
+                    tag=$(echo "$tag" | xargs) # trim whitespace
+                    tag_json_parts+=("\"$tag\"")
+                done
+                tags_json="[$(IFS=,; echo "${tag_json_parts[*]}")]"
+            fi
+            
+            # Use jq to properly escape JSON strings
+            local json_object
+            json_object=$(jq -n \
+                --arg name "$alias_name" \
+                --arg section "$final_section" \
+                --arg desc "$final_desc" \
+                --arg command "$alias_command" \
+                --arg source "$relative_path" \
+                --argjson line "$line_num" \
+                --argjson tags "$tags_json" \
+                '{
+                    name: $name,
+                    section: $section,
+                    desc: $desc,
+                    command: $command,
+                    source: $source,
+                    line: $line,
+                    tags: $tags
+                }')
+            
+            # Add see field if present
+            if [[ -n "$pending_see" ]]; then
+                json_object=$(echo "$json_object" | jq --arg see "$pending_see" '. + {see: $see}')
+            fi
+            
+            # Output the JSON object with trailing comma
+            echo "$json_object,"
+            
+            # Validation warnings
+            if [[ -z "$pending_desc" ]]; then
+                echo.warning "Alias '$alias_name' in $filename has no @desc" >&2
+            fi
+            if [[ -z "$section" ]]; then
+                echo.warning "Alias '$alias_name' in $filename has no @section" >&2
+            fi
+            
+            # Reset pending metadata for alias-specific items
+            pending_alias=""
+            pending_desc=""
+            pending_tags=""
+            pending_see=""
+        fi
+    done < "$file"
+}
+
+# Build the JSON index
+function build_index() {
+    log "Building alias index..."
+    
+    ensure_dir "$UTILS_DIR"
+    
+    # Start JSON structure
+    local temp_file
+    temp_file=$(mktemp)
+    
+    cat > "$temp_file" << EOF
+{
+  "schemaVersion": "$SCHEMA_VERSION",
+  "generatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "aliases": [
+EOF
+    
+    # Process all .aliases files
+    local file_count=0
+    local alias_count=0
+    
+    for file in "$ALIASES_DIR"/*.aliases; do
+        [[ ! -f "$file" ]] && continue
+        ((file_count++))
+        
+        # Count aliases before processing
+        local before_count
+        before_count=$(grep -c '^{' "$temp_file" || echo "0")
+        
+        parse_alias_file "$file" >> "$temp_file"
+        
+        # Count aliases after processing
+        local after_count
+        after_count=$(grep -c '^{' "$temp_file" || echo "0")
+        alias_count=$((alias_count + after_count - before_count))
+    done
+    
+    # Remove trailing comma and close JSON
+    sed -i '$ s/,$//' "$temp_file"
+    cat >> "$temp_file" << EOF
+
+  ]
+}
+EOF
+    
+    # Validate JSON
+    if command -v jq >/dev/null 2>&1; then
+        if ! jq . "$temp_file" >/dev/null 2>&1; then
+            echo.error "Generated invalid JSON"
+            rm -f "$temp_file"
+            return 1
+        fi
+        
+        # Pretty print and sort
+        jq '.aliases |= sort_by(.section, .name)' "$temp_file" > "$OUTPUT_FILE"
+    else
+        # No jq available, just move the file
+        mv "$temp_file" "$OUTPUT_FILE"
+    fi
+    
+    rm -f "$temp_file"
+    
+    # Update hash
+    calculate_aliases_hash > "$HASH_FILE"
+    
+    log "✓ Indexed $alias_count aliases from $file_count files"
+    log "  Output: ${OUTPUT_FILE#$DOTFILES_ROOT/}"
+    
+    return 0
+}
+
+# Ensure directory exists
+function ensure_dir() {
+    local dir="$1"
+    [[ -d "$dir" ]] || mkdir -p "$dir"
+}
+
+# Main function
+function main() {
+    parse_args "$@"
+    
+    # Check if aliases directory exists
+    if [[ ! -d "$ALIASES_DIR" ]]; then
+        echo.error "Aliases directory not found: $ALIASES_DIR"
+        exit 1
+    fi
+    
+    # Check if rebuild is needed
+    if ! needs_rebuild; then
+        log "Index is up to date"
+        exit 0
+    fi
+    
+    # Build the index
+    if build_index; then
+        log "Index built successfully"
+        exit 0
+    else
+        echo.error "Failed to build index"
+        exit 1
+    fi
+}
+
+# Run if called directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

@@ -1,0 +1,51 @@
+[REQUEST TYPE]
+Bug Fix
+
+[TITLE]
+{{BUG_TITLE}}
+
+[Current Behavior]
+{{CURRENT_BEHAVIOR}}
+
+[Expected Behavior]
+{{EXPECTED_BEHAVIOR}}
+
+[Steps to Reproduce]
+{{REPRO_STEPS}}
+
+[Environment]
+{{ENVIRONMENT}}
+
+[Logs / Errors]
+{{LOGS}}
+
+[Affected Files]
+{{AFFECTED_FILES}}
+
+[Suspected Cause]
+{{SUSPECTED_CAUSE}}
+
+[Proposed Fix Approach]
+{{POSSIBLE_FIX}}
+
+[Regression Risk / Impact]
+Risk:
+{{REGRESSION_RISK}}
+Impact:
+{{IMPACT}}
+
+[Current Code Context]
+{{CURRENT_CODE}}
+
+[Acceptance Criteria]
+{{ACCEPTANCE_CRITERIA}}
+
+[Project Rules]
+{{PROJECT_RULES}}
+
+[Response Instructions]
+- Provide minimal, targeted changes to resolve the bug.
+- Keep code pure and functional; do not introduce shared mutable state.
+- Do not add tests unless explicitly requested.
+- No comments. Use clear naming.
+- Return code changes as BEGIN_FILE/END_FILE blocks only, plus a brief implementation plan above.

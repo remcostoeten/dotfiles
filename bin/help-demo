@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+# help-demo - Demonstrate the new enhanced -s functionality
+# This shows how -s now searches both sections AND descriptions
+
+set -euo pipefail
+
+DOTFILES_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+INDEX_FILE="$DOTFILES_ROOT/utils/aliases.index.json"
+
+# Source colors
+source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || {
+    function echo.header() { echo -e "\033[1;34m$*\033[0m"; }
+    function echo.cyan() { echo -e "\033[0;36m$*\033[0m"; }
+    function echo.success() { echo -e "\033[0;32m✓\033[0m $*"; }
+}
+
+if [[ $# -eq 0 ]]; then
+    echo.header "🔍 Help Demo - Enhanced -s Functionality"
+    echo
+    echo "The -s flag now searches both section names AND descriptions!"
+    echo
+    echo.success "Examples:"
+    echo "  $(basename "$0") drizzle      # Show drizzle section"
+    echo "  $(basename "$0") migration    # Find aliases about migrations"
+    echo "  $(basename "$0") studio       # Find aliases about studio"
+    exit 0
+fi
+
+search_term="$1"
+search_lower=$(echo "$search_term" | tr '[:upper:]' '[:lower:]')
+
+echo.header "📋 Enhanced Search Results for '$search_term'"
+echo
+
+# Search both section name and description
+count=$(jq -r --arg term "$search_lower" '
+    .aliases[] | 
+    select(.section == "'$search_term'" or 
+           (.section | ascii_downcase | contains($term)) or 
+           (.desc | ascii_downcase | contains($term))) |
+    "\(.name)|\(.desc)|\(.section)"
+' "$INDEX_FILE" | wc -l)
+
+if [[ $count -eq 0 ]]; then
+    echo "No aliases found matching '$search_term'"
+    exit 0
+fi
+
+echo "Found $count aliases matching '$search_term':"
+echo
+
+# Display results grouped by section
+current_section=""
+jq -r --arg term "$search_lower" '
+    .aliases[] | 
+    select(.section == "'$search_term'" or 
+           (.section | ascii_downcase | contains($term)) or 
+           (.desc | ascii_downcase | contains($term))) |
+    "\(.section)|\(.name)|\(.desc)"
+' "$INDEX_FILE" | sort | while IFS='|' read -r section name desc; do
+    if [[ "$section" != "$current_section" ]]; then
+        if [[ -n "$current_section" ]]; then
+            echo
+        fi
+        echo.cyan "━━━ $section ━━━"
+        current_section="$section"
+    fi
+    printf "  %-15s → %s\n" "$name" "$desc"
+done
+
+echo
+echo.success "Total: $count aliases found"

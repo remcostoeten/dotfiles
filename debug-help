@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+# Debug version to see what the formatted list looks like
+DOTFILES_ROOT="${DOTFILES_ROOT:-$HOME/.config/dotfiles}"
+source "$DOTFILES_ROOT/bin/help"
+
+load_aliases
+
+echo "📋 Available aliases:"
+echo
+
+# Create the same formatted list that would be shown in fzf
+for alias_name in "${!ALIASES[@]}"; do
+    local cmd="${ALIASES[$alias_name]}"
+    local desc="${ALIAS_DESCRIPTIONS[$alias_name]}"
+    local cat="${ALIAS_CATEGORIES[$alias_name]}"
+    
+    # Display format with better alignment and icons
+    local icon=""
+    case "$cat" in
+        "git") icon="🐙" ;;
+        "dev") icon="⚙️" ;;
+        "general") icon="📦" ;;
+        "dotfiles") icon="🏠" ;;
+        "drizzle") icon="🗄️" ;;
+        "help") icon="❓" ;;
+        *) icon="📋" ;;
+    esac
+    
+    # Truncate long commands for display
+    local display_cmd="$cmd"
+    if [[ ${#cmd} -gt 35 ]]; then
+        display_cmd="${cmd:0:32}..."
+    fi
+    
+    printf "%-12s %s %-8s → %-35s %s\n" \
+        "$alias_name" \
+        "$icon" \
+        "[$cat]" \
+        "$display_cmd" \
+        "$desc"
+done | sort | head -20
+
+echo
+echo "... and $((${#ALIASES[@]} - 20)) more aliases"
+echo
+echo "To see the interactive version, run: help -i"

@@ -110,13 +110,25 @@ function dotfiles_load_modules() {
         # Load enabled modules
         local enabled_modules=$(jq -r '.modules | to_entries[] | select(.value.enabled == true) | .key' "$modules_config" 2>/dev/null)
         while read -r module; do
-            [[ -n "$module" ]] && safe_source "$DOTFILES_MODULES/$module" "module: $module"
+            local module_path="$DOTFILES_MODULES/$module"
+            if [[ -f "$module_path" ]]; then
+                [[ -n "$module" ]] && safe_source "$module_path" "module: $module"
+            elif [[ -d "$module_path" ]]; then
+                # If it's a directory, you might want to source a specific file inside it
+                # For now, we'll just notify that it's a directory
+                echo.debug "Module '$module' is a directory, skipping for now."
+            fi
         done <<< "$enabled_modules"
         
         # Load enabled plugins
         local enabled_plugins=$(jq -r '.plugins | to_entries[] | select(.value.enabled == true) | .key' "$modules_config" 2>/dev/null)
         while read -r plugin; do
-            [[ -n "$plugin" ]] && safe_source "$DOTFILES_MODULES/plugins/$plugin" "plugin: $plugin"
+            local plugin_path="$DOTFILES_MODULES/plugins/$plugin"
+            if [[ -f "$plugin_path" ]]; then
+                [[ -n "$plugin" ]] && safe_source "$plugin_path" "plugin: $plugin"
+            elif [[ -d "$plugin_path" ]]; then
+                echo.debug "Plugin '$plugin' is a directory, skipping for now."
+            fi
         done <<< "$enabled_plugins"
         
         # Load enabled alias files

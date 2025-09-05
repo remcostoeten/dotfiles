@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+# Simple test for interactive help
+DOTFILES_ROOT="${DOTFILES_ROOT:-$HOME/.config/dotfiles}"
+source "$DOTFILES_ROOT/bin/help"
+
+# Load aliases and show some debug info
+load_aliases
+echo "Debug: Loaded ${#ALIASES[@]} aliases"
+echo "Debug: fzf available: $(command -v fzf)"
+echo
+
+# Call interactive function directly
+show_interactive

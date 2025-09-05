@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# ============================================================================
+# Drizzle Kit Aliases - Database schema management shortcuts
+# ============================================================================
+
+# Define Drizzle Kit command (bun-first approach)
+export DK="${DRIZZLE_KIT_BIN:-bunx --bun drizzle-kit}"
+
+# === Core Drizzle Kit Commands ===
+# @section drizzle
+# @alias dk
+# @desc Drizzle Kit CLI wrapper
+alias dk="$DK"
+
+# @alias dkg
+# @desc Generate SQL migrations from schema
+alias dkg="$DK generate"
+
+# @alias dkp
+# @desc Push schema changes (no migration files)
+alias dkp="$DK push"
+
+# @alias dkm
+# @desc Run pending migrations
+alias dkm="$DK migrate"
+
+# @alias dks
+# @desc Open Drizzle Studio
+alias dks="$DK studio"
+
+# === Verbose Forms ===
+# @alias dk-gen
+# @desc Generate SQL migrations from schema (verbose)
+alias dk-gen="$DK generate"
+
+# @alias dk-push
+# @desc Push schema changes (verbose)
+alias dk-push="$DK push"
+
+# @alias dk-migrate
+# @desc Run pending migrations (verbose)
+alias dk-migrate="$DK migrate"
+
+# @alias dk-studio
+# @desc Open Drizzle Studio (verbose)
+alias dk-studio="$DK studio"
+
+# === Legacy Compatibility ===
+# @alias gen
+# @desc Generate SQL migrations (legacy)
+alias gen="$DK generate"
+
+# @alias push
+# @desc Push schema changes (legacy)
+alias push="$DK push"
+
+# @alias migrate
+# @desc Run pending migrations (legacy)
+alias migrate="$DK migrate"
+
+# @alias studio
+# @desc Open Drizzle Studio (legacy)
+alias studio="$DK studio"
+
+# @alias st
+# @desc Open Drizzle Studio (short legacy)
+alias st="$DK studio"
+

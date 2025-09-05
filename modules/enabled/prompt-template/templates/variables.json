@@ -1,0 +1,115 @@
+{
+  "partials": {
+    "PROJECT_RULES": "modules/enabled/prompt-template/templates/partials/common_rules.partial"
+  },
+  "templates": [
+    {
+      "id": "react_component",
+      "name": "React/Next.js Component Creation",
+      "file": "modules/enabled/prompt-template/templates/react_component.prompt",
+      "description": "Build a typed React/Next.js component/view/page with TProps, functional style, and project rules.",
+      "fields": [
+        {"key":"REQUEST_TITLE","label":"Title","type":"text","required":true},
+        {"key":"SUMMARY","label":"Summary","type":"textarea","required":true},
+        {"key":"COMPONENT_KIND","label":"Kind","type":"select","options":["component","view","page"],"default":"component","required":true},
+        {"key":"COMPONENT_NAME","label":"Component name","type":"text","required":false},
+        {"key":"TARGET_PATH","label":"Target file path","type":"path","required":true},
+        {"key":"RELATED_FILES","label":"Related files (select)","type":"path-list","required":false},
+        {"key":"UI_SPEC","label":"UI spec","type":"textarea","required":true,"multiline":true},
+        {"key":"PROPS_SPEC","label":"Props and types (plain English)","type":"textarea","required":false,"multiline":true},
+        {"key":"STATE_SPEC","label":"State","type":"textarea","required":false,"multiline":true},
+        {"key":"EVENTS_SPEC","label":"Events/Handlers","type":"textarea","required":false,"multiline":true},
+        {"key":"STYLING_SPEC","label":"Styling","type":"textarea","required":false,"multiline":true},
+        {"key":"A11Y_SPEC","label":"Accessibility","type":"textarea","required":false,"multiline":true},
+        {"key":"DEPENDENCIES_SPEC","label":"Dependencies","type":"textarea","required":false},
+        {"key":"EXAMPLE_USAGE","label":"Example usage","type":"code","required":false},
+        {"key":"CURRENT_CODE","label":"Current code context (auto or paste)","type":"code","source":"files","required":false},
+        {"key":"ACCEPTANCE_CRITERIA","label":"Acceptance criteria","type":"textarea","required":true,"multiline":true},
+        {"key":"ADDITIONAL_CONSTRAINTS","label":"Additional constraints","type":"textarea","required":false}
+      ]
+    },
+    {
+      "id": "api_backend",
+      "name": "API/Backend Feature",
+      "file": "modules/enabled/prompt-template/templates/api_backend.prompt",
+      "description": "Server actions, DB operations, and endpoints with Drizzle factories.",
+      "fields": [
+        {"key":"REQUEST_TITLE","label":"Title","type":"text","required":true},
+        {"key":"SUMMARY","label":"Summary","type":"textarea","required":true},
+        {"key":"FEATURE_NAME","label":"Feature name","type":"text","required":true},
+        {"key":"ENTITY_NAME","label":"Entity name","type":"text","required":true},
+        {"key":"SCHEMA_PATHS","label":"Drizzle schema paths","type":"path-list","required":true},
+        {"key":"TABLE_NAMES","label":"Table names","type":"text","required":true},
+        {"key":"ENDPOINTS_SPEC","label":"Endpoints / Actions","type":"textarea","required":true,"multiline":true},
+        {"key":"INPUT_TYPES_SPEC","label":"Input types (plain English)","type":"textarea","required":false},
+        {"key":"OUTPUT_TYPES_SPEC","label":"Output types (plain English)","type":"textarea","required":false},
+        {"key":"VALIDATION_SPEC","label":"Validation rules","type":"textarea","required":false},
+        {"key":"AUTH_SPEC","label":"AuthN/AuthZ","type":"textarea","required":false},
+        {"key":"TRANSACTION_SPEC","label":"Transactions","type":"textarea","required":false},
+        {"key":"ERROR_HANDLING_SPEC","label":"Error handling","type":"textarea","required":false},
+        {"key":"SIDE_EFFECTS_SPEC","label":"Side effects / integrations","type":"textarea","required":false},
+        {"key":"AFFECTED_FILES","label":"Affected files","type":"path-list","required":false},
+        {"key":"CURRENT_CODE","label":"Current code context (auto or paste)","type":"code","source":"files","required":false},
+        {"key":"ACCEPTANCE_CRITERIA","label":"Acceptance criteria","type":"textarea","required":true,"multiline":true}
+      ]
+    },
+    {
+      "id": "bug_fix",
+      "name": "Bug Fix Request",
+      "file": "modules/enabled/prompt-template/templates/bug_fix.prompt",
+      "description": "Describe bug, expected behavior, context, and acceptance criteria.",
+      "fields": [
+        {"key":"BUG_TITLE","label":"Bug title","type":"text","required":true},
+        {"key":"CURRENT_BEHAVIOR","label":"Current behavior","type":"textarea","required":true,"multiline":true},
+        {"key":"EXPECTED_BEHAVIOR","label":"Expected behavior","type":"textarea","required":true,"multiline":true},
+        {"key":"REPRO_STEPS","label":"Steps to reproduce","type":"textarea","required":true,"multiline":true},
+        {"key":"ENVIRONMENT","label":"Environment","type":"textarea","required":false},
+        {"key":"LOGS","label":"Logs / errors","type":"code","required":false},
+        {"key":"AFFECTED_FILES","label":"Affected files","type":"path-list","required":false},
+        {"key":"SUSPECTED_CAUSE","label":"Suspected cause","type":"textarea","required":false},
+        {"key":"POSSIBLE_FIX","label":"Proposed fix approach","type":"textarea","required":false},
+        {"key":"REGRESSION_RISK","label":"Regression risk","type":"textarea","required":false},
+        {"key":"IMPACT","label":"Impact","type":"textarea","required":false},
+        {"key":"CURRENT_CODE","label":"Current code context (auto or paste)","type":"code","source":"files","required":false},
+        {"key":"ACCEPTANCE_CRITERIA","label":"Acceptance criteria","type":"textarea","required":true,"multiline":true}
+      ]
+    },
+    {
+      "id": "refactor",
+      "name": "Code Refactoring",
+      "file": "modules/enabled/prompt-template/templates/refactor.prompt",
+      "description": "Restructure or optimize existing code with strict non-regression.",
+      "fields": [
+        {"key":"REQUEST_TITLE","label":"Title","type":"text","required":true},
+        {"key":"REFACTOR_GOAL","label":"Refactor goal","type":"textarea","required":true},
+        {"key":"NON_GOALS","label":"Non-goals","type":"textarea","required":false},
+        {"key":"CURRENT_DESIGN","label":"Current design","type":"textarea","required":true,"multiline":true},
+        {"key":"TARGET_DESIGN","label":"Target design","type":"textarea","required":true,"multiline":true},
+        {"key":"SMELLS","label":"Smells/issues","type":"textarea","required":false},
+        {"key":"CONSTRAINTS","label":"Constraints","type":"textarea","required":false},
+        {"key":"PERFORMANCE_TARGETS","label":"Performance targets","type":"textarea","required":false},
+        {"key":"AFFECTED_FILES","label":"Affected files","type":"path-list","required":false},
+        {"key":"CURRENT_CODE","label":"Current code context (auto or paste)","type":"code","source":"files","required":true},
+        {"key":"ACCEPTANCE_CRITERIA","label":"Acceptance criteria","type":"textarea","required":true,"multiline":true}
+      ]
+    },
+    {
+      "id": "feature",
+      "name": "General Feature Request",
+      "file": "modules/enabled/prompt-template/templates/feature.prompt",
+      "description": "Flexible feature request template for any code change.",
+      "fields": [
+        {"key":"FEATURE_TITLE","label":"Title","type":"text","required":true},
+        {"key":"SUMMARY","label":"Summary","type":"textarea","required":true},
+        {"key":"REQUIREMENTS","label":"Requirements","type":"textarea","required":true,"multiline":true},
+        {"key":"SCOPE","label":"Scope","type":"textarea","required":true},
+        {"key":"NON_GOALS","label":"Non-goals","type":"textarea","required":false},
+        {"key":"AFFECTED_AREAS","label":"Affected areas","type":"textarea","required":false},
+        {"key":"AFFECTED_FILES","label":"Affected files","type":"path-list","required":false},
+        {"key":"CURRENT_CODE","label":"Current code context (auto or paste)","type":"code","source":"files","required":false},
+        {"key":"EDGE_CASES","label":"Edge cases","type":"textarea","required":false},
+        {"key":"ACCEPTANCE_CRITERIA","label":"Acceptance criteria","type":"textarea","required":true,"multiline":true}
+      ]
+    }
+  ]
+}

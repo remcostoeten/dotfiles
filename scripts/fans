@@ -1,0 +1,507 @@
+#!/usr/bin/env bash
+
+# fans - CPU and GPU Fan Control System
+# Beautiful, aesthetic fan management for Linux systems
+# Part of the .files ecosystem
+
+set -euo pipefail
+
+# Setup
+DOTFILES_ROOT="${DOTFILES_ROOT:-$HOME/.config/dotfiles}"
+SCRIPT_NAME="fans"
+VERSION="1.0.0"
+
+# Source colors if available
+source "$DOTFILES_ROOT/core/_colors" 2>/dev/null || {
+    function echo.header() { echo -e "\033[1;34m$*\033[0m"; }
+    function echo.cyan() { echo -e "\033[0;36m$*\033[0m"; }
+    function echo.purple() { echo -e "\033[0;35m$*\033[0m"; }
+    function echo.success() { echo -e "\033[0;32m✓\033[0m $*"; }
+    function echo.error() { echo -e "\033[0;31m✗\033[0m $*"; }
+    function echo.warning() { echo -e "\033[1;33m⚠\033[0m $*"; }
+    function echo.info() { echo -e "\033[0;36mℹ\033[0m $*"; }
+    function echo.pastel_banner() { echo ""; }
+    function echo.pastel_pink() { echo -e "\033[1;35m$*\033[0m"; }
+    function echo.pastel_blue() { echo -e "\033[1;36m$*\033[0m"; }
+    function echo.pastel_purple() { echo -e "\033[1;35m$*\033[0m"; }
+    function echo.pastel_green() { echo -e "\033[1;32m$*\033[0m"; }
+    function echo.pastel_yellow() { echo -e "\033[1;33m$*\033[0m"; }
+}
+
+# Global fan data arrays
+declare -A CPU_FANS=()
+declare -A CPU_PWM_PATHS=()
+declare -A CPU_FAN_SPEEDS=()
+declare -A GPU_FANS=()
+declare -A GPU_FAN_SPEEDS=()
+
+# Hardware paths
+HWMON_PATH="/sys/class/hwmon"
+NCT6798_DEVICE=""
+
+# Function to display beautiful header
+function show_banner() {
+    echo
+    echo -e "\033[38;2;255;133;150m╭────────────────────────────────────────────────────────╮\033[0m"
+    echo -e "\033[38;2;255;133;150m│\033[0m                                                        \033[38;2;255;133;150m│\033[0m"
+    echo -e "\033[38;2;255;133;150m│\033[0m  \033[38;2;173;218;120m🌪️  Fan Control System\033[0m  \033[38;2;209;159;222mv$VERSION\033[0m           \033[38;2;255;133;150m│\033[0m"
+    echo -e "\033[38;2;255;133;150m│\033[0m  \033[38;2;133;218;224mAesthetic • Modern • Powerful\033[0m                  \033[38;2;255;133;150m│\033[0m"
+    echo -e "\033[38;2;255;133;150m│\033[0m                                                        \033[38;2;255;133;150m│\033[0m"
+    echo -e "\033[38;2;255;133;150m╰────────────────────────────────────────────────────────╯\033[0m"
+    echo
+}
+
+# Initialize hardware detection
+function init_hardware() {
+    # Detect NCT6798 for CPU fans
+    for device in "$HWMON_PATH"/hwmon*; do
+        if [[ -f "$device/name" ]] && grep -q "nct6798" "$device/name" 2>/dev/null; then
+            NCT6798_DEVICE="$device"
+            break
+        fi
+    done
+    
+    # Load CPU fan data
+    if [[ -n "$NCT6798_DEVICE" ]]; then
+        for i in {1..7}; do
+            local fan_file="$NCT6798_DEVICE/fan${i}_input"
+            local pwm_file="$NCT6798_DEVICE/pwm${i}"
+            
+            if [[ -f "$fan_file" ]] && [[ -f "$pwm_file" ]]; then
+                local rpm=$(cat "$fan_file" 2>/dev/null || echo "0")
+                local pwm=$(cat "$pwm_file" 2>/dev/null || echo "0")
+                
+                if [[ $rpm -gt 0 ]]; then
+                    CPU_FANS["$i"]="$rpm"
+                    CPU_PWM_PATHS["$i"]="$pwm_file"
+                    CPU_FAN_SPEEDS["$i"]=$((pwm * 100 / 255))
+                fi
+            fi
+        done
+    fi
+    
+    # Load GPU fan data
+    if command -v nvidia-smi >/dev/null; then
+        local gpu_info
+        if gpu_info=$(nvidia-smi --query-gpu=name,fan.speed,temperature.gpu --format=csv,noheader,nounits 2>/dev/null); then
+            local gpu_name=$(echo "$gpu_info" | cut -d',' -f1 | xargs)
+            local fan_speed=$(echo "$gpu_info" | cut -d',' -f2 | xargs)
+            local temp=$(echo "$gpu_info" | cut -d',' -f3 | xargs)
+            
+            GPU_FANS["name"]="$gpu_name"
+            GPU_FAN_SPEEDS["speed"]="$fan_speed"
+            GPU_FANS["temp"]="$temp"
+        fi
+    fi
+}
+
+# Display current metrics with beautiful formatting
+function show_metrics() {
+    echo.pastel_purple "╭─────────────────────────────────────────────────────────────╮"
+    echo.pastel_purple "│                    🔧 Current Fan Status                    │"
+    echo.pastel_purple "├─────────────────────────────────────────────────────────────┤"
+    echo.pastel_purple "│                                                             │"
+    
+    # CPU Fans Section
+    echo.pastel_blue "│  💨 CPU Fans:                                               │"
+    echo.pastel_purple "│                                                             │"
+    
+    local cpu_fan_count=0
+    for fan_id in "${!CPU_FANS[@]}"; do
+        local rpm="${CPU_FANS[$fan_id]}"
+        local speed="${CPU_FAN_SPEEDS[$fan_id]}"
+        local status="🟢 Active"
+        
+        if [[ $rpm -eq 0 ]]; then
+            status="🔴 Stopped"
+        elif [[ $rpm -lt 500 ]]; then
+            status="🟡 Low"
+        fi
+        
+        printf "\033[38;2;209;159;222m│\033[0m    \033[38;2;133;218;224mFan %s:\033[0m %-8s \033[38;2;173;218;120m%3s%%\033[0m \033[38;2;255;211;146m%4d RPM\033[0m %s     \033[38;2;209;159;222m│\033[0m\n" \
+            "$fan_id" "$status" "$speed" "$rpm" ""
+        ((cpu_fan_count++))
+    done
+    
+    if [[ $cpu_fan_count -eq 0 ]]; then
+        echo.pastel_purple "│    🚫 No active CPU fans detected                           │"
+    fi
+    
+    echo.pastel_purple "│                                                             │"
+    
+    # GPU Fans Section
+    echo.pastel_blue "│  🎮 GPU Fans:                                               │"
+    echo.pastel_purple "│                                                             │"
+    
+    if [[ -n "${GPU_FANS[name]:-}" ]]; then
+        local gpu_name="${GPU_FANS[name]}"
+        local gpu_speed="${GPU_FAN_SPEEDS[speed]}"
+        local gpu_temp="${GPU_FANS[temp]}"
+        
+        # Truncate GPU name if too long
+        if [[ ${#gpu_name} -gt 25 ]]; then
+            gpu_name="${gpu_name:0:22}..."
+        fi
+        
+        local temp_status="🟢"
+        if [[ $gpu_temp -gt 75 ]]; then
+            temp_status="🔴"
+        elif [[ $gpu_temp -gt 65 ]]; then
+            temp_status="🟡"
+        fi
+        
+        printf "\033[38;2;209;159;222m│\033[0m    \033[38;2;133;218;224m%-25s\033[0m \033[38;2;173;218;120m%3s%%\033[0m \033[38;2;255;211;146m%2s°C\033[0m %s         \033[38;2;209;159;222m│\033[0m\n" \
+            "$gpu_name" "$gpu_speed" "$gpu_temp" "$temp_status"
+    else
+        echo.pastel_purple "│    🚫 No GPU detected or nvidia-smi not available          │"
+    fi
+    
+    echo.pastel_purple "│                                                             │"
+    echo.pastel_purple "╰─────────────────────────────────────────────────────────────╯"
+    echo
+}
+
+# Interactive mode
+function interactive_mode() {
+    while true; do
+        clear
+        show_banner
+        show_metrics
+        
+        echo.pastel_cyan "╭─────────────────────────────────────────────────────────────╮"
+        echo.pastel_cyan "│                      🎛️  Control Menu                       │"
+        echo.pastel_cyan "├─────────────────────────────────────────────────────────────┤"
+        echo.pastel_cyan "│                                                             │"
+        echo.pastel_cyan "│  [1] 🖥️  Modify CPU Fan Speeds                             │"
+        echo.pastel_cyan "│  [2] 🎮 Modify GPU Fan Speed                               │"
+        echo.pastel_cyan "│  [3] 🔄 Refresh Status                                     │"
+        echo.pastel_cyan "│  [4] ❓ Help                                               │"
+        echo.pastel_cyan "│  [q] 🚪 Quit                                               │"
+        echo.pastel_cyan "│                                                             │"
+        echo.pastel_cyan "╰─────────────────────────────────────────────────────────────╯"
+        echo
+        
+        echo -n "$(echo.pastel_yellow "Choose an option [1-4, q]: ")"
+        read -r choice
+        
+        case "$choice" in
+            1) modify_cpu_fans_interactive ;;
+            2) modify_gpu_fan_interactive ;;
+            3) init_hardware ;;
+            4) show_help ;;
+            q|Q) echo.success "Goodbye! 👋"; exit 0 ;;
+            *) echo.error "Invalid choice. Please try again."; sleep 1 ;;
+        esac
+    done
+}
+
+# Interactive CPU fan modification
+function modify_cpu_fans_interactive() {
+    clear
+    show_banner
+    
+    echo.pastel_purple "╭─────────────────────────────────────────────────────────────╮"
+    echo.pastel_purple "│                  🖥️  CPU Fan Control                        │"
+    echo.pastel_purple "├─────────────────────────────────────────────────────────────┤"
+    echo.pastel_purple "│                                                             │"
+    
+    # Show available fans
+    local fan_list=()
+    for fan_id in "${!CPU_FANS[@]}"; do
+        fan_list+=("$fan_id")
+        local rpm="${CPU_FANS[$fan_id]}"
+        local speed="${CPU_FAN_SPEEDS[$fan_id]}"
+        printf "\033[38;2;209;159;222m│\033[0m  \033[38;2;173;218;120m[%s]\033[0m CPU Fan %s - Current: \033[38;2;255;211;146m%3s%% (%d RPM)\033[0m        \033[38;2;209;159;222m│\033[0m\n" \
+            "$fan_id" "$fan_id" "$speed" "$rpm"
+    done
+    
+    echo.pastel_purple "│                                                             │"
+    echo.pastel_purple "╰─────────────────────────────────────────────────────────────╯"
+    echo
+    
+    if [[ ${#fan_list[@]} -eq 0 ]]; then
+        echo.error "No active CPU fans detected!"
+        read -p "Press Enter to continue..."
+        return
+    fi
+    
+    echo.pastel_cyan "Options:"
+    echo "  • Enter fan ID ($(IFS=,; echo "${fan_list[*]}")) to modify individual fan"
+    echo "  • Enter 'all' to modify all fans"
+    echo "  • Enter 'back' to return"
+    echo
+    
+    echo -n "$(echo.pastel_yellow "Select fan or option: ")"
+    read -r selection
+    
+    case "$selection" in
+        all)
+            echo -n "$(echo.pastel_yellow "Enter speed percentage (0-100): ")"
+            read -r speed
+            set_cpu_fan_speed "all" "$speed"
+            ;;
+        back) return ;;
+        *)
+            if [[ " ${fan_list[*]} " == *" $selection "* ]]; then
+                echo -n "$(echo.pastel_yellow "Enter speed percentage (0-100): ")"
+                read -r speed
+                set_cpu_fan_speed "$selection" "$speed"
+            else
+                echo.error "Invalid selection!"
+            fi
+            ;;
+    esac
+    
+    sleep 2
+}
+
+# Interactive GPU fan modification
+function modify_gpu_fan_interactive() {
+    clear
+    show_banner
+    
+    if [[ -z "${GPU_FANS[name]:-}" ]]; then
+        echo.error "No GPU detected or nvidia-smi not available!"
+        read -p "Press Enter to continue..."
+        return
+    fi
+    
+    echo.pastel_purple "╭─────────────────────────────────────────────────────────────╮"
+    echo.pastel_purple "│                   🎮 GPU Fan Control                        │"
+    echo.pastel_purple "├─────────────────────────────────────────────────────────────┤"
+    echo.pastel_purple "│                                                             │"
+    
+    local gpu_name="${GPU_FANS[name]}"
+    local current_speed="${GPU_FAN_SPEEDS[speed]}"
+    local temp="${GPU_FANS[temp]}"
+    
+    printf "\033[38;2;209;159;222m│\033[0m  GPU: \033[38;2;133;218;224m%-30s\033[0m                    \033[38;2;209;159;222m│\033[0m\n" "$gpu_name"
+    printf "\033[38;2;209;159;222m│\033[0m  Current: \033[38;2;173;218;120m%3s%%\033[0m  Temperature: \033[38;2;255;211;146m%s°C\033[0m              \033[38;2;209;159;222m│\033[0m\n" "$current_speed" "$temp"
+    
+    echo.pastel_purple "│                                                             │"
+    echo.pastel_purple "╰─────────────────────────────────────────────────────────────╯"
+    echo
+    
+    echo -n "$(echo.pastel_yellow "Enter new GPU fan speed (0-100%): ")"
+    read -r speed
+    
+    set_gpu_fan_speed "$speed"
+    sleep 2
+}
+
+# Set CPU fan speed
+function set_cpu_fan_speed() {
+    local fan_id="$1"
+    local speed="$2"
+    
+    # Validate speed
+    if ! [[ "$speed" =~ ^[0-9]+$ ]] || [[ $speed -lt 0 ]] || [[ $speed -gt 100 ]]; then
+        echo.error "Invalid speed! Must be 0-100."
+        return 1
+    fi
+    
+    local pwm_value=$((speed * 255 / 100))
+    
+    if [[ "$fan_id" == "all" ]]; then
+        echo.info "Setting all CPU fans to ${speed}%..."
+        
+        for fan in "${!CPU_PWM_PATHS[@]}"; do
+            local pwm_path="${CPU_PWM_PATHS[$fan]}"
+            local enable_path="${pwm_path}_enable"
+            
+            # Set to manual mode (1) and set speed
+            if sudo bash -c "echo 1 > '$enable_path' && echo $pwm_value > '$pwm_path'" 2>/dev/null; then
+                echo.success "Fan $fan set to ${speed}%"
+                CPU_FAN_SPEEDS["$fan"]="$speed"
+            else
+                echo.error "Failed to set Fan $fan"
+            fi
+        done
+    else
+        # Single fan
+        if [[ -z "${CPU_PWM_PATHS[$fan_id]:-}" ]]; then
+            echo.error "Fan $fan_id not found!"
+            return 1
+        fi
+        
+        local pwm_path="${CPU_PWM_PATHS[$fan_id]}"
+        local enable_path="${pwm_path}_enable"
+        
+        echo.info "Setting CPU Fan $fan_id to ${speed}%..."
+        
+        if sudo bash -c "echo 1 > '$enable_path' && echo $pwm_value > '$pwm_path'" 2>/dev/null; then
+            echo.success "CPU Fan $fan_id set to ${speed}%"
+            CPU_FAN_SPEEDS["$fan_id"]="$speed"
+        else
+            echo.error "Failed to set CPU Fan $fan_id"
+            return 1
+        fi
+    fi
+}
+
+# Set GPU fan speed
+function set_gpu_fan_speed() {
+    local speed="$1"
+    
+    # Validate speed
+    if ! [[ "$speed" =~ ^[0-9]+$ ]] || [[ $speed -lt 0 ]] || [[ $speed -gt 100 ]]; then
+        echo.error "Invalid speed! Must be 0-100."
+        return 1
+    fi
+    
+    echo.info "Setting GPU fan to ${speed}%..."
+    
+    # Enable manual control and set speed
+    if nvidia-settings -a GPUFanControlState=1 >/dev/null 2>&1 && \
+       nvidia-settings -a "[fan:0]/GPUTargetFanSpeed=$speed" >/dev/null 2>&1 && \
+       nvidia-settings -a "[fan:1]/GPUTargetFanSpeed=$speed" >/dev/null 2>&1; then
+        echo.success "GPU fan set to ${speed}%"
+        GPU_FAN_SPEEDS["speed"]="$speed"
+    else
+        echo.error "Failed to set GPU fan speed. Make sure coolbits is enabled in X11 config."
+        echo.info "You may need to restart your X session after running: sudo nvidia-xconfig --cool-bits=4"
+        return 1
+    fi
+}
+
+# Show comprehensive help
+function show_help() {
+    clear
+    show_banner
+    
+    echo.pastel_purple "╭─────────────────────────────────────────────────────────────╮"
+    echo.pastel_purple "│                     📖 Help & Usage                        │"
+    echo.pastel_purple "├─────────────────────────────────────────────────────────────┤"
+    echo.pastel_purple "│                                                             │"
+    
+    echo.pastel_blue "│  🚀 Interactive Mode:                                       │"
+    echo.pastel_purple "│                                                             │"
+    echo.pastel_cyan "│    fans                    # Enter interactive mode          │"
+    echo.pastel_cyan "│                           # Also displays current metrics   │"
+    echo.pastel_purple "│                                                             │"
+    
+    echo.pastel_blue "│  📊 Display Metrics:                                        │"
+    echo.pastel_purple "│                                                             │"
+    echo.pastel_cyan "│    fans get               # Show all fan metrics            │"
+    echo.pastel_purple "│                                                             │"
+    
+    echo.pastel_blue "│  🎛️  Direct Control:                                        │"
+    echo.pastel_purple "│                                                             │"
+    echo.pastel_cyan "│    fans set gpu 40        # Set GPU fan to 40%             │"
+    echo.pastel_cyan "│    fans set cpu all 60    # Set all CPU fans to 60%        │"
+    echo.pastel_cyan "│    fans set cpu 1 75      # Set CPU fan 1 to 75%           │"
+    echo.pastel_cyan "│    fans set cpu 2,5,6 50  # Set CPU fans 2,5,6 to 50%     │"
+    echo.pastel_purple "│                                                             │"
+    
+    echo.pastel_blue "│  ❓ Help Options:                                          │"
+    echo.pastel_purple "│                                                             │"
+    echo.pastel_cyan "│    fans help              # Show this help                  │"
+    echo.pastel_cyan "│    fans --help            # Show this help                  │"
+    echo.pastel_cyan "│    fans -h                # Show this help                  │"
+    echo.pastel_purple "│                                                             │"
+    
+    echo.pastel_blue "│  💡 Examples:                                               │"
+    echo.pastel_purple "│                                                             │"
+    echo.pastel_green "│    fans                   # Interactive mode               │"
+    echo.pastel_green "│    fans get               # View current status            │"
+    echo.pastel_green "│    fans set gpu 80        # Boost GPU cooling             │"
+    echo.pastel_green "│    fans set cpu all 25    # Quiet all CPU fans            │"
+    echo.pastel_purple "│                                                             │"
+    
+    echo.pastel_blue "│  🔧 Requirements:                                           │"
+    echo.pastel_purple "│                                                             │"
+    echo.pastel_yellow "│    • NCT6798 chipset for CPU fan control                   │"
+    echo.pastel_yellow "│    • NVIDIA GPU + coolbits=4 for GPU fan control          │"
+    echo.pastel_yellow "│    • Root access (sudo) for hardware control              │"
+    echo.pastel_purple "│                                                             │"
+    echo.pastel_purple "╰─────────────────────────────────────────────────────────────╯"
+    echo
+    
+    if [[ "${1:-}" != "noninteractive" ]]; then
+        read -p "Press Enter to continue..."
+    fi
+}
+
+# Parse command line arguments
+function parse_args() {
+    case "${1:-}" in
+        ""|"get")
+            init_hardware
+            show_banner
+            show_metrics
+            ;;
+        "set")
+            init_hardware
+            case "${2:-}" in
+                "gpu")
+                    local speed="${3:-}"
+                    if [[ -z "$speed" ]]; then
+                        echo.error "Usage: fans set gpu <speed>"
+                        echo.info "Example: fans set gpu 75"
+                        exit 1
+                    fi
+                    set_gpu_fan_speed "$speed"
+                    ;;
+                "cpu")
+                    local fans="${3:-}"
+                    local speed="${4:-}"
+                    
+                    if [[ -z "$fans" ]] || [[ -z "$speed" ]]; then
+                        echo.error "Usage: fans set cpu <fans> <speed>"
+                        echo.info "Examples:"
+                        echo.info "  fans set cpu all 60      # All fans to 60%"
+                        echo.info "  fans set cpu 1 75        # Fan 1 to 75%"
+                        echo.info "  fans set cpu 1,3,5 50    # Fans 1,3,5 to 50%"
+                        exit 1
+                    fi
+                    
+                    if [[ "$fans" == "all" ]]; then
+                        set_cpu_fan_speed "all" "$speed"
+                    elif [[ "$fans" =~ , ]]; then
+                        # Multiple fans specified with commas
+                        IFS=',' read -ra FAN_ARRAY <<< "$fans"
+                        for fan in "${FAN_ARRAY[@]}"; do
+                            set_cpu_fan_speed "$fan" "$speed"
+                        done
+                    else
+                        # Single fan
+                        set_cpu_fan_speed "$fans" "$speed"
+                    fi
+                    ;;
+                *)
+                    echo.error "Usage: fans set <gpu|cpu> ..."
+                    show_help noninteractive
+                    exit 1
+                    ;;
+            esac
+            ;;
+        "help"|"--help"|"-h")
+            show_help noninteractive
+            ;;
+        "--version"|"-v")
+            echo "fans version $VERSION"
+            echo "Part of the .files ecosystem"
+            ;;
+        *)
+            init_hardware
+            interactive_mode
+            ;;
+    esac
+}
+
+# Main execution
+function main() {
+    # Check if running as root for hardware access
+    if [[ $EUID -eq 0 ]]; then
+        echo.warning "Running as root. Be careful with hardware modifications!"
+    fi
+    
+    # Initialize hardware detection
+    init_hardware
+    
+    # Parse arguments or enter interactive mode
+    parse_args "$@"
+}
+
+# Execute main function
+main "$@"
