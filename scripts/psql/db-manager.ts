@@ -701,7 +701,7 @@ class DatabaseManager {
 
     private getEnvironmentInfo(): TEnvironmentInfo {
         return {
-          ,
+            DATABASE_URL: process.env.DATABASE_URL || null,
             DATABASE_AUTH_TOKEN: process.env.DATABASE_AUTH_TOKEN || null,
             NODE_ENV: process.env.NODE_ENV || 'development',
             currentWorkingDir: process.cwd()
