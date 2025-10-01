@@ -839,7 +839,11 @@ async function main(): Promise<void> {
     process.exit(0);
 }
 
-main().catch((error) => {
-    console.error(`${COLORS.red}Fatal error: ${error}${COLORS.reset}`);
-    process.exit(1);
-});
+if (require.main === module) {
+    main().catch((error) => {
+        console.error(`${COLORS.red}Fatal error: ${error}${COLORS.reset}`);
+        process.exit(1);
+    });
+}
+
+export { DatabaseManager };
