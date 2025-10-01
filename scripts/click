@@ -1,0 +1,83 @@
+#!/bin/bash
+
+# Default values
+duration=100
+clicks_per_second=10
+
+# Color definitions
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Help menu
+function show_help() {
+    echo -e "${BLUE}Usage: $(basename "$0") [options]${NC}"
+    echo ""
+    echo -e "${YELLOW}Options:${NC}"
+    echo -e "  ${GREEN}-h, --help${NC}       Show this help menu."
+    echo -e "  ${GREEN}-t, --total${NC}      Total duration in seconds (default: 100)."
+    echo -e "  ${GREEN}-c, --clicks${NC}     Number of clicks per second (default: 10)."
+    echo ""
+    echo -e "${YELLOW}Examples:${NC}"
+    echo -e "  $(basename "$0")"
+    echo -e "  $(basename "$0") --total 60 --clicks 5"
+    echo -e "  $(basename "$0") -t 30 -c 20"
+}
+
+# Parse command-line arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -t|--total)
+            duration="$2"
+            shift
+            ;;
+        -c|--clicks)
+            clicks_per_second="$2"
+            shift
+            ;;
+        *)
+            echo "Unknown parameter passed: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+interval=$(echo "1 / $clicks_per_second" | bc -l)
+
+echo -e "${BLUE}Auto-clicker started.${NC}"
+echo -e "Will run for ${YELLOW}$duration seconds${NC}, clicking every ${YELLOW}$interval seconds${NC} (${YELLOW}$clicks_per_second clicks/sec${NC})."
+echo -e "${RED}Press Ctrl+C to stop.${NC}"
+
+end=$((SECONDS + duration))
+halfway_notified=false
+
+while [ $SECONDS -lt $end ]; do
+    xdotool click 1
+    sleep "$interval"
+
+    remaining_time=$((end - SECONDS))
+    progress=$(( ( (duration - remaining_time) * 100) / duration ))
+
+    # 50% notification
+    if [ "$progress" -ge 50 ] && [ "$halfway_notified" = false ]; then
+        notify-send "Auto-clicker at 50%" "Halfway through the clicking process."
+        halfway_notified=true
+    fi
+
+    # Countdown for last 10 seconds
+    if [ "$remaining_time" -le 10 ]; then
+        echo -e "${YELLOW}Countdown: $remaining_time seconds remaining...${NC}"
+        notify-send "Auto-clicker" "$remaining_time seconds remaining..."
+    fi
+done
+
+echo -e "${GREEN}Auto-clicker finished.${NC}"
+notify-send "Auto-clicker finished" "Completed $duration seconds of clicking."

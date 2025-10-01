@@ -1,0 +1,276 @@
+#!/usr/bin/env bash
+
+# Copy Utility Script
+# Interactive display utility for development workflows
+# Works with files, directories, git remotes, and more
+
+set -euo pipefail
+
+# Configuration
+readonly SCRIPT_NAME="copy"
+readonly VERSION="1.0.0"
+
+# Determine the script directory and source color utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/../" && pwd)"
+
+# Source color utilities
+if [[ -f "$DOTFILES_DIR/core/colors.fish" ]]; then
+    # Fallback if color utils not found
+    red() { printf "\033[31m%s\033[0m" "$@"; }
+    green() { printf "\033[32m%s\033[0m" "$@"; }
+    yellow() { printf "\033[33m%s\033[0m" "$@"; }
+    blue() { printf "\033[34m%s\033[0m" "$@"; }
+    cyan() { printf "\033[36m%s\033[0m" "$@"; }
+    bold() { printf "\033[1m%s\033[0m" "$@"; }
+    
+    # Fallback semantic functions
+    error() { red "[ERROR]" && printf " %s" "$@"; }
+    success() { green "[SUCCESS]" && printf " %s" "$@"; }
+    warning() { yellow "[WARNING]" && printf " %s" "$@"; }
+    info() { blue "[INFO]" && printf " %s" "$@"; }
+fi
+
+# Display text with color formatting
+function copy_to_clipboard() {
+    local content="$1"
+    local title="${2:-Content}"
+    
+    # Copy to clipboard using xclip or wl-copy
+    if command -v xclip >/dev/null 2>&1; then
+        echo -n "$content" | xclip -selection clipboard
+    elif command -v wl-copy >/dev/null 2>&1; then
+        echo -n "$content" | wl-copy
+    else
+        echo "ERROR: Neither xclip nor wl-copy found. Please install one of them."
+        exit 1
+    fi
+    
+    # Display the copied content
+    echo
+    printf "%s\n" "$(bold "$(cyan "=== $title ===")")
+    echo
+    printf "%s\n" "$content"
+    echo
+    printf "%s\n" "$(bold "$(cyan "=== End of $title ===")")
+    echo
+    printf "%s\n" "$(success "Content copied to clipboard!")"
+    echo
+}
+
+# Handle file display
+function handle_file() {
+    local file_path="$1"
+    
+    if [[ ! -f "$file_path" ]]; then
+        printf "%s %s\n" "$(error "File not found:")" "$file_path"
+        return 1
+    fi
+    
+    if [[ ! -r "$file_path" ]]; then
+        printf "%s %s\n" "$(error "Cannot read file:")" "$file_path"
+        return 1
+    fi
+    
+    local content
+    if ! content=$(cat "$file_path"); then
+        printf "%s %s\n" "$(error "Failed to read file:")" "$file_path"
+        return 1
+    fi
+    
+    copy_to_clipboard "$content" "File: $file_path"
+    
+    local file_size=$(wc -c < "$file_path")
+    local line_count=$(wc -l < "$file_path")
+    printf "%s 📄 File size: %s bytes, %s lines\n" "$(info)" "$(bold "$file_size")" "$(bold "$line_count")"
+    
+    return 0
+}
+
+# Handle pwd/path display
+function handle_pwd() {
+    local target_path="${1:-$(pwd)}"
+    local resolved_path
+    
+    # Try to resolve the path
+    if ! resolved_path=$(realpath "$target_path" 2>/dev/null); then
+        printf "%s %s\n" "$(error "Invalid path:")" "$target_path"
+        return 1
+    fi
+    
+    if [[ "$target_path" == "$(pwd)" ]] || [[ "$target_path" == "." ]]; then
+        copy_to_clipboard "$resolved_path" "Current Directory"
+        printf "%s 📂 Current directory path displayed above\n" "$(success)"
+    else
+        copy_to_clipboard "$resolved_path" "Directory Path"
+        printf "%s 📂 Path displayed above\n" "$(success)"
+    fi
+    
+    return 0
+}
+
+# Handle git remote display
+function handle_remote() {
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir &> /dev/null; then
+        printf "%s Not in a git repository\n" "$(error)"
+        return 1
+    fi
+    
+    local remote_url
+    
+    # Try to get the remote URL (prefer origin)
+    if remote_url=$(git remote get-url origin 2>/dev/null); then
+        :  # Success, use remote_url
+    elif remote_url=$(git config --get remote.origin.url 2>/dev/null); then
+        :  # Fallback method
+    else
+        # List available remotes
+        local remotes
+        remotes=$(git remote)
+        
+        if [[ -z "$remotes" ]]; then
+            printf "%s No git remotes configured\n" "$(error)"
+            return 1
+        fi
+        
+        printf "%s No 'origin' remote found. Available remotes:\n" "$(warning)"
+        echo "$remotes" | while read -r remote; do
+            local url
+            url=$(git remote get-url "$remote" 2>/dev/null || echo "unknown")
+            printf "  %s: %s\n" "$(cyan "$remote")" "$url"
+        done
+        
+        return 1
+    fi
+    
+    copy_to_clipboard "$remote_url" "Git Remote URL"
+    printf "%s 🔗 Git remote URL displayed above\n" "$(success)"
+    
+    return 0
+}
+
+# Handle help display
+function handle_help() {
+    printf "%s\n" "$(bold "$(cyan "Copy Utility - Interactive display utility for development workflows")") "
+    echo
+    printf "%s\n" "$(bold "USAGE:")"
+    printf "    %s [COMMAND] [ARGS...]\n" "$(green "copy")"
+    printf "    %s                    # Interactive mode\n" "$(green "copy")"
+    echo
+    printf "%s\n" "$(bold "COMMANDS:")"
+    printf "    %s             Display contents of file\n" "$(cyan "<filename>")"
+    printf "    %s [path]             Display current directory or specified path\n" "$(cyan "pwd")"
+    printf "    %s                 Display git remote URL\n" "$(cyan "remote")"
+    printf "    %s       Show this help message\n" "$(cyan "help, --help, -h")"
+    echo
+    printf "%s\n" "$(bold "EXAMPLES:")"
+    printf "    %s      # Display file contents\n" "$(green "copy package.json")"
+    printf "    %s               # Display current directory path\n" "$(green "copy pwd")"
+    printf "    %s    # Display specific directory path\n" "$(green "copy pwd ~/projects")"
+    printf "    %s            # Display git remote URL\n" "$(green "copy remote")"
+    printf "    %s                   # Interactive mode with menu\n" "$(green "copy")"
+    echo
+    printf "%s\n" "$(bold "INTERACTIVE MODE:")"
+    printf "    When called without arguments, copy enters interactive mode with\n"
+    printf "    a menu of options for easy selection.\n"
+    echo
+}
+
+# Interactive mode
+function interactive_mode() {
+    printf "%s 🔄 Entering interactive mode...\n" "$(info)"
+    echo
+    
+    while true; do
+        printf "%s\n" "$(bold "Select what to display:")"
+        printf "1) %s\n" "$(cyan "File contents")"
+        printf "2) %s\n" "$(cyan "Current directory path")"
+        printf "3) %s\n" "$(cyan "Specific directory path")"
+        printf "4) %s\n" "$(cyan "Git remote URL")"
+        printf "5) %s\n" "$(cyan "Quit")"
+        echo
+        
+        printf "%s " "$(bold "Choice (1-5):")"
+        read -r choice
+        echo
+        
+        case $choice in
+            1)
+                printf "%s " "$(blue "Enter filename:")"
+                read -r filename
+                if [[ -n "$filename" ]]; then
+                    handle_file "$filename" && break
+                else
+                    printf "%s No filename provided\n" "$(warning)"
+                fi
+                ;;
+            2)
+                handle_pwd && break
+                ;;
+            3)
+                printf "%s " "$(blue "Enter directory path:")"
+                read -r dirpath
+                if [[ -n "$dirpath" ]]; then
+                    handle_pwd "$dirpath" && break
+                else
+                    printf "%s No path provided\n" "$(warning)"
+                fi
+                ;;
+            4)
+                handle_remote && break
+                ;;
+            5)
+                printf "%s Goodbye! 👋\n" "$(info)"
+                exit 0
+                ;;
+            *)
+                printf "%s Invalid choice. Please select 1-5.\n" "$(warning)"
+                ;;
+        esac
+        echo
+    done
+}
+
+# Main function
+main() {
+    # Handle no arguments - interactive mode
+    if [[ $# -eq 0 ]]; then
+        interactive_mode
+        return 0
+    fi
+    
+    local command="$1"
+    shift
+    
+    case "$command" in
+        help|--help|-h)
+            handle_help
+            ;;
+        pwd)
+            handle_pwd "$@"
+            ;;
+        remote)
+            if [[ $# -gt 0 ]]; then
+                printf "%s The 'remote' command does not accept arguments\n" "$(warning)"
+                return 1
+            fi
+            handle_remote
+            ;;
+        --version|-v)
+            echo "$SCRIPT_NAME version $VERSION"
+            ;;
+        -*)
+            printf "%s Unknown option: %s\n" "$(error)" "$command"
+            printf "%s Use 'copy --help' for usage information\n" "$(info)"
+            return 1
+            ;;
+        *)
+            # Treat as filename
+            handle_file "$command"
+            ;;
+    esac
+}
+
+# Run main function with all arguments
+main "$@"

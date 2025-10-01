@@ -1,0 +1,16 @@
+#!/usr/bin/env fish
+
+# Main dotfiles configuration
+# This file serves as the entry point for all dotfiles configuration
+
+# Get the dotfiles directory
+set -g DOTFILES_DIR (dirname (status --current-filename))
+
+# Source core utilities (colors, environment variables, etc.)
+source $DOTFILES_DIR/core/init.fish
+
+# Source aliases
+source $DOTFILES_DIR/aliases/init.fish
+
+# Add scripts to PATH
+set -gx PATH $DOTFILES_DIR/scripts $PATH

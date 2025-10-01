@@ -1,0 +1,92 @@
+#!/usr/bin/env fish
+
+# Dotfiles Menu - Main entry point for dotfiles management
+# Displays ASCII banner and lists all available scripts
+
+# Source core utilities
+set DOTFILES_DIR (dirname (dirname (status --current-filename)))
+source $DOTFILES_DIR/core/colors.fish
+
+function show_ascii_banner
+    echo
+    echo (set_color cyan)"
+    ██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗███████╗
+    ██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝██╔════╝
+    ██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗  ███████╗
+    ██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝  ╚════██║
+    ██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗███████║
+    ╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝╚══════╝
+    "(set_color normal)
+    echo
+    print_success "Welcome to your dotfiles management system!"
+    echo
+end
+
+function list_available_scripts
+    set scripts_dir $DOTFILES_DIR/scripts
+    
+    echo (set_color blue)(set_color --bold)"Available Scripts:"(set_color normal)
+    echo "=================="
+    echo
+    
+    # Get all executable files in scripts directory
+    for script in $scripts_dir/*
+        if test -x $script
+            set script_name (basename $script)
+            
+            # Skip the dotfiles script itself
+            if test $script_name != "dotfiles"
+                # Try to get description from script if it has one
+                set description ""
+                if test -f $script
+                    set description (grep -m 1 "^# " $script | sed 's/^# //' | head -c 50)
+                end
+                
+                if test -z "$description"
+                    set description "No description available"
+                end
+                
+                printf "  %-15s - %s\n" $script_name $description
+            end
+        end
+    end
+    
+    echo
+    echo (set_color blue)(set_color --bold)"Usage:"(set_color normal) "Run any script by typing its name (e.g., 'copy', 'click', 'ui')"
+    echo
+end
+
+function show_help
+    echo "Dotfiles Management System"
+    echo
+    echo "Usage:"
+    echo "  dotfiles              Show this menu"
+    echo "  dotfiles list         List all available scripts"
+    echo "  dotfiles help         Show this help message"
+    echo
+    echo "Available commands are also available directly:"
+    echo "  copy                  Copy utility for files, paths, git remotes"
+    echo "  click                 Auto-clicker utility"
+    echo "  ui                    UI component migration tool"
+    echo "  docker-manager        Docker container management"
+    echo "  kill-ports            Kill processes on development ports"
+    echo
+end
+
+# Main function
+function main
+    switch $argv[1]
+        case "" list
+            show_ascii_banner
+            list_available_scripts
+        case help --help -h
+            show_help
+        case '*'
+            print_error "Unknown command: $argv[1]"
+            echo
+            show_help
+            return 1
+    end
+end
+
+main $argv
