@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
 source /home/remco-stoeten/.config/dotfiles/aliases/init.fish
-
+alias x =echo hi
 # Source all .fish files in the current directory
 #for file in (dirname (status --current-filename))/*.fish
 #  if test (basename $file) != (basename (status --current-filename))

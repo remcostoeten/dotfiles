@@ -1,0 +1,1 @@
+/home/remco-stoeten/.config/fish/config.fish
