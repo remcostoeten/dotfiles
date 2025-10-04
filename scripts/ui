@@ -7,42 +7,189 @@ import argparse
 from pathlib import Path
 from typing import List, Dict, Set, Tuple
 import sys
+import time
 
 class Colors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
+    RESET = '\033[0m'
+    BRIGHT = '\033[1m'
+    DIM = '\033[2m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    BG_RED = '\033[41m'
+    BG_GREEN = '\033[42m'
+    BG_YELLOW = '\033[43m'
+    BG_BLUE = '\033[44m'
+    BG_MAGENTA = '\033[45m'
+    BG_CYAN = '\033[46m'
+    
+    # Legacy compatibility
+    HEADER = MAGENTA
+    OKBLUE = BLUE
+    OKCYAN = CYAN
+    OKGREEN = GREEN
+    WARNING = YELLOW
+    FAIL = RED
+    ENDC = RESET
+    BOLD = BRIGHT
     UNDERLINE = '\033[4m'
 
+def clear_screen():
+    os.system('clear' if os.name != 'nt' else 'cls')
+
+def print_header():
+    print(f"{Colors.CYAN}{Colors.BRIGHT}")
+    print('╔════════════════════════════════════════════════════════════════════╗')
+    print('║                                                                    ║')
+    print('║     ██╗   ██╗██╗    ███╗   ███╗██╗ ██████╗ ██████╗  █████╗ ████████╗  ║')
+    print('║     ██║   ██║██║    ████╗ ████║██║██╔════╝ ██╔══██╗██╔══██╗╚══██╔══╝  ║')
+    print('║     ██║   ██║██║    ██╔████╔██║██║██║  ███╗██████╔╝███████║   ██║     ║')
+    print('║     ██║   ██║██║    ██║╚██╔╝██║██║██║   ██║██╔══██╗██╔══██║   ██║     ║')
+    print('║     ╚██████╔╝██║    ██║ ╚═╝ ██║██║╚██████╔╝██║  ██║██║  ██║   ██║     ║')
+    print('║      ╚═════╝ ╚═╝    ╚═╝     ╚═╝╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝     ║')
+    print('║                                                                    ║')
+    print('║              Smart React Component Migration Tool v2.0             ║')
+    print('║                                                                    ║')
+    print('╚════════════════════════════════════════════════════════════════════╝')
+    print(f"{Colors.RESET}\n")
+
 def print_intro():
-    print(f"\n{Colors.HEADER}{Colors.BOLD}╔══════════════════════════════════════════════╗{Colors.ENDC}")
-    print(f"{Colors.HEADER}{Colors.BOLD}║           UI COMPONENTS MIGRATOR             ║{Colors.ENDC}")
-    print(f"{Colors.HEADER}{Colors.BOLD}║        Move & Update Import Paths           ║{Colors.ENDC}")
-    print(f"{Colors.HEADER}{Colors.BOLD}╚══════════════════════════════════════════════╝{Colors.ENDC}\n")
+    print_header()
+    print(f"{Colors.BRIGHT}{Colors.WHITE}COMPONENT MIGRATION ASSISTANT{Colors.RESET}\n")
+    
+    # Description
+    print(f"{Colors.CYAN}What this tool does:{Colors.RESET}")
+    print(f"{Colors.DIM}• Safely migrates React/Next.js UI components between directories{Colors.RESET}")
+    print(f"{Colors.DIM}• Automatically updates all import paths across your entire codebase{Colors.RESET}")
+    print(f"{Colors.DIM}• Converts component names to kebab-case (optional){Colors.RESET}")
+    print(f"{Colors.DIM}• Creates TypeScript barrel exports for better organization{Colors.RESET}")
+    print(f"{Colors.DIM}• Provides dry-run mode for safe preview of changes{Colors.RESET}")
+    
+    print(f"\n{Colors.CYAN}Prerequisites:{Colors.RESET}")
+    print(f"{Colors.DIM}• Node.js project with TypeScript/JavaScript files{Colors.RESET}")
+    print(f"{Colors.DIM}• Components located in src/components/ui (default){Colors.RESET}")
+    print(f"{Colors.DIM}• Git repository (recommended for rollback safety){Colors.RESET}")
+    
+    print(f"\n{Colors.GREEN}Quick Start:{Colors.RESET} {Colors.BRIGHT}ui --dry-run{Colors.RESET}")
+    print(f"{Colors.DIM}Run with --dry-run first to preview changes safely{Colors.RESET}\n")
+
+def print_spinner(text: str):
+    for i in range(3):
+        for frame in ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']:
+            print(f"\r{Colors.CYAN}{frame} {text}{Colors.RESET}", end="", flush=True)
+            time.sleep(0.1)
+    print(f"\r{Colors.GREEN}✓{Colors.RESET} {text}")
+
+def print_progress(current: int, total: int, text: str):
+    percentage = int((current / total) * 100) if total > 0 else 0
+    bar_length = 20
+    filled_length = int(bar_length * current / total) if total > 0 else 0
+    bar = '█' * filled_length + '░' * (bar_length - filled_length)
+    print(f"\r{Colors.CYAN}[{bar}] {percentage}% {text} ({current}/{total}){Colors.RESET}", end="", flush=True)
+    if current == total:
+        print()
+
+def print_detailed_help():
+    clear_screen()
+    print_header()
+    print(f"{Colors.BRIGHT}{Colors.WHITE}DETAILED HELP & USAGE{Colors.RESET}\n")
+    
+    print(f"{Colors.CYAN}{Colors.BRIGHT}CORE OPTIONS{Colors.RESET}")
+    print("─" * 50)
+    print(f"{Colors.GREEN}  --dry-run, -d{Colors.RESET}        Preview changes without making modifications")
+    print(f"{Colors.GREEN}  --source-path{Colors.RESET}         Source directory (default: src/components/ui)")
+    print(f"{Colors.GREEN}  --target-path{Colors.RESET}         Target directory (default: src/shared/components/ui)")
+    
+    print(f"\n{Colors.CYAN}{Colors.BRIGHT}TRANSFORMATION OPTIONS{Colors.RESET}")
+    print("─" * 50)
+    print(f"{Colors.GREEN}  --kebab, -k{Colors.RESET}           Convert filenames to kebab-case")
+    print(f"{Colors.GREEN}  --barrel, -b{Colors.RESET}          Create index.ts barrel file in target directory")
+    print(f"{Colors.GREEN}  --barrel-shared, -bs{Colors.RESET}  Create index.ts barrel file in src/shared/components/ui")
+    
+    print(f"\n{Colors.CYAN}{Colors.BRIGHT}SAFETY & CLEANUP{Colors.RESET}")
+    print("─" * 50)
+    print(f"{Colors.GREEN}  --cleanup{Colors.RESET}            Remove source directory after successful migration")
+    print(f"{Colors.GREEN}  --interactive{Colors.RESET}        Run in interactive mode (default when no args)")
+    
+    print(f"\n{Colors.CYAN}{Colors.BRIGHT}INFORMATION{Colors.RESET}")
+    print("─" * 50)
+    print(f"{Colors.GREEN}  --help, -h{Colors.RESET}           Show this detailed help")
+    print(f"{Colors.GREEN}  --examples{Colors.RESET}           Show usage examples only")
+    print(f"{Colors.GREEN}  --version{Colors.RESET}            Show version information")
+    
+    print(f"\n{Colors.YELLOW}{Colors.BRIGHT}USAGE EXAMPLES{Colors.RESET}")
+    print("─" * 50)
+    
+    print(f"\n{Colors.MAGENTA}1. Safe Preview (Recommended First Step){Colors.RESET}")
+    print(f"{Colors.DIM}   ui --dry-run{Colors.RESET}")
+    print(f"{Colors.DIM}   Shows exactly what will be changed without modifying files{Colors.RESET}")
+    
+    print(f"\n{Colors.MAGENTA}2. Full Migration with Kebab-case and Cleanup{Colors.RESET}")
+    print(f"{Colors.DIM}   ui --kebab --barrel --cleanup{Colors.RESET}")
+    print(f"{Colors.DIM}   Migrates components, converts to kebab-case, creates barrel file, removes source{Colors.RESET}")
+    
+    print(f"\n{Colors.MAGENTA}3. Custom Paths{Colors.RESET}")
+    print(f"{Colors.DIM}   ui --source-path 'components/ui' --target-path 'lib/components'{Colors.RESET}")
+    print(f"{Colors.DIM}   Use custom source and target directories{Colors.RESET}")
+    
+    print(f"\n{Colors.MAGENTA}4. Interactive Mode{Colors.RESET}")
+    print(f"{Colors.DIM}   ui{Colors.RESET}")
+    print(f"{Colors.DIM}   Runs interactive wizard with step-by-step guidance{Colors.RESET}")
+    
+    print(f"\n{Colors.RED}{Colors.BRIGHT}SAFETY NOTES{Colors.RESET}")
+    print("─" * 50)
+    print(f"{Colors.DIM}• Always run with --dry-run first to preview changes{Colors.RESET}")
+    print(f"{Colors.DIM}• Commit your changes before running migration{Colors.RESET}")
+    print(f"{Colors.DIM}• Test your application after migration{Colors.RESET}")
+    print(f"{Colors.DIM}• Use --cleanup only after verifying migration success{Colors.RESET}")
+    print("\n" + "─" * 70)
+
+def print_examples_only():
+    clear_screen()
+    print_header()
+    print(f"{Colors.BRIGHT}{Colors.WHITE}QUICK EXAMPLES{Colors.RESET}\n")
+    
+    examples = [
+        {
+            'title': 'Preview Changes',
+            'command': 'ui --dry-run',
+            'desc': 'See what would happen without making changes'
+        },
+        {
+            'title': 'Full Migration',
+            'command': 'ui --kebab --barrel --cleanup',
+            'desc': 'Complete migration with kebab-case and cleanup'
+        },
+        {
+            'title': 'Custom Directories',
+            'command': 'ui --source-path "old/ui" --target-path "new/components"',
+            'desc': 'Migrate between custom directories'
+        },
+        {
+            'title': 'Safe Migration',
+            'command': 'ui --kebab --barrel',
+            'desc': 'Migrate and organize, keep source directory'
+        },
+        {
+            'title': 'Interactive Mode',
+            'command': 'ui',
+            'desc': 'Step-by-step guided migration'
+        }
+    ]
+    
+    for i, example in enumerate(examples, 1):
+        print(f"{Colors.CYAN}{i}. {example['title']}{Colors.RESET}")
+        print(f"   {Colors.GREEN}{example['command']}{Colors.RESET}")
+        print(f"   {Colors.DIM}{example['desc']}{Colors.RESET}\n")
+    
+    print("─" * 70)
 
 def print_help():
-    help_text = f"""
-{Colors.OKCYAN}Available Arguments:{Colors.ENDC}
-  --dry-run, -d         Show what would be done without making changes
-  --kebab, -k          Convert all filenames to kebab-case
-  --barrel, -b         Create index.ts barrel export file for the target directory
-  --barrel-shared, -bs Create index.ts barrel export file for src/shared/components/ui
-  --source-path        Custom source path (default: src/components/ui)
-  --target-path        Custom target path (default: src/shared/components/ui)
-  --cleanup            Remove the source directory after moving files
-  --help, -h           Show this help message
-
-{Colors.OKGREEN}Examples:{Colors.ENDC}
-  python migrate_ui.py --dry-run
-  python migrate_ui.py --kebab --barrel --cleanup
-  python migrate_ui.py --source-path "components/ui" --target-path "shared/ui"
-"""
-    print(help_text)
+    print_detailed_help()
 
 def to_kebab_case(filename: str) -> str:
     s1 = re.sub('(.)([A-Z][a-z]+)', r'\1-\2', filename)
@@ -219,123 +366,266 @@ def update_imports_in_files(project_files: List[Path], old_path: str, new_path: 
     if not dry_run:
         print(f"{Colors.OKGREEN}{updated_files} files updated{Colors.ENDC}")
 
+def print_menu_item(index: int, text: str, is_selected: bool):
+    if is_selected:
+        print(f"{Colors.BG_CYAN}{Colors.BRIGHT} ▶ {text} {Colors.RESET}")
+    else:
+        print(f"   {text}")
+
+def print_footer(custom_help: str = ''):
+    print('\n' + '─' * 70)
+    if custom_help:
+        print(f"{Colors.DIM}{custom_help}{Colors.RESET}")
+    else:
+        print(f"{Colors.DIM}↑↓: Navigate | Enter: Select | q: Quit | h: Help{Colors.RESET}")
+
+def get_user_choice(options: List[str], title: str = "Select an option") -> int:
+    selected = 0
+    
+    while True:
+        clear_screen()
+        print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}{title.upper()}{Colors.RESET}\n")
+        
+        for i, option in enumerate(options):
+            print_menu_item(i, option, i == selected)
+        
+        print_footer("↑↓: Navigate | Enter: Select | q: Quit")
+        
+        try:
+            import termios, tty
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            tty.setcbreak(fd)
+            ch = sys.stdin.read(1)
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            
+            if ch == '\033':  # Arrow key sequence
+                ch += sys.stdin.read(2)
+                if ch == '\033[A':  # Up arrow
+                    selected = max(0, selected - 1)
+                elif ch == '\033[B':  # Down arrow
+                    selected = min(len(options) - 1, selected + 1)
+            elif ch == '\r' or ch == '\n':  # Enter
+                return selected
+            elif ch.lower() == 'q':
+                return -1
+            elif ch.lower() == 'h':
+                print_detailed_help()
+                input("\nPress Enter to continue...")
+        except ImportError:
+            # Fallback for systems without termios
+            try:
+                choice = input(f"\nEnter number (0-{len(options)-1}, q to quit): ").strip()
+                if choice.lower() == 'q':
+                    return -1
+                elif choice.isdigit() and 0 <= int(choice) < len(options):
+                    return int(choice)
+            except (ValueError, KeyboardInterrupt):
+                return -1
+
 def run_interactive_mode():
+    clear_screen()
     print_intro()
-    print(f"{Colors.OKCYAN}Entering interactive mode...{Colors.ENDC}\n")
+    
+    main_options = [
+        "🚀 Quick Migration (Recommended Settings)",
+        "🎯 Custom Migration (Choose Options)",
+        "👀 Preview Changes (Dry Run)",
+        "📚 Show Examples",
+        "❓ Help & Documentation",
+        "❌ Exit"
+    ]
+    
+    while True:
+        choice = get_user_choice(main_options, "Component Migration Assistant")
+        
+        if choice == -1 or choice == 5:  # Quit or Exit
+            print(f"\n{Colors.CYAN}Thanks for using UI Migrator!{Colors.RESET}")
+            return
+        
+        elif choice == 0:  # Quick Migration
+            clear_screen()
+            print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}QUICK MIGRATION{Colors.RESET}\n")
+            print(f"{Colors.CYAN}Using recommended settings:{Colors.RESET}")
+            print(f"{Colors.DIM}• Source: src/components/ui{Colors.RESET}")
+            print(f"{Colors.DIM}• Target: src/shared/components/ui{Colors.RESET}")
+            print(f"{Colors.DIM}• Convert to kebab-case: Yes{Colors.RESET}")
+            print(f"{Colors.DIM}• Create barrel file: Yes{Colors.RESET}")
+            print(f"{Colors.DIM}• Cleanup source: No (safer){Colors.RESET}")
+            
+            confirm = input(f"\n{Colors.BOLD}Proceed with quick migration? (y/N): {Colors.RESET}").lower()
+            if confirm == 'y':
+                run_migration('src/components/ui', 'src/shared/components/ui', True, True, False, False, False)
+            
+        elif choice == 1:  # Custom Migration
+            run_custom_interactive_mode()
+            
+        elif choice == 2:  # Preview/Dry Run
+            clear_screen()
+            print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}PREVIEW MODE{Colors.RESET}\n")
+            print(f"{Colors.YELLOW}Running dry-run to preview changes...{Colors.RESET}\n")
+            run_migration('src/components/ui', 'src/shared/components/ui', False, False, False, False, True)
+            input(f"\n{Colors.DIM}Press Enter to return to main menu...{Colors.RESET}")
+            
+        elif choice == 3:  # Examples
+            print_examples_only()
+            input(f"\n{Colors.DIM}Press Enter to return to main menu...{Colors.RESET}")
+            
+        elif choice == 4:  # Help
+            print_detailed_help()
+            input(f"\n{Colors.DIM}Press Enter to return to main menu...{Colors.RESET}")
 
-    source_path = input(f"{Colors.BOLD}Enter source path (default: src/components/ui): {Colors.ENDC}") or 'src/components/ui'
-    target_path = input(f"{Colors.BOLD}Enter target path (default: src/shared/components/ui): {Colors.ENDC}") or 'src/shared/components/ui'
-    kebab = input(f"{Colors.BOLD}Convert filenames to kebab-case? (y/n): {Colors.ENDC}").lower() == 'y'
-    barrel = input(f"{Colors.BOLD}Create index.ts barrel file for the target directory? (y/n): {Colors.ENDC}").lower() == 'y'
-    barrel_shared = input(f"{Colors.BOLD}Create index.ts barrel file for src/shared/components/ui? (y/n): {Colors.ENDC}").lower() == 'y'
-    cleanup = input(f"{Colors.BOLD}Remove the source directory after moving files? (y/n): {Colors.ENDC}").lower() == 'y'
-    dry_run = input(f"{Colors.BOLD}Run in dry-run mode? (y/n): {Colors.ENDC}").lower() == 'y'
+def run_custom_interactive_mode():
+    clear_screen()
+    print_header()
+    print(f"{Colors.BRIGHT}{Colors.WHITE}CUSTOM MIGRATION SETUP{Colors.RESET}\n")
 
-    print(f"\n{Colors.OKBLUE}Source: {source_path}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Target: {target_path}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Kebab-case: {kebab}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Create barrel: {barrel}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Create barrel for shared: {barrel_shared}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Cleanup source: {cleanup}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Dry run: {dry_run}{Colors.ENDC}\n")
+    source_path = input(f"{Colors.CYAN}Source path{Colors.RESET} (default: src/components/ui): ").strip() or 'src/components/ui'
+    target_path = input(f"{Colors.CYAN}Target path{Colors.RESET} (default: src/shared/components/ui): ").strip() or 'src/shared/components/ui'
+    
+    print(f"\n{Colors.CYAN}Options:{Colors.RESET}")
+    kebab = input(f"{Colors.DIM}Convert filenames to kebab-case?{Colors.RESET} (y/N): ").lower() == 'y'
+    barrel = input(f"{Colors.DIM}Create index.ts barrel file?{Colors.RESET} (y/N): ").lower() == 'y'
+    barrel_shared = input(f"{Colors.DIM}Create barrel file for shared directory?{Colors.RESET} (y/N): ").lower() == 'y'
+    cleanup = input(f"{Colors.DIM}Remove source directory after migration?{Colors.RESET} (y/N): ").lower() == 'y'
+    dry_run = input(f"{Colors.DIM}Run in preview mode first?{Colors.RESET} (Y/n): ").lower() != 'n'
 
-    confirm = input(f"{Colors.BOLD}Proceed with these settings? (y/n): {Colors.ENDC}").lower()
+    # Summary
+    clear_screen()
+    print_header()
+    print(f"{Colors.BRIGHT}{Colors.WHITE}MIGRATION SUMMARY{Colors.RESET}\n")
+    print(f"{Colors.CYAN}Source:{Colors.RESET} {source_path}")
+    print(f"{Colors.CYAN}Target:{Colors.RESET} {target_path}")
+    print(f"{Colors.CYAN}Kebab-case:{Colors.RESET} {'Yes' if kebab else 'No'}")
+    print(f"{Colors.CYAN}Create barrel:{Colors.RESET} {'Yes' if barrel else 'No'}")
+    print(f"{Colors.CYAN}Barrel for shared:{Colors.RESET} {'Yes' if barrel_shared else 'No'}")
+    print(f"{Colors.CYAN}Cleanup source:{Colors.RESET} {'Yes' if cleanup else 'No'}")
+    print(f"{Colors.CYAN}Preview mode:{Colors.RESET} {'Yes' if dry_run else 'No'}")
+
+    confirm = input(f"\n{Colors.BOLD}Proceed with these settings? (y/N): {Colors.RESET}").lower()
     if confirm != 'y':
-        print(f"{Colors.WARNING}Migration cancelled.{Colors.ENDC}")
+        print(f"{Colors.YELLOW}Migration cancelled.{Colors.RESET}")
         return
+    
+    run_migration(source_path, target_path, kebab, barrel, barrel_shared, cleanup, dry_run)
+    input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
 
+def run_migration(source_path: str, target_path: str, kebab: bool, barrel: bool, barrel_shared: bool, cleanup: bool, dry_run: bool):
+    """Core migration function that performs the actual work"""
+    clear_screen()
+    print_header()
+    
+    migration_type = "PREVIEW MODE" if dry_run else "MIGRATION IN PROGRESS"
+    print(f"{Colors.BRIGHT}{Colors.WHITE}{migration_type}{Colors.RESET}\n")
+    
+    if dry_run:
+        print(f"{Colors.YELLOW}Running in dry-run mode - no files will be modified{Colors.RESET}\n")
+    
+    # Step 1: Find all project files
+    print(f"{Colors.CYAN}Step 1: Scanning project files...{Colors.RESET}")
     project_files = find_all_files('.', {'.ts', '.tsx', '.js', '.jsx'})
     excluded_files = [f for f in project_files if 'node_modules' not in str(f)]
+    print(f"{Colors.GREEN}✓{Colors.RESET} Found {len(excluded_files)} files to scan\n")
     
-    print(f"{Colors.HEADER}Step 1: Moving files{Colors.ENDC}")
+    # Step 2: Move files
+    print(f"{Colors.CYAN}Step 2: Moving files...{Colors.RESET}")
     moved_files = move_files(source_path, target_path, kebab, dry_run)
     
     if moved_files:
-        print(f"{Colors.OKGREEN}Moved {len(moved_files)} files{Colors.ENDC}")
+        print(f"{Colors.GREEN}✓{Colors.RESET} {'Would move' if dry_run else 'Moved'} {len(moved_files)} files\n")
     else:
-        print(f"{Colors.WARNING}No files were moved{Colors.ENDC}")
+        print(f"{Colors.YELLOW}⚠{Colors.RESET} No files found to move\n")
+        return
     
-    print(f"\n{Colors.HEADER}Step 2: Updating imports{Colors.ENDC}")
+    # Step 3: Update imports
+    print(f"{Colors.CYAN}Step 3: Updating import statements...{Colors.RESET}")
     update_imports_in_files(excluded_files, source_path, target_path, kebab, dry_run)
     
+    # Step 4: Create barrel files
     if barrel and moved_files:
-        print(f"\n{Colors.HEADER}Step 3: Creating barrel file{Colors.ENDC}")
+        print(f"\n{Colors.CYAN}Step 4: Creating barrel file...{Colors.RESET}")
         create_barrel_file(target_path, dry_run)
+        print(f"{Colors.GREEN}✓{Colors.RESET} {'Would create' if dry_run else 'Created'} barrel file\n")
 
     if barrel_shared:
-        print(f"\n{Colors.HEADER}Step 4: Creating barrel file for shared directory{Colors.ENDC}")
+        print(f"{Colors.CYAN}Step 5: Creating shared barrel file...{Colors.RESET}")
         create_barrel_file(target_path, dry_run, barrel_for_shared=True)
+        print(f"{Colors.GREEN}✓{Colors.RESET} {'Would create' if dry_run else 'Created'} shared barrel file\n")
 
-    if cleanup and moved_files:
-        print(f"\n{Colors.HEADER}Step 5: Cleaning up source directory{Colors.ENDC}")
+    # Step 5: Cleanup
+    if cleanup and moved_files and not dry_run:
+        print(f"{Colors.CYAN}Step 6: Cleaning up source directory...{Colors.RESET}")
         cleanup_directory(source_path, dry_run)
-
-    print(f"\n{Colors.OKGREEN}{Colors.BOLD}Migration completed successfully!{Colors.ENDC}")
+        print(f"{Colors.GREEN}✓{Colors.RESET} Removed source directory\n")
+    elif cleanup and dry_run:
+        print(f"{Colors.CYAN}Step 6: Would clean up source directory...{Colors.RESET}")
+        print(f"{Colors.YELLOW}✓{Colors.RESET} Would remove source directory\n")
+    
+    # Summary
+    status = "PREVIEW COMPLETE" if dry_run else "MIGRATION COMPLETE"
+    print(f"{Colors.GREEN}{Colors.BOLD}{status}!{Colors.RESET}")
+    
+    if dry_run:
+        print(f"\n{Colors.DIM}To apply these changes, run the same command without --dry-run{Colors.RESET}")
+    else:
+        print(f"\n{Colors.DIM}Migration completed successfully! Don't forget to test your application.{Colors.RESET}")
 
 def main():
-    parser = argparse.ArgumentParser(description='Migrate UI components and update imports', add_help=False)
-    parser.add_argument('--dry-run', '-d', action='store_true', help='Show what would be done without making changes')
+    parser = argparse.ArgumentParser(description='Smart React Component Migration Tool', add_help=False)
+    parser.add_argument('--dry-run', '-d', action='store_true', help='Preview changes without making modifications')
     parser.add_argument('--kebab', '-k', action='store_true', help='Convert filenames to kebab-case')
     parser.add_argument('--barrel', '-b', action='store_true', help='Create index.ts barrel file for the target directory')
     parser.add_argument('--barrel-shared', '-bs', action='store_true', help='Create index.ts barrel file for src/shared/components/ui')
     parser.add_argument('--source-path', default='src/components/ui', help='Source path (default: src/components/ui)')
     parser.add_argument('--target-path', default='src/shared/components/ui', help='Target path (default: src/shared/components/ui)')
     parser.add_argument('--cleanup', action='store_true', help='Remove the source directory after moving files')
-    parser.add_argument('--help', '-h', action='store_true', help='Show help message')
+    parser.add_argument('--interactive', action='store_true', help='Run in interactive mode')
+    parser.add_argument('--examples', action='store_true', help='Show usage examples')
+    parser.add_argument('--version', action='store_true', help='Show version information')
+    parser.add_argument('--help', '-h', action='store_true', help='Show detailed help')
     
+    # Handle special case: no arguments = interactive mode
     if len(sys.argv) == 1:
         run_interactive_mode()
         return
 
     args = parser.parse_args()
     
+    # Handle information flags first
     if args.help:
-        print_intro()
-        print_help()
+        print_detailed_help()
         return
     
-    print_intro()
+    if args.examples:
+        print_examples_only()
+        return
     
-    if args.dry_run:
-        print(f"{Colors.WARNING}DRY RUN MODE - No changes will be made{Colors.ENDC}\n")
+    if args.version:
+        clear_screen()
+        print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}VERSION INFORMATION{Colors.RESET}\n")
+        print(f"{Colors.CYAN}UI Migrator v2.0{Colors.RESET}")
+        print(f"{Colors.DIM}Smart React Component Migration Tool{Colors.RESET}")
+        print(f"{Colors.DIM}Enhanced with interactive menus and better UX{Colors.RESET}")
+        return
     
-    source_path = args.source_path
-    target_path = args.target_path
+    if args.interactive:
+        run_interactive_mode()
+        return
     
-    print(f"{Colors.OKBLUE}Source: {source_path}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Target: {target_path}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Kebab-case: {args.kebab}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Create barrel: {args.barrel}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Create barrel for shared: {args.barrel_shared}{Colors.ENDC}")
-    print(f"{Colors.OKBLUE}Cleanup source: {args.cleanup}{Colors.ENDC}\n")
-
-    project_files = find_all_files('.', {'.ts', '.tsx', '.js', '.jsx'})
-    excluded_files = [f for f in project_files if 'node_modules' not in str(f)]
-    
-    print(f"{Colors.HEADER}Step 1: Moving files{Colors.ENDC}")
-    moved_files = move_files(source_path, target_path, args.kebab, args.dry_run)
-    
-    if moved_files:
-        print(f"{Colors.OKGREEN}Moved {len(moved_files)} files{Colors.ENDC}")
-    else:
-        print(f"{Colors.WARNING}No files were moved{Colors.ENDC}")
-    
-    print(f"\n{Colors.HEADER}Step 2: Updating imports{Colors.ENDC}")
-    update_imports_in_files(excluded_files, source_path, target_path, args.kebab, args.dry_run)
-    
-    if args.barrel and moved_files:
-        print(f"\n{Colors.HEADER}Step 3: Creating barrel file{Colors.ENDC}")
-        create_barrel_file(target_path, args.dry_run)
-
-    if args.barrel_shared:
-        print(f"\n{Colors.HEADER}Step 4: Creating barrel file for shared directory{Colors.ENDC}")
-        create_barrel_file(target_path, args.dry_run, barrel_for_shared=True)
-
-    if args.cleanup and moved_files:
-        print(f"\n{Colors.HEADER}Step 5: Cleaning up source directory{Colors.ENDC}")
-        cleanup_directory(source_path, args.dry_run)
-
-    print(f"\n{Colors.OKGREEN}{Colors.BOLD}Migration completed successfully!{Colors.ENDC}")
+    # Execute migration with command line arguments
+    run_migration(
+        args.source_path,
+        args.target_path,
+        args.kebab,
+        args.barrel,
+        args.barrel_shared,
+        args.cleanup,
+        args.dry_run
+    )
 
 if __name__ == '__main__':
     main()

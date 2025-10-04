@@ -1,11 +1,11 @@
-function l --description 'exa listing with nested-item counts for directories'
-    set -l exa_flags -l --no-permissions --no-user --no-time --group-directories-first --icons
+function l --description 'eza listing with nested-item counts for directories'
+    set -l eza_flags -l --no-permissions --no-user --no-time --group-directories-first --icons
     
-    # Get the basic exa output
-    set -l exa_output (exa $exa_flags $argv)
+    # Get the basic eza output
+    set -l eza_output (eza $eza_flags $argv)
     
     # Process each line to add counts for directories
-    for line in $exa_output
+    for line in $eza_output
         # Extract the filename (last field) - handle icons by taking everything after the last space
         set -l filename (echo $line | string split ' ')[-1]
         

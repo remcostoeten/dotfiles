@@ -1,0 +1,232 @@
+#!/usr/bin/env fish
+
+# Docker Manager - A simple Docker container management script
+
+# Define color functions
+function print_info
+    set_color blue
+    echo $argv[1]
+    set_color normal
+end
+
+function print_success
+    set_color green
+    echo $argv[1]
+    set_color normal
+end
+
+function print_error
+    set_color red
+    echo $argv[1]
+    set_color normal
+end
+
+function log_error
+    print_error "ERROR: $argv[1]" >&2
+end
+
+# Array to store container IDs globally
+set -g CONTAINER_IDS
+
+function list_containers
+    print_info "Docker Containers"
+    # Clear the container IDs array
+    set CONTAINER_IDS
+    
+    # Use format to get just the container ID and name
+    set index 1
+    echo "INDEX | CONTAINER ID | NAME | STATUS"
+    echo "------|--------------|------|-------"
+    
+    for line in (docker ps -a --format "{{.ID}}\t{{.Names}}\t{{.Status}}")
+        if test -n "$line"
+            set container_id (echo $line | awk '{print $1}')
+            set name (echo $line | awk '{print $2}')
+            set status (echo $line | awk '{print $3}')
+            set CONTAINER_IDS $CONTAINER_IDS $container_id
+            printf "%5s | %12s | %s | %s\n" $index $container_id $name $status
+            set index (math $index + 1)
+        end
+    end
+    
+    if test (count $CONTAINER_IDS) -eq 0
+        echo "No containers found."
+    end
+end
+
+function get_container_id
+    set index $argv[1]
+    if not string match -qr '^[0-9]+$' $index; or test $index -lt 1; or test $index -gt (count $CONTAINER_IDS)
+        log_error "Invalid container index: $index"
+        return 1
+    end
+    echo $CONTAINER_IDS[$index]
+    return 0
+end
+
+function start_service
+    set index $argv[1]
+    set container_id (get_container_id $index)
+    or return 1
+    
+    if docker start $container_id
+        print_success "Started container: $container_id"
+    else
+        log_error "Failed to start container: $container_id"
+        return 1
+    end
+end
+
+function stop_service
+    set index $argv[1]
+    set container_id (get_container_id $index)
+    or return 1
+    
+    if docker stop $container_id
+        print_success "Stopped container: $container_id"
+    else
+        log_error "Failed to stop container: $container_id"
+        return 1
+    end
+end
+
+function show_logs
+    set index $argv[1]
+    set container_id (get_container_id $index)
+    or return 1
+    docker logs $container_id
+end
+
+function remove_container
+    set index $argv[1]
+    if not string match -qr '^[0-9]+$' $index; or test $index -lt 1; or test $index -gt (count $CONTAINER_IDS)
+        log_error "Invalid container index: $index"
+        return 1
+    end
+    
+    set container_id $CONTAINER_IDS[$index]
+    if docker rm $container_id
+        echo "Removed container: $container_id"
+    else
+        log_error "Failed to remove container: $container_id"
+        return 1
+    end
+end
+
+function cleanup_dangling
+    print_info "Cleaning up dangling containers and images..."
+    docker system prune -f
+    print_success "Cleanup complete."
+end
+
+function show_usage
+    echo "Usage: docker-manager [COMMAND] [OPTIONS]"
+    echo ""
+    echo "Commands:"
+    echo "  list      List all containers"
+    echo "  start     Start a container"
+    echo "  stop      Stop a container"
+    echo "  logs      Show container logs"
+    echo "  cleanup   Clean up dangling containers and images"
+    echo "  remove    Remove a container"
+    echo "  help      Show this help message"
+end
+
+function interactive_mode
+    while true
+        clear
+        print_info "Docker Container Manager"
+        echo "1) List all containers"
+        echo "2) Start a container"
+        echo "3) Stop a container"
+        echo "4) Show container logs"
+        echo "5) Cleanup system"
+        echo "6) Remove a container"
+        echo "q) Quit"
+        echo
+        
+        read -P "Enter your choice: " choice
+
+        switch $choice
+            case 1
+                list_containers
+                read -P "Press Enter to continue..."
+            case 2
+                list_containers
+                echo
+                read -P "Enter container index to start: " index
+                test -n "$index"; and start_service $index
+                read -P "Press Enter to continue..."
+            case 3
+                list_containers
+                echo
+                read -P "Enter container index to stop: " index
+                test -n "$index"; and stop_service $index
+                read -P "Press Enter to continue..."
+            case 4
+                list_containers
+                echo
+                read -P "Enter container index to view logs: " index
+                test -n "$index"; and show_logs $index
+                read -P "Press Enter to continue..."
+            case 5
+                cleanup_dangling
+                read -P "Press Enter to continue..."
+            case 6
+                list_containers
+                echo
+                read -P "Enter container index to remove: " index
+                test -n "$index"; and remove_container $index
+                read -P "Press Enter to continue..."
+            case q Q
+                exit 0
+            case '*'
+                echo "Invalid option"
+                sleep 1
+        end
+    end
+end
+
+# Main command dispatcher
+switch $argv[1]
+    case "" interactive
+        interactive_mode
+    case list ls
+        list_containers
+    case start
+        if test (count $argv) -lt 2
+            log_error "Usage: docker-manager start <container_index>"
+            exit 1
+        end
+        list_containers
+        start_service $argv[2]
+    case stop
+        if test (count $argv) -lt 2
+            log_error "Usage: docker-manager stop <container_index>"
+            exit 1
+        end
+        list_containers
+        stop_service $argv[2]
+    case logs
+        if test (count $argv) -lt 2
+            log_error "Usage: docker-manager logs <container_index>"
+            exit 1
+        end
+        list_containers
+        show_logs $argv[2]
+    case cleanup
+        cleanup_dangling
+    case remove
+        if test (count $argv) -lt 2
+            log_error "Usage: docker-manager remove <container_index>"
+            exit 1
+        end
+        remove_container $argv[2]
+    case help --help -h
+        show_usage
+    case '*'
+        log_error "Unknown command: $argv[1]"
+        echo ""
+        show_usage
+        exit 1
+end
