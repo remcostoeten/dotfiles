@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { readdirSync, statSync, existsSync } from 'fs';
+import { readdirSync, statSync, lstatSync, existsSync } from 'fs';
 import { join, basename } from 'path';
 import { spawn } from 'child_process';
 import readline from 'readline';
@@ -43,9 +43,10 @@ function collectScripts(dotfilesRoot: string): TScript[] {
                 const filePath = join(fullPath, file);
                 
                 try {
-                    const stats = statSync(filePath);
+                    const lstat = lstatSync(filePath);
+                    const stats = statSync(filePath); // Follow symlinks to check if target exists and is executable
                     
-                    if (stats.isFile()) {
+                    if ((lstat.isFile() || lstat.isSymbolicLink()) && (stats.isFile() || stats.isDirectory())) {
                         const name = basename(file);
                         
                         if (!seen.has(name) && name !== 'dotfiles' && name !== 'dotfiles.old.fish') {
@@ -135,7 +136,7 @@ async function runScript(script: TScript) {
 }
 
 async function main() {
-    const dotfilesRoot = process.env.DOTFILES_DIR || join(process.env.HOME!, '.config', 'dotfiles');
+    const dotfilesRoot = join(process.env.HOME!, '.config', 'dotfiles');
     const scripts = collectScripts(dotfilesRoot);
     
     const selected = await runInteractiveMenu(scripts);

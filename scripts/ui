@@ -61,13 +61,31 @@ def print_intro():
     print_header()
     print(f"{Colors.BRIGHT}{Colors.WHITE}COMPONENT MIGRATION ASSISTANT{Colors.RESET}\n")
     
-    # Description
+    # Problem Statement
+    print(f"{Colors.YELLOW}{Colors.BRIGHT}THE PROBLEM:{Colors.RESET}")
+    print(f"{Colors.DIM}When reorganizing React/Next.js projects, moving UI components between directories{Colors.RESET}")
+    print(f"{Colors.DIM}requires manually updating dozens/hundreds of import statements across your codebase.{Colors.RESET}")
+    print(f"{Colors.DIM}This is tedious, error-prone, and risks breaking your application.{Colors.RESET}\n")
+    
+    # Solution
+    print(f"{Colors.GREEN}{Colors.BRIGHT}THE SOLUTION:{Colors.RESET}")
+    print(f"{Colors.DIM}This tool automates the entire process - safely moving components AND updating{Colors.RESET}")
+    print(f"{Colors.DIM}all import references throughout your project automatically.{Colors.RESET}\n")
+    
+    # What it does
     print(f"{Colors.CYAN}What this tool does:{Colors.RESET}")
     print(f"{Colors.DIM}• Safely migrates React/Next.js UI components between directories{Colors.RESET}")
-    print(f"{Colors.DIM}• Automatically updates all import paths across your entire codebase{Colors.RESET}")
-    print(f"{Colors.DIM}• Converts component names to kebab-case (optional){Colors.RESET}")
-    print(f"{Colors.DIM}• Creates TypeScript barrel exports for better organization{Colors.RESET}")
+    print(f"{Colors.DIM}• Automatically updates ALL import paths across your entire codebase{Colors.RESET}")
+    print(f"{Colors.DIM}• Converts component names to kebab-case (MyButton.tsx → my-button.tsx){Colors.RESET}")
+    print(f"{Colors.DIM}• Creates TypeScript barrel exports (index.ts) for better organization{Colors.RESET}")
     print(f"{Colors.DIM}• Provides dry-run mode for safe preview of changes{Colors.RESET}")
+    
+    # Common scenarios
+    print(f"\n{Colors.MAGENTA}Common Use Cases:{Colors.RESET}")
+    print(f"{Colors.DIM}• Moving shadcn/ui components to shared library structure{Colors.RESET}")
+    print(f"{Colors.DIM}• Converting PascalCase to kebab-case filenames project-wide{Colors.RESET}")
+    print(f"{Colors.DIM}• Consolidating components for better project organization{Colors.RESET}")
+    print(f"{Colors.DIM}• Preparing components for extraction into separate packages{Colors.RESET}")
     
     print(f"\n{Colors.CYAN}Prerequisites:{Colors.RESET}")
     print(f"{Colors.DIM}• Node.js project with TypeScript/JavaScript files{Colors.RESET}")
@@ -98,6 +116,30 @@ def print_detailed_help():
     print_header()
     print(f"{Colors.BRIGHT}{Colors.WHITE}DETAILED HELP & USAGE{Colors.RESET}\n")
     
+    # Tool Overview
+    print(f"{Colors.CYAN}{Colors.BRIGHT}WHAT IS THIS TOOL?{Colors.RESET}")
+    print("─" * 50)
+    print(f"{Colors.DIM}UI Migrator is a custom automation tool that solves the pain of reorganizing{Colors.RESET}")
+    print(f"{Colors.DIM}React/Next.js component structures. Instead of manually moving files and hunting{Colors.RESET}")
+    print(f"{Colors.DIM}down every import statement, this tool does both automatically and safely.{Colors.RESET}")
+    
+    print(f"\n{Colors.YELLOW}{Colors.BRIGHT}BEFORE vs AFTER EXAMPLE{Colors.RESET}")
+    print("─" * 50)
+    print(f"{Colors.RED}BEFORE:{Colors.RESET} Manual process")
+    print(f"{Colors.DIM}  1. Move Button.tsx from src/components/ui/ to src/shared/components/ui/{Colors.RESET}")
+    print(f"{Colors.DIM}  2. Find all files importing Button (could be 50+ files){Colors.RESET}")
+    print(f"{Colors.DIM}  3. Update each: '@/components/ui/Button' → '@/shared/components/ui/button'{Colors.RESET}")
+    print(f"{Colors.DIM}  4. Hope you didn't miss any imports (risk breaking the app){Colors.RESET}")
+    print(f"{Colors.DIM}  5. Manually create index.ts files for clean exports{Colors.RESET}")
+    
+    print(f"\n{Colors.GREEN}AFTER:{Colors.RESET} With this tool")
+    print(f"{Colors.DIM}  Run: {Colors.BRIGHT}ui --kebab --barrel{Colors.RESET}")
+    print(f"{Colors.DIM}  ✓ All files moved automatically{Colors.RESET}")
+    print(f"{Colors.DIM}  ✓ All imports updated across entire project{Colors.RESET}")
+    print(f"{Colors.DIM}  ✓ Files renamed to kebab-case{Colors.RESET}")
+    print(f"{Colors.DIM}  ✓ Barrel files created{Colors.RESET}")
+    print(f"{Colors.DIM}  ✓ Zero risk of missed references{Colors.RESET}\n")
+    
     print(f"{Colors.CYAN}{Colors.BRIGHT}CORE OPTIONS{Colors.RESET}")
     print("─" * 50)
     print(f"{Colors.GREEN}  --dry-run, -d{Colors.RESET}        Preview changes without making modifications")
@@ -121,24 +163,35 @@ def print_detailed_help():
     print(f"{Colors.GREEN}  --examples{Colors.RESET}           Show usage examples only")
     print(f"{Colors.GREEN}  --version{Colors.RESET}            Show version information")
     
-    print(f"\n{Colors.YELLOW}{Colors.BRIGHT}USAGE EXAMPLES{Colors.RESET}")
+    print(f"\n{Colors.YELLOW}{Colors.BRIGHT}REAL-WORLD USAGE EXAMPLES{Colors.RESET}")
     print("─" * 50)
     
-    print(f"\n{Colors.MAGENTA}1. Safe Preview (Recommended First Step){Colors.RESET}")
+    print(f"\n{Colors.MAGENTA}1. Safe Preview (Always Start Here){Colors.RESET}")
     print(f"{Colors.DIM}   ui --dry-run{Colors.RESET}")
-    print(f"{Colors.DIM}   Shows exactly what will be changed without modifying files{Colors.RESET}")
+    print(f"{Colors.DIM}   → Shows exactly what will be changed without modifying files{Colors.RESET}")
+    print(f"{Colors.DIM}   → Perfect for understanding the impact before committing{Colors.RESET}")
     
-    print(f"\n{Colors.MAGENTA}2. Full Migration with Kebab-case and Cleanup{Colors.RESET}")
+    print(f"\n{Colors.MAGENTA}2. shadcn/ui Components Reorganization{Colors.RESET}")
     print(f"{Colors.DIM}   ui --kebab --barrel --cleanup{Colors.RESET}")
-    print(f"{Colors.DIM}   Migrates components, converts to kebab-case, creates barrel file, removes source{Colors.RESET}")
+    print(f"{Colors.DIM}   → Moves: Button.tsx, Modal.tsx, Card.tsx, etc.{Colors.RESET}")
+    print(f"{Colors.DIM}   → Renames: Button.tsx → button.tsx{Colors.RESET}")
+    print(f"{Colors.DIM}   → Updates: import {{Button}} from '@/components/ui/Button'{Colors.RESET}")
+    print(f"{Colors.DIM}   → Becomes: import {{Button}} from '@/shared/components/ui/button'{Colors.RESET}")
     
-    print(f"\n{Colors.MAGENTA}3. Custom Paths{Colors.RESET}")
-    print(f"{Colors.DIM}   ui --source-path 'components/ui' --target-path 'lib/components'{Colors.RESET}")
-    print(f"{Colors.DIM}   Use custom source and target directories{Colors.RESET}")
+    print(f"\n{Colors.MAGENTA}3. Custom Paths for Monorepo Structure{Colors.RESET}")
+    print(f"{Colors.DIM}   ui --source-path 'apps/web/components/ui' --target-path 'packages/ui/src'{Colors.RESET}")
+    print(f"{Colors.DIM}   → Perfect for extracting components to shared packages{Colors.RESET}")
+    print(f"{Colors.DIM}   → Automatically updates all cross-app imports{Colors.RESET}")
     
-    print(f"\n{Colors.MAGENTA}4. Interactive Mode{Colors.RESET}")
+    print(f"\n{Colors.MAGENTA}4. Team Standards Migration{Colors.RESET}")
+    print(f"{Colors.DIM}   ui --kebab --barrel{Colors.RESET}")
+    print(f"{Colors.DIM}   → Convert entire codebase to kebab-case naming{Colors.RESET}")
+    print(f"{Colors.DIM}   → Keep source directory (safer for large codebases){Colors.RESET}")
+    
+    print(f"\n{Colors.MAGENTA}5. Interactive Mode (Guided Setup){Colors.RESET}")
     print(f"{Colors.DIM}   ui{Colors.RESET}")
-    print(f"{Colors.DIM}   Runs interactive wizard with step-by-step guidance{Colors.RESET}")
+    print(f"{Colors.DIM}   → Step-by-step wizard with visual interface{Colors.RESET}")
+    print(f"{Colors.DIM}   → Perfect for first-time users or complex scenarios{Colors.RESET}")
     
     print(f"\n{Colors.RED}{Colors.BRIGHT}SAFETY NOTES{Colors.RESET}")
     print("─" * 50)

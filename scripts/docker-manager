@@ -5,6 +5,7 @@ import sys
 import subprocess
 import platform
 import json
+import re
 from typing import List, Dict, Optional, Tuple
 import datetime
 
@@ -386,57 +387,94 @@ class DockerManager:
     def detect_project(self, container_id: str, container_name: str) -> str:
         """Detect which project a container belongs to based on various indicators."""
         try:
-            # Get container details including labels, mounts, and network
-            inspect_result = subprocess.run(['docker', 'inspect', container_id], 
-                                          capture_output=True, text=True, check=True)
-            container_data = json.loads(inspect_result.stdout)[0]
-            
-            # Check for common project indicators
-            labels = container_data.get('Config', {}).get('Labels', {}) or {}
-            mounts = container_data.get('Mounts', [])
-            networks = list(container_data.get('NetworkSettings', {}).get('Networks', {}).keys())
-            working_dir = container_data.get('Config', {}).get('WorkingDir', '')
-            
-            # 1. Check Docker Compose project label
-            if 'com.docker.compose.project' in labels:
-                return f"📁 {labels['com.docker.compose.project']}"
-            
-            # 2. Check for project label
-            if 'project' in labels:
-                return f"📁 {labels['project']}"
-            
-            # 3. Check mount points for project directories
-            for mount in mounts:
-                if mount.get('Type') == 'bind':
-                    source = mount.get('Source', '')
-                    # Look for common project directory patterns
-                    for common_path in ['/home/remco-stoeten/dev/', '/home/remco-stoeten/projects/', '/workspace/', '/app/']:
-                        if source.startswith(common_path):
-                            project_name = source.replace(common_path, '').split('/')[0]
-                            if project_name:
-                                return f"📁 {project_name}"
-            
-            # 4. Check network names for project hints
-            for network in networks:
-                if network != 'bridge' and network != 'host' and network != 'none':
-                    # Remove common suffixes like _default
-                    clean_network = network.replace('_default', '').replace('-network', '')
-                    if clean_network != network:
-                        return f"🌐 {clean_network}"
-            
-            # 5. Check container name patterns
+            # Quick pattern checks first (no docker inspect needed)
+            # 1. Check container name patterns
             if '_' in container_name:
                 parts = container_name.split('_')
                 if len(parts) >= 2:
                     potential_project = parts[0]
                     # Skip if it looks like a service name rather than project
-                    if potential_project not in ['redis', 'mysql', 'postgres', 'nginx', 'apache']:
+                    common_services = ['redis', 'mysql', 'postgres', 'nginx', 'apache', 'mongo', 'elastic', 'kibana']
+                    if potential_project not in common_services:
                         return f"📦 {potential_project}"
             
-            # 6. Check working directory
-            if working_dir and '/app' not in working_dir and '/usr' not in working_dir:
+            # 2. Check for dash-separated project names
+            if '-' in container_name and not container_name.startswith('redis') and not container_name.startswith('mysql'):
+                parts = container_name.split('-')
+                if len(parts) >= 2:
+                    potential_project = parts[0]
+                    common_services = ['redis', 'mysql', 'postgres', 'nginx', 'apache', 'mongo', 'elastic', 'kibana']
+                    if potential_project not in common_services:
+                        return f"📦 {potential_project}"
+            
+            # 3. Check for numeric suffixes (often indicates project instances)
+            numeric_match = re.match(r'^([a-zA-Z]+)[0-9]+$', container_name)
+            if numeric_match:
+                base_name = numeric_match.group(1)
+                common_services = ['redis', 'mysql', 'postgres', 'nginx', 'apache', 'mongo', 'elastic', 'kibana']
+                if base_name not in common_services:
+                    return f"📦 {base_name}"
+            
+            # Get container details for deeper inspection (only if needed)
+            inspect_result = subprocess.run(['docker', 'inspect', container_id], 
+                                          capture_output=True, text=True, check=True)
+            container_data = json.loads(inspect_result.stdout)[0]
+            
+            # Check for project indicators from container metadata
+            labels = container_data.get('Config', {}).get('Labels', {}) or {}
+            mounts = container_data.get('Mounts', [])
+            networks = list(container_data.get('NetworkSettings', {}).get('Networks', {}).keys())
+            working_dir = container_data.get('Config', {}).get('WorkingDir', '')
+            
+            # 4. Check Docker Compose project label
+            if 'com.docker.compose.project' in labels:
+                return f"📁 {labels['com.docker.compose.project']}"
+            
+            # 5. Check for custom project labels
+            for key in labels:
+                if 'project' in key.lower():
+                    return f"📁 {labels[key]}"
+            
+            # 6. Check mount points for project directories
+            for mount in mounts:
+                if mount.get('Type') == 'bind':
+                    source = mount.get('Source', '')
+                    # Look for common project directory patterns
+                    project_paths = [
+                        '/home/remco-stoeten/dev/', 
+                        '/home/remco-stoeten/projects/', 
+                        '/home/remco-stoeten/work/',
+                        '/workspace/', 
+                        '/app/'
+                    ]
+                    for common_path in project_paths:
+                        if source.startswith(common_path):
+                            project_name = source.replace(common_path, '').split('/')[0]
+                            if project_name and project_name not in ['.', '..', 'node_modules']:
+                                return f"📁 {project_name}"
+            
+            # 7. Check network names for project hints
+            for network in networks:
+                if network not in ['bridge', 'host', 'none', 'default']:
+                    # Clean up common network naming patterns
+                    clean_network = network
+                    for suffix in ['_default', '_network', '-network', '-net']:
+                        clean_network = clean_network.replace(suffix, '')
+                    if clean_network and clean_network != network:
+                        return f"🌐 {clean_network}"
+            
+            # 8. Check environment variables for project hints
+            env_vars = container_data.get('Config', {}).get('Env', [])
+            for env_var in env_vars:
+                if env_var.startswith('PROJECT_NAME=') or env_var.startswith('APP_NAME='):
+                    project_name = env_var.split('=', 1)[1]
+                    if project_name:
+                        return f"🌍 {project_name}"
+            
+            # 9. Check working directory
+            if working_dir and not any(path in working_dir for path in ['/app', '/usr', '/var', '/opt']):
                 parts = working_dir.strip('/').split('/')
-                if parts and parts[0]:
+                if parts and parts[0] and parts[0] not in ['tmp', 'home']:
                     return f"💼 {parts[0]}"
             
         except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, IndexError):

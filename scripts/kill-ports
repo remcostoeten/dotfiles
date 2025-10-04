@@ -77,7 +77,7 @@ const DEFAULT_CONFIG = {
     nextjs: Array.from({ length: 11 }, (_, i) => 3000 + i),
     generic: Array.from({ length: 6 }, (_, i) => 5000 + i),
     vite: Array.from({ length: 11 }, (_, i) => 5173 + i),
-    custom: []
+    custom: [4000, 4001]
   }
 };
 
@@ -86,7 +86,8 @@ let globalOptions = {
   verbose: false,
   dryRun: false,
   force: false,
-  json: false
+  json: false,
+  killAll: false
 };
 
 // Spinner characters and states
@@ -197,10 +198,12 @@ function showHelp() {
   const helpContent = `
 ${chalk.bold('USAGE:')}
   ${chalk.cyan('kill-ports [options] [ports...]')}
+  ${chalk.cyan('kill-ports ports <port-list>')}
 
 ${chalk.bold('OPTIONS:')}
   ${chalk.green('-h, --help')}       Show this help message
   ${chalk.green('-v, --version')}    Show version number
+  ${chalk.green('-a, --all')}        Kill all default development ports without prompts
   ${chalk.green('--verbose')}        Enable verbose logging
   ${chalk.green('--dry-run')}        Show what would be killed without actually killing
   ${chalk.green('--force')}          Skip confirmation prompts
@@ -208,9 +211,14 @@ ${chalk.bold('OPTIONS:')}
 
 ${chalk.bold('EXAMPLES:')}
   ${chalk.yellow('kill-ports')}              Scan all default development ports
+  ${chalk.yellow('kill-ports --all')}        Kill all default ports without prompts
+  ${chalk.yellow('kill-ports -a')}           Kill all default ports (short form)
   ${chalk.yellow('kill-ports 3000')}         Kill processes on port 3000
   ${chalk.yellow('kill-ports 3000 8080')}    Kill processes on multiple ports
   ${chalk.yellow('kill-ports 3000-3005')}    Kill processes on port range
+  ${chalk.yellow('kill-ports --3000+')}      Kill processes on ports 3000-3010
+  ${chalk.yellow('kill-ports ports 3000')}   Kill processes on port 3000 (no prompts)
+  ${chalk.yellow('kill-ports ports 3000,4000,5173')} Kill processes on multiple ports
   ${chalk.yellow('kill-ports --dry-run')}    Preview what would be killed
   ${chalk.yellow('kill-ports --force 3000')} Kill without confirmation
 
@@ -218,6 +226,7 @@ ${chalk.bold('DEFAULT PORTS:')}
   ${chalk.magenta('Next.js/React:')} 3000-3010
   ${chalk.magenta('Generic dev:')}   5000-5005
   ${chalk.magenta('Vite:')}          5173-5183
+  ${chalk.magenta('Custom:')}        4000, 4001
 
 ${chalk.bold('INTERACTIVE CONTROLS:')}
   ${chalk.cyan('Enter')}         Confirm selection
@@ -251,17 +260,72 @@ function parseArguments(args) {
   // Parse global options
   globalOptions.verbose = args.includes('--verbose');
   globalOptions.dryRun = args.includes('--dry-run');
-  globalOptions.force = args.includes('--force');
+  globalOptions.force = args.includes('--force') || args.includes('-a') || args.includes('--all');
   globalOptions.json = args.includes('--json');
+  globalOptions.killAll = args.includes('-a') || args.includes('--all');
   
-  // Filter out option flags to get only port arguments
-  const portArgs = args.filter(arg => !arg.startsWith('--') && !arg.startsWith('-'));
+  // If --all or -a is used, return default ports and set force mode
+  if (globalOptions.killAll) {
+    return getDefaultPorts();
+  }
+  
+  // Check for 'ports' command with port specifications
+  const portsIndex = args.indexOf('ports');
+  if (portsIndex !== -1 && portsIndex < args.length - 1) {
+    // Handle 'ports' command - force mode and parse following arguments
+    globalOptions.force = true;
+    const portSpecs = args.slice(portsIndex + 1).filter(arg => !arg.startsWith('-'));
+    const ports = new Set();
+    
+    for (const spec of portSpecs) {
+      if (spec.includes(',')) {
+        // Handle comma-separated ports (e.g., "5173,5174,3001,4515")
+        const portList = spec.split(',').map(p => p.trim());
+        for (const portStr of portList) {
+          const port = parseInt(portStr, 10);
+          if (!isNaN(port) && port > 0 && port <= 65535) {
+            ports.add(port);
+          } else {
+            console.warn(chalk.yellow(`⚠️  Invalid port '${portStr}' in list. Skipping.`));
+          }
+        }
+      } else {
+        // Handle single port (e.g., "3000")
+        const port = parseInt(spec, 10);
+        if (!isNaN(port) && port > 0 && port <= 65535) {
+          ports.add(port);
+        } else {
+          console.warn(chalk.yellow(`⚠️  Invalid port '${spec}'. Skipping.`));
+        }
+      }
+    }
+    
+    return Array.from(ports);
+  }
+  
+  // Filter out option flags to get only port arguments, but keep --<port>+ patterns
+  const portArgs = args.filter(arg => {
+    if (arg.startsWith('--') && arg.endsWith('+')) return true;
+    return !arg.startsWith('--') && !arg.startsWith('-');
+  });
   
   if (portArgs.length === 0) return getDefaultPorts();
   
   const ports = new Set();
   for (const arg of portArgs) {
-    if (arg.includes('-')) {
+    if (arg.startsWith('--') && arg.endsWith('+')) {
+      // Handle --<port>+ syntax (e.g., "--3000+" becomes 3000-3010) - enable force mode
+      globalOptions.force = true;
+      const portStr = arg.slice(2, -1); // Remove -- and +
+      const port = parseInt(portStr, 10);
+      if (!isNaN(port) && port > 0 && port <= 65525) { // Ensure port+10 doesn't exceed 65535
+        for (let i = port; i <= port + 10; i++) {
+          ports.add(i);
+        }
+      } else {
+        console.warn(chalk.yellow(`⚠️  Invalid port range '${arg}'. Skipping.`));
+      }
+    } else if (arg.includes('-')) {
       // Handle port ranges (e.g., "3000-3005")
       const [startStr, endStr] = arg.split('-');
       const start = parseInt(startStr, 10);
@@ -673,7 +737,7 @@ async function main() {
       return;
     }
 
-    // Confirmation for non-force mode
+    // Skip confirmation for force mode (--all, -a, ports command, --force)
     if (!globalOptions.force) {
       const confirmKill = await confirm(`Are you sure you want to kill ${selectedProcesses.length} process(es)?`, false);
       

@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from urllib.parse import urlparse
+import argparse
+
+class Colors:
+    RESET = '\033[0m'
+    BRIGHT = '\033[1m'
+    DIM = '\033[2m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+
+def connect_to_database(connection_url):
+    try:
+        conn = psycopg2.connect(connection_url)
+        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        cursor = conn.cursor()
+        return conn, cursor
+    except Exception as e:
+        print(f"{Colors.RED}✗ Connection failed: {str(e)}{Colors.RESET}")
+        return None, None
+
+def get_table_record_count(cursor, table_name):
+    try:
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name};")
+        return cursor.fetchone()[0]
+    except Exception as e:
+        print(f"{Colors.RED}✗ Failed to get record count: {str(e)}{Colors.RESET}")
+        return None
+
+def get_table_preview(cursor, table_name, limit=25):
+    try:
+        # Get column names
+        cursor.execute(f"SELECT * FROM {table_name} LIMIT 0;")
+        column_names = [desc[0] for desc in cursor.description]
+        
+        # Get data
+        cursor.execute(f"SELECT * FROM {table_name} LIMIT %s;", (limit,))
+        rows = cursor.fetchall()
+        
+        return column_names, rows
+    except Exception as e:
+        print(f"{Colors.RED}✗ Failed to get table preview: {str(e)}{Colors.RESET}")
+        return None, None
+
+def list_all_tables(cursor):
+    try:
+        cursor.execute("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            ORDER BY table_name;
+        """)
+        return [row[0] for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"{Colors.RED}✗ Failed to list tables: {str(e)}{Colors.RESET}")
+        return []
+
+def format_value(value):
+    if value is None:
+        return 'NULL'
+    value_str = str(value)
+    # Handle newlines and long values
+    value_str = value_str.replace('\n', ' ').replace('\r', '')
+    if len(value_str) > 20:
+        return value_str[:17] + '...'
+    return value_str
+
+def print_table_info(cursor, table_name, limit=25):
+    print(f"\n{Colors.BRIGHT}{Colors.CYAN}=== TABLE: {table_name} ==={Colors.RESET}")
+    
+    # Get record count
+    record_count = get_table_record_count(cursor, table_name)
+    if record_count is not None:
+        print(f"{Colors.GREEN}Total Records: {record_count:,}{Colors.RESET}")
+    
+    # Get preview
+    column_names, rows = get_table_preview(cursor, table_name, limit)
+    
+    if column_names and rows:
+        print(f"\n{Colors.YELLOW}First {len(rows)} records:{Colors.RESET}")
+        print('─' * 100)
+        
+        # Print headers
+        header_line = " | ".join([f"{col[:19]:19}" for col in column_names])
+        print(f"{Colors.BRIGHT}{header_line}{Colors.RESET}")
+        print('─' * len(header_line))
+        
+        # Print data
+        for row in rows:
+            formatted_values = [f"{format_value(value):19}" for value in row]
+            print(" | ".join(formatted_values))
+        
+        if record_count and record_count > limit:
+            remaining = record_count - limit
+            print(f"\n{Colors.DIM}... and {remaining:,} more records{Colors.RESET}")
+    elif column_names:
+        print(f"{Colors.YELLOW}Table exists but has no records{Colors.RESET}")
+    
+    print()
+
+def main():
+    parser = argparse.ArgumentParser(description='Quick PostgreSQL table inspector')
+    parser.add_argument('connection_url', help='PostgreSQL connection URL')
+    parser.add_argument('table_name', nargs='?', help='Table name to inspect (optional)')
+    parser.add_argument('-l', '--limit', type=int, default=25, help='Number of records to preview (default: 25)')
+    parser.add_argument('--list-tables', action='store_true', help='List all tables')
+    
+    args = parser.parse_args()
+    
+    # Connect to database
+    conn, cursor = connect_to_database(args.connection_url)
+    if not conn:
+        sys.exit(1)
+    
+    try:
+        if args.list_tables or not args.table_name:
+            tables = list_all_tables(cursor)
+            if tables:
+                print(f"\n{Colors.CYAN}Available tables:{Colors.RESET}")
+                for i, table in enumerate(tables, 1):
+                    print(f"{i:2}. {table}")
+                print()
+                
+                if not args.table_name:
+                    try:
+                        choice = input("Enter table number (or press Enter to exit): ").strip()
+                        if choice.isdigit() and 1 <= int(choice) <= len(tables):
+                            args.table_name = tables[int(choice) - 1]
+                        else:
+                            print("Exiting...")
+                            sys.exit(0)
+                    except KeyboardInterrupt:
+                        print("\nExiting...")
+                        sys.exit(0)
+            else:
+                print(f"{Colors.YELLOW}No tables found{Colors.RESET}")
+                sys.exit(0)
+        
+        if args.table_name:
+            print_table_info(cursor, args.table_name, args.limit)
+    
+    finally:
+        cursor.close()
+        conn.close()
+
+if __name__ == '__main__':
+    main()

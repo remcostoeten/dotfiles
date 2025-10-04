@@ -59,6 +59,31 @@ ORDER BY n_live_tup DESC;"""
 FROM information_schema.tables
 WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
 ORDER BY pg_total_relation_size(table_schema || '.' || table_name) DESC;"""
+    },
+    {
+        'name': 'Quick table record counts',
+        'query': """SELECT 
+    schemaname || '.' || tablename as table_name,
+    n_live_tup as estimated_rows,
+    n_dead_tup as dead_rows,
+    last_vacuum,
+    last_autovacuum
+FROM pg_stat_user_tables 
+ORDER BY n_live_tup DESC;"""
+    },
+    {
+        'name': 'Table info with record counts',
+        'query': """SELECT 
+    t.table_name,
+    t.table_type,
+    s.n_live_tup as records,
+    pg_size_pretty(pg_total_relation_size(t.table_name::regclass)) as total_size,
+    pg_size_pretty(pg_relation_size(t.table_name::regclass)) as table_size,
+    pg_size_pretty(pg_total_relation_size(t.table_name::regclass) - pg_relation_size(t.table_name::regclass)) as index_size
+FROM information_schema.tables t
+LEFT JOIN pg_stat_user_tables s ON s.relname = t.table_name
+WHERE t.table_schema = 'public'
+ORDER BY pg_total_relation_size(t.table_name::regclass) DESC;"""
     }
 ]
 
@@ -170,6 +195,64 @@ class CloudDatabase:
             return True, "Table info retrieved successfully", columns
         except Exception as e:
             return False, f"Failed to get table info: {str(e)}", None
+
+    def get_table_record_count(self, table_name: str) -> Tuple[bool, str, Optional[int]]:
+        query = f"SELECT COUNT(*) FROM {table_name};"
+        try:
+            self._cursor.execute(query)
+            count = self._cursor.fetchone()[0]
+            return True, "Record count retrieved successfully", count
+        except Exception as e:
+            return False, f"Failed to get record count: {str(e)}", None
+
+    def get_table_preview(self, table_name: str, limit: int = 25) -> Tuple[bool, str, Optional[List[Dict]]]:
+        try:
+            # Get column names first
+            self._cursor.execute(f"SELECT * FROM {table_name} LIMIT 0;")
+            column_names = [desc[0] for desc in self._cursor.description]
+            
+            # Get the actual data
+            query = f"SELECT * FROM {table_name} LIMIT %s;"
+            self._cursor.execute(query, (limit,))
+            rows = self._cursor.fetchall()
+            
+            # Convert to list of dictionaries
+            preview_data = [
+                dict(zip(column_names, row)) for row in rows
+            ]
+            
+            return True, f"Retrieved {len(preview_data)} records", preview_data
+        except Exception as e:
+            return False, f"Failed to get table preview: {str(e)}", None
+
+    def get_table_record_count(self, table_name: str) -> Tuple[bool, str, Optional[int]]:
+        query = f"SELECT COUNT(*) FROM {table_name};"
+        try:
+            self._cursor.execute(query)
+            count = self._cursor.fetchone()[0]
+            return True, "Record count retrieved successfully", count
+        except Exception as e:
+            return False, f"Failed to get record count: {str(e)}", None
+
+    def get_table_preview(self, table_name: str, limit: int = 25) -> Tuple[bool, str, Optional[List[Dict]]]:
+        try:
+            # Get column names first
+            self._cursor.execute(f"SELECT * FROM {table_name} LIMIT 0;")
+            column_names = [desc[0] for desc in self._cursor.description]
+            
+            # Get the actual data
+            query = f"SELECT * FROM {table_name} LIMIT %s;"
+            self._cursor.execute(query, (limit,))
+            rows = self._cursor.fetchall()
+            
+            # Convert to list of dictionaries
+            preview_data = [
+                dict(zip(column_names, row)) for row in rows
+            ]
+            
+            return True, f"Retrieved {len(preview_data)} records", preview_data
+        except Exception as e:
+            return False, f"Failed to get table preview: {str(e)}", None
 
     @staticmethod
     def mask_connection_url(url: str) -> str:
@@ -894,11 +977,11 @@ class DatabaseManager:
             options = [
                 MenuItem('📂 List Tables', 'tables'),
                 MenuItem('🔍 View Table Details', 'details'),
+                MenuItem('📊 Table Records & Preview', 'records'),
                 MenuItem('📋 Custom Query', 'query'),
                 MenuItem('🌱 Seed Database', 'seed'),
                 MenuItem('❌ Disconnect', 'disconnect')
             ]
-
             for i, option in enumerate(options):
                 self.print_menu_item(i, option.text, i == self.selected_index)
 
@@ -912,6 +995,8 @@ class DatabaseManager:
                     self.show_cloud_tables()
                 elif selected.value == 'details':
                     self.show_cloud_table_details()
+                elif selected.value == 'records':
+                    self.show_cloud_table_records()
                 elif selected.value == 'query':
                     self.show_cloud_custom_query()
                 elif selected.value == 'seed':
@@ -979,6 +1064,162 @@ class DatabaseManager:
                 print(f"{Colors.CYAN}{col['name']}{Colors.RESET}: {col['type']} {nullable}{default}")
         else:
             print(f"{Colors.RED}✗ {message}{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def show_cloud_table_records(self):
+        if not self.cloud_db or not self.cloud_db.is_connected():
+            return
+
+        success, message, tables = self.cloud_db.list_tables()
+        if not success or not tables:
+            print(f"{Colors.RED}✗ {message}{Colors.RESET}")
+            return
+
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}SELECT TABLE FOR RECORDS VIEW{Colors.RESET}\n")
+
+        print("Available tables:")
+        for i, table in enumerate(tables, 1):
+            print(f"{i}. {table}")
+
+        print()
+        choice = input("Enter table number (or press Enter to cancel): ").strip()
+        if not choice.isdigit() or int(choice) < 1 or int(choice) > len(tables):
+            return
+
+        table_name = tables[int(choice) - 1]
+        
+        # Get record count
+        success_count, message_count, record_count = self.cloud_db.get_table_record_count(table_name)
+        
+        # Get preview data
+        success_preview, message_preview, preview_data = self.cloud_db.get_table_preview(table_name, 25)
+
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}TABLE RECORDS: {table_name}{Colors.RESET}\n")
+
+        # Show record count
+        if success_count:
+            print(f"{Colors.CYAN}Total Records:{Colors.RESET} {record_count:,}")
+        else:
+            print(f"{Colors.RED}✗ Failed to get record count: {message_count}{Colors.RESET}")
+
+        print()
+        
+        # Show preview data
+        if success_preview and preview_data:
+            print(f"{Colors.CYAN}First {len(preview_data)} records:{Colors.RESET}")
+            print('─' * 80)
+            
+            if preview_data:
+                # Get column names from first record
+                column_names = list(preview_data[0].keys())
+                
+                # Print headers
+                header_line = " | ".join([f"{col[:15]:15}" for col in column_names])
+                print(f"{Colors.BRIGHT}{header_line}{Colors.RESET}")
+                print('─' * len(header_line))
+                
+                # Print data rows
+                for row in preview_data:
+                    row_values = []
+                    for col in column_names:
+                        value = str(row[col]) if row[col] is not None else 'NULL'
+                        # Truncate long values and handle newlines
+                        value = value.replace('\n', ' ').replace('\r', '')
+                        if len(value) > 15:
+                            value = value[:12] + '...'
+                        row_values.append(f"{value:15}")
+                    print(" | ".join(row_values))
+                    
+                print()
+                if record_count and record_count > 25:
+                    remaining = record_count - 25
+                    print(f"{Colors.DIM}... and {remaining:,} more records{Colors.RESET}")
+        else:
+            print(f"{Colors.RED}✗ Failed to get preview data: {message_preview}{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def show_cloud_table_records(self):
+        if not self.cloud_db or not self.cloud_db.is_connected():
+            return
+
+        success, message, tables = self.cloud_db.list_tables()
+        if not success or not tables:
+            print(f"{Colors.RED}✗ {message}{Colors.RESET}")
+            return
+
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}SELECT TABLE FOR RECORDS VIEW{Colors.RESET}\n")
+
+        print("Available tables:")
+        for i, table in enumerate(tables, 1):
+            print(f"{i}. {table}")
+
+        print()
+        choice = input("Enter table number (or press Enter to cancel): ").strip()
+        if not choice.isdigit() or int(choice) < 1 or int(choice) > len(tables):
+            return
+
+        table_name = tables[int(choice) - 1]
+        
+        # Get record count
+        success_count, message_count, record_count = self.cloud_db.get_table_record_count(table_name)
+        
+        # Get preview data
+        success_preview, message_preview, preview_data = self.cloud_db.get_table_preview(table_name, 25)
+
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}TABLE RECORDS: {table_name}{Colors.RESET}\n")
+
+        # Show record count
+        if success_count:
+            print(f"{Colors.CYAN}Total Records:{Colors.RESET} {record_count:,}")
+        else:
+            print(f"{Colors.RED}✗ Failed to get record count: {message_count}{Colors.RESET}")
+
+        print()
+        
+        # Show preview data
+        if success_preview and preview_data:
+            print(f"{Colors.CYAN}First {len(preview_data)} records:{Colors.RESET}")
+            print('─' * 80)
+            
+            if preview_data:
+                # Get column names from first record
+                column_names = list(preview_data[0].keys())
+                
+                # Print headers
+                header_line = " | ".join([f"{col[:15]:15}" for col in column_names])
+                print(f"{Colors.BRIGHT}{header_line}{Colors.RESET}")
+                print('─' * len(header_line))
+                
+                # Print data rows
+                for row in preview_data:
+                    row_values = []
+                    for col in column_names:
+                        value = str(row[col]) if row[col] is not None else 'NULL'
+                        # Truncate long values and handle newlines
+                        value = value.replace('\n', ' ').replace('\r', '')
+                        if len(value) > 15:
+                            value = value[:12] + '...'
+                        row_values.append(f"{value:15}")
+                    print(" | ".join(row_values))
+                    
+                print()
+                if record_count and record_count > 25:
+                    remaining = record_count - 25
+                    print(f"{Colors.DIM}... and {remaining:,} more records{Colors.RESET}")
+        else:
+            print(f"{Colors.RED}✗ Failed to get preview data: {message_preview}{Colors.RESET}")
 
         print('\n' + '─' * 70)
         input("Press Enter to continue...")

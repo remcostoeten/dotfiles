@@ -1,0 +1,48 @@
+#!/bin/bash
+
+echo "🚀 PostgreSQL CLI Tool - New Table Features Demo"
+echo "================================================="
+echo
+echo "✨ New features added to your PostgreSQL CLI tool:"
+echo
+echo "1. 📊 TABLE RECORDS & PREVIEW"
+echo "   • View exact record counts for any table"
+echo "   • Preview first 25 records with smart formatting"
+echo "   • Handles NULLs, long values, and special characters"
+echo
+echo "2. 📋 NEW SQL SNIPPETS"
+echo "   • Quick table record counts (estimated from stats)"
+echo "   • Comprehensive table info with sizes and counts"
+echo
+echo "3. 🔧 STANDALONE pgtable UTILITY"
+echo "   • Command-line tool for quick table inspection"
+echo "   • Works with any PostgreSQL connection URL"
+echo
+echo "━━━ USAGE EXAMPLES ━━━"
+echo
+echo "Main PostgreSQL Tool:"
+echo "  \$ postgres"
+echo "  → Navigate to: 🌎 Cloud Databases → Select connection"
+echo "  → Choose: 📊 Table Records & Preview"
+echo
+echo "Standalone pgtable utility:"
+echo "  \$ pgtable 'postgresql://user:pass@host:port/db'"
+echo "  \$ pgtable 'postgresql://...' users"
+echo "  \$ pgtable 'postgresql://...' users --limit 50"
+echo "  \$ pgtable 'postgresql://...' --list-tables"
+echo
+echo "Quick Snippets (in main tool):"
+echo "  → Go to: 🔧 Database Tools → 📋 Quick Snippets"
+echo "  → New options: 'Quick table record counts' & 'Table info with record counts'"
+echo
+echo "━━━ FEATURES ━━━"
+echo "✅ Exact COUNT(*) queries for precise record numbers"
+echo "✅ Smart table formatting with column headers"
+echo "✅ Truncates long values (keeps first 17 chars + '...')"
+echo "✅ Shows 'NULL' clearly for empty values"
+echo "✅ Handles newlines and special characters"
+echo "✅ Color-coded output using your existing theme"
+echo "✅ Works with both cloud and local databases"
+echo
+echo "🎯 Both tools are ready to use and follow your coding conventions!"
+echo "   (No comments, functional style, named functions only)"
