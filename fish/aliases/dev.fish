@@ -40,3 +40,12 @@ end
 function vim
     nvim $argv
 end
+
+# DOCSTRING: Deploy to Vercel
+alias deploy "vercel deploy"
+
+# DOCSTRING: Deploy to Vercel production
+alias prod "vercel deploy --prod"
+
+# DOCSTRING: Deploy to Vercel production (alternative)
+alias deployprod "vercel deploy --prod"

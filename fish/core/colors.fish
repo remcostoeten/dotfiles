@@ -27,49 +27,49 @@ set -g fish_color_dim (set_color --dim)
 set -g fish_color_italic (set_color --italics)
 set -g fish_color_underline (set_color --underline)
 
-# Color shorthand functions
-function r -d "Print text in red"
+# Color shorthand functions - using 'color_' prefix to avoid conflicts
+function color_red -d "Print text in red"
     echo -e "$fish_color_red$argv$fish_color_reset"
 end
 
-function g -d "Print text in green"
+function color_green -d "Print text in green"
     echo -e "$fish_color_green$argv$fish_color_reset"
 end
 
-function y -d "Print text in yellow"
+function color_yellow -d "Print text in yellow"
     echo -e "$fish_color_yellow$argv$fish_color_reset"
 end
 
-function bl -d "Print text in blue"
+function color_blue -d "Print text in blue"
     echo -e "$fish_color_blue$argv$fish_color_reset"
 end
 
-function p -d "Print text in magenta"
+function color_magenta -d "Print text in magenta"
     echo -e "$fish_color_magenta$argv$fish_color_reset"
 end
 
-function c -d "Print text in cyan"
+function color_cyan -d "Print text in cyan"
     echo -e "$fish_color_cyan$argv$fish_color_reset"
 end
 
-function w -d "Print text in white"
+function color_white -d "Print text in white"
     echo -e "$fish_color_white$argv$fish_color_reset"
 end
 
-# Text formatting functions
-function b -d "Print text in bold"
+# Text formatting functions - using 'text_' prefix to avoid conflicts
+function text_bold -d "Print text in bold"
     echo -e "$fish_color_bold$argv$fish_color_reset"
 end
 
-function d -d "Print text in dim"
+function text_dim -d "Print text in dim"
     echo -e "$fish_color_dim$argv$fish_color_reset"
 end
 
-function i -d "Print text in italic"
+function text_italic -d "Print text in italic"
     echo -e "$fish_color_italic$argv$fish_color_reset"
 end
 
-function u -d "Print text in underline"
+function text_underline -d "Print text in underline"
     echo -e "$fish_color_underline$argv$fish_color_reset"
 end
 

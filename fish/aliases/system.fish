@@ -86,7 +86,7 @@ function _show_dotfiles_help
     echo "Related commands:"
     echo "  help --all    # Show all available aliases and functions"
     echo "  reload        # Reload fish configuration"
-    echo "  alias --help  # Show alias-specific help"
+    echo "  aliases --help # Show alias management help"
 end
 
 # DOCSTRING: Show disk usage in human-readable format
