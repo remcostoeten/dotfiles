@@ -49,3 +49,12 @@ alias prod "vercel deploy --prod"
 
 # DOCSTRING: Deploy to Vercel production (alternative)
 alias deployprod "vercel deploy --prod"
+
+# DOCSTRING: Run advanced unused code analyzer
+alias unused "unused-analyzer"
+
+# DOCSTRING: Run unused import analyzer in current directory
+alias cleanimports "unused-analyzer --type typescript --path ."
+
+# DOCSTRING: Dry run unused import analysis
+alias checkimports "unused-analyzer --type typescript --path . --dry-run"

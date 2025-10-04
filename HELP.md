@@ -108,6 +108,9 @@ reload --help           # Show reload help
 | `r`        | `bun run dev`     | Run development server with Bun         |
 | `i`        | `bun install`     | Install dependencies with Bun           |
 | `b`        | `bun run build`   | Build the app with Bun                   |
+| `unused`   | `unused-analyzer` | Advanced unused code analyzer             |
+| `cleanimports` | `unused-analyzer --type typescript --path .` | Clean unused imports in current dir |
+| `checkimports` | `unused-analyzer --type typescript --path . --dry-run` | Check unused imports (dry run) |
 
 ### 📝 Git Aliases (`git.fish`)
 
@@ -121,7 +124,96 @@ reload --help           # Show reload help
 
 *(Add your drizzle aliases here as you create them)*
 
+### 🧹 Code Cleanup (`unused-analyzer`)
+
+| Alias         | Command                                     | Description                              |
+|---------------|---------------------------------------------|------------------------------------------|
+| `unused`      | `unused-analyzer`                           | Launch interactive unused code analyzer  |
+| `cleanimports`| `unused-analyzer --type typescript --path .` | Clean unused imports in TypeScript files |
+| `checkimports`| `unused-analyzer --type typescript --path . --dry-run` | Dry run check for unused imports |
+
 ## Advanced Usage
+
+## Unused Code Analyzer
+
+The `unused-analyzer` is a powerful tool for cleaning up your codebase by finding and removing:
+
+- **Unused imports**: Detects imports that are declared but never used
+- **Unused exports**: Finds exports that are never imported anywhere
+- **Unused files**: Identifies files that are never imported or referenced
+
+### Quick Start
+
+```bash
+# Interactive mode with menu
+unused
+
+# Clean unused imports in current directory
+cleanimports
+
+# Check for unused imports (dry run)
+checkimports
+
+# Advanced options
+unused-analyzer --type javascript --path ./src --dry-run
+```
+
+### Features
+
+- **Interactive Menu**: Choose what to analyze and how to handle results
+- **Multiple File Types**: Supports TypeScript, JavaScript, and Python
+- **Dry Run Mode**: Preview changes before making them
+- **Backup System**: Automatic backups before making changes
+- **Edge Case Detection**: Handles complex import patterns and edge cases
+- **Individual Review**: Option to review each file individually
+- **JSON Output**: Generate reports in JSON format for automation
+
+### Safety Features
+
+- **Backup Creation**: All modifications are backed up automatically
+- **Dry Run Mode**: See what would be changed without making changes
+- **Confirmation Prompts**: Always asks before making destructive changes
+- **Revert Capability**: Can undo changes using backup system
+- **Pattern Exclusion**: Skip files/directories using regex patterns
+
+### Command Line Options
+
+```bash
+unused-analyzer [options]
+
+--path DIR              Base directory to scan (default: current)
+--type TYPE             File type: typescript, javascript, python, all
+--exclude-file NAME     Exclude specific files (can repeat)
+--exclude-dir DIR       Exclude directories (can repeat) 
+--exclude-pattern REGEX Exclude using regex patterns (can repeat)
+--dry-run              Report only, no changes
+--non-interactive      Disable interactive mode
+--json                 Output JSON report
+--report FILE          Save report to JSON file
+--version              Show version
+--help                 Show help
+```
+
+### Examples
+
+```bash
+# Interactive analysis of TypeScript files
+unused --type typescript
+
+# Dry run on specific directory
+unused-analyzer --path ./src --type javascript --dry-run
+
+# Exclude test files and node_modules
+unused-analyzer --exclude-dir tests --exclude-pattern ".*\.test\.*"
+
+# Generate JSON report
+unused-analyzer --json > unused-report.json
+
+# Clean only imports, skip files in components dir
+unused-analyzer --exclude-dir components --type typescript
+```
+
+---
 
 ### Creating New Aliases
 

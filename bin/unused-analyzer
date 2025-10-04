@@ -1,0 +1,24 @@
+#!/usr/bin/env fish
+
+# DOCSTRING: Advanced unused code analyzer with interactive cleanup
+function unused-analyzer --description "Launch the advanced unused code analyzer"
+    # Get the script directory relative to this file
+    set script_dir (dirname (dirname (realpath (status --current-filename))))
+    set python_script "$script_dir/scripts/unused-analyzer.py"
+    
+    if not test -f $python_script
+        echo "❌ Unused analyzer script not found at: $python_script"
+        return 1
+    end
+    
+    # Run the Python script with all arguments
+    python3 $python_script $argv
+end
+
+# If called directly (not sourced), run the function
+if status --is-interactive
+    unused-analyzer $argv
+else
+    # Called directly from command line
+    unused-analyzer $argv
+end
