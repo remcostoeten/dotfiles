@@ -1,0 +1,16 @@
+{
+  "name": ".cli",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "ink": "^6.3.1",
+    "ink-select-input": "^6.2.0"
+  }
+}

@@ -1,0 +1,1490 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import subprocess
+import json
+from pathlib import Path
+import curses
+from typing import List, Dict, Optional, Tuple
+import platform
+import subprocess
+import psycopg2
+import datetime
+from db_analyzer import DatabaseAnalyzer
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from urllib.parse import urlparse
+import keyring
+from cryptography.fernet import Fernet
+import base64
+
+# SQL snippets for quick access
+SNIPPETS = [
+    {
+        'name': 'Drop all tables',
+        'query': """DO $$ 
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+    END LOOP;
+END $$;"""
+    },
+    {
+        'name': 'Show all tables',
+        'query': "SELECT * FROM pg_catalog.pg_tables WHERE schemaname != 'pg_catalog' AND schemaname != 'information_schema';"
+    },
+    {
+        'name': 'Show database size',
+        'query': 'SELECT pg_size_pretty(pg_database_size(current_database()));'
+    },
+    {
+        'name': 'List sequences and values',
+        'query': "SELECT sequence_name, last_value, start_value, increment_by FROM information_schema.sequences;"
+    },
+    {
+        'name': 'List table row counts',
+        'query': """SELECT 
+    schemaname || '.' || tablename as table, 
+    n_live_tup as row_count 
+FROM pg_stat_user_tables 
+ORDER BY n_live_tup DESC;"""
+    },
+    {
+        'name': 'List table sizes',
+        'query': """SELECT 
+    table_schema || '.' || table_name as table,
+    pg_size_pretty(pg_total_relation_size(table_schema || '.' || table_name)) as size
+FROM information_schema.tables
+WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+ORDER BY pg_total_relation_size(table_schema || '.' || table_name) DESC;"""
+    }
+]
+
+class Colors:
+    RESET = '\033[0m'
+    BRIGHT = '\033[1m'
+    DIM = '\033[2m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    BG_RED = '\033[41m'
+    BG_GREEN = '\033[42m'
+    BG_YELLOW = '\033[43m'
+    BG_BLUE = '\033[44m'
+    BG_MAGENTA = '\033[45m'
+    BG_CYAN = '\033[46m'
+
+class MenuItem:
+    def __init__(self, text: str, value: str, indicator: str = ''):
+        self.text = text
+        self.value = value
+        self.indicator = indicator
+
+class CloudDatabase:
+    def __init__(self, name: str, url: str):
+        self.name = name
+        self.url = url
+        self.masked_url = self.mask_connection_url(url)
+        self._conn = None
+        self._cursor = None
+        parsed = urlparse(url)
+        self.host = parsed.hostname
+        self.port = parsed.port or 5432
+        self.database = parsed.path[1:] if parsed.path else ''
+
+    def connect(self) -> Tuple[bool, str]:
+        try:
+            self._conn = psycopg2.connect(self.url)
+            self._conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            self._cursor = self._conn.cursor()
+            return True, "Connected successfully"
+        except Exception as e:
+            return False, f"Connection failed: {str(e)}"
+
+    def disconnect(self):
+        if self._cursor:
+            self._cursor.close()
+        if self._conn:
+            self._conn.close()
+        self._cursor = None
+        self._conn = None
+
+    def is_connected(self) -> bool:
+        return self._conn is not None and not self._conn.closed
+
+    def execute_query(self, query: str) -> Tuple[bool, str, Optional[List[tuple]]]:
+        if not self.is_connected():
+            return False, "Not connected to database", None
+
+        try:
+            self._cursor.execute(query)
+            if self._cursor.description:  # If query returns data
+                rows = self._cursor.fetchall()
+                return True, "Query executed successfully", rows
+            return True, "Query executed successfully", None
+        except Exception as e:
+            return False, f"Query failed: {str(e)}", None
+
+    def list_tables(self) -> Tuple[bool, str, Optional[List[str]]]:
+        query = """
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        ORDER BY table_name;
+        """
+        success, message, rows = self.execute_query(query)
+        if success and rows is not None:
+            return True, message, [row[0] for row in rows]
+        return False, message, None
+
+    def get_table_info(self, table_name: str) -> Tuple[bool, str, Optional[List[Dict]]]:
+        query = """
+        SELECT 
+            column_name, 
+            data_type,
+            is_nullable,
+            column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+        AND table_name = %s
+        ORDER BY ordinal_position;
+        """
+        try:
+            self._cursor.execute(query, (table_name,))
+            rows = self._cursor.fetchall()
+            columns = [
+                {
+                    'name': row[0],
+                    'type': row[1],
+                    'nullable': row[2],
+                    'default': row[3]
+                }
+                for row in rows
+            ]
+            return True, "Table info retrieved successfully", columns
+        except Exception as e:
+            return False, f"Failed to get table info: {str(e)}", None
+
+    @staticmethod
+    def mask_connection_url(url: str) -> str:
+        parsed = urlparse(url)
+        masked = parsed._replace(
+            netloc=f"{parsed.username}:****@{parsed.hostname}:{parsed.port or 5432}"
+        ).geturl()
+        return masked
+
+class DatabaseInstance:
+    def __init__(self, name: str, db_type: str, status: str, ports: str = '', image: str = '', container_id: str = ''):
+        self.name = name
+        self.type = db_type
+        self.status = status
+        self.ports = ports
+        self.image = image
+        self.container_id = container_id
+
+class SeedFile:
+    def __init__(self, name: str, path: str, size: int):
+        self.name = name
+        self.path = path
+        self.size = size
+
+class CredentialManager:
+    STORAGE_DIR = os.path.expanduser('~/.config/dotfiles/postgres')
+    CONNECTIONS_FILE = 'connections.json'
+    KEY_FILE = 'key.secret'
+    
+    def __init__(self):
+        self._ensure_storage_exists()
+        self.key = self._get_or_create_key()
+        self.fernet = Fernet(self.key)
+    
+    def _ensure_storage_exists(self):
+        os.makedirs(self.STORAGE_DIR, mode=0o700, exist_ok=True)
+        
+        storage_path = os.path.join(self.STORAGE_DIR, self.CONNECTIONS_FILE)
+        if not os.path.exists(storage_path):
+            with open(storage_path, 'w') as f:
+                json.dump({'connections': {}}, f)
+    
+    def _get_or_create_key(self) -> bytes:
+        key_path = os.path.join(self.STORAGE_DIR, self.KEY_FILE)
+        try:
+            if os.path.exists(key_path):
+                with open(key_path, 'rb') as f:
+                    return f.read()
+            else:
+                key = Fernet.generate_key()
+                with open(key_path, 'wb') as f:
+                    f.write(key)
+                os.chmod(key_path, 0o600)
+                return key
+        except Exception as e:
+            print(f"Error managing encryption key: {e}")
+            raise
+    
+    def _read_storage(self) -> Dict:
+        try:
+            storage_path = os.path.join(self.STORAGE_DIR, self.CONNECTIONS_FILE)
+            with open(storage_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error reading storage: {e}")
+            return {'connections': {}}
+    
+    def _write_storage(self, data: Dict) -> bool:
+        try:
+            storage_path = os.path.join(self.STORAGE_DIR, self.CONNECTIONS_FILE)
+            with open(storage_path, 'w') as f:
+                json.dump(data, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"Error writing storage: {e}")
+            return False
+    
+    def save_connection(self, name: str, url: str) -> bool:
+        try:
+            storage = self._read_storage()
+            encrypted = self.fernet.encrypt(url.encode()).decode()
+            
+            storage['connections'][name] = {
+                'encrypted_url': encrypted,
+                'created_at': datetime.datetime.now().isoformat()
+            }
+            
+            return self._write_storage(storage)
+        except Exception as e:
+            print(f"Error saving connection: {e}")
+            return False
+    
+    def get_connection(self, name: str) -> Optional[str]:
+        try:
+            storage = self._read_storage()
+            connection = storage['connections'].get(name)
+            
+            if connection and 'encrypted_url' in connection:
+                return self.fernet.decrypt(
+                    connection['encrypted_url'].encode()
+                ).decode()
+            return None
+        except Exception as e:
+            print(f"Error getting connection: {e}")
+            return None
+    
+    def list_connections(self) -> List[str]:
+        try:
+            storage = self._read_storage()
+            return list(storage['connections'].keys())
+        except Exception as e:
+            print(f"Error listing connections: {e}")
+            return []
+    
+    def delete_connection(self, name: str) -> bool:
+        try:
+            storage = self._read_storage()
+            if name in storage['connections']:
+                del storage['connections'][name]
+                return self._write_storage(storage)
+            return False
+        except Exception as e:
+            print(f"Error deleting connection: {e}")
+            return False
+
+class DatabaseManager:
+    def __init__(self):
+        self.selected_index = 0
+        self.current_view = 'main'
+        self.prev_view = ''
+        self.is_running = True
+        self.credential_manager = CredentialManager()
+        self.cloud_db = None  # Current cloud database connection
+
+    def start(self):
+        self.check_dependencies()
+        self.show_main_menu()
+        self.cleanup()
+
+    def check_dependencies(self):
+        try:
+            subprocess.run(['docker', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.YELLOW}⚠ Warning: Docker is not installed or not running{Colors.RESET}")
+            print("Some features may not be available.\n")
+            input("Press Enter to continue...")
+
+    def clear_screen(self):
+        os.system('clear' if os.name != 'nt' else 'cls')
+
+    def print_header(self):
+        print(f"{Colors.CYAN}{Colors.BRIGHT}")
+        print('╔════════════════════════════════════════════════════════════════════╗')
+        print('║                                                                    ║')
+        print('║     ██████╗  ██████╗ ███████╗████████╗ ██████╗ ██████╗ ███████╗  ║')
+        print('║     ██╔══██╗██╔════╝ ██╔════╝╚══██╔══╝██╔════╝ ██╔══██╗██╔════╝  ║')
+        print('║     ██████╔╝██║  ███╗███████╗   ██║   ██║  ███╗██████╔╝█████╗    ║')
+        print('║     ██╔═══╝ ██║   ██║╚════██║   ██║   ██║   ██║██╔══██╗██╔══╝    ║')
+        print('║     ██║     ╚██████╔╝███████║   ██║   ╚██████╔╝██║  ██║███████╗  ║')
+        print('║     ╚═╝      ╚═════╝ ╚══════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝  ║')
+        print('║                                                                    ║')
+        print('║              PostgreSQL Database Manager CLI v1.0                 ║')
+        print('║                                                                    ║')
+        print('╚════════════════════════════════════════════════════════════════════╝')
+        print(f"{Colors.RESET}\n")
+
+    def print_menu_item(self, index: int, text: str, is_selected: bool):
+        if is_selected:
+            print(f"{Colors.BG_CYAN}{Colors.BRIGHT} ▶ {text} {Colors.RESET}")
+        else:
+            print(f"   {text}")
+
+    def print_footer(self, custom_help: str = ''):
+        print('\n' + '─' * 70)
+        if custom_help:
+            print(f"{Colors.DIM}{custom_help}{Colors.RESET}")
+        else:
+            print(f"{Colors.DIM}↑↓: Navigate | Enter: Select | q: Quit | b: Back{Colors.RESET}")
+
+    def show_main_menu(self):
+        self.current_view = 'main'
+        self.selected_index = 0
+        options = [
+            MenuItem('📈 View Databases', 'view'),
+            MenuItem('➕ Create Database', 'create'),
+            MenuItem('🌎 Cloud Databases', 'cloud'),
+            MenuItem('🌍 Environment & Connections', 'env'),
+            MenuItem('🔧  Database Tools', 'tools'),
+            MenuItem('❌ Exit', 'exit')
+        ]
+
+        while self.is_running:
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}MAIN MENU{Colors.RESET}\n")
+
+            for i, option in enumerate(options):
+                self.print_menu_item(i, option.text, i == self.selected_index)
+
+            self.print_footer()
+
+            action = self.handle_navigation(len(options))
+
+            if action == 'select':
+                selected = options[self.selected_index]
+                if selected.value == 'view':
+                    self.show_databases_view()
+                elif selected.value == 'create':
+                    self.show_create_database_menu()
+                elif selected.value == 'cloud':
+                    self.show_cloud_connection_menu()
+                elif selected.value == 'env':
+                    self.show_environment_menu()
+                elif selected.value == 'tools':
+                    self.show_tools_menu()
+                elif selected.value == 'exit':
+                    self.is_running = False
+            elif action == 'quit':
+                self.is_running = False
+
+    def show_databases_view(self):
+        self.prev_view = self.current_view
+        self.current_view = 'databases'
+        self.selected_index = 0
+
+        while self.current_view == 'databases':
+            databases = self.get_running_postgres()
+            
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}DATABASES{Colors.RESET}")
+            print(f"{Colors.DIM}Main Menu > View Databases{Colors.RESET}\n")
+
+            if len(databases) == 0:
+                print(f"{Colors.YELLOW}No running PostgreSQL databases found.{Colors.RESET}\n")
+                input("Press Enter to return...")
+                self.current_view = self.prev_view
+                return
+
+            options = []
+            for i, db in enumerate(databases):
+                icon = '🐳' if db.type == 'docker' else '💻'
+                port_info = f" - Port: {db.ports}" if db.ports else ''
+                options.append(MenuItem(f"{icon} {db.name} ({db.status}){port_info}", str(i)))
+            options.append(MenuItem('⬅️  Back to Main Menu', 'back'))
+
+            for i, option in enumerate(options):
+                self.print_menu_item(i, option.text, i == self.selected_index)
+
+            self.print_footer('↑↓: Navigate | Enter: Details | d: Delete | c: Copy URL | b: Back')
+
+            action = self.handle_navigation(len(options), extra_keys=['d', 'c'])
+
+            if action == 'select':
+                if options[self.selected_index].value == 'back':
+                    self.current_view = self.prev_view
+                else:
+                    db_index = int(options[self.selected_index].value)
+                    self.show_database_details(databases[db_index])
+            elif action == 'd':
+                if self.selected_index < len(databases):
+                    self.delete_database(databases[self.selected_index])
+            elif action == 'c':
+                if self.selected_index < len(databases):
+                    self.copy_connection_url(databases[self.selected_index])
+            elif action == 'back' or action == 'quit':
+                self.current_view = self.prev_view
+
+    def show_database_details(self, db: DatabaseInstance):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}DATABASE DETAILS{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > View Databases > {db.name}{Colors.RESET}\n")
+
+        print(f"{Colors.CYAN}Name:{Colors.RESET} {db.name}")
+        print(f"{Colors.CYAN}Type:{Colors.RESET} {db.type}")
+        
+        status_color = Colors.GREEN if db.status == 'running' else Colors.RED
+        print(f"{Colors.CYAN}Status:{Colors.RESET} {status_color}{db.status}{Colors.RESET}")
+        
+        if db.ports:
+            print(f"{Colors.CYAN}Ports:{Colors.RESET} {db.ports}")
+            port = db.ports.split('->')[0].split(':')[1] if ':' in db.ports else '5432'
+            connection_url = f"postgresql://postgres:password@localhost:{port}/{db.name}"
+            print(f"{Colors.CYAN}Connection URL:{Colors.RESET} {self.mask_database_url(connection_url)}")
+        
+        if db.image:
+            print(f"{Colors.CYAN}Image:{Colors.RESET} {db.image}")
+
+        print('\n' + '─' * 70)
+        print(f"{Colors.DIM}Press any key to return...{Colors.RESET}")
+        input()
+
+    def show_create_database_menu(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}CREATE DATABASE{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Create Database{Colors.RESET}\n")
+
+        name = input("Database name: ").strip()
+        if not name:
+            return
+
+        port_input = input("Port (default 5432): ").strip()
+        port = int(port_input) if port_input else 5432
+
+        password = input("Password (default 'password'): ").strip()
+        db_password = password if password else 'password'
+
+        print(f"\n{Colors.YELLOW}Creating database...{Colors.RESET}")
+
+        try:
+            self.create_docker_postgres(name, db_password, port)
+            print(f"{Colors.GREEN}✓ Database created successfully!{Colors.RESET}")
+            print(f"{Colors.CYAN}Connection URL:{Colors.RESET} postgresql://postgres:{db_password}@localhost:{port}/{name}")
+        except Exception as e:
+            print(f"{Colors.RED}✗ Failed to create database: {e}{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        print(f"{Colors.DIM}Press Enter to return...{Colors.RESET}")
+        input()
+
+    def show_environment_menu(self):
+        self.prev_view = self.current_view
+        self.current_view = 'environment'
+        self.selected_index = 0
+
+        while self.current_view == 'environment':
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}ENVIRONMENT & CONNECTIONS{Colors.RESET}")
+            print(f"{Colors.DIM}Main Menu > Environment & Connections{Colors.RESET}\n")
+
+            options = [
+                MenuItem('📋 View Current Environment', 'current'),
+                MenuItem('📄 View .env Files', 'dotenv'),
+                MenuItem('🔧 View Database Configuration', 'config'),
+                MenuItem('💾 Check SQLite Files', 'sqlite'),
+                MenuItem('⬅️  Back to Main Menu', 'back')
+            ]
+
+            for i, option in enumerate(options):
+                self.print_menu_item(i, option.text, i == self.selected_index)
+
+            self.print_footer()
+
+            action = self.handle_navigation(len(options))
+
+            if action == 'select':
+                selected = options[self.selected_index]
+                if selected.value == 'current':
+                    self.show_current_environment()
+                elif selected.value == 'dotenv':
+                    self.show_dotenv_files()
+                elif selected.value == 'config':
+                    self.show_database_config()
+                elif selected.value == 'sqlite':
+                    self.show_sqlite_files()
+                elif selected.value == 'back':
+                    self.current_view = self.prev_view
+            elif action == 'back' or action == 'quit':
+                self.current_view = self.prev_view
+
+    def show_tools_menu(self):
+        self.prev_view = self.current_view
+        self.current_view = 'tools'
+        self.selected_index = 0
+
+        while self.current_view == 'tools':
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}DATABASE TOOLS{Colors.RESET}")
+            print(f"{Colors.DIM}Main Menu > Database Tools{Colors.RESET}\n")
+
+            options = [
+                MenuItem('🌱 Seed Database', 'seed'),
+                MenuItem('💾 Backup Database', 'backup'),
+                MenuItem('📥 Restore Database', 'restore'),
+            MenuItem('📊 Database Statistics', 'stats'),
+            MenuItem('📋 Quick Snippets', 'snippets'),
+            MenuItem('🤖 AI Database Analysis', 'ai_analysis'),
+            MenuItem('⬅️  Back to Main Menu', 'back')
+            ]
+
+            for i, option in enumerate(options):
+                self.print_menu_item(i, option.text, i == self.selected_index)
+
+            self.print_footer()
+
+            action = self.handle_navigation(len(options))
+
+            if action == 'select':
+                selected = options[self.selected_index]
+                if selected.value == 'seed':
+                    self.show_seed_menu()
+                elif selected.value == 'backup':
+                    self.show_backup_menu()
+                elif selected.value == 'restore':
+                    self.show_restore_menu()
+                elif selected.value == 'stats':
+                    self.show_database_stats()
+                elif selected.value == 'snippets':
+                    self.show_quick_snippets()
+                elif selected.value == 'ai_analysis':
+                    self.show_ai_analysis()
+                elif selected.value == 'back':
+                    self.current_view = self.prev_view
+            elif action == 'back' or action == 'quit':
+                self.current_view = self.prev_view
+
+    def show_current_environment(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}CURRENT ENVIRONMENT{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Environment & Connections > Current Environment{Colors.RESET}\n")
+
+        print(f"{Colors.CYAN}Working Directory:{Colors.RESET} {os.getcwd()}")
+        print(f"{Colors.CYAN}NODE_ENV:{Colors.RESET} {os.getenv('NODE_ENV', 'not set')}")
+        
+        db_url = os.getenv('DATABASE_URL')
+        if db_url:
+            print(f"{Colors.CYAN}DATABASE_URL:{Colors.RESET} {self.mask_database_url(db_url)}")
+        else:
+            print(f"{Colors.CYAN}DATABASE_URL:{Colors.RESET} not set")
+        
+        auth_token = os.getenv('DATABASE_AUTH_TOKEN')
+        if auth_token:
+            print(f"{Colors.CYAN}DATABASE_AUTH_TOKEN:{Colors.RESET} {self.mask_auth_token(auth_token)}")
+        else:
+            print(f"{Colors.CYAN}DATABASE_AUTH_TOKEN:{Colors.RESET} not set")
+
+        print('\n' + '─' * 70)
+        print(f"{Colors.DIM}Press Enter to return...{Colors.RESET}")
+        input()
+
+    def show_dotenv_files(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}.ENV FILES{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Environment & Connections > .env Files{Colors.RESET}\n")
+
+        env_files = self.find_env_files()
+
+        if len(env_files) == 0:
+            print(f"{Colors.YELLOW}No .env files found in current directory.{Colors.RESET}")
+        else:
+            for file in env_files:
+                print(f"{Colors.GREEN}📄 {file}{Colors.RESET}")
+                try:
+                    with open(file, 'r') as f:
+                        lines = [line.strip() for line in f.readlines() if line.strip() and not line.startswith('#')]
+                        for line in lines:
+                            if '=' in line:
+                                key, value = line.split('=', 1)
+                                if any(s in key for s in ['PASSWORD', 'TOKEN', 'SECRET']):
+                                    display_value = self.mask_auth_token(value.strip())
+                                else:
+                                    display_value = value.strip()
+                                print(f"  {Colors.DIM}{key.strip()}={display_value}{Colors.RESET}")
+                except Exception:
+                    print(f"  {Colors.RED}Error reading file{Colors.RESET}")
+                print()
+
+        print('─' * 70)
+        print(f"{Colors.DIM}Press Enter to return...{Colors.RESET}")
+        input()
+
+    def show_database_config(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}DATABASE CONFIGURATION{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Environment & Connections > Database Configuration{Colors.RESET}\n")
+
+        config_files = ['drizzle.config.ts', 'prisma/schema.prisma', 'knexfile.js']
+        found_config = False
+
+        for config_file in config_files:
+            if os.path.exists(config_file):
+                found_config = True
+                print(f"{Colors.GREEN}Found: {config_file}{Colors.RESET}\n")
+
+        if not found_config:
+            print(f"{Colors.YELLOW}No common database configuration files found.{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        print(f"{Colors.DIM}Press Enter to return...{Colors.RESET}")
+        input()
+
+    def show_sqlite_files(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}SQLITE FILES{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Environment & Connections > SQLite Files{Colors.RESET}\n")
+
+        sqlite_files = self.find_sqlite_files()
+
+        if len(sqlite_files) == 0:
+            print(f"{Colors.YELLOW}No SQLite database files found.{Colors.RESET}")
+        else:
+            for file in sqlite_files:
+                size = os.path.getsize(file)
+                print(f"{Colors.GREEN}💾 {file}{Colors.RESET}")
+                print(f"  {Colors.DIM}Size: {self.format_file_size(size)}{Colors.RESET}")
+                print()
+
+        print('─' * 70)
+        print(f"{Colors.DIM}Press Enter to return...{Colors.RESET}")
+        input()
+
+    def show_seed_menu(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}SEED DATABASE{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Database Tools > Seed Database{Colors.RESET}\n")
+
+        databases = self.get_running_postgres()
+        if len(databases) == 0:
+            print(f"{Colors.YELLOW}No running databases found.{Colors.RESET}")
+            input("Press Enter to return...")
+            return
+
+        seed_files = self.find_seed_files()
+        if len(seed_files) == 0:
+            print(f"{Colors.YELLOW}No seed files found in ./seed directory.{Colors.RESET}")
+            input("Press Enter to return...")
+            return
+
+        print("Available databases:")
+        for i, db in enumerate(databases):
+            print(f"{i + 1}. {db.name}")
+
+        print("\nAvailable seed files:")
+        for i, file in enumerate(seed_files):
+            print(f"{i + 1}. {file.name} ({self.format_file_size(file.size)})")
+
+        print(f"\n{Colors.DIM}Feature coming soon...{Colors.RESET}")
+        print('\n' + '─' * 70)
+        print(f"{Colors.DIM}Press Enter to return...{Colors.RESET}")
+        input()
+
+    def show_backup_menu(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}BACKUP DATABASE{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Database Tools > Backup Database{Colors.RESET}\n")
+
+        print(f"{Colors.DIM}Feature coming soon...{Colors.RESET}")
+        print('\n' + '─' * 70)
+        print(f"{Colors.DIM}Press Enter to return...{Colors.RESET}")
+        input()
+
+    def show_restore_menu(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}RESTORE DATABASE{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Database Tools > Restore Database{Colors.RESET}\n")
+
+        print(f"{Colors.DIM}Feature coming soon...{Colors.RESET}")
+        print('\n' + '─' * 70)
+        print(f"{Colors.DIM}Press Enter to return...{Colors.RESET}")
+        input()
+
+    def show_database_stats(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}DATABASE STATISTICS{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Database Tools > Database Statistics{Colors.RESET}\n")
+
+        databases = self.get_running_postgres()
+        
+        print(f"{Colors.CYAN}Total Running Databases:{Colors.RESET} {len(databases)}")
+        print(f"{Colors.CYAN}Docker Instances:{Colors.RESET} {len([db for db in databases if db.type == 'docker'])}")
+        print(f"{Colors.CYAN}Local Instances:{Colors.RESET} {len([db for db in databases if db.type == 'local'])}")
+
+        print('\n' + '─' * 70)
+        print(f"{Colors.DIM}Press Enter to return...{Colors.RESET}")
+        input()
+
+    def show_cloud_connection_menu(self):
+        self.prev_view = self.current_view
+        self.current_view = 'cloud'
+        self.selected_index = 0
+
+        while self.current_view == 'cloud':
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}CLOUD DATABASE CONNECTIONS{Colors.RESET}")
+            print(f"{Colors.DIM}Main Menu > Cloud Databases{Colors.RESET}\n")
+
+            options = [
+                MenuItem('🔗 New Connection', 'new'),
+                MenuItem('📂 Saved Connections', 'saved'),
+                MenuItem('⬅️  Back to Main Menu', 'back')
+            ]
+
+            for i, option in enumerate(options):
+                self.print_menu_item(i, option.text, i == self.selected_index)
+
+            self.print_footer()
+
+            action = self.handle_navigation(len(options))
+
+            if action == 'select':
+                selected = options[self.selected_index]
+                if selected.value == 'new':
+                    self.show_new_cloud_connection()
+                elif selected.value == 'saved':
+                    self.show_saved_connections()
+                elif selected.value == 'back':
+                    self.current_view = self.prev_view
+            elif action == 'back' or action == 'quit':
+                self.current_view = self.prev_view
+
+    def show_new_cloud_connection(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}NEW CLOUD CONNECTION{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Cloud Databases > New Connection{Colors.RESET}\n")
+
+        name = input("Connection name (e.g., 'neon-prod'): ").strip()
+        if not name:
+            return
+
+        url = input("PostgreSQL connection URL: ").strip()
+        if not url:
+            return
+
+        # Test connection
+        db = CloudDatabase(name, url)
+        success, message = db.connect()
+
+        if success:
+            # Save connection if successful
+            if self.credential_manager.save_connection(name, url):
+                print(f"\n{Colors.GREEN}✓ Connection successful and saved{Colors.RESET}")
+            else:
+                print(f"\n{Colors.YELLOW}⚠ Connection works but couldn't be saved{Colors.RESET}")
+            db.disconnect()
+        else:
+            print(f"\n{Colors.RED}✗ {message}{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def show_saved_connections(self):
+        self.prev_view = self.current_view
+        self.current_view = 'saved_connections'
+        self.selected_index = 0
+
+        while self.current_view == 'saved_connections':
+            connections = self.credential_manager.list_connections()
+            
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}SAVED CONNECTIONS{Colors.RESET}")
+            print(f"{Colors.DIM}Main Menu > Cloud Databases > Saved Connections{Colors.RESET}\n")
+
+            if not connections:
+                print(f"{Colors.YELLOW}No saved connections found.{Colors.RESET}")
+                print('\n' + '─' * 70)
+                input("Press Enter to return...")
+                self.current_view = self.prev_view
+                continue
+
+            options = [
+                MenuItem(f"🌐 {conn}", conn) for conn in connections
+            ]
+            options.append(MenuItem('⬅️  Back', 'back'))
+
+            for i, option in enumerate(options):
+                self.print_menu_item(i, option.text, i == self.selected_index)
+
+            self.print_footer('↑↓: Navigate | Enter: Connect | d: Delete | b: Back')
+
+            action = self.handle_navigation(len(options), ['d'])
+
+            if action == 'select':
+                if options[self.selected_index].value == 'back':
+                    self.current_view = self.prev_view
+                else:
+                    conn_name = options[self.selected_index].value
+                    url = self.credential_manager.get_connection(conn_name)
+                    if url:
+                        self.connect_and_manage_cloud_db(conn_name, url)
+            elif action == 'd':
+                if self.selected_index < len(connections):
+                    conn_name = options[self.selected_index].value
+                    self.delete_cloud_connection(conn_name)
+            elif action == 'back' or action == 'quit':
+                self.current_view = self.prev_view
+
+    def connect_and_manage_cloud_db(self, name: str, url: str):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}CONNECTING TO {name}{Colors.RESET}\n")
+
+        db = CloudDatabase(name, url)
+        success, message = db.connect()
+
+        if not success:
+            print(f"{Colors.RED}✗ {message}{Colors.RESET}")
+            print('\n' + '─' * 70)
+            input("Press Enter to continue...")
+            return
+
+        self.cloud_db = db
+        self.show_cloud_db_management()
+
+    def show_cloud_db_management(self):
+        self.prev_view = self.current_view
+        self.current_view = 'cloud_management'
+        self.selected_index = 0
+
+        while self.current_view == 'cloud_management' and self.cloud_db and self.cloud_db.is_connected():
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}MANAGE {self.cloud_db.name}{Colors.RESET}")
+            print(f"{Colors.DIM}Connected to: {self.cloud_db.masked_url}{Colors.RESET}\n")
+
+            options = [
+                MenuItem('📂 List Tables', 'tables'),
+                MenuItem('🔍 View Table Details', 'details'),
+                MenuItem('📋 Custom Query', 'query'),
+                MenuItem('🌱 Seed Database', 'seed'),
+                MenuItem('❌ Disconnect', 'disconnect')
+            ]
+
+            for i, option in enumerate(options):
+                self.print_menu_item(i, option.text, i == self.selected_index)
+
+            self.print_footer()
+
+            action = self.handle_navigation(len(options))
+
+            if action == 'select':
+                selected = options[self.selected_index]
+                if selected.value == 'tables':
+                    self.show_cloud_tables()
+                elif selected.value == 'details':
+                    self.show_cloud_table_details()
+                elif selected.value == 'query':
+                    self.show_cloud_custom_query()
+                elif selected.value == 'seed':
+                    self.show_cloud_seed_menu()
+                elif selected.value == 'disconnect':
+                    self.cloud_db.disconnect()
+                    self.cloud_db = None
+                    self.current_view = self.prev_view
+            elif action == 'back' or action == 'quit':
+                self.cloud_db.disconnect()
+                self.cloud_db = None
+                self.current_view = self.prev_view
+
+    def show_cloud_tables(self):
+        if not self.cloud_db or not self.cloud_db.is_connected():
+            return
+
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}TABLES IN {self.cloud_db.name}{Colors.RESET}\n")
+
+        success, message, tables = self.cloud_db.list_tables()
+        if success and tables:
+            for table in tables:
+                print(f"{Colors.GREEN}● {table}{Colors.RESET}")
+        else:
+            print(f"{Colors.RED}✗ {message}{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def show_cloud_table_details(self):
+        if not self.cloud_db or not self.cloud_db.is_connected():
+            return
+
+        success, message, tables = self.cloud_db.list_tables()
+        if not success or not tables:
+            print(f"{Colors.RED}✗ {message}{Colors.RESET}")
+            return
+
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}SELECT TABLE{Colors.RESET}\n")
+
+        print("Available tables:")
+        for i, table in enumerate(tables, 1):
+            print(f"{i}. {table}")
+
+        print()
+        choice = input("Enter table number (or press Enter to cancel): ").strip()
+        if not choice.isdigit() or int(choice) < 1 or int(choice) > len(tables):
+            return
+
+        table_name = tables[int(choice) - 1]
+        success, message, columns = self.cloud_db.get_table_info(table_name)
+
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}TABLE: {table_name}{Colors.RESET}\n")
+
+        if success and columns:
+            for col in columns:
+                nullable = "NULL" if col['nullable'] == "YES" else "NOT NULL"
+                default = f" DEFAULT {col['default']}" if col['default'] else ""
+                print(f"{Colors.CYAN}{col['name']}{Colors.RESET}: {col['type']} {nullable}{default}")
+        else:
+            print(f"{Colors.RED}✗ {message}{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def show_cloud_custom_query(self):
+        if not self.cloud_db or not self.cloud_db.is_connected():
+            return
+
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}CUSTOM QUERY{Colors.RESET}\n")
+
+        print(f"{Colors.YELLOW}Enter your SQL query below (press Enter twice to execute):{Colors.RESET}")
+        print()
+
+        lines = []
+        while True:
+            line = input()
+            if not line and lines and not lines[-1]:
+                break
+            lines.append(line)
+
+        query = '\n'.join(lines[:-1])  # Remove the last empty line
+        if not query.strip():
+            return
+
+        success, message, rows = self.cloud_db.execute_query(query)
+
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}QUERY RESULTS{Colors.RESET}\n")
+
+        if success:
+            if rows:
+                # Get column names from cursor description
+                columns = [desc[0] for desc in self.cloud_db._cursor.description]
+                print(f"{Colors.CYAN}{' | '.join(columns)}{Colors.RESET}")
+                print('─' * (sum(len(c) for c in columns) + 3 * (len(columns) - 1)))
+                
+                for row in rows:
+                    print(' | '.join(str(value) for value in row))
+                print(f"\n{Colors.GREEN}Query returned {len(rows)} rows{Colors.RESET}")
+            else:
+                print(f"{Colors.GREEN}✓ Query executed successfully (no results){Colors.RESET}")
+        else:
+            print(f"{Colors.RED}✗ {message}{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def show_cloud_seed_menu(self):
+        if not self.cloud_db or not self.cloud_db.is_connected():
+            return
+
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}SEED {self.cloud_db.name}{Colors.RESET}\n")
+
+        seed_files = self.find_seed_files()
+        if not seed_files:
+            print(f"{Colors.YELLOW}No seed files found in ./seed directory{Colors.RESET}")
+            print('\n' + '─' * 70)
+            input("Press Enter to continue...")
+            return
+
+        print("Available seed files:")
+        for i, file in enumerate(seed_files, 1):
+            print(f"{i}. {file.name} ({self.format_file_size(file.size)})")
+
+        print(f"\n{Colors.YELLOW}⚠ Warning: Seeding may modify or delete existing data{Colors.RESET}")
+        choice = input("\nEnter file number (or press Enter to cancel): ").strip()
+
+        if not choice.isdigit() or int(choice) < 1 or int(choice) > len(seed_files):
+            return
+
+        seed_file = seed_files[int(choice) - 1]
+        confirm = input(f"Type '{self.cloud_db.name}' to confirm: ").strip()
+
+        if confirm != self.cloud_db.name:
+            print(f"\n{Colors.YELLOW}Operation cancelled{Colors.RESET}")
+            input("\nPress Enter to continue...")
+            return
+
+        print(f"\n{Colors.YELLOW}Seeding database...{Colors.RESET}")
+        try:
+            with open(seed_file.path, 'r') as f:
+                sql = f.read()
+                success, message, _ = self.cloud_db.execute_query(sql)
+                if success:
+                    print(f"{Colors.GREEN}✓ Database seeded successfully{Colors.RESET}")
+                else:
+                    print(f"{Colors.RED}✗ {message}{Colors.RESET}")
+        except Exception as e:
+            print(f"{Colors.RED}✗ Failed to seed database: {str(e)}{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def delete_cloud_connection(self, name: str):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.RED}{Colors.BRIGHT}DELETE CONNECTION{Colors.RESET}\n")
+
+        print(f"{Colors.YELLOW}⚠ Warning: You are about to delete the connection \"{name}\"{Colors.RESET}")
+        confirm = input(f"\nType '{name}' to confirm: ").strip()
+
+        if confirm == name:
+            if self.credential_manager.delete_connection(name):
+                print(f"\n{Colors.GREEN}✓ Connection deleted{Colors.RESET}")
+            else:
+                print(f"\n{Colors.RED}✗ Failed to delete connection{Colors.RESET}")
+        else:
+            print(f"\n{Colors.YELLOW}Deletion cancelled{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def show_quick_snippets(self):
+        self.prev_view = self.current_view
+        self.current_view = 'snippets'
+        self.selected_index = 0
+
+        while self.current_view == 'snippets':
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}QUICK SNIPPETS{Colors.RESET}")
+            print(f"{Colors.DIM}Main Menu > Database Tools > Quick Snippets{Colors.RESET}\n")
+
+            options = [MenuItem(f"📋 {snippet['name']}", str(i)) for i, snippet in enumerate(SNIPPETS)]
+            options.append(MenuItem('⬅️  Back to Main Menu', 'back'))
+
+            # Display snippets
+            for i, option in enumerate(options):
+                self.print_menu_item(i, option.text, i == self.selected_index)
+                # Show query preview if this snippet is selected
+                if i == self.selected_index and i < len(SNIPPETS):
+                    print(f"\n{Colors.DIM}Query Preview:{Colors.RESET}")
+                    query_lines = SNIPPETS[i]['query'].strip().split('\n')
+                    if len(query_lines) > 3:
+                        # Show first 2 lines and last line with ellipsis
+                        print(f"{Colors.CYAN}{query_lines[0]}{Colors.RESET}")
+                        print(f"{Colors.CYAN}{query_lines[1]}{Colors.RESET}")
+                        print(f"{Colors.DIM}...{Colors.RESET}")
+                        print(f"{Colors.CYAN}{query_lines[-1]}{Colors.RESET}")
+                    else:
+                        for line in query_lines:
+                            print(f"{Colors.CYAN}{line}{Colors.RESET}")
+                    print()
+
+            self.print_footer('↑↓: Navigate | Enter: Copy to Clipboard | b: Back')
+
+            action = self.handle_navigation(len(options))
+
+            if action == 'select':
+                if options[self.selected_index].value == 'back':
+                    self.current_view = self.prev_view
+                else:
+                    # Copy snippet to clipboard
+                    snippet_index = int(options[self.selected_index].value)
+                    success, message = self.copy_to_clipboard(SNIPPETS[snippet_index]['query'])
+                    
+                    self.clear_screen()
+                    self.print_header()
+                    if success:
+                        print(f"\n{Colors.GREEN}✓ {message}{Colors.RESET}\n")
+                        print(f"Query: {SNIPPETS[snippet_index]['name']}")
+                    else:
+                        print(f"\n{Colors.RED}✗ {message}{Colors.RESET}")
+                    
+                    print('\n' + '─' * 70)
+                    input("Press Enter to continue...")
+
+            elif action == 'back' or action == 'quit':
+                self.current_view = self.prev_view
+
+    def get_running_postgres(self) -> List[DatabaseInstance]:
+        databases = []
+
+        try:
+            result = subprocess.run(
+                ['docker', 'ps', '--format', '{{.ID}}|{{.Names}}|{{.Status}}|{{.Ports}}|{{.Image}}'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            lines = [line for line in result.stdout.strip().split('\n') if line]
+
+            for line in lines:
+                parts = line.split('|')
+                if len(parts) == 5:
+                    container_id, name, status, ports, image = parts
+                    if 'postgres' in image:
+                        databases.append(DatabaseInstance(
+                            name=name,
+                            db_type='docker',
+                            status='running' if 'Up' in status else 'stopped',
+                            ports=ports,
+                            image=image,
+                            container_id=container_id
+                        ))
+        except Exception:
+            pass
+
+        return databases
+
+    def create_docker_postgres(self, name: str, password: str, port: int):
+        cmd = [
+            'docker', 'run', '-d',
+            '--name', name,
+            '-e', f'POSTGRES_PASSWORD={password}',
+            '-e', f'POSTGRES_DB={name}',
+            '-p', f'{port}:5432',
+            'postgres:latest'
+        ]
+        
+        subprocess.run(cmd, check=True, capture_output=True)
+
+    def delete_database(self, db: DatabaseInstance):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.RED}{Colors.BRIGHT}DELETE DATABASE{Colors.RESET}\n")
+        
+        print(f"{Colors.YELLOW}⚠ Warning: You are about to delete the database \"{db.name}\".{Colors.RESET}")
+        print(f"{Colors.YELLOW}This action cannot be undone.{Colors.RESET}\n")
+        
+        confirm = input(f"Type \"{db.name}\" to confirm: ").strip()
+        
+        if confirm == db.name:
+            try:
+                if db.type == 'docker' and db.container_id:
+                    subprocess.run(['docker', 'stop', db.container_id], check=True, capture_output=True)
+                    subprocess.run(['docker', 'rm', db.container_id], check=True, capture_output=True)
+                    print(f"{Colors.GREEN}✓ Database deleted successfully.{Colors.RESET}")
+                else:
+                    print(f"{Colors.RED}✗ Cannot delete this database type.{Colors.RESET}")
+            except Exception:
+                print(f"{Colors.RED}✗ Failed to delete database.{Colors.RESET}")
+        else:
+            print(f"{Colors.YELLOW}Deletion cancelled.{Colors.RESET}")
+
+        input("\nPress Enter to continue...")
+
+    def copy_connection_url(self, db: DatabaseInstance):
+        if db.ports:
+            port = db.ports.split('->')[0].split(':')[1] if ':' in db.ports else '5432'
+            connection_url = f"postgresql://postgres:password@localhost:{port}/{db.name}"
+            
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.GREEN}✓ Connection URL:{Colors.RESET}\n")
+            print(f"{connection_url}\n")
+            print(f"{Colors.DIM}(Copy this URL manually){Colors.RESET}")
+            input("\nPress Enter to continue...")
+
+    def handle_navigation(self, num_options: int, extra_keys: List[str] = []) -> str:
+        import sys
+        import tty
+        import termios
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        
+        try:
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+            
+            if ch == '\x1b':
+                ch2 = sys.stdin.read(1)
+                ch3 = sys.stdin.read(1)
+                if ch2 == '[':
+                    if ch3 == 'A':
+                        self.selected_index = max(0, self.selected_index - 1)
+                        return 'navigate'
+                    elif ch3 == 'B':
+                        self.selected_index = min(num_options - 1, self.selected_index + 1)
+                        return 'navigate'
+            elif ch == '\r' or ch == '\n':
+                return 'select'
+            elif ch == 'q' or ch == '\x03':
+                return 'quit'
+            elif ch == 'b' or ch == '\x7f':
+                return 'back'
+            elif ch in extra_keys:
+                return ch
+            
+            return 'navigate'
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+    def mask_database_url(self, url: str) -> str:
+        import re
+        return re.sub(r'(:\/\/)([^:]+):([^@]+)(@)', r'\1\2:****\4', url)
+
+    def mask_auth_token(self, token: str) -> str:
+        if len(token) <= 8:
+            return '****'
+        return token[:4] + '****' + token[-4:]
+
+    def format_file_size(self, bytes: int) -> str:
+        if bytes == 0:
+            return '0 Bytes'
+        k = 1024
+        sizes = ['Bytes', 'KB', 'MB', 'GB']
+        i = 0
+        size = bytes
+        while size >= k and i < len(sizes) - 1:
+            size /= k
+            i += 1
+        return f"{round(size, 2)} {sizes[i]}"
+
+    def find_env_files(self) -> List[str]:
+        files = []
+        patterns = ['.env', '.env.local', '.env.development', '.env.production']
+        
+        for pattern in patterns:
+            if os.path.exists(pattern):
+                files.append(pattern)
+
+        return files
+
+    def find_sqlite_files(self) -> List[str]:
+        files = []
+        extensions = ['.db', '.sqlite', '.sqlite3']
+
+        def search_directory(directory: str, depth: int = 0):
+            if depth > 2:
+                return
+
+            try:
+                for item in os.listdir(directory):
+                    full_path = os.path.join(directory, item)
+                    try:
+                        if os.path.isdir(full_path) and not item.startswith('.') and item != 'node_modules':
+                            search_directory(full_path, depth + 1)
+                        elif os.path.isfile(full_path) and any(full_path.endswith(ext) for ext in extensions):
+                            files.append(full_path)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        search_directory('.')
+        return files
+
+    def find_seed_files(self) -> List[SeedFile]:
+        seed_dir = os.path.join(os.getcwd(), 'seed')
+        files = []
+
+        if not os.path.exists(seed_dir):
+            return files
+
+        try:
+            for item in os.listdir(seed_dir):
+                if item.endswith('.sql'):
+                    full_path = os.path.join(seed_dir, item)
+                    size = os.path.getsize(full_path)
+                    files.append(SeedFile(name=item, path=full_path, size=size))
+        except Exception:
+            pass
+
+        return files
+
+    def copy_to_clipboard(self, text: str) -> Tuple[bool, str]:
+        """Copy text to clipboard using system commands. Returns (success, message)."""
+        system = platform.system().lower()
+        
+        try:
+            if system == 'linux':
+                # Try xclip first (X11)
+                try:
+                    p = subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE)
+                    p.communicate(input=text.encode())
+                    if p.returncode == 0:
+                        return True, "Copied to clipboard using xclip"
+                except FileNotFoundError:
+                    # Try wl-copy (Wayland)
+                    try:
+                        p = subprocess.Popen(['wl-copy'], stdin=subprocess.PIPE)
+                        p.communicate(input=text.encode())
+                        if p.returncode == 0:
+                            return True, "Copied to clipboard using wl-copy"
+                    except FileNotFoundError:
+                        return False, "Please install xclip (X11) or wl-copy (Wayland) for clipboard support"
+            elif system == 'darwin':
+                p = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
+                p.communicate(input=text.encode())
+                if p.returncode == 0:
+                    return True, "Copied to clipboard using pbcopy"
+            elif system == 'windows':
+                p = subprocess.Popen(['clip'], stdin=subprocess.PIPE)
+                p.communicate(input=text.encode())
+                if p.returncode == 0:
+                    return True, "Copied to clipboard using clip"
+            
+            return False, f"Clipboard operation failed on {system}"
+        except Exception as e:
+            return False, f"Clipboard error: {str(e)}"
+
+    def show_ai_analysis(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}AI DATABASE ANALYSIS{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Database Tools > AI Analysis{Colors.RESET}\n")
+
+        if not os.getenv("GEMINI_API_KEY"):
+            print(f"{Colors.YELLOW}⚠ GEMINI_API_KEY environment variable not set.{Colors.RESET}")
+            print("To use AI analysis features, please set your API key:")
+            print(f"{Colors.DIM}In fish shell: set -x GEMINI_API_KEY your-key-here{Colors.RESET}")
+            print('\n' + '─' * 70)
+            input("Press Enter to return...")
+            return
+
+        # Get current database connection
+        if self.cloud_db and self.cloud_db.is_connected():
+            conn_url = self.cloud_db.url
+        else:
+            # Get local database connection if available
+            databases = self.get_running_postgres()
+            if not databases:
+                print(f"{Colors.YELLOW}No running databases found.{Colors.RESET}")
+                input("Press Enter to return...")
+                return
+
+            print("Select a database to analyze:")
+            for i, db in enumerate(databases):
+                print(f"{i + 1}. {db.name}")
+            
+            choice = input("\nEnter database number (or Enter to cancel): ").strip()
+            if not choice.isdigit() or int(choice) < 1 or int(choice) > len(databases):
+                return
+
+            db = databases[int(choice) - 1]
+            if db.ports:
+                port = db.ports.split('->')[0].split(':')[1] if ':' in db.ports else '5432'
+                conn_url = f"postgresql://postgres:password@localhost:{port}/{db.name}"
+            else:
+                print(f"{Colors.RED}Cannot determine connection details for selected database.{Colors.RESET}")
+                input("Press Enter to return...")
+                return
+
+        print(f"\n{Colors.YELLOW}Analyzing database...{Colors.RESET}")
+        
+        try:
+            analyzer = DatabaseAnalyzer(conn_url)
+            success, message = analyzer.connect()
+            if not success:
+                print(f"\n{Colors.RED}✗ {message}{Colors.RESET}")
+                input("Press Enter to return...")
+                return
+
+            analysis = analyzer.analyze_database()
+            success, recommendations = analyzer.get_ai_recommendations(analysis)
+            
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}ANALYSIS RESULTS{Colors.RESET}\n")
+
+            # Print statistics
+            print(f"{Colors.CYAN}Database Statistics:{Colors.RESET}")
+            print("─" * 50)
+            for table in analysis['tables']:
+                print(f"\n{Colors.GREEN}● {table['name']}{Colors.RESET}")
+                stats = table['stats']
+                print(f"  Rows: {stats['rows']:,}")
+                print(f"  Size: {stats['total_size_mb']:.2f} MB")
+                print(f"  Index Size: {stats['index_size_mb']:.2f} MB")
+                print(f"  Index Usage Ratio: {stats['index_ratio']:.2f}")
+
+            # Print potential issues
+            if analysis['potential_issues']:
+                print(f"\n{Colors.YELLOW}Potential Issues:{Colors.RESET}")
+                print("─" * 50)
+                for issue in analysis['potential_issues']:
+                    print(f"! {issue}")
+
+            # Print AI recommendations
+            if success:
+                print(f"\n{Colors.MAGENTA}AI Recommendations:{Colors.RESET}")
+                print("─" * 50)
+                print(recommendations)
+            else:
+                print(f"\n{Colors.RED}Failed to get AI recommendations: {recommendations}{Colors.RESET}")
+
+            analyzer.disconnect()
+
+        except Exception as e:
+            print(f"\n{Colors.RED}Error during analysis: {str(e)}{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to return...")
+
+    def cleanup(self):
+        self.clear_screen()
+        print(f"{Colors.CYAN}Thank you for using PostgreSQL Database Manager!{Colors.RESET}\n")
+
+def main():
+    try:
+        manager = DatabaseManager()
+        manager.start()
+    except KeyboardInterrupt:
+        print(f"\n{Colors.CYAN}Goodbye!{Colors.RESET}\n")
+        sys.exit(0)
+    except Exception as e:
+        print(f"{Colors.RED}Fatal error: {e}{Colors.RESET}")
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()

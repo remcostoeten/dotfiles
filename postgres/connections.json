@@ -1,0 +1,12 @@
+{
+  "connections": {
+    "calendar": {
+      "encrypted_url": "gAAAAABo3oIb3Mgypd0GMlCONzwAoFCBYQOF2FDZCwvcFkKibDzJJFqtw0nvnXc7S9pWA5KsQ3y4OhzI7-uMIYF-wE3WQ_KuhtrNJyF5KhgcuMV-1mw3Cl364quniAMmP-fwQTTXVAszjsJj0hk8ow8ufrcX1P27mclLua_rnRfkXvRugoOO5s__0Io7qx8e8Hc-dCbcplKrFzCT1UUf-zubnLLe1LWwAbfI2eiL_HGfqk0oqQx1OS1PlhZFWeDLXJG5j-ixHr4q8V8wnfyD3zBsB8O97aeDyQ==",
+      "created_at": "2025-10-02T15:46:03.289479"
+    },
+    "remcostoeten.nlbackend": {
+      "encrypted_url": "gAAAAABo4HQrHvEpz8Uk5aT1oF05_CAgMfEs40md8cRJ0I24UKKc81gP_A8dRUA6aT4Lr9GTVIYReEdPzXhaNXO-LWtt753bJMvxRBVCZAdfFHjdHSPgcvaZv48D3c21ZfuURdfWnMnLZOBHSQZHHXGOqXfwGAIcZ2PxbLffwJO2uM9z2AXwHXbVVFnmV7XHWX0lR5cYGMUggghaqdrMy5FNO0eCV0aFxJ62QmgtWH-7U8zputZgcL514hm0X-qwJ24AXxQbp3ocT05S0oWOqaEQ63SFc78tFA==",
+      "created_at": "2025-10-04T03:11:07.629376"
+    }
+  }
+}

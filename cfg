@@ -1,16 +1,22 @@
 #!/usr/bin/env fish
+source /home/remco-stoeten/.config/dotfiles/aliases/init.fish
 
-# Main dotfiles configuration
-# This file serves as the entry point for all dotfiles configuration
+# Source all .fish files in the current directory
+#for file in (dirname (status --current-filename))/*.fish
+#  if test (basename $file) != (basename (status --current-filename))
+#  source $file
+#end
+#end
 
-# Get the dotfiles directory
-set -g DOTFILES_DIR (dirname (status --current-filename))
+## Source all .fish files in the aliases directory
+#for file in (dirname (status --current-filename))/aliases/*.fish
+#   source $file
+#end
 
-# Source core utilities (colors, environment variables, etc.)
-source $DOTFILES_DIR/core/init.fish
+#source './aliases/dev.fish'
+#source './aliases/drizzle.fish'
+#source './aliases/fzf.fish'
+#source './aliases/git.fish'
+#source './aliases/init.fish'
 
-# Source aliases
-source $DOTFILES_DIR/aliases/init.fish
-
-# Add scripts to PATH
-set -gx PATH $DOTFILES_DIR/scripts $PATH
+#alias cc='clear'

@@ -1,0 +1,23 @@
+#!/usr/bin/env fish
+
+# Docker Manager - Interactive Docker container management CLI
+# This script is a launcher for the TypeScript-based Docker manager
+
+# Resolve script directories
+set SCRIPT_DIR (dirname (status --current-filename))
+set ROOT_DIR (dirname $SCRIPT_DIR)
+set DOCKER_MANAGER_DIR $ROOT_DIR/scripts/docker
+
+# Ensure dependencies are installed
+if not test -d $DOCKER_MANAGER_DIR/node_modules
+    echo "Installing dependencies..."
+    cd $DOCKER_MANAGER_DIR
+    npm install
+    or exit 1
+end
+
+# Add node_modules/.bin to PATH temporarily
+set -x PATH $DOCKER_MANAGER_DIR/node_modules/.bin $PATH
+
+# Execute the Docker manager script
+exec tsx $DOCKER_MANAGER_DIR/index.ts $argv

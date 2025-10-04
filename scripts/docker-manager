@@ -2,9 +2,24 @@
 
 # Docker Manager - A simple Docker container management script
 
-# Source core colors from dotfiles
-set DOTFILES_DIR (dirname (dirname (status --current-filename)))
-source $DOTFILES_DIR/core/colors.fish
+# Define color functions
+function print_info
+    set_color blue
+    echo $argv[1]
+    set_color normal
+end
+
+function print_success
+    set_color green
+    echo $argv[1]
+    set_color normal
+end
+
+function print_error
+    set_color red
+    echo $argv[1]
+    set_color normal
+end
 
 function log_error
     print_error "ERROR: $argv[1]" >&2

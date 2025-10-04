@@ -31,3 +31,10 @@ alias ...='cd ../..'
 
 # DOCSTRING: Go back three directories
 alias ....='cd ../../..'
+
+# DOCSTRING: Replace ls with exa
+alias ls='exa'
+
+# DOCSTRING: Custom l alias with icons (backup - replaced by function)
+alias l_orig='exa -l --no-permissions --no-user --no-time --group-directories-first --icons'
+# alias l='exa -l --no-permissions --no-user --no-time --group-directories-first --icons'

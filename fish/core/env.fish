@@ -29,3 +29,5 @@ set -gx SAVEHIST 10000
 # fly cli
  export FLYCTL_INSTALL="/home/remco-stoeten/.fly"
   export PATH="$FLYCTL_INSTALL/bin:$PATH"
+# Add dotfiles bin directory to PATH
+set -gx PATH $DOTFILES_DIR/bin $PATH
