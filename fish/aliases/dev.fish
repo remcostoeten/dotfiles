@@ -3,7 +3,7 @@
 # Development aliases
 
 # DOCSTRING: Run pnpm
-alias p "pnpm"
+alias p pnpm
 
 # DOCSTRING: Install dependencies with pnpm
 alias pi "pnpm install"
@@ -25,6 +25,9 @@ alias i "bun install"
 
 # DOCSTRING: Build the app with Bun
 alias b "bun run build"
+
+# DOCSTRING: Run tauri dev via bun 
+alias tauri="bun tauri dev"
 
 # DOCSTRING: Open files with Neovim
 function v
@@ -51,7 +54,7 @@ alias prod "vercel deploy --prod"
 alias deployprod "vercel deploy --prod"
 
 # DOCSTRING: Run advanced unused code analyzer
-alias unused "unused-analyzer"
+alias unused unused-analyzer
 
 # DOCSTRING: Run unused import analyzer in current directory
 alias cleanimports "unused-analyzer --type typescript --path ."
