@@ -163,8 +163,8 @@ function handle_tree() {
         return 1
     fi
     
-    # Default exclusions (always ignore node_modules and .next unless overridden)
-    local default_exclude="node_modules|.next"
+    # Default exclusions (always ignore common generated folders unless overridden)
+    local default_exclude="node_modules|.next|dist|build|.dist|.cache|tmp|temp|coverage|.coverage|out|.output|generated|.generated|target|vendor|venv|.venv|__pycache__|.pytest_cache|.tox|.mypy_cache|.ruff_cache|.turbo|.parcel-cache|.nuxt|.docusaurus|.svelte-kit|.astro|.angular|.gradle|__snapshots__|.DS_Store|.idea|.vscode|*.egg-info|.cargo|pkg|obj|bin"
     
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -268,7 +268,7 @@ function handle_tree() {
                 printf "    %s  Show only folders/files matching pattern\n" "$(cyan "-i, --include-only PATTERN")"
                 printf "    %s  Exclude files with extension\n" "$(cyan "--exclude-ext EXT")"
                 printf "    %s  Include only files with extension\n" "$(cyan "--include-ext EXT")"
-                printf "    %s    Don't exclude node_modules/.next by default\n" "$(cyan "--no-defaults")"
+                printf "    %s    Don't exclude generated folders by default\n" "$(cyan "--no-defaults")"
                 printf "    %s         Show this help\n" "$(cyan "--help")"
                 echo
                 printf "%s\n" "$(bold "EXAMPLES:")"
@@ -379,245 +379,7 @@ function handle_tree() {
     elif [[ -z "$default_exclude" ]]; then
         printf "%s 📋 Filters: None (--no-defaults used)\n" "$(info)"
     else
-        printf "%s 📋 Filters: Default exclusions (node_modules, .next)\n" "$(info)"
-    fi
-    
-    return 0
-}
-
-# Handle tree display with custom arguments
-function handle_tree() {
-    local tree_args=()
-    local tree_path="."
-    local custom_exclude=""
-    local custom_include=""
-    local exclude_extensions=""
-    local include_extensions=""
-    local has_custom_filters=false
-    
-    # Check if tree command exists
-    if ! command -v tree >/dev/null 2>&1; then
-        printf "%s tree command not found. Please install it first.\n" "$(error)"
-        return 1
-    fi
-    
-    # Default exclusions (always ignore node_modules and .next unless overridden)
-    local default_exclude="node_modules|.next"
-    
-    # Parse arguments
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -l|--level)
-                if [[ -n "$2" ]] && [[ "$2" =~ ^[0-9]+$ ]]; then
-                    tree_args+=("-L" "$2")
-                    shift 2
-                else
-                    printf "%s Invalid level argument. Use: -l <number>\n" "$(error)"
-                    return 1
-                fi
-                ;;
-            -a|--all)
-                tree_args+=("-a")
-                shift
-                ;;
-            -d|--dirs-only)
-                tree_args+=("-d")
-                shift
-                ;;
-            -f|--full-path)
-                tree_args+=("-f")
-                shift
-                ;;
-            -e|--exclude)
-                if [[ -n "$2" ]]; then
-                    if [[ -n "$custom_exclude" ]]; then
-                        custom_exclude="$custom_exclude|$2"
-                    else
-                        custom_exclude="$2"
-                    fi
-                    has_custom_filters=true
-                    shift 2
-                else
-                    printf "%s --exclude requires a pattern\n" "$(error)"
-                    return 1
-                fi
-                ;;
-            -i|--include-only)
-                if [[ -n "$2" ]]; then
-                    if [[ -n "$custom_include" ]]; then
-                        custom_include="$custom_include|$2"
-                    else
-                        custom_include="$2"
-                    fi
-                    has_custom_filters=true
-                    shift 2
-                else
-                    printf "%s --include-only requires a pattern\n" "$(error)"
-                    return 1
-                fi
-                ;;
-            --exclude-ext)
-                if [[ -n "$2" ]]; then
-                    # Remove leading dot if present and add pattern
-                    local ext="${2#.}"
-                    if [[ -n "$exclude_extensions" ]]; then
-                        exclude_extensions="$exclude_extensions|*.$ext"
-                    else
-                        exclude_extensions="*.$ext"
-                    fi
-                    has_custom_filters=true
-                    shift 2
-                else
-                    printf "%s --exclude-ext requires an extension\n" "$(error)"
-                    return 1
-                fi
-                ;;
-            --include-ext)
-                if [[ -n "$2" ]]; then
-                    # Remove leading dot if present and add pattern
-                    local ext="${2#.}"
-                    if [[ -n "$include_extensions" ]]; then
-                        include_extensions="$include_extensions|*.$ext"
-                    else
-                        include_extensions="*.$ext"
-                    fi
-                    has_custom_filters=true
-                    shift 2
-                else
-                    printf "%s --include-ext requires an extension\n" "$(error)"
-                    return 1
-                fi
-                ;;
-            --no-defaults)
-                # Don't apply default exclusions
-                default_exclude=""
-                shift
-                ;;
-            --help)
-                printf "%s\n" "$(bold "Tree Copy Usage:")"
-                printf "    %s tree [OPTIONS] [PATH]\n" "$(green "copy")"
-                echo
-                printf "%s\n" "$(bold "OPTIONS:")"
-                printf "    %s        Limit depth to N levels\n" "$(cyan "-l, --level N")"
-                printf "    %s           Show hidden files\n" "$(cyan "-a, --all")"
-                printf "    %s     Show directories only\n" "$(cyan "-d, --dirs-only")"
-                printf "    %s     Show full path names\n" "$(cyan "-f, --full-path")"
-                printf "    %s      Exclude folders/files matching pattern\n" "$(cyan "-e, --exclude PATTERN")"
-                printf "    %s  Show only folders/files matching pattern\n" "$(cyan "-i, --include-only PATTERN")"
-                printf "    %s  Exclude files with extension\n" "$(cyan "--exclude-ext EXT")"
-                printf "    %s  Include only files with extension\n" "$(cyan "--include-ext EXT")"
-                printf "    %s    Don't exclude node_modules/.next by default\n" "$(cyan "--no-defaults")"
-                printf "    %s         Show this help\n" "$(cyan "--help")"
-                echo
-                printf "%s\n" "$(bold "EXAMPLES:")"
-                printf "    %s           # Tree with default settings\n" "$(green "copy tree")"
-                printf "    %s        # Tree limited to 2 levels\n" "$(green "copy tree -l 2")"
-                printf "    %s  # Exclude dist and build folders\n" "$(green "copy tree -e dist -e build")"
-                printf "    %s      # Include only TypeScript files\n" "$(green "copy tree --include-ext ts")"
-                printf "    %s     # Exclude JavaScript files\n" "$(green "copy tree --exclude-ext js")"
-                printf "    %s    # Include only src and docs folders\n" "$(green "copy tree -i 'src|docs'")"
-                printf "    %s # No default exclusions\n" "$(green "copy tree --no-defaults")"
-                return 0
-                ;;
-            -*)
-                printf "%s Unknown tree option: %s\n" "$(error)" "$1"
-                printf "%s Use 'copy tree --help' for available options\n" "$(info)"
-                return 1
-                ;;
-            *)
-                # Treat as path
-                tree_path="$1"
-                shift
-                ;;
-        esac
-    done
-    
-    # Validate path
-    if [[ ! -d "$tree_path" ]]; then
-        printf "%s Directory not found: %s\n" "$(error)" "$tree_path"
-        return 1
-    fi
-    
-    # Build final filter patterns
-    local final_exclude=""
-    local final_include=""
-    
-    # Handle include patterns (takes precedence)
-    if [[ -n "$custom_include" ]] || [[ -n "$include_extensions" ]]; then
-        if [[ -n "$custom_include" ]] && [[ -n "$include_extensions" ]]; then
-            final_include="$custom_include|$include_extensions"
-        elif [[ -n "$custom_include" ]]; then
-            final_include="$custom_include"
-        else
-            final_include="$include_extensions"
-        fi
-        tree_args+=("-P" "$final_include")
-    else
-        # Handle exclude patterns
-        local all_excludes=""
-        
-        # Add default exclusions unless disabled
-        if [[ -n "$default_exclude" ]]; then
-            all_excludes="$default_exclude"
-        fi
-        
-        # Add custom exclusions
-        if [[ -n "$custom_exclude" ]]; then
-            if [[ -n "$all_excludes" ]]; then
-                all_excludes="$all_excludes|$custom_exclude"
-            else
-                all_excludes="$custom_exclude"
-            fi
-        fi
-        
-        # Add extension exclusions
-        if [[ -n "$exclude_extensions" ]]; then
-            if [[ -n "$all_excludes" ]]; then
-                all_excludes="$all_excludes|$exclude_extensions"
-            else
-                all_excludes="$exclude_extensions"
-            fi
-        fi
-        
-        # Apply exclusions if any
-        if [[ -n "$all_excludes" ]]; then
-            tree_args+=("-I" "$all_excludes")
-            final_exclude="$all_excludes"
-        fi
-    fi
-    
-    # Generate tree output
-    local tree_output
-    if ! tree_output=$(tree "${tree_args[@]}" "$tree_path" 2>/dev/null); then
-        printf "%s Failed to generate tree output\n" "$(error)"
-        return 1
-    fi
-    
-    # Get resolved path for title
-    local resolved_path
-    resolved_path=$(realpath "$tree_path" 2>/dev/null || echo "$tree_path")
-    
-    copy_to_clipboard "$tree_output" "Directory Tree: $resolved_path"
-    
-    # Display tree stats
-    local dir_count file_count
-    if [[ "$tree_output" =~ ([0-9]+)\ director(y|ies),\ ([0-9]+)\ files? ]]; then
-        dir_count="${BASH_REMATCH[1]}"
-        file_count="${BASH_REMATCH[3]}"
-        printf "%s 🌳 Tree displayed above (%s directories, %s files)\n" "$(success)" "$(bold "$dir_count")" "$(bold "$file_count")"
-    else
-        printf "%s 🌳 Directory tree displayed above\n" "$(success)"
-    fi
-    
-    # Show applied filters
-    if [[ -n "$final_include" ]]; then
-        printf "%s 📋 Filters: Including only: %s\n" "$(info)" "$final_include"
-    elif [[ -n "$final_exclude" ]]; then
-        printf "%s 📋 Filters: Excluding: %s\n" "$(info)" "$final_exclude"
-    elif [[ -z "$default_exclude" ]]; then
-        printf "%s 📋 Filters: None (--no-defaults used)\n" "$(info)"
-    else
-        printf "%s 📋 Filters: Default exclusions (node_modules, .next)\n" "$(info)"
+        printf "%s 📋 Filters: Default exclusions (generated folders: node_modules, .next, dist, build, cache, etc.)\n" "$(info)"
     fi
     
     return 0
@@ -635,7 +397,7 @@ function handle_help() {
     printf "    %s             Display contents of file\n" "$(cyan "<filename>")"
     printf "    %s [path]             Display current directory or specified path\n" "$(cyan "pwd")"
     printf "    %s                 Display git remote URL\n" "$(cyan "remote")"
-    printf "    %s [options] [path]   Display directory tree (excludes node_modules & .next)\n" "$(cyan "tree")"
+    printf "    %s [options] [path]   Display directory tree (excludes generated folders)\n" "$(cyan "tree")"
     printf "    %s       Show this help message\n" "$(cyan "help, --help, -h")"
     echo
     printf "%s\n" "$(bold "EXAMPLES:")"
