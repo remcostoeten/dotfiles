@@ -1058,6 +1058,8 @@ function singleKeypress(message) {
     process.stdin.setEncoding('utf8');
     
     process.stdin.once('data', function(key) {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
       resolve(key.toString());
     });
   });
@@ -1090,9 +1092,6 @@ async function multiSelect(message, choices) {
     return choices.map(function(c) { return c.value; });
   }
   
-  process.stdin.setRawMode(false);
-  process.stdin.pause();
-  
   const fullAnswer = answer + (await new Promise(function(resolve) {
     const rl = readline.createInterface({
       input: process.stdin,
@@ -1104,6 +1103,7 @@ async function multiSelect(message, choices) {
     
     rl.on('line', function(line) {
       rl.close();
+      process.stdin.pause();
       resolve(line);
     });
   }));
@@ -1445,21 +1445,41 @@ async function main() {
     
   } catch (error) {
     console.error(chalk.red('An error occurred:'), error.message);
+    cleanupStdin();
     process.exit(1);
+  } finally {
+    cleanupStdin();
+  }
+}
+
+function cleanupStdin() {
+  try {
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+      process.stdin.setRawMode(false);
+    }
+    process.stdin.pause();
+  } catch (error) {
   }
 }
 
 process.on('SIGINT', function() {
   console.log(chalk.yellow(`\n\n⚠️  ${APP_CONFIG.messages.OPERATION_CANCELLED}`));
+  cleanupStdin();
   process.exit(0);
 });
 
 process.on('unhandledRejection', function(error) {
   console.error(chalk.red('An unexpected error occurred:'), error);
+  cleanupStdin();
   process.exit(1);
+});
+
+process.on('exit', function() {
+  cleanupStdin();
 });
 
 main().catch(function(error) {
   console.error(chalk.red('A critical error occurred:'), error);
+  cleanupStdin();
   process.exit(1);
 });
