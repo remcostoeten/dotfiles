@@ -137,8 +137,8 @@ function _show_general_help
     echo "🔧 Featured Scripts & Tools:"
     set_color normal
     printf "  %-12s %s\n" "postgres" "$(set_color brblack)Interactive PostgreSQL database manager$(set_color normal)"
-    printf "  %-12s %s\n" "ui" "$(set_color brblack)Smart React component migration tool$(set_color normal)"
-    printf "  %-12s %s\n" "unused" "$(set_color brblack)Find & remove unused TypeScript/JavaScript files$(set_color normal)"
+    printf "  %-12s %s\n" "ui" "$(set_color brblack)🎨 Component Migration + 🔍 Code Analyzer v3.0$(set_color normal)"
+    printf "  %-12s %s\n" "unused" "$(set_color brblack)Find & remove unused files (legacy, use 'ui --analyze')$(set_color normal)"
     printf "  %-12s %s\n" "copy" "$(set_color brblack)Interactive development workflow utility$(set_color normal)"
     echo ""
     
@@ -253,10 +253,15 @@ function _show_scripts_help
     set_color green
     echo "Development & Code Tools:"
     set_color normal
-    echo "  unused         - Find & remove unused TypeScript/JavaScript files"
-    echo "                   Advanced code analysis with backup/restore functionality"
-    echo "  ui             - Smart React Component Migration Tool v2.0"
-    echo "                   Migrates and transforms UI components"
+    echo "  ui             - Interactive Developer Toolkit v3.0 (UPDATED!)"
+    echo "                   🎨 Component Migration + 🔍 Unused Code Analyzer"
+    echo "                   Combined tool with interactive menus for:"
+    echo "                   • React/Next.js component migration & import updates"
+    echo "                   • Unused files, imports, and exports detection"
+    echo "                   • Automatic backups, dry-run modes, and cleanup"
+    echo "                   Run: 'ui' (interactive) or 'ui --help' (CLI flags)"
+    echo "  unused         - Find & remove unused files (use 'ui --analyze' instead)"
+    echo "                   Note: This is an older standalone tool"
     echo "  copy           - Interactive display utility for development workflows"
     echo "                   Works with files, directories, git remotes, and more"
     echo "  cat            - Enhanced cat with syntax highlighting (bat wrapper)"
@@ -306,10 +311,10 @@ function _show_scripts_help
     set_color yellow
     echo "Script Categories by Type:"
     set_color normal
-    printf "  %-15s %s\n" "📝 Python:" "postgres, ui, db_analyzer.py"
+    printf "  %-15s %s\n" "📝 Python:" "ui (unified toolkit), postgres, db_analyzer.py"
     printf "  %-15s %s\n" "🐙 TypeScript:" "dotfiles, simple-menu.ts, docker utilities"
     printf "  %-15s %s\n" "📜 Bash:" "copy, docker-manager, kill-ports, click, cat"
-    printf "  %-15s %s\n" "⚙️ Binary:" "unused (Go/Rust), pgtable"
+    printf "  %-15s %s\n" "⚙️ Binary:" "unused (legacy), pgtable"
     echo ""
     
     set_color white
@@ -317,8 +322,9 @@ function _show_scripts_help
     set_color normal
     echo "  All scripts in bin/ are in PATH and executable anywhere"
     echo "  Most scripts support --help for detailed usage"
-    echo "  Interactive tools: postgres, docker-manager, dotfiles, ui"
-    echo "  Automation tools: unused, click, kill-ports, pgtable"
+    echo "  Interactive tools: ui (NEW!), postgres, docker-manager, dotfiles"
+    echo "  Automation tools: click, kill-ports, pgtable"
+    echo "  Direct CLI flags: ui --migrate, ui --analyze (skip interactive menu)"
     echo ""
     
     set_color brblack

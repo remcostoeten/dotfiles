@@ -67,6 +67,85 @@ env edit                # Open env file in editor
 - `PROJECTS_DIR` - Projects directory
 - `NODE_ENV` - Default Node environment
 
+### Secret Manager: `secret`
+
+```bash
+secret                 # Interactive menu
+secret --add           # Add a new secret
+secret -a              # Add a new secret (short)
+secret --view          # View and copy secrets
+secret -v              # View and copy secrets (short)
+secret --edit          # Edit an existing secret
+secret -e              # Edit an existing secret (short)
+secret --delete        # Delete secret(s)
+secret -d              # Delete secret(s) (short)
+secret --help          # Show help
+secret -h              # Show help (short)
+```
+
+**Features:**
+- Store API keys, tokens, and other development secrets
+- Interactive menu with arrow key navigation
+- Copy secrets to clipboard in multiple formats
+- Multi-select deletion with spacebar
+- Auto-backup before changes (*.bak files)
+- Plain JSON storage (no encryption needed for dev secrets)
+- Private git repo for syncing across machines
+
+**Secret Structure:**
+- **Name**: Identifier for the secret (required)
+- **Prefix**: Environment variable name like `API_KEY` (optional)
+- **Value**: The actual secret value (required)
+
+**Copy Formats:**
+- **Environment variable**: `API_KEY=secret_value` (ready for .env files)
+- **Value only**: Just the secret value
+
+**Storage:**
+- Location: `~/.config/dotfiles/secrets/secrets.json`
+- Format: `{"secrets": [{"name": "...", "prefix": "...", "value": "..."}]}`
+- Backups: Automatically created as `secrets.json.bak` before changes
+
+**Usage Examples:**
+```bash
+# Interactive mode
+secret
+
+# Add a new API key
+secret --add
+# Name: github-token
+# Prefix: GITHUB_TOKEN
+# Value: ghp_xxxxxxxxxxxx
+
+# View secrets and copy
+secret --view
+# Navigate with arrows, press Enter to select
+# Choose: (1) Environment variable or (2) Value only
+
+# Edit a secret
+secret --edit
+# Select secret, update any field
+
+# Delete secrets
+secret --delete
+# Use spacebar to select multiple, Enter to confirm
+```
+
+**Syncing Secrets:**
+```bash
+# Initialize as git repo (first time)
+cd ~/.config/dotfiles/secrets
+git init
+git add secrets.json
+git commit -m "Initial secrets"
+git remote add origin <your-private-repo>
+git push -u origin main
+
+# On another machine
+cd ~/.config/dotfiles
+git clone <your-private-repo> secrets
+```
+
 ### Port Manager: `ports`
 
 ```bash
