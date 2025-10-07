@@ -1,1 +1,14 @@
-/home/remco-stoeten/.config/dotfiles/scripts/ui
+#!/usr/bin/env bash
+
+# UI Toolkit Wrapper Script
+# Forwards all arguments to the Python implementation
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_SCRIPT="$SCRIPT_DIR/../scripts/ui-toolkit.py"
+
+if [ ! -f "$PYTHON_SCRIPT" ]; then
+    echo "❌ Error: ui-toolkit.py not found at: $PYTHON_SCRIPT"
+    exit 1
+fi
+
+exec python3 "$PYTHON_SCRIPT" "$@"

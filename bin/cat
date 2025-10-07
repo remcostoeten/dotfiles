@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+# Cat wrapper using bat --plain
+# This provides syntax highlighting while maintaining cat-like behavior
+
+# Check if batcat is available (Ubuntu package name)
+if command -v batcat &> /dev/null; then
+    exec batcat --plain --paging=never "$@"
+elif command -v bat &> /dev/null; then
+    exec bat --plain --paging=never "$@"
+else
+    # Fallback to regular cat if neither is installed
+    exec /bin/cat "$@"
+fi

@@ -1,0 +1,739 @@
+#!/usr/bin/env bash
+
+# Emoji Picker Script
+# Interactive emoji selector with categories and smart search
+
+# Color definitions
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Emoji categories with comprehensive lists
+declare -A EMOJI_CATEGORIES
+
+EMOJI_CATEGORIES[party]="🎉 🎊 🥳 🎈 🎆 🎇 ✨ 🎁 🎀 🎂 🍾 🥂 🍻 🎭 🎪 🎨 🎬 🎤 🎧 🎼 🎹 🎺 🎷 🎸 🪕 🥁 🎮"
+EMOJI_CATEGORIES[smile]="😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 😎"
+EMOJI_CATEGORIES[sad]="😢 😭 😿 😔 😞 😓 😩 😫 🥺 😖 😣 😰 😨 😧 😦 😱 🙁 ☹️ 😕 🥹"
+EMOJI_CATEGORIES[flowers]="🌸 🌺 🌼 🌻 🌷 🌹 🥀 💐 🏵️ 🌾 🌿 ☘️ 🍀 🪴 🌵 🌴 🌳 🌲 🌱"
+EMOJI_CATEGORIES[flags]="🏳️ 🏴 🏁 🚩 🏳️‍🌈 🏳️‍⚧️ 🇺🇳 🇦🇫 🇦🇽 🇦🇱 🇩🇿 🇦🇸 🇦🇩 🇦🇴 🇦🇮 🇦🇶 🇦🇬 🇦🇷 🇦🇲 🇦🇼 🇦🇺 🇦🇹 🇦🇿 🇧🇸 🇧🇭 🇧🇩 🇧🇧 🇧🇾 🇧🇪 🇧🇿 🇧🇯 🇧🇲 🇧🇹 🇧🇴 🇧🇦 🇧🇼 🇧🇷 🇮🇴 🇻🇬 🇧🇳 🇧🇬 🇧🇫 🇧🇮 🇰🇭 🇨🇲 🇨🇦 🇮🇨 🇨🇻 🇧🇶 🇰🇾 🇨🇫 🇹🇩 🇨🇱 🇨🇳 🇨🇽 🇨🇨 🇨🇴 🇰🇲 🇨🇬 🇨🇩 🇨🇰 🇨🇷 🇨🇮 🇭🇷 🇨🇺 🇨🇼 🇨🇾 🇨🇿 🇩🇰 🇩🇯 🇩🇲 🇩🇴 🇪🇨 🇪🇬 🇸🇻 🇬🇶 🇪🇷 🇪🇪 🇪🇹 🇪🇺 🇫🇰 🇫🇴 🇫🇯 🇫🇮 🇫🇷 🇬🇫 🇵🇫 🇹🇫 🇬🇦 🇬🇲 🇬🇪 🇩🇪 🇬🇭 🇬🇮 🇬🇷 🇬🇱 🇬🇩 🇬🇵 🇬🇺 🇬🇹 🇬🇬 🇬🇳 🇬🇼 🇬🇾 🇭🇹 🇭🇳 🇭🇰 🇭🇺 🇮🇸 🇮🇳 🇮🇩 🇮🇷 🇮🇶 🇮🇪 🇮🇲 🇮🇱 🇮🇹 🇯🇲 🇯🇵 🇯🇪 🇯🇴 🇰🇿 🇰🇪 🇰🇮 🇽🇰 🇰🇼 🇰🇬 🇱🇦 🇱🇻 🇱🇧 🇱🇸 🇱🇷 🇱🇾 🇱🇮 🇱🇹 🇱🇺 🇲🇴 🇲🇰 🇲🇬 🇲🇼 🇲🇾 🇲🇻 🇲🇱 🇲🇹 🇲🇭 🇲🇶 🇲🇷 🇲🇺 🇾🇹 🇲🇽 🇫🇲 🇲🇩 🇲🇨 🇲🇳 🇲🇪 🇲🇸 🇲🇦 🇲🇿 🇲🇲 🇳🇦 🇳🇷 🇳🇵 🇳🇱 🇳🇨 🇳🇿 🇳🇮 🇳🇪 🇳🇬 🇳🇺 🇳🇫 🇰🇵 🇲🇵 🇳🇴 🇴🇲 🇵🇰 🇵🇼 🇵🇸 🇵🇦 🇵🇬 🇵🇾 🇵🇪 🇵🇭 🇵🇳 🇵🇱 🇵🇹 🇵🇷 🇶🇦 🇷🇪 🇷🇴 🇷🇺 🇷🇼 🇼🇸 🇸🇲 🇸🇹 🇸🇦 🇸🇳 🇷🇸 🇸🇨 🇸🇱 🇸🇬 🇸🇽 🇸🇰 🇸🇮 🇬🇸 🇸🇧 🇸🇴 🇿🇦 🇰🇷 🇸🇸 🇪🇸 🇱🇰 🇧🇱 🇸🇭 🇰🇳 🇱🇨 🇵🇲 🇻🇨 🇸🇩 🇸🇷 🇸🇯 🇸🇿 🇸🇪 🇨🇭 🇸🇾 🇹🇼 🇹🇯 🇹🇿 🇹🇭 🇹🇱 🇹🇬 🇹🇰 🇹🇴 🇹🇹 🇹🇳 🇹🇷 🇹🇲 🇹🇨 🇹🇻 🇻🇮 🇺🇬 🇺🇦 🇦🇪 🇬🇧 🏴󠁧󠁢󠁥󠁮󠁧󠁿 🏴󠁧󠁢󠁳󠁣󠁴󠁿 🏴󠁧󠁢󠁷󠁬󠁳󠁿 🇺🇸 🇺🇾 🇺🇿 🇻🇺 🇻🇦 🇻🇪 🇻🇳 🇼🇫 🇪🇭 🇾🇪 🇿🇲 🇿🇼"
+EMOJI_CATEGORIES[hearts]="❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❤️‍🔥 ❤️‍🩹 💕 💞 💓 💗 💖 💘 💝 💟 ♥️ 💌"
+EMOJI_CATEGORIES[food]="🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🍆 🥑 🥦 🥬 🥒 🌶️ 🫑 🌽 🥕 🫒 🧄 🧅 🥔 🍠 🥐 🥯 🍞 🥖 🥨 🧀 🥚 🍳 🧈 🥞 🧇 🥓 🥩 🍗 🍖 🦴 🌭 🍔 🍟 🍕 🫓 🥪 🥙 🧆 🌮 🌯 🫔 🥗 🥘 🫕 🥫 🍝 🍜 🍲 🍛 🍣 🍱 🥟 🦪 🍤 🍙 🍚 🍘 🍥 🥠 🥮 🍢 🍡 🍧 🍨 🍦 🥧 🧁 🍰 🎂 🍮 🍭 🍬 🍫 🍿 🍩 🍪 🌰 🥜 🍯 🥛 🍼 🫖 ☕ 🍵 🧃 🥤 🧋 🍶 🍺 🍻 🥂 🍷 🥃 🍸 🍹 🧉 🍾 🧊"
+EMOJI_CATEGORIES[animals]="🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐻‍❄️ 🐨 🐯 🦁 🐮 🐷 🐽 🐸 🐵 🙈 🙉 🙊 🐒 🐔 🐧 🐦 🐤 🐣 🐥 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🪱 🐛 🦋 🐌 🐞 🐜 🪰 🪲 🪳 🦟 🦗 🕷️ 🕸️ 🦂 🐢 🐍 🦎 🦖 🦕 🐙 🦑 🦐 🦞 🦀 🐡 🐠 🐟 🐬 🐳 🐋 🦈 🐊 🐅 🐆 🦓 🦍 🦧 🦣 🐘 🦛 🦏 🐪 🐫 🦒 🦘 🦬 🐃 🐂 🐄 🐎 🐖 🐏 🐑 🦙 🐐 🦌 🐕 🐩 🦮 🐕‍🦺 🐈 🐈‍⬛ 🪶 🐓 🦃 🦤 🦚 🦜 🦢 🦩 🕊️ 🐇 🦝 🦨 🦡 🦫 🦦 🦥 🐁 🐀 🐿️ 🦔"
+EMOJI_CATEGORIES[travel]="🚗 🚕 🚙 🚌 🚎 🏎️ 🚓 🚑 🚒 🚐 🛻 🚚 🚛 🚜 🦯 🦽 🦼 🛴 🚲 🛵 🏍️ 🛺 🚨 🚔 🚍 🚘 🚖 🚡 🚠 🚟 🚃 🚋 🚞 🚝 🚄 🚅 🚈 🚂 🚆 🚇 🚊 🚉 ✈️ 🛫 🛬 🛩️ 💺 🛰️ 🚀 🛸 🚁 🛶 ⛵ 🚤 🛥️ 🛳️ ⛴️ 🚢 ⚓ 🪝 ⛽ 🚧 🚦 🚥 🚏 🗺️ 🗿 🗽 🗼 🏰 🏯 🏟️ 🎡 🎢 🎠 ⛲ ⛱️ 🏖️ 🏝️ 🏜️ 🌋 ⛰️ 🏔️ 🗻 🏕️ ⛺ 🛖 🏠 🏡 🏘️ 🏚️ 🏗️ 🏭 🏢 🏬 🏣 🏤 🏥 🏦 🏨 🏪 🏫 🏩 💒 🏛️ ⛪ 🕌 🕍 🛕 🕋 ⛩️"
+EMOJI_CATEGORIES[nature]="☀️ 🌤️ ⛅ 🌥️ ☁️ 🌦️ 🌧️ ⛈️ 🌩️ 🌨️ ❄️ ☃️ ⛄ 🌬️ 💨 💧 💦 ☔ ☂️ 🌊 🌫️ 🌈 ⭐ 🌟 ✨ ⚡ 🔥 💥 ☄️ 🌙 🌛 🌜 🌚 🌕 🌖 🌗 🌘 🌑 🌒 🌓 🌔 🌍 🌎 🌏 🪐 🌌 🌠 🌄 🌅 🌆 🌇 🌃 🏙️"
+EMOJI_CATEGORIES[objects]="⌚ 📱 📲 💻 ⌨️ 🖥️ 🖨️ 🖱️ 🖲️ 🕹️ 🗜️ 💽 💾 💿 📀 📼 📷 📸 📹 🎥 📽️ 🎞️ 📞 ☎️ 📟 📠 📺 📻 🎙️ 🎚️ 🎛️ 🧭 ⏱️ ⏲️ ⏰ 🕰️ ⌛ ⏳ 📡 🔋 🔌 💡 🔦 🕯️ 🪔 🧯 🛢️ 💸 💵 💴 💶 💷 🪙 💰 💳 💎 ⚖️ 🪜 🧰 🪛 🔧 🔨 ⚒️ 🛠️ ⛏️ 🪚 🔩 ⚙️ 🪤 🧱 ⛓️ 🧲 🔫 💣 🧨 🪓 🔪 🗡️ ⚔️ 🛡️ 🚬 ⚰️ 🪦 ⚱️ 🏺 🔮 📿 🧿 💈 ⚗️ 🔭 🔬 🕳️ 🩹 🩺 💊 💉 🩸 🧬 🦠 🧫 🧪 🌡️ 🧹 🪠 🧺 🧻 🚽 🚰 🚿 🛁 🛀 🧼 🪥 🪒 🧽 🪣 🧴 🛎️ 🔑 🗝️ 🚪 🪑 🛋️ 🛏️ 🛌 🧸 🪆 🖼️ 🪞 🪟 🛍️ 🛒 🎁 🎈 🎏 🎀 🪄 🪅 🎊 🎉 🪩 🎎 🏮 🎐 🧧 ✉️ 📩 📨 📧 💌 📥 📤 📦 🏷️ 🪧 📪 📫 📬 📭 📮 📯 📜 📃 📄 📑 🧾 📊 📈 📉 🗒️ 🗓️ 📆 📅 🗑️ 📇 🗃️ 🗳️ 🗄️ 📋 📁 📂 🗂️ 🗞️ 📰 📓 📔 📒 📕 📗 📘 📙 📚 📖 🔖 🧷 🔗 📎 🖇️ 📐 📏 🧮 📌 📍 ✂️ 🖊️ 🖋️ ✒️ 🖌️ 🖍️ 📝 ✏️ 🔍 🔎 🔏 🔐 🔒 🔓"
+EMOJI_CATEGORIES[symbols]="❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔯 🕎 ☯️ ☦️ 🛐 ⛎ ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ 🆔 ⚛️ 🉑 ☢️ ☣️ 📴 📳 🈶 🈚 🈸 🈺 🈷️ ✴️ 🆚 💮 🉐 ㊙️ ㊗️ 🈴 🈵 🈹 🈲 🅰️ 🅱️ 🆎 🆑 🅾️ 🆘 ❌ ⭕ 🛑 ⛔ 📛 🚫 💯 💢 ♨️ 🚷 🚯 🚳 🚱 🔞 📵 🚭 ❗ ❕ ❓ ❔ ‼️ ⁉️ 🔅 🔆 〽️ ⚠️ 🚸 🔱 ⚜️ 🔰 ♻️ ✅ 🈯 💹 ❇️ ✳️ ❎ 🌐 💠 Ⓜ️ 🌀 💤 🏧 🚾 ♿ 🅿️ 🛗 🈳 🈂️ 🛂 🛃 🛄 🛅 🚹 🚺 🚼 ⚧️ 🚻 🚮 🎦 📶 🈁 🔣 ℹ️ 🔤 🔡 🔠 🆖 🆗 🆙 🆒 🆕 🆓 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ 🔟 🔢 #️⃣ *️⃣ ⏏️ ▶️ ⏸️ ⏯️ ⏹️ ⏺️ ⏭️ ⏮️ ⏩ ⏪ ⏫ ⏬ ◀️ 🔼 🔽 ➡️ ⬅️ ⬆️ ⬇️ ↗️ ↘️ ↙️ ↖️ ↕️ ↔️ ↪️ ↩️ ⤴️ ⤵️ 🔀 🔁 🔂 🔄 🔃 🎵 🎶 ➕ ➖ ➗ ✖️ ♾️ 💲 💱 ™️ ©️ ®️ 〰️ ➰ ➿ 🔚 🔙 🔛 🔝 🔜 ✔️ ☑️ 🔘 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟤 🔺 🔻 🔸 🔹 🔶 🔷 🔳 🔲 ▪️ ▫️ ◾ ◽ ◼️ ◻️ 🟥 🟧 🟨 🟩 🟦 🟪 ⬛ ⬜ 🟫 🔈 🔇 🔉 🔊 🔔 🔕 📣 📢 💬 💭 🗯️ ♠️ ♣️ ♥️ ♦️ 🃏 🎴 🀄 🕐 🕑 🕒 🕓 🕔 🕕 🕖 🕗 🕘 🕙 🕚 🕛 🕜 🕝 🕞 🕟 🕠 🕡 🕢 🕣 🕤 🕥 🕦 🕧"
+EMOJI_CATEGORIES[sports]="⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🪀 🏓 🏸 🏒 🏑 🥍 🏏 🪃 🥅 ⛳ 🪁 🏹 🎣 🤿 🥊 🥋 🎽 🛹 🛼 🛷 ⛸️ 🥌 🎿 ⛷️ 🏂 🪂 🏋️ 🤼 🤸 🤺 🤾 🏌️ 🏇 🧘 🏄 🏊 🤽 🚣 🧗 🚵 🚴 🏆 🥇 🥈 🥉 🏅 🎖️ 🏵️ 🎗️"
+EMOJI_CATEGORIES[hands]="👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🤝 🙏 ✍️ 💅 🤳 💪 🦾 🦿 🦵 🦶 👂 🦻 👃 🧠 🫀 🫁 🦷 🦴 👀 👁️ 👅 👄"
+EMOJI_CATEGORIES[people]="👶 👧 🧒 👦 👩 🧑 👨 👩‍🦱 🧑‍🦱 👨‍🦱 👩‍🦰 🧑‍🦰 👨‍🦰 👱‍♀️ 👱 👱‍♂️ 👩‍🦳 🧑‍🦳 👨‍🦳 👩‍🦲 🧑‍🦲 👨‍🦲 🧔‍♀️ 🧔 🧔‍♂️ 👵 🧓 👴 👲 👳‍♀️ 👳 👳‍♂️ 🧕 👮‍♀️ 👮 👮‍♂️ 👷‍♀️ 👷 👷‍♂️ 💂‍♀️ 💂 💂‍♂️ 🕵️‍♀️ 🕵️ 🕵️‍♂️ 👩‍⚕️ 🧑‍⚕️ 👨‍⚕️ 👩‍🌾 🧑‍🌾 👨‍🌾 👩‍🍳 🧑‍🍳 👨‍🍳 👩‍🎓 🧑‍🎓 👨‍🎓 👩‍🎤 🧑‍🎤 👨‍🎤 👩‍🏫 🧑‍🏫 👨‍🏫 👩‍🏭 🧑‍🏭 👨‍🏭 👩‍💻 🧑‍💻 👨‍💻 👩‍💼 🧑‍💼 👨‍💼 👩‍🔧 🧑‍🔧 👨‍🔧 👩‍🔬 🧑‍🔬 👨‍🔬 👩‍🎨 🧑‍🎨 👨‍🎨 👩‍🚒 🧑‍🚒 👨‍🚒 👩‍✈️ 🧑‍✈️ 👨‍✈️ 👩‍🚀 🧑‍🚀 👨‍🚀 👩‍⚖️ 🧑‍⚖️ 👨‍⚖️ 👰‍♀️ 👰 👰‍♂️ 🤵‍♀️ 🤵 🤵‍♂️ 👸 🤴 🥷 🦸‍♀️ 🦸 🦸‍♂️ 🦹‍♀️ 🦹 🦹‍♂️ 🤶 🧑‍🎄 🎅 🧙‍♀️ 🧙 🧙‍♂️ 🧝‍♀️ 🧝 🧝‍♂️ 🧛‍♀️ 🧛 🧛‍♂️ 🧟‍♀️ 🧟 🧟‍♂️ 🧞‍♀️ 🧞 🧞‍♂️ 🧜‍♀️ 🧜 🧜‍♂️ 🧚‍♀️ 🧚 🧚‍♂️ 👼 🤰 🤱 👩‍🍼 🧑‍🍼 👨‍🍼"
+EMOJI_CATEGORIES[weather]="☀️ 🌤️ ⛅ 🌥️ ☁️ 🌦️ 🌧️ ⛈️ 🌩️ 🌨️ ❄️ ☃️ ⛄ 🌬️ 💨 🌪️ 🌫️ 🌈 ☔ ⚡ ⛱️"
+EMOJI_CATEGORIES[tech]="💻 🖥️ 🖨️ ⌨️ 🖱️ 🖲️ 💽 💾 💿 📀 📱 📲 ☎️ 📞 📟 📠 📡 🔋 🔌 💡 🔦 🕯️ 🧯 🛢️ 💸 🔧 🔨 ⚒️ 🛠️ ⛏️ 🔩 ⚙️ 🔗 ⛓️ 🧲 🧰 🧪 🧫 🧬 🔬 🔭 📡 💉 💊 🩹 🩺 🚪 🛗 🪟 🪜 🧳 ⏱️ ⏲️ ⏰ 🕰️ ⌛ ⏳ 📅 📆 🗓️ 📇 📈 📉 📊 📋 📌 📍 📎 🖇️ 📏 📐 ✂️ 🗃️ 🗄️ 🗑️"
+
+# Copy to clipboard function (handles both X11 and Wayland)
+copy_to_clipboard() {
+    local emoji="$1"
+    if command -v wl-copy &> /dev/null && [ -n "$WAYLAND_DISPLAY" ]; then
+        echo -n "$emoji" | wl-copy
+        echo -e "${GREEN}✓${NC} Copied to clipboard (Wayland): ${CYAN}$emoji${NC}"
+    elif command -v xclip &> /dev/null; then
+        echo -n "$emoji" | xclip -selection clipboard
+        echo -e "${GREEN}✓${NC} Copied to clipboard (X11): ${CYAN}$emoji${NC}"
+    else
+        echo -e "${RED}✗${NC} Neither xclip nor wl-copy found. Please install one of them."
+        echo -e "${YELLOW}Install with:${NC} sudo apt install xclip ${YELLOW}or${NC} sudo apt install wl-clipboard"
+        return 1
+    fi
+}
+
+# Show help
+show_help() {
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}                    🎭 EMOJI PICKER 🎭${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  ${GREEN}emoji${NC}                      ${MAGENTA}→${NC} Show all emojis with smart search"
+    echo -e "  ${GREEN}emoji${NC} ${CYAN}--CATEGORY${NC}           ${MAGENTA}→${NC} Show category-specific emojis"
+    echo -e "  ${GREEN}emoji${NC} ${CYAN}--help${NC}               ${MAGENTA}→${NC} Show this help menu"
+    echo ""
+    echo -e "${YELLOW}Available Categories:${NC}"
+    local categories=(party smile sad flowers flags hearts food animals travel nature objects symbols sports hands people weather tech)
+    for category in "${categories[@]}"; do
+        local emojis="${EMOJI_CATEGORIES[$category]}"
+        local first_emojis=$(echo "$emojis" | cut -d' ' -f1-5)
+        echo -e "  ${CYAN}--${category}${NC}$(printf '%*s' $((20 - ${#category})) '')${first_emojis} ..."
+    done
+    echo ""
+    echo -e "${YELLOW}Examples:${NC}"
+    echo -e "  ${GREEN}emoji${NC}                      ${MAGENTA}→${NC} Browse all emojis"
+    echo -e "  ${GREEN}emoji${NC} ${CYAN}--party${NC}              ${MAGENTA}→${NC} Show party emojis"
+    echo -e "  ${GREEN}emoji${NC} ${CYAN}--food${NC}               ${MAGENTA}→${NC} Show food emojis"
+    echo -e "  ${GREEN}emoji${NC} ${CYAN}--flags${NC}              ${MAGENTA}→${NC} Show country flags"
+    echo ""
+    echo -e "${YELLOW}Features:${NC}"
+    echo -e "  ${GREEN}✓${NC} Interactive selection with ${CYAN}fzf${NC}"
+    echo -e "  ${GREEN}✓${NC} Smart semantic search"
+    echo -e "  ${GREEN}✓${NC} Auto-copy to clipboard on selection"
+    echo -e "  ${GREEN}✓${NC} Supports both X11 and Wayland"
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}
+
+# Show available categories
+show_categories() {
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}                Available Emoji Categories${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    for category in "${!EMOJI_CATEGORIES[@]}"; do
+        local emojis="${EMOJI_CATEGORIES[$category]}"
+        local first_emojis=$(echo "$emojis" | cut -d' ' -f1-8)
+        echo -e "${YELLOW}--${category}${NC}"
+        echo -e "  ${first_emojis} ..."
+        echo ""
+    done
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${MAGENTA}Run with:${NC} ${GREEN}emoji --CATEGORY${NC}"
+    echo -e "${MAGENTA}Example:${NC}  ${GREEN}emoji --party${NC}"
+}
+
+# Generate emoji list with semantic data
+generate_emoji_list() {
+    local emojis="$1"
+    local category="$2"
+    python3 - "$emojis" "$category" << 'PYTHON_EOF'
+import sys
+import unicodedata
+import re
+
+# Get arguments
+emojis_str = sys.argv[1] if len(sys.argv) > 1 else ""
+category = sys.argv[2] if len(sys.argv) > 2 else "all"
+
+# Comprehensive emoji metadata database with natural language keywords
+emoji_data = {
+    # Party & Celebration
+    "🎉": ["party popper", "celebration", "party", "congrats", "hooray", "celebrate", "tada", "festive"],
+    "🎊": ["confetti ball", "party", "celebration", "tada", "congrats", "festive"],
+    "🥳": ["partying face", "party", "celebration", "happy", "fun", "birthday", "festive", "smiley"],
+    "🎈": ["balloon", "party", "celebration", "birthday", "decoration", "festive"],
+    "🎆": ["fireworks", "celebration", "party", "festival", "night", "boom", "pyrotechnics"],
+    "🎇": ["sparkler", "celebration", "party", "fireworks", "festival", "shiny"],
+    "✨": ["sparkles", "shiny", "magic", "clean", "new", "special", "glitter", "shine"],
+    "🎁": ["wrapped gift", "present", "birthday", "party", "surprise", "box"],
+    "🎀": ["ribbon", "decoration", "present", "gift", "bow", "pretty"],
+    "🎂": ["birthday cake", "cake", "party", "celebration", "birthday", "dessert", "candles"],
+    
+    # Smiles & Positive Emotions
+    "😀": ["grinning face", "smile", "smiley", "happy", "joy", "cheerful", "grin", "happiness"],
+    "😃": ["grinning face with big eyes", "smile", "smiley", "happy", "joy", "excited", "grin", "happiness"],
+    "😄": ["grinning face with smiling eyes", "smile", "smiley", "happy", "joy", "laugh", "grin", "happiness", "haha"],
+    "😁": ["beaming face", "smile", "smiley", "happy", "grin", "teeth", "cheerful", "happiness"],
+    "😆": ["grinning squinting face", "smiley", "laugh", "happy", "lol", "haha", "hahaha", "giggle", "lmao", "funny"],
+    "😅": ["grinning face with sweat", "smiley", "laugh", "relief", "nervous", "phew", "awkward", "haha", "lol"],
+    "🤣": ["rolling on floor laughing", "smiley", "lol", "rofl", "laugh", "hilarious", "funny", "lmao", "lmfao", "haha", "hahaha", "dead"],
+    "😂": ["face with tears of joy", "smiley", "laugh", "lol", "crying", "funny", "hilarious", "haha", "hahaha", "lmao", "rofl", "dead"],
+    "🙂": ["slightly smiling face", "smile", "smiley", "happy", "content", "pleasant", "happiness"],
+    "🙃": ["upside down face", "smiley", "silly", "sarcasm", "playful", "ironic", "sarcastic"],
+    "😉": ["winking face", "smiley", "wink", "flirt", "playful", "suggestive", "cheeky"],
+    "😊": ["smiling face with smiling eyes", "smiley", "smile", "happy", "blush", "blushing", "pleased", "content", "happiness"],
+    "😇": ["smiling face with halo", "smiley", "angel", "innocent", "good", "saint", "pure"],
+    "🥰": ["smiling face with hearts", "smiley", "love", "adore", "crush", "hearts", "affection", "happy", "blush"],
+    "😍": ["smiling face with heart-eyes", "smiley", "love", "heart", "crush", "adore", "infatuated", "hearts"],
+    "🤩": ["star-struck", "smiley", "amazed", "wow", "excited", "starstruck", "impressed", "awesome"],
+    "😘": ["face blowing kiss", "smiley", "kiss", "love", "muah", "affection", "smooch"],
+    "😗": ["kissing face", "smiley", "kiss", "love", "smooch", "pucker"],
+    "😚": ["kissing face with closed eyes", "smiley", "kiss", "love", "smooch"],
+    "😙": ["kissing face with smiling eyes", "smiley", "kiss", "love", "happy", "smooch"],
+    "🥲": ["smiling face with tear", "smiley", "touched", "grateful", "emotional", "bittersweet", "crying", "happy"],
+    "😋": ["face savoring food", "smiley", "yum", "delicious", "tasty", "hungry", "eating", "yummy"],
+    "😛": ["face with tongue", "smiley", "playful", "silly", "tease", "tongue", "bleh"],
+    "😜": ["winking face with tongue", "smiley", "playful", "silly", "tease", "wink", "cheeky"],
+    "🤪": ["zany face", "smiley", "crazy", "wild", "silly", "goofy", "mad", "insane"],
+    "😝": ["squinting face with tongue", "smiley", "playful", "silly", "tease", "yuck", "bleh"],
+    "🤑": ["money mouth face", "smiley", "rich", "money", "dollar", "greedy", "cash"],
+    "😎": ["smiling face with sunglasses", "smiley", "cool", "sunglasses", "swagger", "confident", "awesome", "rad", "chill"],
+    
+    # Sad & Negative Emotions
+    "😢": ["crying face", "sad", "tear", "cry", "crying", "upset", "unhappy", "tears"],
+    "😭": ["loudly crying face", "sob", "cry", "crying", "sad", "bawling", "tears", "sobbing", "bawl"],
+    "😿": ["crying cat", "sad", "cat", "tear", "crying", "upset", "kitty", "tears"],
+    "😔": ["pensive face", "sad", "depressed", "down", "thoughtful", "dejected", "unhappy"],
+    "😞": ["disappointed face", "sad", "upset", "let down", "frown", "unhappy", "disappointed"],
+    "😓": ["downcast face with sweat", "sad", "stressed", "worried", "anxiety", "nervous"],
+    "😩": ["weary face", "tired", "exhausted", "stressed", "fed up", "frustrated"],
+    "😫": ["tired face", "exhausted", "weary", "worn out", "frustrated", "tired"],
+    "🥺": ["pleading face", "puppy eyes", "beg", "please", "cute", "sad", "pleading"],
+    "😖": ["confounded face", "confused", "frustrated", "stressed", "upset", "confounded"],
+    "😣": ["persevering face", "struggling", "difficult", "frustrated", "helpless", "persevere"],
+    "😰": ["anxious face with sweat", "worried", "nervous", "scared", "anxious", "anxiety"],
+    "😨": ["fearful face", "scared", "afraid", "frightened", "terror", "fear"],
+    "😧": ["anguished face", "shocked", "dismayed", "upset", "distressed", "anguish"],
+    "😦": ["frowning face with open mouth", "shocked", "surprised", "worried", "surprise"],
+    "😱": ["face screaming in fear", "scared", "terrified", "shocked", "scream", "omg"],
+    "🙁": ["slightly frowning face", "sad", "unhappy", "disappointed", "frown"],
+    "☹️": ["frowning face", "sad", "unhappy", "upset", "frown"],
+    "😕": ["confused face", "confused", "uncertain", "puzzled", "unsure", "confusion"],
+    "🥹": ["face holding back tears", "touched", "emotional", "grateful", "moved", "tears", "crying"],
+    
+    # Flowers & Plants
+    "🌸": ["cherry blossom", "flower", "spring", "pink", "nature", "sakura", "bloom"],
+    "🌺": ["hibiscus", "flower", "tropical", "nature", "bloom", "exotic"],
+    "🌼": ["blossom", "flower", "nature", "yellow", "daisy", "bloom"],
+    "🌻": ["sunflower", "flower", "yellow", "nature", "sun", "bright"],
+    "🌷": ["tulip", "flower", "spring", "nature", "bloom", "netherlands"],
+    "🌹": ["rose", "flower", "red", "love", "romance", "valentine"],
+    "🥀": ["wilted flower", "dead", "decay", "sad", "dried"],
+    "💐": ["bouquet", "flowers", "gift", "arrangement", "bunch"],
+    "🏵️": ["rosette", "flower", "prize", "award", "decoration"],
+    "🌾": ["sheaf of rice", "grain", "harvest", "farm", "crop"],
+    "🌿": ["herb", "plant", "leaf", "nature", "green"],
+    "☘️": ["shamrock", "clover", "irish", "luck", "green"],
+    "🍀": ["four leaf clover", "lucky", "rare", "fortune", "irish"],
+    "🪴": ["potted plant", "plant", "pot", "indoor", "houseplant"],
+    "🌵": ["cactus", "desert", "plant", "prickly", "succulent"],
+    "🌴": ["palm tree", "tropical", "beach", "vacation", "tree"],
+    "🌳": ["deciduous tree", "tree", "nature", "forest", "green"],
+    "🌲": ["evergreen tree", "tree", "pine", "christmas", "forest"],
+    "🌱": ["seedling", "plant", "sprout", "new", "growth", "young"],
+    
+    # Hearts & Love
+    "❤️": ["red heart", "love", "heart", "romance", "like", "valentine"],
+    "🧡": ["orange heart", "love", "heart", "like", "orange", "affection"],
+    "💛": ["yellow heart", "love", "heart", "friendship", "happy", "gold"],
+    "💚": ["green heart", "love", "heart", "nature", "jealous", "envy"],
+    "💙": ["blue heart", "love", "heart", "trust", "loyalty", "peace"],
+    "💜": ["purple heart", "love", "heart", "compassion", "understanding", "care"],
+    "🖤": ["black heart", "love", "dark", "evil", "wicked"],
+    "🤍": ["white heart", "love", "pure", "clean", "innocent"],
+    "🤎": ["brown heart", "love", "brown", "earth", "natural"],
+    "💔": ["broken heart", "heartbreak", "sad", "breakup", "hurt"],
+    "❤️‍🔥": ["heart on fire", "love", "passion", "burning", "intense"],
+    "❤️‍🩹": ["mending heart", "healing", "recovery", "heartbreak", "better"],
+    "💕": ["two hearts", "love", "romance", "couple", "affection"],
+    "💞": ["revolving hearts", "love", "romance", "spinning"],
+    "💓": ["beating heart", "love", "heartbeat", "pulse", "alive"],
+    "💗": ["growing heart", "love", "growing", "expanding", "increasing"],
+    "💖": ["sparkling heart", "love", "sparkle", "shiny", "special"],
+    "💘": ["heart with arrow", "cupid", "love", "crush", "romance"],
+    "💝": ["heart with ribbon", "gift", "love", "present", "valentine"],
+    "💟": ["heart decoration", "love", "purple", "cute", "decorative"],
+    "♥️": ["heart suit", "love", "cards", "poker", "valentine"],
+    "💌": ["love letter", "letter", "love", "mail", "message", "romantic"],
+    
+    # Food & Drinks
+    "🍎": ["red apple", "fruit", "apple", "healthy", "food"],
+    "🍐": ["pear", "fruit", "food", "healthy"],
+    "🍊": ["tangerine", "orange", "fruit", "citrus"],
+    "🍋": ["lemon", "fruit", "citrus", "sour", "yellow"],
+    "🍌": ["banana", "fruit", "yellow", "food"],
+    "🍉": ["watermelon", "fruit", "summer", "red", "juicy"],
+    "🍇": ["grapes", "fruit", "wine", "purple", "vine"],
+    "🍓": ["strawberry", "fruit", "berry", "red", "sweet"],
+    "🍕": ["pizza", "food", "italian", "slice", "cheese", "pepperoni"],
+    "🍔": ["hamburger", "burger", "food", "fast food", "meal", "beef"],
+    "🍟": ["french fries", "fries", "food", "fast food", "potato"],
+    "🌭": ["hot dog", "food", "sausage", "wiener", "frank"],
+    "🍿": ["popcorn", "snack", "movie", "cinema", "corn"],
+    "🍩": ["doughnut", "donut", "food", "sweet", "dessert"],
+    "🍪": ["cookie", "food", "sweet", "dessert", "biscuit"],
+    "🎂": ["birthday cake", "cake", "party", "celebration", "birthday", "dessert"],
+    "🍰": ["shortcake", "cake", "dessert", "sweet", "slice"],
+    "🧁": ["cupcake", "cake", "dessert", "sweet", "muffin"],
+    "🍫": ["chocolate bar", "chocolate", "candy", "sweet", "dessert"],
+    "🍬": ["candy", "sweet", "lollipop", "treat", "sugar"],
+    "🍭": ["lollipop", "candy", "sweet", "treat", "sucker"],
+    "🍺": ["beer mug", "beer", "drink", "alcohol", "cheers", "brew"],
+    "🍻": ["clinking beer mugs", "beer", "cheers", "toast", "drinks"],
+    "🥂": ["clinking glasses", "champagne", "toast", "celebration", "cheers"],
+    "🍷": ["wine glass", "wine", "drink", "alcohol", "red"],
+    "🥃": ["tumbler glass", "whiskey", "drink", "alcohol", "bourbon"],
+    "🍸": ["cocktail glass", "cocktail", "drink", "alcohol", "martini"],
+    "🍹": ["tropical drink", "cocktail", "vacation", "beach", "drink"],
+    "☕": ["coffee", "hot beverage", "drink", "morning", "cafe", "caffeine"],
+    "🍵": ["teacup", "tea", "drink", "green tea", "hot"],
+    "🥛": ["glass of milk", "milk", "drink", "dairy", "white"],
+    "🧃": ["beverage box", "juice", "drink", "juice box"],
+    "🥤": ["cup with straw", "drink", "soda", "beverage"],
+    
+    # Animals
+    "🐶": ["dog face", "dog", "puppy", "pet", "cute", "woof"],
+    "🐱": ["cat face", "cat", "kitten", "pet", "cute", "meow"],
+    "🐭": ["mouse face", "mouse", "rodent", "pet", "small"],
+    "🐹": ["hamster", "rodent", "pet", "cute", "small"],
+    "🐰": ["rabbit face", "rabbit", "bunny", "pet", "cute", "hop"],
+    "🦊": ["fox", "animal", "clever", "orange", "wild"],
+    "🐻": ["bear", "animal", "wild", "grizzly", "teddy"],
+    "🐼": ["panda", "animal", "cute", "bamboo", "china"],
+    "🐨": ["koala", "animal", "cute", "australia", "marsupial"],
+    "🐯": ["tiger face", "tiger", "animal", "wild", "cat"],
+    "🦁": ["lion", "animal", "king", "wild", "cat", "mane"],
+    "🐮": ["cow face", "cow", "animal", "farm", "cattle", "moo"],
+    "🐷": ["pig face", "pig", "animal", "farm", "oink"],
+    "🐵": ["monkey face", "monkey", "animal", "primate", "cute"],
+    "🙈": ["see no evil monkey", "monkey", "hide", "peek", "shy"],
+    "🙉": ["hear no evil monkey", "monkey", "deaf", "ignore"],
+    "🙊": ["speak no evil monkey", "monkey", "quiet", "silence", "shh"],
+    "🐔": ["chicken", "bird", "farm", "poultry", "cluck"],
+    "🐧": ["penguin", "bird", "cold", "antarctic", "cute"],
+    "🐦": ["bird", "flying", "tweet", "nature"],
+    "🦆": ["duck", "bird", "water", "quack", "pond"],
+    "🦅": ["eagle", "bird", "freedom", "america", "majestic"],
+    "🦉": ["owl", "bird", "wise", "night", "hoot"],
+    "🐝": ["honeybee", "bee", "insect", "honey", "buzz"],
+    "🦋": ["butterfly", "insect", "beautiful", "colorful", "transform"],
+    "🐛": ["bug", "insect", "caterpillar", "worm", "crawl"],
+    "🐞": ["lady beetle", "ladybug", "insect", "red", "spots"],
+    "🐜": ["ant", "insect", "small", "work", "colony"],
+    "🦟": ["mosquito", "insect", "bite", "annoying", "buzz"],
+    "🕷️": ["spider", "insect", "web", "scary", "arachnid"],
+    "🦂": ["scorpion", "insect", "sting", "desert", "dangerous"],
+    "🐍": ["snake", "reptile", "serpent", "slither", "danger"],
+    "🐢": ["turtle", "reptile", "slow", "shell", "tortoise"],
+    "🐠": ["tropical fish", "fish", "ocean", "colorful", "sea"],
+    "🐟": ["fish", "ocean", "sea", "swim", "water"],
+    "🐬": ["dolphin", "ocean", "intelligent", "friendly", "sea"],
+    "🐳": ["spouting whale", "whale", "ocean", "large", "sea"],
+    "🦈": ["shark", "ocean", "dangerous", "predator", "jaws"],
+    "🐙": ["octopus", "ocean", "tentacles", "intelligent", "sea"],
+    "🦑": ["squid", "ocean", "tentacles", "sea", "ink"],
+    "🦐": ["shrimp", "ocean", "food", "seafood", "small"],
+    "🦞": ["lobster", "ocean", "food", "seafood", "red"],
+    "🦀": ["crab", "ocean", "food", "seafood", "claws"],
+    "🐘": ["elephant", "animal", "large", "trunk", "memory"],
+    "🦒": ["giraffe", "animal", "tall", "neck", "africa"],
+    "🦓": ["zebra", "animal", "stripes", "africa", "horse"],
+    "🦍": ["gorilla", "animal", "ape", "strong", "jungle"],
+    "🦘": ["kangaroo", "animal", "australia", "jump", "pouch"],
+    "🐎": ["horse", "animal", "fast", "stallion", "ride"],
+    "🦄": ["unicorn", "fantasy", "magic", "rainbow", "mythical"],
+    
+    # Travel & Transportation
+    "🚗": ["automobile", "car", "vehicle", "drive", "transport"],
+    "🚕": ["taxi", "car", "cab", "ride", "transport"],
+    "🚙": ["sport utility vehicle", "suv", "car", "vehicle"],
+    "🚌": ["bus", "vehicle", "transport", "public", "travel"],
+    "🚎": ["trolleybus", "bus", "vehicle", "electric", "transport"],
+    "🏎️": ["racing car", "race", "fast", "formula one", "speed"],
+    "🚓": ["police car", "cop", "law", "emergency", "patrol"],
+    "🚑": ["ambulance", "emergency", "medical", "hospital", "rescue"],
+    "🚒": ["fire engine", "truck", "emergency", "firefighter"],
+    "🚐": ["minibus", "van", "vehicle", "transport"],
+    "🚚": ["delivery truck", "truck", "vehicle", "cargo", "shipping"],
+    "🚛": ["articulated lorry", "truck", "big rig", "transport"],
+    "🚜": ["tractor", "farm", "vehicle", "agriculture"],
+    "🏍️": ["motorcycle", "bike", "vehicle", "ride", "fast"],
+    "🛵": ["motor scooter", "scooter", "vehicle", "ride"],
+    "🚲": ["bicycle", "bike", "cycle", "ride", "pedal"],
+    "✈️": ["airplane", "plane", "flight", "travel", "trip", "fly"],
+    "🛫": ["airplane departure", "takeoff", "flight", "travel", "leaving"],
+    "🛬": ["airplane arrival", "landing", "flight", "travel", "arriving"],
+    "🚀": ["rocket", "launch", "space", "fast", "startup", "blast off"],
+    "🛸": ["flying saucer", "ufo", "alien", "space", "extraterrestrial"],
+    "🚁": ["helicopter", "chopper", "aircraft", "fly", "rotor"],
+    "⛵": ["sailboat", "boat", "sail", "water", "ocean"],
+    "🚤": ["speedboat", "boat", "fast", "water", "motor"],
+    "⛴️": ["ferry", "boat", "transport", "water", "passenger"],
+    "🚢": ["ship", "boat", "cruise", "ocean", "large"],
+    "⚓": ["anchor", "ship", "boat", "harbor", "nautical"],
+    
+    # Nature & Weather
+    "☀️": ["sun", "sunny", "bright", "day", "hot", "weather"],
+    "🌤️": ["sun behind small cloud", "partly cloudy", "weather"],
+    "⛅": ["sun behind cloud", "partly cloudy", "weather"],
+    "🌥️": ["sun behind large cloud", "cloudy", "weather"],
+    "☁️": ["cloud", "cloudy", "weather", "overcast"],
+    "🌦️": ["sun behind rain cloud", "rain", "shower", "weather"],
+    "🌧️": ["cloud with rain", "rain", "rainy", "weather", "wet"],
+    "⛈️": ["cloud with lightning and rain", "storm", "thunder", "lightning", "rain", "weather"],
+    "🌩️": ["cloud with lightning", "thunder", "lightning", "storm"],
+    "🌨️": ["cloud with snow", "snow", "snowing", "winter", "weather"],
+    "❄️": ["snowflake", "snow", "cold", "winter", "ice", "frozen"],
+    "☃️": ["snowman", "snow", "winter", "cold", "frosty"],
+    "⛄": ["snowman without snow", "winter", "cold", "frosty"],
+    "🌬️": ["wind face", "wind", "breeze", "blow", "weather"],
+    "💨": ["dashing away", "wind", "fast", "speed", "running"],
+    "💧": ["droplet", "water", "rain", "drop", "liquid"],
+    "💦": ["sweat droplets", "water", "splash", "spray", "wet"],
+    "☔": ["umbrella with rain drops", "rain", "umbrella", "weather", "wet"],
+    "☂️": ["umbrella", "rain", "weather", "protection"],
+    "🌊": ["wave", "ocean", "water", "sea", "surf", "tide"],
+    "🌫️": ["fog", "foggy", "mist", "weather", "hazy"],
+    "🌈": ["rainbow", "colors", "pride", "happy", "arc", "weather"],
+    "⭐": ["star", "favorite", "rating", "excellent", "sparkle", "night"],
+    "🌟": ["glowing star", "star", "sparkle", "shine", "bright"],
+    "⚡": ["high voltage", "lightning", "electric", "power", "energy", "zap"],
+    "🔥": ["fire", "hot", "flame", "burn", "lit", "blaze"],
+    "💥": ["collision", "boom", "explosion", "bang", "crash"],
+    "☄️": ["comet", "space", "meteor", "shooting star"],
+    "🌙": ["crescent moon", "moon", "night", "dark", "sleep", "lunar"],
+    "🌛": ["first quarter moon face", "moon", "night", "face"],
+    "🌜": ["last quarter moon face", "moon", "night", "face"],
+    "🌚": ["new moon face", "moon", "dark", "night", "creepy"],
+    "🌕": ["full moon", "moon", "night", "bright", "lunar"],
+    "🌍": ["globe showing europe africa", "globe", "world", "earth", "planet", "global"],
+    "🌎": ["globe showing americas", "globe", "world", "earth", "planet"],
+    "🌏": ["globe showing asia australia", "globe", "world", "earth", "planet"],
+    "🪐": ["ringed planet", "saturn", "planet", "space", "rings"],
+    "🌌": ["milky way", "galaxy", "space", "stars", "cosmos"],
+    "🌠": ["shooting star", "star", "meteor", "wish", "night"],
+    
+    # Tech & Objects
+    "💻": ["laptop", "computer", "coding", "work", "tech", "programming"],
+    "🖥️": ["desktop computer", "computer", "pc", "work", "tech"],
+    "🖨️": ["printer", "print", "copy", "office", "paper"],
+    "⌨️": ["keyboard", "type", "computer", "input", "keys"],
+    "🖱️": ["computer mouse", "mouse", "click", "computer", "pointer"],
+    "🖲️": ["trackball", "mouse", "input", "computer"],
+    "💽": ["computer disk", "disk", "storage", "save", "data"],
+    "💾": ["floppy disk", "disk", "save", "storage", "old"],
+    "💿": ["optical disk", "cd", "music", "disc", "data"],
+    "📀": ["dvd", "disk", "movie", "disc", "data"],
+    "📱": ["mobile phone", "phone", "smartphone", "cell", "device", "mobile"],
+    "📲": ["mobile phone with arrow", "phone", "call", "incoming", "mobile"],
+    "☎️": ["telephone", "phone", "call", "landline", "old"],
+    "📞": ["telephone receiver", "phone", "call", "receiver"],
+    "📟": ["pager", "beeper", "old", "device", "message"],
+    "📠": ["fax machine", "fax", "office", "old", "document"],
+    "📡": ["satellite antenna", "satellite", "signal", "communication", "space"],
+    "🔋": ["battery", "power", "energy", "charge", "electric"],
+    "🔌": ["electric plug", "plug", "power", "electric", "socket"],
+    "💡": ["light bulb", "idea", "innovation", "think", "bright", "lightbulb"],
+    "🔦": ["flashlight", "light", "torch", "bright", "illuminate"],
+    "🕯️": ["candle", "light", "flame", "wax", "romantic"],
+    "🧯": ["fire extinguisher", "fire", "safety", "emergency", "extinguish"],
+    "💸": ["money with wings", "money", "cash", "flying", "spending"],
+    "💵": ["dollar banknote", "money", "dollar", "cash", "bill"],
+    "💰": ["money bag", "money", "cash", "rich", "wealth", "dollar"],
+    "💳": ["credit card", "payment", "card", "buy", "purchase", "shopping"],
+    "💎": ["gem stone", "diamond", "jewel", "precious", "valuable"],
+    "🔧": ["wrench", "tool", "fix", "repair", "settings", "maintenance"],
+    "🔨": ["hammer", "tool", "build", "construction", "nail"],
+    "⚒️": ["hammer and pick", "tools", "mining", "construction"],
+    "🛠️": ["hammer and wrench", "tools", "fix", "repair", "maintenance"],
+    "⚙️": ["gear", "settings", "config", "mechanical", "cog", "configuration"],
+    "🔩": ["nut and bolt", "hardware", "tools", "mechanical"],
+    "🔗": ["link", "chain", "connection", "url", "hyperlink"],
+    "⛓️": ["chains", "link", "locked", "connection", "metal"],
+    "🧲": ["magnet", "magnetic", "attract", "pull"],
+    "🔫": ["water pistol", "gun", "toy", "squirt", "play"],
+    "💣": ["bomb", "explosive", "danger", "boom"],
+    "🔪": ["kitchen knife", "knife", "cut", "cooking", "sharp"],
+    "🗡️": ["dagger", "knife", "weapon", "blade", "sword"],
+    "⚔️": ["crossed swords", "swords", "fight", "battle", "weapon"],
+    "🛡️": ["shield", "protection", "defense", "guard", "protect"],
+    
+    # Symbols & Signs
+    "✅": ["check mark button", "correct", "done", "yes", "approved", "complete"],
+    "❌": ["cross mark", "wrong", "no", "error", "delete", "incorrect"],
+    "⚠️": ["warning", "caution", "alert", "careful", "danger", "attention"],
+    "🚨": ["police car light", "emergency", "alert", "siren", "warning", "urgent"],
+    "🔥": ["fire", "hot", "flame", "burn", "lit", "trending"],
+    "💯": ["hundred points", "perfect", "100", "score", "complete", "full"],
+    "🔔": ["bell", "notification", "alert", "ring", "sound", "alarm"],
+    "🔕": ["bell with slash", "mute", "silent", "no sound", "quiet", "off"],
+    "🔒": ["locked", "lock", "secure", "private", "closed", "security"],
+    "🔓": ["unlocked", "unlock", "open", "public", "access", "unsecure"],
+    "🔐": ["locked with key", "secure", "lock", "key", "protected"],
+    "🔑": ["key", "unlock", "access", "password", "security"],
+    "🗝️": ["old key", "key", "vintage", "unlock", "antique"],
+    "🆕": ["new button", "new", "fresh", "latest", "recent", "updated"],
+    "🆓": ["free button", "free", "gratis", "no cost", "complimentary"],
+    "🆒": ["cool button", "cool", "awesome", "nice", "good"],
+    "🆗": ["ok button", "okay", "yes", "good", "fine"],
+    "🆙": ["up button", "up", "increase", "raise", "upgrade"],
+    "🔴": ["red circle", "red", "circle", "dot", "record"],
+    "🟠": ["orange circle", "orange", "circle", "dot"],
+    "🟡": ["yellow circle", "yellow", "circle", "dot"],
+    "🟢": ["green circle", "green", "circle", "dot", "go"],
+    "🔵": ["blue circle", "blue", "circle", "dot"],
+    "🟣": ["purple circle", "purple", "circle", "dot"],
+    "⚫": ["black circle", "black", "circle", "dot"],
+    "⚪": ["white circle", "white", "circle", "dot"],
+    "🟤": ["brown circle", "brown", "circle", "dot"],
+    "⬛": ["black large square", "black", "square", "block"],
+    "⬜": ["white large square", "white", "square", "block"],
+    "🟥": ["red square", "red", "square", "block"],
+    "🟧": ["orange square", "orange", "square", "block"],
+    "🟨": ["yellow square", "yellow", "square", "block"],
+    "🟩": ["green square", "green", "square", "block"],
+    "🟦": ["blue square", "blue", "square", "block"],
+    "🟪": ["purple square", "purple", "square", "block"],
+    "🟫": ["brown square", "brown", "square", "block"],
+    "▶️": ["play button", "play", "start", "begin", "media"],
+    "⏸️": ["pause button", "pause", "stop", "media", "wait"],
+    "⏹️": ["stop button", "stop", "end", "media", "finish"],
+    "⏺️": ["record button", "record", "recording", "media", "capture"],
+    "⏭️": ["next track button", "next", "skip", "forward", "media"],
+    "⏮️": ["last track button", "previous", "back", "media", "rewind"],
+    "⏩": ["fast forward button", "fast", "forward", "skip", "media"],
+    "⏪": ["fast reverse button", "rewind", "back", "reverse", "media"],
+    "⏫": ["fast up button", "up", "increase", "scroll", "volume"],
+    "⏬": ["fast down button", "down", "decrease", "scroll", "volume"],
+    "➡️": ["right arrow", "right", "arrow", "next", "forward", "direction"],
+    "⬅️": ["left arrow", "left", "arrow", "back", "previous", "direction"],
+    "⬆️": ["up arrow", "up", "arrow", "increase", "direction"],
+    "⬇️": ["down arrow", "down", "arrow", "decrease", "direction"],
+    "↗️": ["up right arrow", "diagonal", "arrow", "northeast", "direction"],
+    "↘️": ["down right arrow", "diagonal", "arrow", "southeast", "direction"],
+    "↙️": ["down left arrow", "diagonal", "arrow", "southwest", "direction"],
+    "↖️": ["up left arrow", "diagonal", "arrow", "northwest", "direction"],
+    
+    # Sports & Activities
+    "⚽": ["soccer ball", "soccer", "football", "sport", "ball", "game"],
+    "🏀": ["basketball", "sport", "ball", "game", "court", "hoops"],
+    "🏈": ["american football", "football", "sport", "ball", "game"],
+    "⚾": ["baseball", "sport", "ball", "game", "bat"],
+    "🎾": ["tennis", "sport", "ball", "game", "racket"],
+    "🏐": ["volleyball", "sport", "ball", "game", "net"],
+    "🏉": ["rugby football", "rugby", "sport", "ball", "game"],
+    "🎱": ["pool 8 ball", "billiards", "pool", "game", "eight ball"],
+    "🏓": ["ping pong", "table tennis", "sport", "game", "paddle"],
+    "🏸": ["badminton", "sport", "game", "racket", "shuttlecock"],
+    "🏒": ["ice hockey", "hockey", "sport", "ice", "game"],
+    "🏑": ["field hockey", "hockey", "sport", "field", "game"],
+    "🥅": ["goal net", "goal", "sport", "net", "score"],
+    "🏆": ["trophy", "win", "champion", "award", "prize", "first"],
+    "🥇": ["1st place medal", "gold", "first", "winner", "medal"],
+    "🥈": ["2nd place medal", "silver", "second", "medal", "runner up"],
+    "🥉": ["3rd place medal", "bronze", "third", "medal"],
+    "🏅": ["sports medal", "medal", "award", "achievement", "win"],
+    
+    # Hands & Gestures
+    "👋": ["waving hand", "hello", "hi", "bye", "wave", "greet"],
+    "🤚": ["raised back of hand", "hand", "stop", "halt"],
+    "🖐️": ["hand with fingers splayed", "hand", "five", "stop"],
+    "✋": ["raised hand", "hand", "stop", "halt", "high five"],
+    "🖖": ["vulcan salute", "spock", "star trek", "hand", "greeting"],
+    "👌": ["ok hand", "okay", "good", "perfect", "yes"],
+    "🤌": ["pinched fingers", "hand", "italian", "gesture"],
+    "🤏": ["pinching hand", "small", "tiny", "little", "hand"],
+    "✌️": ["victory hand", "peace", "victory", "v", "hand"],
+    "🤞": ["crossed fingers", "fingers", "luck", "hope", "wish"],
+    "🤟": ["love you gesture", "i love you", "hand", "sign language"],
+    "🤘": ["sign of the horns", "rock", "metal", "devil horns", "hand"],
+    "🤙": ["call me hand", "phone", "call", "shaka", "hang loose"],
+    "👈": ["backhand index pointing left", "left", "point", "hand"],
+    "👉": ["backhand index pointing right", "right", "point", "hand", "finger"],
+    "👆": ["backhand index pointing up", "up", "point", "hand"],
+    "🖕": ["middle finger", "rude", "offensive", "angry", "hand"],
+    "👇": ["backhand index pointing down", "down", "point", "hand"],
+    "☝️": ["index pointing up", "up", "point", "one", "hand"],
+    "👍": ["thumbs up", "yes", "approve", "like", "good", "okay"],
+    "👎": ["thumbs down", "no", "disapprove", "dislike", "bad", "reject"],
+    "✊": ["raised fist", "fist", "power", "punch", "strength"],
+    "👊": ["oncoming fist", "fist", "punch", "bump", "hit"],
+    "🤛": ["left facing fist", "fist", "punch", "bump"],
+    "🤜": ["right facing fist", "fist", "punch", "bump"],
+    "👏": ["clapping hands", "clap", "applause", "bravo", "well done"],
+    "🙌": ["raising hands", "celebrate", "yay", "hooray", "praise"],
+    "👐": ["open hands", "hands", "hug", "open", "embrace"],
+    "🤲": ["palms up together", "hands", "pray", "wish", "offer"],
+    "🤝": ["handshake", "shake", "deal", "agreement", "meet"],
+    "🙏": ["folded hands", "pray", "please", "thanks", "namaste", "prayer"],
+    "✍️": ["writing hand", "write", "pen", "signature", "note"],
+    "💅": ["nail polish", "nails", "manicure", "beauty", "polish"],
+    "🤳": ["selfie", "photo", "camera", "phone", "picture"],
+    "💪": ["flexed biceps", "strong", "muscle", "power", "strength", "flex"],
+    
+    # People & Professions
+    "👶": ["baby", "child", "infant", "young", "newborn"],
+    "👧": ["girl", "child", "young", "female", "kid"],
+    "🧒": ["child", "kid", "young", "gender neutral"],
+    "👦": ["boy", "child", "young", "male", "kid"],
+    "👩": ["woman", "female", "adult", "lady"],
+    "🧑": ["person", "adult", "gender neutral", "human"],
+    "👨": ["man", "male", "adult", "guy"],
+    "👵": ["old woman", "grandmother", "elderly", "grandma", "senior"],
+    "🧓": ["older person", "elderly", "senior", "old", "aged"],
+    "👴": ["old man", "grandfather", "elderly", "grandpa", "senior"],
+    "👩‍⚕️": ["woman health worker", "doctor", "nurse", "medical", "healthcare"],
+    "🧑‍⚕️": ["health worker", "doctor", "nurse", "medical", "healthcare"],
+    "👨‍⚕️": ["man health worker", "doctor", "nurse", "medical", "healthcare"],
+    "👩‍🎓": ["woman student", "student", "graduate", "education", "learning"],
+    "🧑‍🎓": ["student", "graduate", "education", "learning", "school"],
+    "👨‍🎓": ["man student", "student", "graduate", "education", "learning"],
+    "👩‍🏫": ["woman teacher", "teacher", "professor", "education", "instructor"],
+    "🧑‍🏫": ["teacher", "professor", "education", "instructor", "educator"],
+    "👨‍🏫": ["man teacher", "teacher", "professor", "education", "instructor"],
+    "👩‍💻": ["woman technologist", "programmer", "coder", "developer", "tech"],
+    "🧑‍💻": ["technologist", "programmer", "coder", "developer", "tech"],
+    "👨‍💻": ["man technologist", "programmer", "coder", "developer", "tech"],
+    "👩‍🎨": ["woman artist", "artist", "painter", "creative", "art"],
+    "🧑‍🎨": ["artist", "painter", "creative", "art", "designer"],
+    "👨‍🎨": ["man artist", "artist", "painter", "creative", "art"],
+    "🎅": ["santa claus", "santa", "christmas", "holiday", "gifts"],
+    "🧙‍♀️": ["woman mage", "wizard", "witch", "magic", "sorcerer"],
+    "🧙": ["mage", "wizard", "magic", "sorcerer", "spellcaster"],
+    "🧙‍♂️": ["man mage", "wizard", "magic", "sorcerer", "merlin"],
+    "🧝‍♀️": ["woman elf", "elf", "fantasy", "magical", "fairy"],
+    "🧝": ["elf", "fantasy", "magical", "fairy", "mythical"],
+    "🧝‍♂️": ["man elf", "elf", "fantasy", "magical", "legolas"],
+    "🧛‍♀️": ["woman vampire", "vampire", "dracula", "blood", "undead"],
+    "🧛": ["vampire", "dracula", "blood", "undead", "fangs"],
+    "🧛‍♂️": ["man vampire", "vampire", "dracula", "blood", "undead"],
+    "🧚‍♀️": ["woman fairy", "fairy", "magic", "tinkerbell", "wings"],
+    "🧚": ["fairy", "magic", "mystical", "wings", "sprite"],
+    "🧚‍♂️": ["man fairy", "fairy", "magic", "mystical", "wings"],
+    "👼": ["baby angel", "angel", "innocent", "cherub", "heaven"],
+    
+    # Miscellaneous
+    "🎯": ["bullseye", "target", "goal", "aim", "focus", "direct hit"],
+    "🎓": ["graduation cap", "graduate", "education", "school", "degree", "diploma"],
+    "📚": ["books", "reading", "study", "library", "education", "learning"],
+    "📖": ["open book", "book", "reading", "literature", "study"],
+    "📝": ["memo", "note", "write", "document", "text", "notepad"],
+    "📅": ["calendar", "date", "schedule", "day", "appointment", "planner"],
+    "📆": ["tear off calendar", "date", "schedule", "day"],
+    "🗓️": ["spiral calendar", "calendar", "date", "planner"],
+    "⏰": ["alarm clock", "time", "wake", "alert", "morning", "clock"],
+    "⏱️": ["stopwatch", "time", "timer", "countdown", "measure"],
+    "⏲️": ["timer clock", "timer", "time", "countdown", "alarm"],
+    "🕰️": ["mantelpiece clock", "clock", "time", "antique"],
+    "⌛": ["hourglass done", "time", "sand", "timer", "finished"],
+    "⏳": ["hourglass not done", "time", "sand", "timer", "waiting"],
+    "🔍": ["magnifying glass tilted left", "search", "find", "look", "zoom", "examine"],
+    "🔎": ["magnifying glass tilted right", "search", "find", "look", "zoom"],
+    "🎨": ["artist palette", "art", "paint", "creative", "design", "colors"],
+    "🖼️": ["framed picture", "picture", "image", "photo", "frame", "art"],
+    "📷": ["camera", "photo", "picture", "snapshot", "photography", "selfie"],
+    "📸": ["camera with flash", "photo", "picture", "flash", "snapshot"],
+    "🎬": ["clapper board", "movie", "film", "cinema", "action", "director"],
+    "🎤": ["microphone", "sing", "music", "voice", "speech", "karaoke"],
+    "🎧": ["headphone", "music", "listen", "audio", "sound"],
+    "🎵": ["musical note", "music", "song", "melody", "tune", "note"],
+    "🎶": ["musical notes", "music", "song", "melody", "singing", "notes"],
+    "🎹": ["musical keyboard", "piano", "keys", "music", "instrument"],
+    "🎸": ["guitar", "music", "rock", "instrument", "string"],
+    "🥁": ["drum", "music", "beat", "percussion", "instrument"],
+    "🎺": ["trumpet", "music", "brass", "instrument", "jazz"],
+    "🎷": ["saxophone", "music", "jazz", "instrument", "brass"],
+    "🎻": ["violin", "music", "classical", "instrument", "string"],
+}
+
+# Get category-based keywords
+category_keywords = {
+    "party": ["party", "celebration", "festive", "fun"],
+    "smile": ["smile", "smiley", "happy", "joy", "cheerful", "positive", "blush", "blushing"],
+    "sad": ["sad", "cry", "crying", "upset", "unhappy", "negative"],
+    "flowers": ["flower", "plant", "bloom", "nature", "botanical"],
+    "hearts": ["love", "heart", "romance", "affection"],
+    "food": ["food", "eat", "drink", "meal", "edible"],
+    "animals": ["animal", "pet", "creature", "wildlife"],
+    "travel": ["travel", "vehicle", "transport", "journey"],
+    "nature": ["nature", "weather", "outdoor", "natural"],
+    "objects": ["object", "thing", "item", "tool"],
+    "symbols": ["symbol", "sign", "icon", "mark"],
+    "sports": ["sport", "game", "play", "athletic"],
+    "hands": ["hand", "gesture", "finger"],
+    "people": ["people", "person", "human", "character"],
+    "weather": ["weather", "climate", "forecast"],
+    "tech": ["tech", "technology", "digital", "electronic"],
+}
+
+# Get category keywords
+cat_keys = category_keywords.get(category, [])
+
+for emoji in emojis_str.split():
+    emoji = emoji.strip()
+    if not emoji:
+        continue
+    
+    # Try to get metadata from dictionary
+    if emoji in emoji_data:
+        metadata = emoji_data[emoji]
+        name = metadata[0] if metadata else emoji
+        keywords = " ".join(metadata[1:]) if len(metadata) > 1 else ""
+    else:
+        # Fallback: try to get Unicode name
+        try:
+            unicode_name = unicodedata.name(emoji, "").lower().replace("_", " ")
+            # Add category keywords
+            keywords = " ".join([unicode_name] + cat_keys)
+            name = unicode_name if unicode_name else emoji
+        except:
+            name = emoji
+            keywords = " ".join(cat_keys)
+    
+    print(f"{emoji}\t{name}\t{keywords}")
+PYTHON_EOF
+}
+
+# Show emoji picker with fzf
+show_emoji_picker() {
+    local emojis="$1"
+    local category="${2:-all}"
+    
+    if ! command -v fzf &> /dev/null; then
+        echo -e "${RED}✗${NC} fzf is not installed. Please install it first:"
+        echo -e "${YELLOW}Install with:${NC} sudo apt install fzf"
+        return 1
+    fi
+    
+    local selected
+    selected=$(generate_emoji_list "$emojis" "$category" | \
+        fzf --height=50% \
+            --reverse \
+            --border \
+            --delimiter='\t' \
+            --with-nth=1,2 \
+            --prompt="🔍 Search emoji ($category): " \
+            --preview='echo {1} | figlet -f big 2>/dev/null || echo {1}' \
+            --preview-window=up:3:wrap \
+            --color='fg:#ebdbb2,bg:#282828,hl:#fabd2f,fg+:#ebdbb2,bg+:#3c3836,hl+:#fabd2f' \
+            --color='info:#83a598,prompt:#bdae93,spinner:#fabd2f,pointer:#83a598,marker:#fe8019,header:#665c54' \
+            --margin=1 \
+            --padding=1 | cut -f1)
+    
+    if [ -n "$selected" ]; then
+        copy_to_clipboard "$selected"
+        return 0
+    else
+        echo -e "${YELLOW}No emoji selected.${NC}"
+        return 1
+    fi
+}
+
+# Main logic
+main() {
+    if [ $# -eq 0 ]; then
+        # Show all emojis
+        local all_emojis=""
+        for category in "${!EMOJI_CATEGORIES[@]}"; do
+            all_emojis="$all_emojis ${EMOJI_CATEGORIES[$category]}"
+        done
+        show_emoji_picker "$all_emojis" "all categories"
+    else
+        case "$1" in
+            -h|--help)
+                show_help
+                ;;
+            --list-categories)
+                show_categories
+                ;;
+            --party|--smile|--sad|--flowers|--flags|--hearts|--food|--animals|--travel|--nature|--objects|--symbols|--sports|--hands|--people|--weather|--tech)
+                local category="${1#--}"
+                if [ -n "${EMOJI_CATEGORIES[$category]}" ]; then
+                    show_emoji_picker "${EMOJI_CATEGORIES[$category]}" "$category"
+                else
+                    echo -e "${RED}✗${NC} Unknown category: ${category}"
+                    echo -e "${YELLOW}Available categories:${NC}"
+                    echo "${!EMOJI_CATEGORIES[@]}" | tr ' ' '\n' | sort
+                    return 1
+                fi
+                ;;
+            *)
+                echo -e "${RED}✗${NC} Unknown option: $1"
+                echo -e "${YELLOW}Run${NC} ${GREEN}emoji --help${NC} ${YELLOW}for usage information.${NC}"
+                return 1
+                ;;
+        esac
+    fi
+}
+
+main "$@"

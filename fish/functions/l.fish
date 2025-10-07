@@ -1,27 +1,51 @@
-function l --description 'exa listing with nested-item counts for directories'
-    set -l exa_flags -l --no-permissions --no-user --no-time --group-directories-first --icons
+function l --description 'Enhanced eza listing with better alignment and metrics'
+    set -l target_dir "."
+    if test (count $argv) -gt 0
+        set target_dir $argv[1]
+    end
     
-    # Get the basic exa output
-    set -l exa_output (exa $exa_flags $argv)
-    
-    # Process each line to add counts for directories
-    for line in $exa_output
-        # Extract the filename (last field) - handle icons by taking everything after the last space
-        set -l filename (echo $line | string split ' ')[-1]
+    eza -lah \
+        --group-directories-first \
+        --icons \
+        --git \
+        --time-style=relative \
+        --sort=name \
+        --color=always \
+        --classify \
+        $target_dir | while read -l line
         
-        # Check if this is a directory by testing the filesystem
-        if test -d $filename
-            # Count items in the directory
-            set -l count (command ls -1A $filename 2>/dev/null | wc -l 2>/dev/null)
-            if test $status -ne 0
-                # If we can't read the directory, show a lock symbol
-                set count "⛔"
+        set -l line_trimmed (echo $line | string trim)
+        
+        if test -z "$line_trimmed"
+            continue
+        end
+        
+        set -l parts (echo $line_trimmed | string split -r -m1 ' ')
+        if test (count $parts) -lt 2
+            echo $line
+            continue
+        end
+        
+        set -l filename $parts[-1]
+        set -l full_path "$target_dir/$filename"
+        
+        if test -d "$full_path"
+            set -l folder_count (find "$full_path" -maxdepth 1 -type d 2>/dev/null | tail -n +2 | wc -l | string trim)
+            set -l file_count (find "$full_path" -maxdepth 1 -type f 2>/dev/null | wc -l | string trim)
+            
+            set -l count_str ""
+            if test $folder_count -gt 0 -a $file_count -gt 0
+                set count_str (printf "(📁%-2s 📄%-2s)" $folder_count $file_count)
+            else if test $folder_count -gt 0
+                set count_str (printf "(📁%-2s)     " $folder_count)
+            else if test $file_count -gt 0
+                set count_str (printf "(📄%-2s)     " $file_count)
+            else
+                set count_str "(empty)    "
             end
             
-            # Replace the filename in the line with (count) filename
-            echo $line | string replace $filename "($count) $filename"
+            echo $line | string replace -r "($filename)\$" "$count_str \$1"
         else
-            # For files, just output the line as-is
             echo $line
         end
     end

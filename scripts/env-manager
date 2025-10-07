@@ -1,0 +1,143 @@
+
+#!/usr/bin/env bash
+set -e
+
+ENV_FILE="$HOME/.config/dotfiles/env-private/env"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+GRAY='\033[0;90m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Ensure directory and file exist
+mkdir -p "$(dirname "$ENV_FILE")"
+if [ ! -f "$ENV_FILE" ]; then
+  echo "# ~/.config/dotfiles/env-private/env" > "$ENV_FILE"
+fi
+
+COMMAND="$1"
+KEY="$2"
+VALUE="$3"
+
+function view_env {
+  echo -e "${CYAN}${BOLD}╭──────────────────────────╮${NC}"
+  echo -e "${CYAN}${BOLD}│${NC}  ${MAGENTA}⚙  Environment Variables${NC}   ${CYAN}${BOLD}│${NC}"
+  echo -e "${CYAN}${BOLD}╰───────────────────────────╯${NC}"
+  echo ""
+  
+  local count=0
+  while IFS= read -r line; do
+    # Skip empty lines and comments
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    
+    # Extract key and value - handle both quoted and unquoted values
+    if [[ "$line" =~ ^export[[:space:]]+([^=]+)=(.*)$ ]]; then
+      local key="${BASH_REMATCH[1]}"
+      local value="${BASH_REMATCH[2]}"
+      # Remove surrounding quotes if present
+      value="${value%\"}"
+      value="${value#\"}"
+      echo -e "  ${GREEN}${BOLD}${key}${NC} ${GRAY}=${NC} ${YELLOW}${value}${NC}"
+      count=$((count + 1))
+    fi
+  done < "$ENV_FILE"
+  
+  echo ""
+  if [ $count -eq 0 ]; then
+    echo -e "  ${DIM}No environment variables set${NC}"
+    echo ""
+  fi
+  echo -e "${GRAY}${DIM}File: ${ENV_FILE}${NC}"
+}
+
+function add_env {
+  # Interactive mode if no args
+  if [ -z "$KEY" ]; then
+    echo -e "${CYAN}${BOLD}🆕 Add Environment Variable${NC}"
+    echo ""
+    read -rp "$(echo -e ${GREEN}Key${NC} ${GRAY}\(e.g. MY_PATH\)${NC}: )" KEY
+    if [ -z "$KEY" ]; then
+      echo -e "${RED}✗ No key entered${NC}"
+      exit 1
+    fi
+  fi
+
+  if [ -z "$VALUE" ]; then
+    read -rp "$(echo -e ${YELLOW}Value for${NC} ${GREEN}${BOLD}$KEY${NC}: )" VALUE
+    if [ -z "$VALUE" ]; then
+      echo -e "${RED}✗ No value entered${NC}"
+      exit 1
+    fi
+  fi
+
+  # Remove old entry if it exists
+  sed -i.bak "/^export $KEY=/d" "$ENV_FILE"
+  echo "export $KEY=\"$VALUE\"" >> "$ENV_FILE"
+  echo ""
+  echo -e "${GREEN}✓ Added:${NC} ${GREEN}${BOLD}$KEY${NC} ${GRAY}=${NC} ${YELLOW}$VALUE${NC}"
+}
+
+function remove_env {
+  if [ -z "$KEY" ]; then
+    echo -e "${RED}Usage:${NC} env remove ${GREEN}<KEY>${NC}"
+    exit 1
+  fi
+  
+  # Check if key exists
+  if grep -q "^export $KEY=" "$ENV_FILE"; then
+    sed -i.bak "/^export $KEY=/d" "$ENV_FILE"
+    echo ""
+    echo -e "${GREEN}✓ Removed:${NC} ${GREEN}${BOLD}$KEY${NC}"
+  else
+    echo ""
+    echo -e "${YELLOW}⚠ Variable not found:${NC} ${GREEN}${BOLD}$KEY${NC}"
+  fi
+}
+
+function edit_env {
+  ${EDITOR:-nano} "$ENV_FILE"
+}
+
+function help_text {
+  echo -e "${CYAN}${BOLD}╭─────────────────────────────────────────────────────────╮${NC}"
+  echo -e "${CYAN}${BOLD}│${NC}  ${MAGENTA}⚙  Environment Manager${NC}                               ${CYAN}${BOLD}│${NC}"
+  echo -e "${CYAN}${BOLD}╰─────────────────────────────────────────────────────────╯${NC}"
+  echo ""
+  echo -e "${YELLOW}Usage:${NC} env ${GRAY}[command]${NC}"
+  echo ""
+  echo -e "${YELLOW}Commands:${NC}"
+  echo -e "  ${GREEN}view${NC}                 View all environment variables"
+  echo -e "  ${GREEN}add${NC} ${GRAY}[KEY] [VAL]${NC}     Add or update a variable"
+  echo -e "  ${GREEN}remove${NC} ${GRAY}<KEY>${NC}        Remove a variable"
+  echo -e "  ${GREEN}edit${NC}                 Open env file in editor"
+  echo ""
+  echo -e "${GRAY}${DIM}Examples:${NC}"
+  echo -e "  ${GRAY}env view${NC}"
+  echo -e "  ${GRAY}env add MY_VAR \"my_value\"${NC}"
+  echo -e "  ${GRAY}env remove MY_VAR${NC}"
+}
+
+case "$COMMAND" in
+  view|"")
+    view_env
+    ;;
+  add)
+    add_env
+    ;;
+  remove)
+    remove_env
+    ;;
+  edit)
+    edit_env
+    ;;
+  *)
+    help_text
+    ;;
+esac

@@ -6,15 +6,15 @@ This repository contains my personal dotfiles for various applications.
 
 The repository is structured as follows:
 
-*   `cfg`: The main configuration file for `fish` shell. This file sources all other configuration files.
+*   `fish`: Contains the configuration for the `fish` shell. The main configuration file is `fish/config.fish`.
 *   `core`: Contains the core configuration files, such as color definitions and environment variables.
 *   `aliases`: Contains all the shell aliases.
 *   `scripts`: Contains various utility scripts.
 
 ## Installation
 
-To install these dotfiles, simply clone this repository and source the `cfg` file in your `~/.config/fish/config.fish`.
+To install these dotfiles, you can clone this repository and then symlink the `fish` directory to your `~/.config/` directory.
 
-```fish
-source /path/to/your/dotfiles/cfg
+```bash
+ln -s /path/to/your/dotfiles/fish ~/.config/fish
 ```

@@ -1,9 +1,9 @@
 # Main fish configuration file
-
+alias x "exit"
 if status is-interactive
     # Get the directory where this config file is located
     set -l fish_dir (dirname (status --current-filename))
-    
+
     # Define paths relative to the fish directory
     set -l core_init $fish_dir/core/init.fish
     set -l aliases_init $fish_dir/aliases/init.fish

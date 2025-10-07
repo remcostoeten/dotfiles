@@ -1,232 +1,565 @@
-#!/usr/bin/env fish
+#!/usr/bin/env python3
 
-# Docker Manager - A simple Docker container management script
+import os
+import sys
+import subprocess
+import platform
+import json
+import re
+from typing import List, Dict, Optional, Tuple
+import datetime
 
-# Define color functions
-function print_info
-    set_color blue
-    echo $argv[1]
-    set_color normal
-end
+class Colors:
+    RESET = '\033[0m'
+    BRIGHT = '\033[1m'
+    DIM = '\033[2m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    BG_RED = '\033[41m'
+    BG_GREEN = '\033[42m'
+    BG_YELLOW = '\033[43m'
+    BG_BLUE = '\033[44m'
+    BG_MAGENTA = '\033[45m'
+    BG_CYAN = '\033[46m'
 
-function print_success
-    set_color green
-    echo $argv[1]
-    set_color normal
-end
+class MenuItem:
+    def __init__(self, text: str, value: str, indicator: str = ''):
+        self.text = text
+        self.value = value
+        self.indicator = indicator
 
-function print_error
-    set_color red
-    echo $argv[1]
-    set_color normal
-end
+class Container:
+    def __init__(self, container_id: str, name: str, image: str, status: str, ports: str = '', created: str = '', project: str = ''):
+        self.id = container_id
+        self.name = name
+        self.image = image
+        self.status = status
+        self.ports = ports
+        self.created = created
+        self.project = project
 
-function log_error
-    print_error "ERROR: $argv[1]" >&2
-end
+class DockerManager:
+    def __init__(self):
+        self.selected_index = 0
+        self.current_view = 'main'
+        self.prev_view = ''
+        self.is_running = True
 
-# Array to store container IDs globally
-set -g CONTAINER_IDS
+    def start(self):
+        self.check_dependencies()
+        self.show_main_menu()
+        self.cleanup()
 
-function list_containers
-    print_info "Docker Containers"
-    # Clear the container IDs array
-    set CONTAINER_IDS
-    
-    # Use format to get just the container ID and name
-    set index 1
-    echo "INDEX | CONTAINER ID | NAME | STATUS"
-    echo "------|--------------|------|-------"
-    
-    for line in (docker ps -a --format "{{.ID}}\t{{.Names}}\t{{.Status}}")
-        if test -n "$line"
-            set container_id (echo $line | awk '{print $1}')
-            set name (echo $line | awk '{print $2}')
-            set status (echo $line | awk '{print $3}')
-            set CONTAINER_IDS $CONTAINER_IDS $container_id
-            printf "%5s | %12s | %s | %s\n" $index $container_id $name $status
-            set index (math $index + 1)
-        end
-    end
-    
-    if test (count $CONTAINER_IDS) -eq 0
-        echo "No containers found."
-    end
-end
+    def check_dependencies(self):
+        try:
+            subprocess.run(['docker', '--version'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.YELLOW}⚠ Warning: Docker is not installed or not running{Colors.RESET}")
+            print("Please install Docker to use this tool.\n")
+            input("Press Enter to exit...")
+            sys.exit(1)
 
-function get_container_id
-    set index $argv[1]
-    if not string match -qr '^[0-9]+$' $index; or test $index -lt 1; or test $index -gt (count $CONTAINER_IDS)
-        log_error "Invalid container index: $index"
-        return 1
-    end
-    echo $CONTAINER_IDS[$index]
-    return 0
-end
+    def clear_screen(self):
+        os.system('clear' if os.name != 'nt' else 'cls')
 
-function start_service
-    set index $argv[1]
-    set container_id (get_container_id $index)
-    or return 1
-    
-    if docker start $container_id
-        print_success "Started container: $container_id"
-    else
-        log_error "Failed to start container: $container_id"
-        return 1
-    end
-end
+    def print_header(self):
+        print(f"{Colors.CYAN}{Colors.BRIGHT}")
+        print('╔════════════════════════════════════════════════════════════════════╗')
+        print('║                                                                    ║')
+        print('║     ██████╗  ██████╗  ██████╗██╗  ██╗███████╗██████╗              ║')
+        print('║     ██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝██╔══██╗             ║')
+        print('║     ██║  ██║██║   ██║██║     █████╔╝ █████╗  ██████╔╝             ║')
+        print('║     ██║  ██║██║   ██║██║     ██╔═██╗ ██╔══╝  ██╔══██╗             ║')
+        print('║     ██████╔╝╚██████╔╝╚██████╗██║  ██╗███████╗██║  ██║             ║')
+        print('║     ╚═════╝  ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝             ║')
+        print('║                                                                    ║')
+        print('║                   Docker Container Manager v1.0                   ║')
+        print('║                                                                    ║')
+        print('╚════════════════════════════════════════════════════════════════════╝')
+        print(f"{Colors.RESET}\n")
 
-function stop_service
-    set index $argv[1]
-    set container_id (get_container_id $index)
-    or return 1
-    
-    if docker stop $container_id
-        print_success "Stopped container: $container_id"
-    else
-        log_error "Failed to stop container: $container_id"
-        return 1
-    end
-end
+    def print_menu_item(self, index: int, text: str, is_selected: bool):
+        if is_selected:
+            print(f"{Colors.BG_CYAN}{Colors.BRIGHT} ▶ {text} {Colors.RESET}")
+        else:
+            print(f"   {text}")
 
-function show_logs
-    set index $argv[1]
-    set container_id (get_container_id $index)
-    or return 1
-    docker logs $container_id
-end
+    def print_footer(self, custom_help: str = ''):
+        print('\n' + '─' * 70)
+        if custom_help:
+            print(f"{Colors.DIM}{custom_help}{Colors.RESET}")
+        else:
+            print(f"{Colors.DIM}↑↓: Navigate | Enter: Select | q: Quit | b: Back{Colors.RESET}")
 
-function remove_container
-    set index $argv[1]
-    if not string match -qr '^[0-9]+$' $index; or test $index -lt 1; or test $index -gt (count $CONTAINER_IDS)
-        log_error "Invalid container index: $index"
-        return 1
-    end
-    
-    set container_id $CONTAINER_IDS[$index]
-    if docker rm $container_id
-        echo "Removed container: $container_id"
-    else
-        log_error "Failed to remove container: $container_id"
-        return 1
-    end
-end
+    def show_main_menu(self):
+        self.current_view = 'main'
+        self.selected_index = 0
+        options = [
+            MenuItem('🐳 View Containers', 'view'),
+            MenuItem('🚀 Start Container', 'start'),
+            MenuItem('🛑 Stop Container', 'stop'),
+            MenuItem('📋 Container Logs', 'logs'),
+            MenuItem('🗑️  Remove Container', 'remove'),
+            MenuItem('🧹 System Cleanup', 'cleanup'),
+            MenuItem('📊 Docker Info', 'info'),
+            MenuItem('❌ Exit', 'exit')
+        ]
 
-function cleanup_dangling
-    print_info "Cleaning up dangling containers and images..."
-    docker system prune -f
-    print_success "Cleanup complete."
-end
+        while self.is_running:
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}MAIN MENU{Colors.RESET}\n")
 
-function show_usage
-    echo "Usage: docker-manager [COMMAND] [OPTIONS]"
-    echo ""
-    echo "Commands:"
-    echo "  list      List all containers"
-    echo "  start     Start a container"
-    echo "  stop      Stop a container"
-    echo "  logs      Show container logs"
-    echo "  cleanup   Clean up dangling containers and images"
-    echo "  remove    Remove a container"
-    echo "  help      Show this help message"
-end
+            for i, option in enumerate(options):
+                self.print_menu_item(i, option.text, i == self.selected_index)
 
-function interactive_mode
-    while true
-        clear
-        print_info "Docker Container Manager"
-        echo "1) List all containers"
-        echo "2) Start a container"
-        echo "3) Stop a container"
-        echo "4) Show container logs"
-        echo "5) Cleanup system"
-        echo "6) Remove a container"
-        echo "q) Quit"
-        echo
+            self.print_footer()
+
+            action = self.handle_navigation(len(options))
+
+            if action == 'select':
+                selected = options[self.selected_index]
+                if selected.value == 'view':
+                    self.show_containers_view()
+                elif selected.value == 'start':
+                    self.show_start_container_menu()
+                elif selected.value == 'stop':
+                    self.show_stop_container_menu()
+                elif selected.value == 'logs':
+                    self.show_logs_menu()
+                elif selected.value == 'remove':
+                    self.show_remove_container_menu()
+                elif selected.value == 'cleanup':
+                    self.show_cleanup_menu()
+                elif selected.value == 'info':
+                    self.show_docker_info()
+                elif selected.value == 'exit':
+                    self.is_running = False
+            elif action == 'quit':
+                self.is_running = False
+
+    def show_containers_view(self):
+        self.prev_view = self.current_view
+        self.current_view = 'containers'
+        self.selected_index = 0
+
+        while self.current_view == 'containers':
+            containers = self.get_containers()
+            
+            self.clear_screen()
+            self.print_header()
+            print(f"{Colors.BRIGHT}{Colors.WHITE}CONTAINERS{Colors.RESET}")
+            print(f"{Colors.DIM}Main Menu > View Containers{Colors.RESET}\n")
+
+            if len(containers) == 0:
+                print(f"{Colors.YELLOW}No containers found.{Colors.RESET}\n")
+                input("Press Enter to return...")
+                self.current_view = self.prev_view
+                return
+
+            options = []
+            for i, container in enumerate(containers):
+                status_icon = '🟢' if 'running' in container.status.lower() else '🔴'
+                port_info = f" - {container.ports}" if container.ports else ''
+                project_info = f" {Colors.DIM}[{container.project}]{Colors.RESET}" if container.project else ''
+                options.append(MenuItem(
+                    f"{status_icon} {container.name} ({container.status}){port_info}{project_info}",
+                    str(i)
+                ))
+            options.append(MenuItem('⬅️  Back to Main Menu', 'back'))
+
+            for i, option in enumerate(options):
+                self.print_menu_item(i, option.text, i == self.selected_index)
+
+            self.print_footer('↑↓: Navigate | Enter: Details | b: Back')
+
+            action = self.handle_navigation(len(options))
+
+            if action == 'select':
+                if options[self.selected_index].value == 'back':
+                    self.current_view = self.prev_view
+                else:
+                    container_index = int(options[self.selected_index].value)
+                    self.show_container_details(containers[container_index])
+            elif action == 'back' or action == 'quit':
+                self.current_view = self.prev_view
+
+    def show_container_details(self, container: Container):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}CONTAINER DETAILS{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > View Containers > {container.name}{Colors.RESET}\n")
+
+        print(f"{Colors.CYAN}ID:{Colors.RESET} {container.id}")
+        print(f"{Colors.CYAN}Name:{Colors.RESET} {container.name}")
+        print(f"{Colors.CYAN}Image:{Colors.RESET} {container.image}")
         
-        read -P "Enter your choice: " choice
+        status_color = Colors.GREEN if 'running' in container.status.lower() else Colors.RED
+        print(f"{Colors.CYAN}Status:{Colors.RESET} {status_color}{container.status}{Colors.RESET}")
+        
+        if container.ports:
+            print(f"{Colors.CYAN}Ports:{Colors.RESET} {container.ports}")
+        
+        if container.created:
+            print(f"{Colors.CYAN}Created:{Colors.RESET} {container.created}")
+        
+        if container.project:
+            print(f"{Colors.CYAN}Project:{Colors.RESET} {container.project}")
 
-        switch $choice
-            case 1
-                list_containers
-                read -P "Press Enter to continue..."
-            case 2
-                list_containers
-                echo
-                read -P "Enter container index to start: " index
-                test -n "$index"; and start_service $index
-                read -P "Press Enter to continue..."
-            case 3
-                list_containers
-                echo
-                read -P "Enter container index to stop: " index
-                test -n "$index"; and stop_service $index
-                read -P "Press Enter to continue..."
-            case 4
-                list_containers
-                echo
-                read -P "Enter container index to view logs: " index
-                test -n "$index"; and show_logs $index
-                read -P "Press Enter to continue..."
-            case 5
-                cleanup_dangling
-                read -P "Press Enter to continue..."
-            case 6
-                list_containers
-                echo
-                read -P "Enter container index to remove: " index
-                test -n "$index"; and remove_container $index
-                read -P "Press Enter to continue..."
-            case q Q
-                exit 0
-            case '*'
-                echo "Invalid option"
-                sleep 1
-        end
-    end
-end
+        print('\n' + '─' * 70)
+        print(f"{Colors.DIM}Press any key to return...{Colors.RESET}")
+        input()
 
-# Main command dispatcher
-switch $argv[1]
-    case "" interactive
-        interactive_mode
-    case list ls
-        list_containers
-    case start
-        if test (count $argv) -lt 2
-            log_error "Usage: docker-manager start <container_index>"
-            exit 1
-        end
-        list_containers
-        start_service $argv[2]
-    case stop
-        if test (count $argv) -lt 2
-            log_error "Usage: docker-manager stop <container_index>"
-            exit 1
-        end
-        list_containers
-        stop_service $argv[2]
-    case logs
-        if test (count $argv) -lt 2
-            log_error "Usage: docker-manager logs <container_index>"
-            exit 1
-        end
-        list_containers
-        show_logs $argv[2]
-    case cleanup
-        cleanup_dangling
-    case remove
-        if test (count $argv) -lt 2
-            log_error "Usage: docker-manager remove <container_index>"
-            exit 1
-        end
-        remove_container $argv[2]
-    case help --help -h
-        show_usage
-    case '*'
-        log_error "Unknown command: $argv[1]"
-        echo ""
-        show_usage
-        exit 1
-end
+    def show_start_container_menu(self):
+        containers = [c for c in self.get_containers() if 'running' not in c.status.lower()]
+        self.show_container_action_menu("START CONTAINER", containers, self.start_container)
+
+    def show_stop_container_menu(self):
+        containers = [c for c in self.get_containers() if 'running' in c.status.lower()]
+        self.show_container_action_menu("STOP CONTAINER", containers, self.stop_container)
+
+    def show_logs_menu(self):
+        containers = self.get_containers()
+        self.show_container_action_menu("CONTAINER LOGS", containers, self.show_container_logs)
+
+    def show_remove_container_menu(self):
+        containers = self.get_containers()
+        self.show_container_action_menu("REMOVE CONTAINER", containers, self.remove_container)
+
+    def show_container_action_menu(self, title: str, containers: List[Container], action_func):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}{title}{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > {title.title()}{Colors.RESET}\n")
+
+        if len(containers) == 0:
+            print(f"{Colors.YELLOW}No containers available for this action.{Colors.RESET}")
+            input("Press Enter to return...")
+            return
+
+        print("Available containers:")
+        for i, container in enumerate(containers, 1):
+            status_icon = '🟢' if 'running' in container.status.lower() else '🔴'
+            print(f"{i}. {status_icon} {container.name} ({container.status})")
+
+        print()
+        choice = input("Enter container number (or press Enter to cancel): ").strip()
+
+        if not choice.isdigit() or int(choice) < 1 or int(choice) > len(containers):
+            return
+
+        selected_container = containers[int(choice) - 1]
+        action_func(selected_container)
+
+    def start_container(self, container: Container):
+        print(f"\n{Colors.YELLOW}Starting container {container.name}...{Colors.RESET}")
+        try:
+            result = subprocess.run(['docker', 'start', container.id], 
+                                  capture_output=True, text=True, check=True)
+            print(f"{Colors.GREEN}✓ Container started successfully!{Colors.RESET}")
+        except subprocess.CalledProcessError as e:
+            print(f"{Colors.RED}✗ Failed to start container: {e.stderr.strip()}{Colors.RESET}")
+        
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def stop_container(self, container: Container):
+        print(f"\n{Colors.YELLOW}Stopping container {container.name}...{Colors.RESET}")
+        try:
+            result = subprocess.run(['docker', 'stop', container.id], 
+                                  capture_output=True, text=True, check=True)
+            print(f"{Colors.GREEN}✓ Container stopped successfully!{Colors.RESET}")
+        except subprocess.CalledProcessError as e:
+            print(f"{Colors.RED}✗ Failed to stop container: {e.stderr.strip()}{Colors.RESET}")
+        
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def show_container_logs(self, container: Container):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}LOGS: {container.name}{Colors.RESET}\n")
+        
+        try:
+            result = subprocess.run(['docker', 'logs', '--tail', '50', container.id], 
+                                  capture_output=True, text=True, check=True)
+            if result.stdout:
+                print(result.stdout)
+            else:
+                print(f"{Colors.YELLOW}No logs available for this container.{Colors.RESET}")
+        except subprocess.CalledProcessError as e:
+            print(f"{Colors.RED}✗ Failed to get logs: {e.stderr.strip()}{Colors.RESET}")
+        
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def remove_container(self, container: Container):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.RED}{Colors.BRIGHT}REMOVE CONTAINER{Colors.RESET}\n")
+        
+        print(f"{Colors.YELLOW}⚠ Warning: You are about to remove container \"{container.name}\".{Colors.RESET}")
+        print(f"{Colors.YELLOW}This action cannot be undone.{Colors.RESET}\n")
+        
+        confirm = input(f"Type \"{container.name}\" to confirm: ").strip()
+        
+        if confirm == container.name:
+            try:
+                # Stop container if running
+                if 'running' in container.status.lower():
+                    subprocess.run(['docker', 'stop', container.id], 
+                                 capture_output=True, text=True, check=True)
+                
+                # Remove container
+                subprocess.run(['docker', 'rm', container.id], 
+                             capture_output=True, text=True, check=True)
+                print(f"\n{Colors.GREEN}✓ Container removed successfully.{Colors.RESET}")
+            except subprocess.CalledProcessError as e:
+                print(f"\n{Colors.RED}✗ Failed to remove container: {e.stderr.strip()}{Colors.RESET}")
+        else:
+            print(f"\n{Colors.YELLOW}Removal cancelled.{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def show_cleanup_menu(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}SYSTEM CLEANUP{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > System Cleanup{Colors.RESET}\n")
+        
+        print(f"{Colors.YELLOW}⚠ This will remove:{Colors.RESET}")
+        print("  - All stopped containers")
+        print("  - All dangling images")
+        print("  - All unused networks")
+        print("  - All build cache")
+        print()
+        
+        confirm = input("Type 'CLEANUP' to confirm: ").strip()
+        
+        if confirm == 'CLEANUP':
+            print(f"\n{Colors.YELLOW}Cleaning up Docker system...{Colors.RESET}")
+            try:
+                result = subprocess.run(['docker', 'system', 'prune', '-a', '-f'], 
+                                      capture_output=True, text=True, check=True)
+                print(f"{Colors.GREEN}✓ System cleanup completed successfully!{Colors.RESET}")
+                if result.stdout:
+                    print(f"\n{result.stdout}")
+            except subprocess.CalledProcessError as e:
+                print(f"{Colors.RED}✗ Cleanup failed: {e.stderr.strip()}{Colors.RESET}")
+        else:
+            print(f"\n{Colors.YELLOW}Cleanup cancelled.{Colors.RESET}")
+
+        print('\n' + '─' * 70)
+        input("Press Enter to continue...")
+
+    def show_docker_info(self):
+        self.clear_screen()
+        self.print_header()
+        print(f"{Colors.BRIGHT}{Colors.WHITE}DOCKER SYSTEM INFO{Colors.RESET}")
+        print(f"{Colors.DIM}Main Menu > Docker Info{Colors.RESET}\n")
+        
+        try:
+            # Get Docker version
+            version_result = subprocess.run(['docker', '--version'], 
+                                          capture_output=True, text=True, check=True)
+            print(f"{Colors.CYAN}Version:{Colors.RESET} {version_result.stdout.strip()}")
+            
+            # Get system info
+            info_result = subprocess.run(['docker', 'system', 'df'], 
+                                       capture_output=True, text=True, check=True)
+            print(f"\n{Colors.CYAN}System Usage:{Colors.RESET}")
+            print(info_result.stdout)
+            
+        except subprocess.CalledProcessError as e:
+            print(f"{Colors.RED}✗ Failed to get Docker info: {e.stderr.strip()}{Colors.RESET}")
+
+        print('─' * 70)
+        input("Press Enter to return...")
+
+    def detect_project(self, container_id: str, container_name: str) -> str:
+        """Detect which project a container belongs to based on various indicators."""
+        try:
+            # Quick pattern checks first (no docker inspect needed)
+            # 1. Check container name patterns
+            if '_' in container_name:
+                parts = container_name.split('_')
+                if len(parts) >= 2:
+                    potential_project = parts[0]
+                    # Skip if it looks like a service name rather than project
+                    common_services = ['redis', 'mysql', 'postgres', 'nginx', 'apache', 'mongo', 'elastic', 'kibana']
+                    if potential_project not in common_services:
+                        return f"📦 {potential_project}"
+            
+            # 2. Check for dash-separated project names
+            if '-' in container_name and not container_name.startswith('redis') and not container_name.startswith('mysql'):
+                parts = container_name.split('-')
+                if len(parts) >= 2:
+                    potential_project = parts[0]
+                    common_services = ['redis', 'mysql', 'postgres', 'nginx', 'apache', 'mongo', 'elastic', 'kibana']
+                    if potential_project not in common_services:
+                        return f"📦 {potential_project}"
+            
+            # 3. Check for numeric suffixes (often indicates project instances)
+            numeric_match = re.match(r'^([a-zA-Z]+)[0-9]+$', container_name)
+            if numeric_match:
+                base_name = numeric_match.group(1)
+                common_services = ['redis', 'mysql', 'postgres', 'nginx', 'apache', 'mongo', 'elastic', 'kibana']
+                if base_name not in common_services:
+                    return f"📦 {base_name}"
+            
+            # Get container details for deeper inspection (only if needed)
+            inspect_result = subprocess.run(['docker', 'inspect', container_id], 
+                                          capture_output=True, text=True, check=True)
+            container_data = json.loads(inspect_result.stdout)[0]
+            
+            # Check for project indicators from container metadata
+            labels = container_data.get('Config', {}).get('Labels', {}) or {}
+            mounts = container_data.get('Mounts', [])
+            networks = list(container_data.get('NetworkSettings', {}).get('Networks', {}).keys())
+            working_dir = container_data.get('Config', {}).get('WorkingDir', '')
+            
+            # 4. Check Docker Compose project label
+            if 'com.docker.compose.project' in labels:
+                return f"📁 {labels['com.docker.compose.project']}"
+            
+            # 5. Check for custom project labels
+            for key in labels:
+                if 'project' in key.lower():
+                    return f"📁 {labels[key]}"
+            
+            # 6. Check mount points for project directories
+            for mount in mounts:
+                if mount.get('Type') == 'bind':
+                    source = mount.get('Source', '')
+                    # Look for common project directory patterns
+                    project_paths = [
+                        '/home/remco-stoeten/dev/', 
+                        '/home/remco-stoeten/projects/', 
+                        '/home/remco-stoeten/work/',
+                        '/workspace/', 
+                        '/app/'
+                    ]
+                    for common_path in project_paths:
+                        if source.startswith(common_path):
+                            project_name = source.replace(common_path, '').split('/')[0]
+                            if project_name and project_name not in ['.', '..', 'node_modules']:
+                                return f"📁 {project_name}"
+            
+            # 7. Check network names for project hints
+            for network in networks:
+                if network not in ['bridge', 'host', 'none', 'default']:
+                    # Clean up common network naming patterns
+                    clean_network = network
+                    for suffix in ['_default', '_network', '-network', '-net']:
+                        clean_network = clean_network.replace(suffix, '')
+                    if clean_network and clean_network != network:
+                        return f"🌐 {clean_network}"
+            
+            # 8. Check environment variables for project hints
+            env_vars = container_data.get('Config', {}).get('Env', [])
+            for env_var in env_vars:
+                if env_var.startswith('PROJECT_NAME=') or env_var.startswith('APP_NAME='):
+                    project_name = env_var.split('=', 1)[1]
+                    if project_name:
+                        return f"🌍 {project_name}"
+            
+            # 9. Check working directory
+            if working_dir and not any(path in working_dir for path in ['/app', '/usr', '/var', '/opt']):
+                parts = working_dir.strip('/').split('/')
+                if parts and parts[0] and parts[0] not in ['tmp', 'home']:
+                    return f"💼 {parts[0]}"
+            
+        except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, IndexError):
+            pass
+        
+        return ''
+
+    def get_containers(self) -> List[Container]:
+        containers = []
+        try:
+            result = subprocess.run(['docker', 'ps', '-a', '--format', 
+                                   '{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.CreatedAt}}'],
+                                  capture_output=True, text=True, check=True)
+            
+            for line in result.stdout.strip().split('\n'):
+                if line:
+                    parts = line.split('\t')
+                    if len(parts) >= 4:
+                        container_id = parts[0]
+                        container_name = parts[1]
+                        project = self.detect_project(container_id, container_name)
+                        
+                        containers.append(Container(
+                            container_id=container_id,
+                            name=container_name,
+                            image=parts[2],
+                            status=parts[3],
+                            ports=parts[4] if len(parts) > 4 else '',
+                            created=parts[5] if len(parts) > 5 else '',
+                            project=project
+                        ))
+        except subprocess.CalledProcessError:
+            pass
+        
+        return containers
+
+    def handle_navigation(self, num_options: int, extra_keys: List[str] = []) -> str:
+        import sys
+        import tty
+        import termios
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        
+        try:
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+            
+            if ch == '\x1b':
+                ch2 = sys.stdin.read(1)
+                ch3 = sys.stdin.read(1)
+                if ch2 == '[':
+                    if ch3 == 'A':
+                        self.selected_index = max(0, self.selected_index - 1)
+                        return 'navigate'
+                    elif ch3 == 'B':
+                        self.selected_index = min(num_options - 1, self.selected_index + 1)
+                        return 'navigate'
+            elif ch == '\r' or ch == '\n':
+                return 'select'
+            elif ch == 'q' or ch == '\x03':
+                return 'quit'
+            elif ch == 'b' or ch == '\x7f':
+                return 'back'
+            elif ch in extra_keys:
+                return ch
+            
+            return 'navigate'
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+    def cleanup(self):
+        self.clear_screen()
+        print(f"{Colors.CYAN}Thank you for using Docker Container Manager!{Colors.RESET}\n")
+
+def main():
+    try:
+        manager = DockerManager()
+        manager.start()
+    except KeyboardInterrupt:
+        print(f"\n{Colors.CYAN}Goodbye!{Colors.RESET}\n")
+        sys.exit(0)
+    except Exception as e:
+        print(f"{Colors.RED}Fatal error: {e}{Colors.RESET}")
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()

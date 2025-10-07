@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/ensure-global-npm-package" "prettier" "prettier"
+
+# Run the actual command (not our wrapper)
+"$ACTUAL_CMD_PATH" "$@"
+
