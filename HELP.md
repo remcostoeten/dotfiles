@@ -44,6 +44,80 @@ dotfiles                # Navigate to dotfiles directory
 dotfiles --help         # Show dotfiles help
 ```
 
+### Environment Manager: `env`
+
+```bash
+env                     # View all environment variables
+env view                # View all environment variables
+env add KEY VALUE       # Add or update a variable
+env remove KEY          # Remove a variable
+env edit                # Open env file in editor
+```
+
+**Features:**
+- Private git submodule for secure syncing across machines
+- Beautiful colored output
+- Auto-loads on shell startup
+- Supports both absolute and $HOME paths
+
+**Your Environment Variables:**
+- `FLYCTL_INSTALL` - Fly.io CLI path
+- `TURSO_INSTALL` - Turso CLI path
+- `DEV_DIR` - Development directory
+- `PROJECTS_DIR` - Projects directory
+- `NODE_ENV` - Default Node environment
+
+### Port Manager: `ports`
+
+```bash
+ports                   # Scan development ports (filters out browsers/editors)
+ports --show-all        # Show ALL ports including system apps
+ports 3000              # Kill process on specific port
+ports 3000 8080         # Kill processes on multiple ports
+ports 3000-3005         # Kill processes on port range
+ports --all             # Kill all default dev ports without prompts
+ports --dry-run         # Preview what would be killed
+ports --force 3000      # Kill without confirmation
+ports --watch           # Monitor ports continuously
+ports --verbose         # Show detailed logging
+ports history           # Show kill history
+ports profiles          # List available port profiles
+ports profile fullstack # Kill ports from a saved profile
+ports --help            # Show full help
+```
+
+**Smart Filtering:**
+- **Default**: Only shows development ports (Node, Vite, databases, etc.)
+- **Filters out**: Brave, Chrome, Cursor, VSCode, Slack, Discord, etc.
+- **Use `--show-all`** to see all ports including system apps
+
+### NPM Package Wrapper Creator: `create-npm-wrapper`
+
+```bash
+create-npm-wrapper      # Interactive tool to create global npm wrappers
+```
+
+**What it does:**
+- Creates a wrapper command for any npm package
+- Auto-installs the package globally if missing
+- Supports scoped packages (e.g., `@user/package`)
+- Works with pnpm, bun, yarn, and npm
+- Creates shortcuts for frequently used tools
+
+**Example usage:**
+```bash
+create-npm-wrapper
+# Package name: prettier
+# Command name: format  (or leave empty to use 'prettier')
+
+# Now you can run:
+format --write .
+```
+
+**Existing wrappers:**
+- `prettier` → runs `prettier`
+- `hygienic` → runs `@remcostoeten/hygienic`
+
 ### Emoji Picker: `emoji`
 
 ```bash
@@ -133,6 +207,137 @@ reload --help           # Show reload help
 | `checkimports`| `unused-analyzer --type typescript --path . --dry-run` | Dry run check for unused imports |
 
 ## Advanced Usage
+
+## Environment Variables Management
+
+The environment manager keeps your personal configuration secure while syncing across machines using a private git submodule.
+
+### Setup on New Machine
+
+```bash
+# Clone dotfiles with submodules
+git clone --recurse-submodules https://github.com/YOUR_USERNAME/dotfiles.git ~/.config/dotfiles
+
+# Or if already cloned
+cd ~/.config/dotfiles
+git submodule init
+git submodule update
+
+# Or use the setup helper
+setup-env
+```
+
+### Managing Variables
+
+```bash
+# View all variables
+env view
+
+# Add a new variable
+env add API_KEY "your-secret-key"
+
+# Remove a variable
+env remove API_KEY
+
+# Edit directly in your editor
+env edit
+```
+
+### Syncing Changes
+
+```bash
+# After modifying variables
+cd ~/.config/dotfiles/env-private
+git add env
+git commit -m "Update environment variables"
+git push
+
+# Update the main dotfiles reference
+cd ~/.config/dotfiles
+git add env-private
+git commit -m "Update env-private reference"
+git push
+```
+
+## Port Management
+
+The `ports` tool helps you manage development server ports with smart filtering.
+
+### Common Workflows
+
+```bash
+# Quick scan (dev ports only)
+ports
+
+# Kill Next.js dev server (common ports)
+ports 3000
+
+# Kill all Vite instances
+ports 5173-5183
+
+# Check before killing
+ports --dry-run
+
+# See everything (including browsers)
+ports --show-all
+
+# Kill without confirmation
+ports --force 3000 5173 8080
+```
+
+### Port Profiles
+
+Save frequently used port combinations:
+
+```bash
+# Kill frontend ports
+ports profile frontend
+
+# Kill fullstack ports
+ports profile fullstack
+
+# Create custom profile
+ports save-profile myproject
+```
+
+### Watch Mode
+
+Monitor ports in real-time:
+
+```bash
+ports --watch
+# Updates every 5 seconds, Ctrl+C to exit
+```
+
+## NPM Package Wrappers
+
+Create command wrappers for npm packages that auto-install when missing.
+
+### Creating Wrappers
+
+```bash
+create-npm-wrapper
+# Package name (npm): eslint
+# Command name (shortcut): lint
+
+# Now use it:
+lint --fix .
+```
+
+### Use Cases
+
+- **Formatter shortcuts**: `prettier` → `format`
+- **Linting**: `eslint` → `lint`
+- **Build tools**: `vite` → `v`
+- **Your packages**: `@username/tool` → `tool`
+
+### How It Works
+
+1. Creates a wrapper script in `scripts/`
+2. Creates a bin command in `bin/`
+3. Checks if package is installed globally
+4. Auto-installs if missing using best available package manager
+5. Runs the actual command with your arguments
 
 ## Unused Code Analyzer
 

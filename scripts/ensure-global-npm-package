@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Ensures a global npm package is installed before running it
+
+PACKAGE="$1"
+CMD="${2:-$PACKAGE}"
+
+if [ -z "$PACKAGE" ]; then
+  echo "❌ Usage: ensure-global-npm-package <package> [command]"
+  exit 1
+fi
+
+# Get dotfiles directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Function to find the actual command path
+find_command_path() {
+  local cmd="$1"
+  
+  # First check if it's already in PATH (but not our wrapper)
+  local found_path="$(which "$cmd" 2>/dev/null || true)"
+  if [ -n "$found_path" ] && [ "$found_path" != "$DOTFILES_DIR/bin/$cmd" ]; then
+    echo "$found_path"
+    return 0
+  fi
+  
+  # Check common global bin paths
+  local bin_paths=(
+    "$(npm config get prefix 2>/dev/null)/bin"
+    "$HOME/.bun/bin"
+    "$HOME/.local/share/pnpm"
+    "$(yarn global bin 2>/dev/null)"
+    "/usr/local/bin"
+    "/usr/bin"
+  )
+  
+  for bin_path in "${bin_paths[@]}"; do
+    if [ -n "$bin_path" ] && [ -f "$bin_path/$cmd" ]; then
+      echo "$bin_path/$cmd"
+      return 0
+    fi
+  done
+  
+  return 1
+}
+
+# Try to find the command
+ACTUAL_CMD_PATH="$(find_command_path "$CMD")"
+
+if [ ! -f "$ACTUAL_CMD_PATH" ]; then
+  echo "📦 Package '$PACKAGE' not found. Installing globally..."
+  
+  # Try package managers in order
+  INSTALL_SUCCESS=false
+  
+  if command -v bun &> /dev/null; then
+    echo "Using bun..."
+    if bun install -g "$PACKAGE" &> /dev/null; then
+      INSTALL_SUCCESS=true
+    fi
+  fi
+  
+  if [ "$INSTALL_SUCCESS" = false ] && command -v pnpm &> /dev/null; then
+    echo "Using pnpm..."
+    if pnpm install -g "$PACKAGE" 2>&1 | grep -q "ERR_PNPM_NO_GLOBAL_BIN_DIR"; then
+      echo "⚠️  pnpm not configured for global packages, trying npm..."
+    elif pnpm install -g "$PACKAGE" &> /dev/null; then
+      INSTALL_SUCCESS=true
+    fi
+  fi
+  
+  if [ "$INSTALL_SUCCESS" = false ] && command -v yarn &> /dev/null; then
+    echo "Using yarn..."
+    if yarn global add "$PACKAGE" &> /dev/null; then
+      INSTALL_SUCCESS=true
+    fi
+  fi
+  
+  if [ "$INSTALL_SUCCESS" = false ]; then
+    echo "Using npm..."
+    if npm install -g "$PACKAGE"; then
+      INSTALL_SUCCESS=true
+    fi
+  fi
+  
+  if [ "$INSTALL_SUCCESS" = true ]; then
+    echo "✅ Successfully installed '$PACKAGE'"
+    # Try to find the newly installed command
+    ACTUAL_CMD_PATH="$(find_command_path "$CMD")"
+    if [ -z "$ACTUAL_CMD_PATH" ]; then
+      echo "⚠️  Package installed but command not found in PATH. You may need to restart your shell."
+      exit 1
+    fi
+  else
+    echo "❌ Failed to install '$PACKAGE'"
+    exit 1
+  fi
+fi
+
+# Export the actual command path to be used by the wrapper
+export ACTUAL_CMD_PATH
+

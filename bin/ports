@@ -1,0 +1,1422 @@
+#!/usr/bin/env node
+
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const readline = require('readline');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const execAsync = promisify(exec);
+
+const APP_CONFIG = {
+  flags: {
+    ASK_FOR_YES_NO: true,
+    ENABLE_SPINNERS: true,
+    ENABLE_COLORS: true,
+    ENABLE_VERBOSE_LOGS: true,
+    USE_PROCESS_NAME_CACHE: true,
+    PARALLEL_PORT_SCANNING: true,
+    AUTO_RESTART_AFTER_KILL: false,
+    SAVE_HISTORY: true,
+    ENABLE_NOTIFICATIONS: false,
+    WATCH_MODE: false,
+    SMART_DETECTION: true,
+    BACKUP_BEFORE_KILL: false,
+  },
+  limits: {
+    MAX_PORT: 65535,
+    MIN_PORT: 1,
+    EXEC_TIMEOUT: 5000,
+    KILL_DELAY_MS: 100,
+    SPINNER_INTERVAL_MS: 80,
+    MIN_TABLE_COLUMN_WIDTH: 8,
+    WATCH_INTERVAL_MS: 5000,
+    MAX_HISTORY_ENTRIES: 100,
+  },
+  paths: {
+    CONFIG_DIR: path.join(os.homedir(), '.killdevports'),
+    HISTORY_FILE: path.join(os.homedir(), '.killdevports', 'history.json'),
+    PROFILES_DIR: path.join(os.homedir(), '.killdevports', 'profiles'),
+  },
+  defaults: {
+    ports: {
+      frontend: {
+        nextjs: Array.from({ length: 11 }, (_, i) => 3000 + i),
+        react: Array.from({ length: 11 }, (_, i) => 3000 + i),
+        vite: Array.from({ length: 11 }, (_, i) => 5173 + i),
+        vue: [8080, 8081, 8082],
+        angular: [4200, 4201, 4202],
+        svelte: [5000, 5001, 5002],
+        astro: [3000, 4321],
+        remix: [3000, 3001],
+        nuxt: [3000, 24678],
+        gatsby: [8000, 9000],
+      },
+      backend: {
+        node: [3000, 3001, 5000, 8000],
+        express: [3000, 3001, 5000, 8000],
+        nestjs: [3000, 3001],
+        fastify: [3000, 3001],
+        koa: [3000, 3001],
+        rails: [3000, 3001],
+        django: [8000, 8001],
+        flask: [5000, 5001],
+        laravel: [8000, 8001],
+        springboot: [8080, 8081],
+        aspnet: [5000, 5001],
+        fastapi: [8000, 8001],
+        golang: [8080, 8081],
+        rust: [8000, 8080],
+      },
+      databases: {
+        mongodb: [27017, 27018, 27019],
+        postgres: [5432, 5433],
+        mysql: [3306, 3307],
+        redis: [6379, 6380],
+        elasticsearch: [9200, 9300],
+        cassandra: [9042, 7000],
+        couchdb: [5984],
+        neo4j: [7474, 7687],
+        influxdb: [8086],
+        memcached: [11211],
+      },
+      devtools: {
+        webpack: [8080, 8081],
+        parcel: [1234],
+        rollup: [10001],
+        esbuild: [8000],
+        storybook: [6006, 9009],
+        playwright: [9323],
+        cypress: [5173],
+        jest: [9229],
+        vitest: [51204],
+      },
+      proxies: {
+        nginx: [80, 443, 8080],
+        apache: [80, 443, 8080],
+        caddy: [80, 443, 2019],
+        traefik: [80, 443, 8080],
+        envoy: [10000, 9901],
+      },
+      apis: {
+        graphql: [4000, 4001],
+        apollo: [4000],
+        hasura: [8080],
+        strapi: [1337],
+        directus: [8055],
+        supabase: [54321, 54322, 54323],
+        prisma: [5555],
+      },
+      mobile: {
+        reactnative: [8081, 19000, 19001, 19002],
+        expo: [19000, 19001, 19002, 19006],
+        flutter: [8080, 8081],
+        ionic: [8100],
+      },
+      containers: {
+        docker: [2375, 2376],
+        kubernetes: [6443, 8001, 10250],
+        portainer: [9000, 9443],
+        rancher: [80, 443],
+      },
+      monitoring: {
+        prometheus: [9090],
+        grafana: [3000],
+        kibana: [5601],
+        jaeger: [16686],
+        datadog: [8126],
+      },
+      messaging: {
+        rabbitmq: [5672, 15672],
+        kafka: [9092, 2181],
+        nats: [4222, 8222],
+        activemq: [61616, 8161],
+      },
+      testing: {
+        selenium: [4444],
+        browserstack: [4444],
+        saucelabs: [4445],
+      },
+      collaboration: {
+        liveshare: [5000, 5001],
+        codesandbox: [3000],
+        stackblitz: [3000],
+      },
+      custom: [4000, 4001],
+    },
+  },
+  profiles: {
+    fullstack: ['frontend.nextjs', 'backend.node', 'databases.mongodb', 'databases.redis'],
+    microservices: ['backend.node', 'databases.postgres', 'databases.redis', 'messaging.kafka', 'monitoring.prometheus'],
+    jamstack: ['frontend.nextjs', 'apis.graphql', 'databases.postgres'],
+    mobile: ['mobile.reactnative', 'mobile.expo', 'backend.node'],
+    wordpress: ['backend.laravel', 'databases.mysql', 'proxies.nginx'],
+    python: ['backend.django', 'backend.flask', 'databases.postgres', 'databases.redis'],
+    java: ['backend.springboot', 'databases.mysql', 'proxies.nginx'],
+    devops: ['containers.docker', 'containers.kubernetes', 'monitoring.grafana', 'monitoring.prometheus'],
+  },
+  patterns: {
+    processNames: {
+      node: ['node', 'nodejs', 'npm', 'yarn', 'pnpm', 'bun'],
+      python: ['python', 'python3', 'uvicorn', 'gunicorn', 'flask', 'django'],
+      ruby: ['ruby', 'rails', 'puma', 'unicorn'],
+      java: ['java', 'mvn', 'gradle'],
+      go: ['go', 'golang'],
+      rust: ['cargo', 'rustc'],
+      php: ['php', 'php-fpm', 'artisan'],
+      dotnet: ['dotnet', 'aspnet'],
+    },
+  },
+  messages: {
+    NO_PROCESSES: 'No active processes found on the specified ports.',
+    ALL_PORTS_FREE: 'All ports appear to be free.',
+    OPERATION_CANCELLED: 'Operation cancelled by user.',
+    SELECT_PROCESSES: 'Select processes to kill:',
+    SELECT_PREVIEW: 'Select processes to preview (DRY RUN):',
+    DRY_RUN_WARNING: 'DRY RUN MODE - No processes will actually be killed',
+    WATCH_MODE_ACTIVE: 'Watch mode active. Monitoring ports every',
+    PROFILE_SAVED: 'Profile saved successfully',
+    HISTORY_CLEARED: 'History cleared successfully',
+  },
+  features: {
+    smartDetection: {
+      enabled: true,
+      detectByProcessName: true,
+      detectByPortUsage: true,
+      suggestRelatedPorts: true,
+    },
+    autoRestart: {
+      enabled: false,
+      commands: {
+        npm: 'npm run dev',
+        yarn: 'yarn dev',
+        pnpm: 'pnpm dev',
+        bun: 'bun dev',
+      },
+    },
+  },
+  version: '2.0.0',
+  license: 'MIT',
+};
+
+const CONFIG_FILE = path.join(APP_CONFIG.paths.CONFIG_DIR, 'config.json');
+
+const colors = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  gray: '\x1b[90m',
+};
+
+const chalk = {
+  red: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.red}${text}${colors.reset}` : text; },
+  green: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.green}${text}${colors.reset}` : text; },
+  yellow: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.yellow}${text}${colors.reset}` : text; },
+  blue: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.blue}${text}${colors.reset}` : text; },
+  magenta: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.magenta}${text}${colors.reset}` : text; },
+  cyan: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.cyan}${text}${colors.reset}` : text; },
+  white: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.white}${text}${colors.reset}` : text; },
+  gray: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.gray}${text}${colors.reset}` : text; },
+  bold: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.bright}${text}${colors.reset}` : text; },
+  dim: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.dim}${text}${colors.reset}` : text; },
+};
+
+let globalOptions = {
+  verbose: false,
+  dryRun: false,
+  force: false,
+  json: false,
+  killAll: false,
+  showAll: false,
+};
+
+const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+let spinnerIndex = 0;
+
+const processNameCache = new Map();
+
+const compiledRegex = {
+  ssUsers: /users:\(\("([^"]+)",pid=(\d+),/,
+  csvQuotes: /"([^"]+)"/,
+  commaSeparator: /\s*,\s*/,
+  whitespace: /\s+/,
+};
+
+function Spinner(text) {
+  this.text = text || '';
+  this.isSpinning = false;
+  this.interval = null;
+}
+
+Spinner.prototype.start = function() {
+  if (this.isSpinning || globalOptions.json || !APP_CONFIG.flags.ENABLE_SPINNERS) return;
+  this.isSpinning = true;
+  process.stdout.write('\x1b[?25l');
+  
+  const self = this;
+  this.interval = setInterval(function() {
+    process.stdout.write(`\r${colors.cyan}${spinnerFrames[spinnerIndex]} ${self.text}${colors.reset}`);
+    spinnerIndex = (spinnerIndex + 1) % spinnerFrames.length;
+  }, APP_CONFIG.limits.SPINNER_INTERVAL_MS);
+};
+
+Spinner.prototype.stop = function() {
+  if (!this.isSpinning) return;
+  this.isSpinning = false;
+  
+  if (this.interval) {
+    clearInterval(this.interval);
+    this.interval = null;
+  }
+  
+  process.stdout.write('\r\x1b[K');
+  process.stdout.write('\x1b[?25h');
+};
+
+Spinner.prototype.succeed = function(message) {
+  this.stop();
+  if (!globalOptions.json) {
+    console.log(`${colors.green}✓ ${message}${colors.reset}`);
+  }
+};
+
+Spinner.prototype.fail = function(message) {
+  this.stop();
+  if (!globalOptions.json) {
+    console.log(`${colors.red}✗ ${message}${colors.reset}`);
+  }
+};
+
+Spinner.prototype.updateText = function(newText) {
+  this.text = newText;
+};
+
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const userConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+      return Object.assign({}, APP_CONFIG.defaults, userConfig);
+    }
+  } catch (error) {
+    if (globalOptions.verbose && APP_CONFIG.flags.ENABLE_VERBOSE_LOGS) {
+      console.warn(chalk.yellow(`⚠️  Warning: Could not load config file: ${error.message}`));
+    }
+  }
+  return APP_CONFIG.defaults;
+}
+
+function getDefaultPorts() {
+  const config = loadConfig();
+  const allPorts = new Set();
+  
+  for (const category of Object.values(config.ports)) {
+    if (Array.isArray(category)) {
+      for (const port of category) {
+        allPorts.add(port);
+      }
+    } else if (typeof category === 'object') {
+      for (const subcategory of Object.values(category)) {
+        if (Array.isArray(subcategory)) {
+          for (const port of subcategory) {
+            allPorts.add(port);
+          }
+        }
+      }
+    }
+  }
+  
+  return Array.from(allPorts);
+}
+
+function getPortsByCategory(category) {
+  const parts = category.split('.');
+  let current = APP_CONFIG.defaults.ports;
+  
+  for (const part of parts) {
+    if (current[part]) {
+      current = current[part];
+    } else {
+      return [];
+    }
+  }
+  
+  return Array.isArray(current) ? current : Object.values(current).flat();
+}
+
+function getPortsByProfile(profileName) {
+  const profile = APP_CONFIG.profiles[profileName];
+  if (!profile) return [];
+  
+  const ports = new Set();
+  for (const category of profile) {
+    const categoryPorts = getPortsByCategory(category);
+    for (const port of categoryPorts) {
+      ports.add(port);
+    }
+  }
+  
+  return Array.from(ports);
+}
+
+function detectFramework(processInfo) {
+  const { name, port, command } = processInfo;
+  
+  const detections = [];
+  
+  if (command) {
+    if (command.includes('next')) detections.push('Next.js');
+    if (command.includes('vite')) detections.push('Vite');
+    if (command.includes('react-scripts')) detections.push('Create React App');
+    if (command.includes('vue-cli')) detections.push('Vue CLI');
+    if (command.includes('@angular/cli')) detections.push('Angular');
+    if (command.includes('astro')) detections.push('Astro');
+    if (command.includes('remix')) detections.push('Remix');
+    if (command.includes('svelte')) detections.push('Svelte');
+    if (command.includes('nuxt')) detections.push('Nuxt');
+    if (command.includes('gatsby')) detections.push('Gatsby');
+  }
+  
+  for (const [framework, ports] of Object.entries(APP_CONFIG.defaults.ports.frontend)) {
+    if (Array.isArray(ports) && ports.includes(port)) {
+      detections.push(framework.charAt(0).toUpperCase() + framework.slice(1));
+    }
+  }
+  
+  return detections.length > 0 ? detections[0] : 'Unknown';
+}
+
+function saveToHistory(operation) {
+  if (!APP_CONFIG.flags.SAVE_HISTORY) return;
+  
+  try {
+    if (!fs.existsSync(APP_CONFIG.paths.CONFIG_DIR)) {
+      fs.mkdirSync(APP_CONFIG.paths.CONFIG_DIR, { recursive: true });
+    }
+    
+    let history = [];
+    if (fs.existsSync(APP_CONFIG.paths.HISTORY_FILE)) {
+      history = JSON.parse(fs.readFileSync(APP_CONFIG.paths.HISTORY_FILE, 'utf8'));
+    }
+    
+    history.unshift({
+      timestamp: new Date().toISOString(),
+      operation: operation,
+    });
+    
+    if (history.length > APP_CONFIG.limits.MAX_HISTORY_ENTRIES) {
+      history = history.slice(0, APP_CONFIG.limits.MAX_HISTORY_ENTRIES);
+    }
+    
+    fs.writeFileSync(APP_CONFIG.paths.HISTORY_FILE, JSON.stringify(history, null, 2));
+  } catch (error) {
+    verboseLog(`Failed to save history: ${error.message}`);
+  }
+}
+
+function showHistory(limit) {
+  try {
+    if (!fs.existsSync(APP_CONFIG.paths.HISTORY_FILE)) {
+      console.log('No history found.');
+      return;
+    }
+    
+    const history = JSON.parse(fs.readFileSync(APP_CONFIG.paths.HISTORY_FILE, 'utf8'));
+    const display = limit ? history.slice(0, limit) : history;
+    
+    console.log(chalk.cyan('\n📜 Kill History:\n'));
+    
+    const tableData = display.map(function(entry, index) {
+      const date = new Date(entry.timestamp);
+      return [
+        (index + 1).toString(),
+        date.toLocaleDateString(),
+        date.toLocaleTimeString(),
+        entry.operation.ports ? entry.operation.ports.join(', ') : 'N/A',
+        entry.operation.count || '0',
+      ];
+    });
+    
+    const table = createTable(['#', 'DATE', 'TIME', 'PORTS', 'KILLED'], tableData);
+    console.log(table);
+    console.log();
+  } catch (error) {
+    console.error(chalk.red('Failed to read history:'), error.message);
+  }
+}
+
+function clearHistory() {
+  try {
+    if (fs.existsSync(APP_CONFIG.paths.HISTORY_FILE)) {
+      fs.unlinkSync(APP_CONFIG.paths.HISTORY_FILE);
+      console.log(chalk.green(`✓ ${APP_CONFIG.messages.HISTORY_CLEARED}`));
+    } else {
+      console.log('No history to clear.');
+    }
+  } catch (error) {
+    console.error(chalk.red('Failed to clear history:'), error.message);
+  }
+}
+
+function saveProfile(name, ports) {
+  try {
+    if (!fs.existsSync(APP_CONFIG.paths.PROFILES_DIR)) {
+      fs.mkdirSync(APP_CONFIG.paths.PROFILES_DIR, { recursive: true });
+    }
+    
+    const profilePath = path.join(APP_CONFIG.paths.PROFILES_DIR, `${name}.json`);
+    fs.writeFileSync(profilePath, JSON.stringify({ ports: ports }, null, 2));
+    
+    console.log(chalk.green(`✓ ${APP_CONFIG.messages.PROFILE_SAVED}: ${name}`));
+  } catch (error) {
+    console.error(chalk.red('Failed to save profile:'), error.message);
+  }
+}
+
+function loadProfile(name) {
+  try {
+    const profilePath = path.join(APP_CONFIG.paths.PROFILES_DIR, `${name}.json`);
+    
+    if (!fs.existsSync(profilePath)) {
+      console.error(chalk.red(`Profile "${name}" not found.`));
+      return null;
+    }
+    
+    const profile = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
+    return profile.ports;
+  } catch (error) {
+    console.error(chalk.red('Failed to load profile:'), error.message);
+    return null;
+  }
+}
+
+function listProfiles() {
+  try {
+    console.log(chalk.cyan('\n📋 Available Profiles:\n'));
+    
+    console.log(chalk.bold('Built-in Profiles:'));
+    for (const [name, categories] of Object.entries(APP_CONFIG.profiles)) {
+      console.log(`  ${chalk.yellow(name.padEnd(20))} ${chalk.dim(categories.join(', '))}`);
+    }
+    
+    if (fs.existsSync(APP_CONFIG.paths.PROFILES_DIR)) {
+      const customProfiles = fs.readdirSync(APP_CONFIG.paths.PROFILES_DIR)
+        .filter(function(file) { return file.endsWith('.json'); })
+        .map(function(file) { return file.replace('.json', ''); });
+      
+      if (customProfiles.length > 0) {
+        console.log(chalk.bold('\nCustom Profiles:'));
+        for (const name of customProfiles) {
+          console.log(`  ${chalk.green(name)}`);
+        }
+      }
+    }
+    
+    console.log();
+  } catch (error) {
+    console.error(chalk.red('Failed to list profiles:'), error.message);
+  }
+}
+
+function listCategories() {
+  console.log(chalk.cyan('\n📂 Available Port Categories:\n'));
+  
+  for (const [category, subcategories] of Object.entries(APP_CONFIG.defaults.ports)) {
+    console.log(chalk.bold(`${category}:`));
+    for (const [name, ports] of Object.entries(subcategories)) {
+      const portRange = Array.isArray(ports) ? ports : Object.values(ports).flat();
+      console.log(`  ${chalk.yellow(name.padEnd(20))} ${chalk.dim(portRange.slice(0, 5).join(', '))}${portRange.length > 5 ? '...' : ''}`);
+    }
+    console.log();
+  }
+}
+
+async function watchMode(ports) {
+  console.log(chalk.cyan(`\n👁️  ${APP_CONFIG.messages.WATCH_MODE_ACTIVE} ${APP_CONFIG.limits.WATCH_INTERVAL_MS / 1000}s\n`));
+  console.log(chalk.dim('Press Ctrl+C to exit watch mode\n'));
+  
+  const seenProcesses = new Map();
+  
+  async function check() {
+    const allProcesses = await scanPortsParallel(ports);
+    
+    const currentPids = new Set(allProcesses.map(function(p) { return p.pid; }));
+    const newProcesses = allProcesses.filter(function(p) { return !seenProcesses.has(p.pid); });
+    
+    if (newProcesses.length > 0) {
+      console.log(chalk.yellow(`\n[${new Date().toLocaleTimeString()}] Detected ${newProcesses.length} new process(es):`));
+      
+      for (const proc of newProcesses) {
+        console.log(`  Port ${proc.port}: ${proc.name} (PID: ${proc.pid})`);
+        seenProcesses.set(proc.pid, proc);
+      }
+      
+      if (APP_CONFIG.flags.AUTO_RESTART_AFTER_KILL) {
+        const shouldKill = await confirm('Kill these processes?', false);
+        if (shouldKill) {
+          for (const proc of newProcesses) {
+            await killProcess(proc.pid);
+            console.log(chalk.green(`✓ Killed PID ${proc.pid} on port ${proc.port}`));
+          }
+        }
+      }
+    }
+    
+    for (const [pid] of seenProcesses) {
+      if (!currentPids.has(pid)) {
+        seenProcesses.delete(pid);
+      }
+    }
+  }
+  
+  await check();
+  
+  const interval = setInterval(check, APP_CONFIG.limits.WATCH_INTERVAL_MS);
+  
+  process.on('SIGINT', function() {
+    clearInterval(interval);
+    console.log(chalk.yellow('\n\n⚠️  Watch mode stopped.'));
+    process.exit(0);
+  });
+}
+
+async function suggestRelatedPorts(foundProcesses) {
+  if (!APP_CONFIG.features.smartDetection.suggestRelatedPorts) return;
+  
+  const suggestions = new Set();
+  
+  for (const proc of foundProcesses) {
+    const framework = detectFramework(proc);
+    
+    if (framework === 'Next.js') {
+      suggestions.add(3000);
+      suggestions.add(3001);
+    } else if (framework === 'Vite') {
+      suggestions.add(5173);
+      suggestions.add(5174);
+    }
+  }
+  
+  if (suggestions.size > 0) {
+    console.log(chalk.cyan('\n💡 Suggested related ports: ') + Array.from(suggestions).join(', '));
+  }
+}
+
+function showHelp() {
+  const asciiArt = chalk.cyan(`
+██╗  ██╗██╗██╗     ██╗         ██████╗ ███████╗██╗   ██╗
+██║ ██╔╝██║██║     ██║         ██╔══██╗██╔════╝██║   ██║
+█████╔╝ ██║██║     ██║         ██║  ██║█████╗  ██║   ██║
+██╔═██╗ ██║██║     ██║         ██║  ██║██╔══╝  ╚██╗ ██╔╝
+██║  ██╗██║███████╗███████╗    ██████╔╝███████╗ ╚████╔╝ 
+╚═╝  ╚═╝╚═╝╚══════╝╚══════╝    ╚═════╝ ╚══════╝  ╚═══╝  
+`);
+  
+  console.log(asciiArt);
+  console.log(chalk.magenta(`            Process Port Terminator ${chalk.yellow(`v${APP_CONFIG.version}`)}`));
+  console.log(chalk.gray('                    by @remcostoeten'));
+  
+  const helpContent = `
+${chalk.bold('USAGE:')}
+  ${chalk.cyan('ports [options] [ports...]')}
+  ${chalk.cyan('ports [command] [args...]')}
+
+${chalk.bold('OPTIONS:')}
+  ${chalk.green('-h, --help')}       Show this help message
+  ${chalk.green('-v, --version')}    Show version number
+  ${chalk.green('-a, --all')}        Kill all default development ports without prompts
+  ${chalk.green('--show-all')}       Show all ports including browsers/editors (default: dev only)
+  ${chalk.green('--verbose')}        Enable verbose logging
+  ${chalk.green('--dry-run')}        Show what would be killed without actually killing
+  ${chalk.green('--force')}          Skip confirmation prompts
+  ${chalk.green('--json')}           Output results in JSON format
+  ${chalk.green('--watch')}          Watch mode - monitor ports continuously
+
+${chalk.bold('COMMANDS:')}
+  ${chalk.cyan('history [limit]')}         Show kill history (optional limit)
+  ${chalk.cyan('clear-history')}           Clear kill history
+  ${chalk.cyan('profiles')}                List all available profiles
+  ${chalk.cyan('profile <name>')}          Load and kill ports from a profile
+  ${chalk.cyan('save-profile <name>')}     Save current ports as a profile
+  ${chalk.cyan('categories')}              List all port categories
+  ${chalk.cyan('category <name>')}         Kill ports from a category (e.g., frontend.nextjs)
+
+${chalk.bold('EXAMPLES:')}
+  ${chalk.yellow('ports')}                       Scan all default development ports
+  ${chalk.yellow('ports --all')}                 Kill all default ports without prompts
+  ${chalk.yellow('ports -a')}                    Kill all default ports (short form)
+  ${chalk.yellow('ports 3000')}                  Kill processes on port 3000
+  ${chalk.yellow('ports 3000 8080')}             Kill processes on multiple ports
+  ${chalk.yellow('ports 3000-3005')}             Kill processes on port range
+  ${chalk.yellow('ports --3000+')}               Kill processes on ports 3000-3010
+  ${chalk.yellow('ports --dry-run')}             Preview what would be killed
+  ${chalk.yellow('ports --force 3000')}          Kill without confirmation
+  ${chalk.yellow('ports --watch')}               Monitor ports continuously
+  ${chalk.yellow('ports history 10')}            Show last 10 kill operations
+  ${chalk.yellow('ports profile fullstack')}     Kill all fullstack profile ports
+  ${chalk.yellow('ports category frontend.vite')} Kill all Vite ports
+  ${chalk.yellow('ports categories')}            List all available categories
+
+${chalk.bold('BUILT-IN PROFILES:')}
+  ${chalk.magenta('fullstack')}     Next.js + Node + MongoDB + Redis
+  ${chalk.magenta('microservices')} Node + Postgres + Redis + Kafka + Prometheus
+  ${chalk.magenta('jamstack')}      Next.js + GraphQL + Postgres
+  ${chalk.magenta('mobile')}        React Native + Expo + Node
+  ${chalk.magenta('python')}        Django + Flask + Postgres + Redis
+
+${chalk.gray('─'.repeat(60))}
+Documentation: https://github.com/remcostoeten/dotfiles
+Version: ${APP_CONFIG.version} | License: ${APP_CONFIG.license}
+`;
+  
+  console.log(helpContent);
+}
+
+function isValidPort(port) {
+  return !isNaN(port) && port >= APP_CONFIG.limits.MIN_PORT && port <= APP_CONFIG.limits.MAX_PORT;
+}
+
+function parsePortRange(startStr, endStr) {
+  const start = parseInt(startStr, 10);
+  const end = parseInt(endStr, 10);
+  
+  if (!isValidPort(start) || !isValidPort(end) || start > end) {
+    return null;
+  }
+  
+  const ports = [];
+  for (let i = start; i <= end; i++) {
+    ports.push(i);
+  }
+  return ports;
+}
+
+function parseCommaSeparatedPorts(spec) {
+  const ports = [];
+  const portList = spec.split(compiledRegex.commaSeparator);
+  
+  for (const portStr of portList) {
+    const port = parseInt(portStr, 10);
+    if (isValidPort(port)) {
+      ports.push(port);
+    } else {
+      console.warn(chalk.yellow(`⚠️  Invalid port '${portStr}' in list. Skipping.`));
+    }
+  }
+  
+  return ports;
+}
+
+function parsePlusRangePort(arg) {
+  const portStr = arg.slice(2, -1);
+  const port = parseInt(portStr, 10);
+  
+  if (!isValidPort(port) || port > APP_CONFIG.limits.MAX_PORT - 10) {
+    console.warn(chalk.yellow(`⚠️  Invalid port range '${arg}'. Skipping.`));
+    return null;
+  }
+  
+  const ports = [];
+  for (let i = port; i <= port + 10; i++) {
+    ports.push(i);
+  }
+  return ports;
+}
+
+function parseArguments(args) {
+  if (args.includes('-h') || args.includes('--help')) {
+    showHelp();
+    process.exit(0);
+  }
+  
+  if (args.includes('-v') || args.includes('--version')) {
+    console.log(`Ports v${APP_CONFIG.version}\n`);
+    process.exit(0);
+  }
+  
+  if (args[0] === 'history') {
+    const limit = args[1] ? parseInt(args[1], 10) : undefined;
+    showHistory(limit);
+    process.exit(0);
+  }
+  
+  if (args[0] === 'clear-history') {
+    clearHistory();
+    process.exit(0);
+  }
+  
+  if (args[0] === 'profiles') {
+    listProfiles();
+    process.exit(0);
+  }
+  
+  if (args[0] === 'categories') {
+    listCategories();
+    process.exit(0);
+  }
+  
+  if (args[0] === 'profile' && args[1]) {
+    const ports = getPortsByProfile(args[1]);
+    if (ports.length === 0) {
+      const customPorts = loadProfile(args[1]);
+      if (customPorts) {
+        globalOptions.force = true;
+        return customPorts;
+      }
+      process.exit(1);
+    }
+    globalOptions.force = true;
+    return ports;
+  }
+  
+  if (args[0] === 'category' && args[1]) {
+    const ports = getPortsByCategory(args[1]);
+    if (ports.length === 0) {
+      console.error(chalk.red(`Category "${args[1]}" not found.`));
+      process.exit(1);
+    }
+    globalOptions.force = true;
+    return ports;
+  }
+  
+  globalOptions.verbose = args.includes('--verbose');
+  globalOptions.dryRun = args.includes('--dry-run');
+  globalOptions.force = args.includes('--force') || args.includes('-a') || args.includes('--all');
+  globalOptions.json = args.includes('--json');
+  globalOptions.killAll = args.includes('-a') || args.includes('--all');
+  globalOptions.showAll = args.includes('--show-all');
+  
+  if (args.includes('--watch')) {
+    APP_CONFIG.flags.WATCH_MODE = true;
+  }
+  
+  if (globalOptions.killAll) {
+    return getDefaultPorts();
+  }
+  
+  const portsIndex = args.indexOf('ports');
+  if (portsIndex !== -1 && portsIndex < args.length - 1) {
+    globalOptions.force = true;
+    const portSpecs = args.slice(portsIndex + 1).filter(function(arg) {
+      return !arg.startsWith('-');
+    });
+    
+    const ports = new Set();
+    for (const spec of portSpecs) {
+      const parsed = spec.includes(',') 
+        ? parseCommaSeparatedPorts(spec)
+        : [parseInt(spec, 10)];
+      
+      for (const port of parsed) {
+        if (isValidPort(port)) {
+          ports.add(port);
+        }
+      }
+    }
+    
+    return Array.from(ports);
+  }
+  
+  const portArgs = args.filter(function(arg) {
+    if (arg.startsWith('--') && arg.endsWith('+')) return true;
+    return !arg.startsWith('--') && !arg.startsWith('-');
+  });
+  
+  if (portArgs.length === 0) return getDefaultPorts();
+  
+  const ports = new Set();
+  for (const arg of portArgs) {
+    let parsed = null;
+    
+    if (arg.startsWith('--') && arg.endsWith('+')) {
+      globalOptions.force = true;
+      parsed = parsePlusRangePort(arg);
+    } else if (arg.includes('-')) {
+      const parts = arg.split('-');
+      parsed = parsePortRange(parts[0], parts[1]);
+    } else {
+      const port = parseInt(arg, 10);
+      if (isValidPort(port)) {
+        parsed = [port];
+      }
+    }
+    
+    if (parsed) {
+      for (const port of parsed) {
+        ports.add(port);
+      }
+    } else if (arg.includes('-') || (arg.startsWith('--') && arg.endsWith('+'))) {
+      console.warn(chalk.yellow(`⚠️  Invalid port range '${arg}'. Skipping.`));
+    } else {
+      console.warn(chalk.yellow(`⚠️  Invalid port '${arg}'. Skipping.`));
+    }
+  }
+  
+  return Array.from(ports);
+}
+
+async function getProcessName(pid) {
+  if (APP_CONFIG.flags.USE_PROCESS_NAME_CACHE && processNameCache.has(pid)) {
+    return processNameCache.get(pid);
+  }
+  
+  try {
+    const cmd = process.platform === 'win32'
+      ? `tasklist /FI "PID eq ${pid}" /FO CSV /NH`
+      : `ps -p ${pid} -o comm=`;
+    
+    const { stdout } = await execAsync(cmd);
+    
+    let name = 'unknown';
+    if (process.platform === 'win32') {
+      const match = stdout.match(compiledRegex.csvQuotes);
+      name = match ? match[1] : 'unknown';
+    } else {
+      name = stdout.trim() || 'unknown';
+    }
+    
+    if (APP_CONFIG.flags.USE_PROCESS_NAME_CACHE) {
+      processNameCache.set(pid, name);
+    }
+    
+    return name;
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function findProcessesByPort(port) {
+  try {
+    let cmd;
+    
+    if (process.platform === 'win32') {
+      cmd = `netstat -ano | findstr :${port}`;
+    } else {
+      try {
+        await execAsync('which lsof');
+        cmd = `lsof -ti :${port}`;
+      } catch {
+        try {
+          await execAsync('which ss');
+          cmd = `ss -tlnp | grep :${port}`;
+        } catch {
+          cmd = `netstat -tlnp | grep :${port}`;
+        }
+      }
+    }
+    
+    const { stdout } = await execAsync(cmd, { timeout: APP_CONFIG.limits.EXEC_TIMEOUT });
+    
+    if (!stdout.trim()) {
+      return null;
+    }
+    
+    return process.platform === 'win32'
+      ? parseWindowsNetstat(stdout, port)
+      : parseUnixOutput(stdout, port, cmd);
+  } catch (error) {
+    if (globalOptions.verbose && APP_CONFIG.flags.ENABLE_VERBOSE_LOGS) {
+      console.warn(chalk.yellow(`⚠️  Error scanning port ${port}: ${error.message}`));
+    }
+    return null;
+  }
+}
+
+function parseWindowsNetstat(stdout, port) {
+  const lines = stdout.trim().split('\n');
+  const processes = new Set();
+  
+  for (const line of lines) {
+    const parts = line.trim().split(compiledRegex.whitespace);
+    if (parts.length >= 5) {
+      const pid = parseInt(parts[4], 10);
+      if (!isNaN(pid)) {
+        processes.add(pid);
+      }
+    }
+  }
+  
+  if (processes.size === 0) return null;
+  
+  return Array.from(processes).map(function(pid) {
+    return { pid: pid, name: 'unknown', port: port };
+  });
+}
+
+async function parseUnixOutput(stdout, port, cmd) {
+  const lines = stdout.trim().split('\n');
+  const processes = [];
+  
+  for (const line of lines) {
+    if (cmd.includes('lsof')) {
+      const pid = parseInt(line.trim(), 10);
+      if (!isNaN(pid)) {
+        const name = await getProcessName(pid);
+        processes.push({ pid: pid, name: name, port: port });
+      }
+    } else if (cmd.includes('ss')) {
+      const userMatch = line.match(compiledRegex.ssUsers);
+      if (userMatch) {
+        const name = userMatch[1];
+        const pid = parseInt(userMatch[2], 10);
+        if (!isNaN(pid)) {
+          processes.push({ pid: pid, name: name, port: port });
+        }
+      }
+    } else {
+      const parts = line.trim().split(compiledRegex.whitespace);
+      const lastPart = parts[parts.length - 1];
+      if (lastPart && lastPart.includes('/')) {
+        const slashParts = lastPart.split('/');
+        const pid = parseInt(slashParts[0], 10);
+        if (!isNaN(pid)) {
+          processes.push({ pid: pid, name: slashParts[1], port: port });
+        }
+      }
+    }
+  }
+  
+  return processes.length > 0 ? processes : null;
+}
+
+async function killProcess(pid) {
+  try {
+    const cmd = process.platform === 'win32'
+      ? `taskkill /PID ${pid} /F`
+      : `kill -9 ${pid}`;
+    
+    await execAsync(cmd);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function createTable(headers, rows) {
+  const colWidths = headers.map(function(header, i) {
+    const cellLengths = rows.map(function(row) {
+      return String(row[i] || '').length;
+    });
+    const maxWidth = Math.max(header.length, ...cellLengths);
+    return Math.max(maxWidth, APP_CONFIG.limits.MIN_TABLE_COLUMN_WIDTH);
+  });
+  
+  const topBorder = '┌' + colWidths.map(function(w) {
+    return '─'.repeat(w + 2);
+  }).join('┬') + '┐';
+  
+  const headerRow = '│' + headers.map(function(header, i) {
+    return ` ${chalk.bold(header.padEnd(colWidths[i]))} `;
+  }).join('│') + '│';
+  
+  const headerSep = '├' + colWidths.map(function(w) {
+    return '─'.repeat(w + 2);
+  }).join('┼') + '┤';
+  
+  const dataRows = rows.map(function(row) {
+    return '│' + row.map(function(cell, i) {
+      return ` ${String(cell || '').padEnd(colWidths[i])} `;
+    }).join('│') + '│';
+  });
+  
+  const bottomBorder = '└' + colWidths.map(function(w) {
+    return '─'.repeat(w + 2);
+  }).join('┴') + '┘';
+  
+  return [topBorder, headerRow, headerSep, ...dataRows, bottomBorder].join('\n');
+}
+
+function prompt(question) {
+  return new Promise(function(resolve) {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    
+    rl.question(question, function(answer) {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+async function confirm(message, defaultValue) {
+  if (!APP_CONFIG.flags.ASK_FOR_YES_NO) {
+    return defaultValue;
+  }
+  
+  const defaultText = defaultValue ? 'Y/n' : 'y/N';
+  const answer = await prompt(`${message} (${defaultText}): `);
+  
+  if (answer === '') return defaultValue;
+  return ['y', 'yes', '1', 'true'].includes(answer.toLowerCase());
+}
+
+async function multiSelect(message, choices) {
+  console.log(`\n${message}`);
+  console.log(chalk.dim('Enter the numbers of processes to select (comma-separated), or "all" for all:'));
+  
+  choices.forEach(function(choice, index) {
+    console.log(`  ${chalk.yellow((index + 1).toString().padStart(2))}. ${choice.name}`);
+  });
+  
+  const answer = await prompt('\nSelection: ');
+  
+  if (answer.toLowerCase() === 'all') {
+    return choices.map(function(c) { return c.value; });
+  }
+  
+  const indices = answer.split(',')
+    .map(function(s) { return parseInt(s.trim(), 10) - 1; })
+    .filter(function(i) { return i >= 0 && i < choices.length; });
+  
+  return indices.map(function(i) { return choices[i].value; });
+}
+
+function outputJSON(data) {
+  console.log(JSON.stringify(data, null, 2));
+}
+
+function verboseLog(message) {
+  if (globalOptions.verbose && APP_CONFIG.flags.ENABLE_VERBOSE_LOGS && !globalOptions.json) {
+    console.log(chalk.dim(`[VERBOSE] ${message}`));
+  }
+}
+
+async function scanPortsParallel(ports) {
+  if (!APP_CONFIG.flags.PARALLEL_PORT_SCANNING) {
+    const allProcesses = [];
+    for (const port of ports) {
+      const processes = await findProcessesByPort(port);
+      if (processes) {
+        allProcesses.push(...processes);
+      }
+    }
+    return allProcesses;
+  }
+  
+  const results = await Promise.all(
+    ports.map(function(port) {
+      return findProcessesByPort(port);
+    })
+  );
+  
+  const allProcesses = [];
+  for (const processes of results) {
+    if (processes) {
+      allProcesses.push(...processes);
+    }
+  }
+  
+  return allProcesses;
+}
+
+function displayHeader() {
+  if (globalOptions.json) return;
+  
+  const asciiTitle = chalk.cyan(`
+██╗  ██╗██╗██╗     ██╗         ██████╗ ███████╗██╗   ██╗
+██║ ██╔╝██║██║     ██║         ██╔══██╗██╔════╝██║   ██║
+█████╔╝ ██║██║     ██║         ██║  ██║█████╗  ██║   ██║
+██╔═██╗ ██║██║     ██║         ██║  ██║██╔══╝  ╚██╗ ██╔╝
+██║  ██╗██║███████╗███████╗    ██████╔╝███████╗ ╚████╔╝ 
+╚═╝  ╚═╝╚═╝╚══════╝╚══════╝    ╚═════╝ ╚══════╝  ╚═══╝  
+`);
+  
+  const subtitle = chalk.magenta('            Kill Dev - ') + chalk.red('🎯') + 
+    chalk.magenta(' v') + chalk.yellow(APP_CONFIG.version) + 
+    chalk.magenta(' - by ') + chalk.green('@remcostoeten');
+  const separator = chalk.gray('═'.repeat(65));
+  
+  console.log(separator);
+  console.log(asciiTitle);
+  console.log(subtitle);
+  console.log(separator);
+  
+  if (globalOptions.verbose) {
+    const activeOptions = [];
+    if (globalOptions.dryRun) activeOptions.push(chalk.yellow('DRY-RUN'));
+    if (globalOptions.force) activeOptions.push(chalk.red('FORCE'));
+    if (globalOptions.verbose) activeOptions.push(chalk.blue('VERBOSE'));
+    if (globalOptions.json) activeOptions.push(chalk.green('JSON'));
+    
+    if (activeOptions.length > 0) {
+      console.log(chalk.dim(`\n[OPTIONS] ${activeOptions.join(' | ')}\n`));
+    }
+  }
+}
+
+async function handleNoProcesses() {
+  console.log(`\n${chalk.gray('▪')} ${APP_CONFIG.messages.NO_PROCESSES}`);
+  console.log(`${chalk.gray('▪')} ${APP_CONFIG.messages.ALL_PORTS_FREE}\n`);
+}
+
+async function selectProcesses(allProcesses) {
+  if (globalOptions.force) {
+    verboseLog('Force mode enabled - selecting all processes');
+    return allProcesses;
+  }
+  
+  const choices = allProcesses.map(function(proc) {
+    return {
+      name: `Port ${proc.port} (${proc.name}) - PID: ${proc.pid}`,
+      value: proc,
+    };
+  });
+  
+  const message = globalOptions.dryRun 
+    ? APP_CONFIG.messages.SELECT_PREVIEW 
+    : APP_CONFIG.messages.SELECT_PROCESSES;
+  
+  return await multiSelect(message, choices);
+}
+
+async function handleDryRun(selectedProcesses) {
+  console.log(chalk.yellow(`\n📋 ${APP_CONFIG.messages.DRY_RUN_WARNING}\n`));
+  
+  const dryRunData = selectedProcesses.map(function(proc) {
+    return [chalk.red('WOULD KILL'), proc.port.toString(), proc.pid.toString(), proc.name];
+  });
+  
+  const dryRunTable = createTable(['ACTION', 'PORT', 'PID', 'PROCESS'], dryRunData);
+  console.log(dryRunTable);
+  
+  console.log(`\n${chalk.yellow('⚠️')} ${selectedProcesses.length} process(es) would be terminated.`);
+  console.log(chalk.dim('Run without --dry-run to actually kill these processes.\n'));
+}
+
+async function killSelectedProcesses(selectedProcesses) {
+  console.log(`\n${globalOptions.force ? '⚡ Force killing' : 'Attempting to terminate'} selected processes...\n`);
+  let successCount = 0;
+
+  for (let i = 0; i < selectedProcesses.length; i++) {
+    const proc = selectedProcesses[i];
+    const spinner = new Spinner(`Terminating process on port ${proc.port} (PID: ${proc.pid}) [${i + 1}/${selectedProcesses.length}]`);
+    spinner.start();
+    
+    const success = await killProcess(proc.pid);
+    
+    if (success) {
+      spinner.succeed(`Terminated process (PID: ${proc.pid}) on port ${proc.port}`);
+      successCount++;
+    } else {
+      spinner.fail(`Failed to terminate process (PID: ${proc.pid}) on port ${proc.port}`);
+    }
+    
+    if (i < selectedProcesses.length - 1) {
+      await new Promise(function(resolve) {
+        setTimeout(resolve, APP_CONFIG.limits.KILL_DELAY_MS);
+      });
+    }
+  }
+
+  return successCount;
+}
+
+function displaySummary(successCount, totalCount) {
+  console.log('\n' + chalk.cyan('═'.repeat(50)));
+  console.log(chalk.cyan.bold('⚙️  TERMINATION SUMMARY'));
+  console.log(chalk.cyan('═'.repeat(50)));
+  
+  if (successCount === totalCount) {
+    console.log(chalk.green(`✓ All ${successCount} process(es) were successfully terminated.`));
+  } else {
+    console.log(chalk.yellow(`✓ ${successCount} process(es) were successfully terminated.`));
+    if (totalCount > successCount) {
+      console.log(chalk.red(`✗ ${totalCount - successCount} process(es) could not be terminated.`));
+      console.log(chalk.dim('\nYou may need to run this command with elevated privileges (sudo).'));
+    }
+  }
+  
+  console.log(chalk.cyan('═'.repeat(50)) + '\n');
+}
+
+function filterDevelopmentPorts(processes) {
+  // Processes to filter out (browsers, editors, system apps)
+  const nonDevProcessPatterns = [
+    // Browsers
+    /brave/i,
+    /chrome/i,
+    /chromium/i,
+    /firefox/i,
+    /safari/i,
+    /edge/i,
+    /opera/i,
+    // Editors/IDEs
+    /cursor/i,
+    /vscode/i,
+    /code/i,
+    /visual studio/i,
+    /webstorm/i,
+    /phpstorm/i,
+    /intellij/i,
+    /pycharm/i,
+    /atom/i,
+    /sublime/i,
+    // Communication
+    /slack/i,
+    /discord/i,
+    /teams/i,
+    /zoom/i,
+    /skype/i,
+    // System
+    /systemd/i,
+    /launchd/i,
+  ];
+  
+  // Ports commonly used by browsers/editors (not dev servers)
+  const nonDevPorts = new Set([
+    443,   // HTTPS (browsers)
+    80,    // HTTP (browsers)
+    8443,  // Alt HTTPS
+  ]);
+  
+  return processes.filter(function(proc) {
+    // Filter by port
+    if (nonDevPorts.has(proc.port)) {
+      return false;
+    }
+    
+    // Filter by process name
+    const processName = proc.name.toLowerCase();
+    for (const pattern of nonDevProcessPatterns) {
+      if (pattern.test(processName)) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const ports = parseArguments(args);
+  
+  verboseLog(`Parsed ports: ${ports.join(', ')}`);
+  verboseLog(`Active options: ${JSON.stringify(globalOptions)}`);
+
+  displayHeader();
+
+  if (APP_CONFIG.flags.WATCH_MODE) {
+    await watchMode(ports);
+    return;
+  }
+
+  const scanSpinner = new Spinner(`Scanning ${ports.length} port(s): ${ports.slice(0, 5).join(', ')}${ports.length > 5 ? '...' : ''}`);
+  scanSpinner.start();
+
+  let allProcesses = await scanPortsParallel(ports);
+  
+  scanSpinner.succeed(`Scan completed on ${ports.length} port(s)`);
+  
+  verboseLog(`Found ${allProcesses.length} active processes`);
+  
+  // Filter out non-development processes unless --show-all is used
+  if (!globalOptions.showAll) {
+    const originalCount = allProcesses.length;
+    const filteredProcesses = filterDevelopmentPorts(allProcesses);
+    const filteredCount = originalCount - filteredProcesses.length;
+    
+    if (filteredCount > 0 && !globalOptions.json) {
+      console.log(chalk.dim(`\n💡 Filtered out ${filteredCount} non-development port(s) (browsers/editors)`));
+      console.log(chalk.dim(`   Use ${chalk.cyan('--show-all')} to see all ports\n`));
+    }
+    
+    verboseLog(`Filtered out ${filteredCount} non-development processes`);
+    allProcesses = filteredProcesses;
+  }
+
+  if (globalOptions.json) {
+    const jsonData = {
+      timestamp: new Date().toISOString(),
+      ports_scanned: ports,
+      processes_found: allProcesses.length,
+      processes: allProcesses,
+      options: globalOptions,
+    };
+    outputJSON(jsonData);
+    return;
+  }
+
+  if (allProcesses.length === 0) {
+    await handleNoProcesses();
+    return;
+  }
+
+  console.log(`\n${chalk.bold('◆')} Found ${chalk.bold(allProcesses.length)} active process(es):\n`);
+  
+  const tableData = allProcesses.map(function(proc) {
+    return [proc.port.toString(), proc.pid.toString(), proc.name];
+  });
+  
+  const table = createTable(['PORT', 'PID', 'PROCESS NAME'], tableData);
+  console.log(table);
+
+  if (APP_CONFIG.features.smartDetection.enabled) {
+    await suggestRelatedPorts(allProcesses);
+  }
+
+  try {
+    const selectedProcesses = await selectProcesses(allProcesses);
+
+    if (selectedProcesses.length === 0) {
+      console.log('No processes selected. Exiting.');
+      return;
+    }
+
+    if (globalOptions.dryRun) {
+      await handleDryRun(selectedProcesses);
+      return;
+    }
+
+    if (!globalOptions.force && APP_CONFIG.flags.ASK_FOR_YES_NO) {
+      const confirmKill = await confirm(
+        `Are you sure you want to kill ${selectedProcesses.length} process(es)?`, 
+        false
+      );
+      
+      if (!confirmKill) {
+        console.log(APP_CONFIG.messages.OPERATION_CANCELLED);
+        return;
+      }
+    }
+
+    const successCount = await killSelectedProcesses(selectedProcesses);
+    displaySummary(successCount, selectedProcesses.length);
+    
+    if (APP_CONFIG.flags.SAVE_HISTORY) {
+      saveToHistory({
+        ports: selectedProcesses.map(function(p) { return p.port; }),
+        count: successCount,
+        pids: selectedProcesses.map(function(p) { return p.pid; }),
+      });
+    }
+    
+  } catch (error) {
+    console.error(chalk.red('An error occurred:'), error.message);
+    process.exit(1);
+  }
+}
+
+process.on('SIGINT', function() {
+  console.log(chalk.yellow(`\n\n⚠️  ${APP_CONFIG.messages.OPERATION_CANCELLED}`));
+  process.exit(0);
+});
+
+process.on('unhandledRejection', function(error) {
+  console.error(chalk.red('An unexpected error occurred:'), error);
+  process.exit(1);
+});
+
+main().catch(function(error) {
+  console.error(chalk.red('A critical error occurred:'), error);
+  process.exit(1);
+});
