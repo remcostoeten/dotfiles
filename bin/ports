@@ -44,7 +44,7 @@ const APP_CONFIG = {
       frontend: {
         nextjs: Array.from({ length: 11 }, (_, i) => 3000 + i),
         react: Array.from({ length: 11 }, (_, i) => 3000 + i),
-        vite: Array.from({ length: 11 }, (_, i) => 5173 + i),
+        vite: Array.from({ length: 11 }, (_, i) => 5173 + i).concat([1420]),
         vue: [8080, 8081, 8082],
         angular: [4200, 4201, 4202],
         svelte: [5000, 5001, 5002],
@@ -1047,6 +1047,22 @@ function prompt(question) {
   });
 }
 
+function singleKeypress(message) {
+  return new Promise(function(resolve) {
+    if (message) {
+      process.stdout.write(message);
+    }
+    
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+    
+    process.stdin.once('data', function(key) {
+      resolve(key.toString());
+    });
+  });
+}
+
 async function confirm(message, defaultValue) {
   if (!APP_CONFIG.flags.ASK_FOR_YES_NO) {
     return defaultValue;
@@ -1061,19 +1077,43 @@ async function confirm(message, defaultValue) {
 
 async function multiSelect(message, choices) {
   console.log(`\n${message}`);
-  console.log(chalk.dim('Enter the numbers of processes to select (comma-separated), or "all" for all:'));
+  console.log(chalk.dim('Press "a" to kill all, or enter numbers (comma-separated):'));
   
   choices.forEach(function(choice, index) {
     console.log(`  ${chalk.yellow((index + 1).toString().padStart(2))}. ${choice.name}`);
   });
   
-  const answer = await prompt('\nSelection: ');
+  const answer = await singleKeypress('\nSelection: ');
   
-  if (answer.toLowerCase() === 'all') {
+  if (answer.toLowerCase() === 'a') {
+    globalOptions.force = true;
     return choices.map(function(c) { return c.value; });
   }
   
-  const indices = answer.split(',')
+  process.stdin.setRawMode(false);
+  process.stdin.pause();
+  
+  const fullAnswer = answer + (await new Promise(function(resolve) {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: false
+    });
+    
+    process.stdin.resume();
+    
+    rl.on('line', function(line) {
+      rl.close();
+      resolve(line);
+    });
+  }));
+  
+  if (fullAnswer.toLowerCase() === 'all') {
+    globalOptions.force = true;
+    return choices.map(function(c) { return c.value; });
+  }
+  
+  const indices = fullAnswer.split(',')
     .map(function(s) { return parseInt(s.trim(), 10) - 1; })
     .filter(function(i) { return i >= 0 && i < choices.length; });
   
@@ -1222,7 +1262,7 @@ async function killSelectedProcesses(selectedProcesses) {
 
 function displaySummary(successCount, totalCount) {
   console.log('\n' + chalk.cyan('═'.repeat(50)));
-  console.log(chalk.cyan.bold('⚙️  TERMINATION SUMMARY'));
+  console.log(chalk.bold(chalk.cyan('⚙️  TERMINATION SUMMARY')));
   console.log(chalk.cyan('═'.repeat(50)));
   
   if (successCount === totalCount) {
@@ -1269,6 +1309,9 @@ function filterDevelopmentPorts(processes) {
     // System
     /systemd/i,
     /launchd/i,
+    // WebKit (browser rendering engines)
+    /webkit/i,
+    /webkitnetwork/i,
   ];
   
   // Ports commonly used by browsers/editors (not dev servers)
