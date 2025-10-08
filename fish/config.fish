@@ -1,6 +1,12 @@
 # Main fish configuration file
 alias x "exit"
 if status is-interactive
+    # Display welcome banner once per session
+    if not set -q DOTFILES_WELCOME_SHOWN
+        set -g DOTFILES_WELCOME_SHOWN 1
+        welcome_banner
+        echo ""
+    end
     # Get the directory where this config file is located
     set -l fish_dir (dirname (status --current-filename))
 
@@ -27,3 +33,10 @@ if status is-interactive
         zoxide init fish | source
     end
 end
+
+# pnpm
+set -gx PNPM_HOME "/home/remco-stoeten/.local/share/pnpm"
+if not string match -q -- $PNPM_HOME $PATH
+  set -gx PATH "$PNPM_HOME" $PATH
+end
+# pnpm end

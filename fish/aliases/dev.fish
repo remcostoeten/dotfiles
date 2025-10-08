@@ -29,6 +29,11 @@ alias b "bun run build"
 # DOCSTRING: Run tauri dev via bun 
 alias tauri="bun tauri dev"
 
+# DOCSTRING: Run tauri dev via pnpm
+alias rt='pnpm tauri dev'
+
+# DOCSTRING: Remove all generated files
+
 # DOCSTRING: Open files with Neovim
 function v
     nvim $argv

@@ -8,6 +8,7 @@ import json
 import sys
 import time
 import ast
+import hashlib
 from pathlib import Path
 from typing import List, Dict, Set, Tuple, Optional, NamedTuple
 from dataclasses import dataclass
@@ -55,6 +56,14 @@ class UnusedImport:
     line_number: int
     import_type: str
 
+@dataclass
+class DuplicateFileInfo:
+    file_path: Path
+    content_hash: str
+    size: int
+    mtime: float
+    import_count: int = 0
+
 class Colors:
     RESET = '\033[0m'
     BRIGHT = '\033[1m'
@@ -82,6 +91,22 @@ class Colors:
     ENDC = RESET
     BOLD = BRIGHT
     UNDERLINE = '\033[4m'
+
+def normalize_content(content: str) -> str:
+    lines = []
+    for line in content.split('\n'):
+        stripped = line.strip()
+        if stripped and not stripped.startswith('//'):
+            lines.append(stripped)
+    return '\n'.join(lines)
+
+def compute_content_hash(file_path: Path) -> Optional[str]:
+    try:
+        content = file_path.read_text(encoding='utf-8')
+        normalized = normalize_content(content)
+        return hashlib.md5(normalized.encode('utf-8')).hexdigest()
+    except Exception:
+        return None
 
 def clear_screen():
     os.system('clear' if os.name != 'nt' else 'cls')
@@ -150,6 +175,7 @@ def show_analyzer_menu():
     print(f"  {Colors.GREEN}4.{Colors.RESET} 🔍 Complete analysis (all of the above)")
     print(f"  {Colors.GREEN}5.{Colors.RESET} ⏪ Revert previous changes")
     print(f"  {Colors.GREEN}6.{Colors.RESET} ⚙️  Show configuration")
+    print(f"  {Colors.GREEN}7.{Colors.RESET} 🔍 Find duplicate files")
     print(f"  {Colors.RED}0.{Colors.RESET} ← Back to Main Menu")
     print()
 
@@ -662,6 +688,139 @@ class JavaScriptAnalyzer:
         
         return usage_lines
 
+class DuplicateDetector:
+    def __init__(self, base_path: Path, exclude_dirs: Set[str]):
+        self.base_path = base_path
+        self.exclude_dirs = exclude_dirs
+        self.ts_files = self._find_typescript_files()
+    
+    def _find_typescript_files(self) -> List[Path]:
+        files = []
+        for root, dirs, filenames in os.walk(self.base_path):
+            dirs[:] = [d for d in dirs if d not in self.exclude_dirs]
+            for filename in filenames:
+                if filename.endswith(('.ts', '.tsx')):
+                    files.append(Path(root) / filename)
+        return files
+    
+    def find_duplicates(self) -> Dict[str, List[DuplicateFileInfo]]:
+        print(f"{Colors.BLUE}🔍 Scanning {len(self.ts_files)} TypeScript files...{Colors.RESET}")
+        
+        hash_map = defaultdict(list)
+        
+        for file_path in self.ts_files:
+            content_hash = compute_content_hash(file_path)
+            if content_hash:
+                stat = file_path.stat()
+                file_info = DuplicateFileInfo(
+                    file_path=file_path,
+                    content_hash=content_hash,
+                    size=stat.st_size,
+                    mtime=stat.st_mtime
+                )
+                hash_map[content_hash].append(file_info)
+        
+        duplicates = {h: files for h, files in hash_map.items() if len(files) > 1}
+        
+        for duplicate_group in duplicates.values():
+            for file_info in duplicate_group:
+                file_info.import_count = self._count_imports_to_file(file_info.file_path)
+        
+        return duplicates
+    
+    def _count_imports_to_file(self, target_file: Path) -> int:
+        count = 0
+        rel_target = target_file.relative_to(self.base_path)
+        target_without_ext = str(rel_target.with_suffix(''))
+        
+        for file_path in self.ts_files:
+            if file_path == target_file:
+                continue
+            
+            try:
+                content = file_path.read_text(encoding='utf-8')
+                patterns = [
+                    rf"from\s+['\"].*{re.escape(target_without_ext)}['\"]" ,
+                    rf"from\s+['\"]@/.*{re.escape(target_file.stem)}['\"]" ,
+                    rf"import\s+['\"].*{re.escape(target_without_ext)}['\"]" ,
+                ]
+                
+                for pattern in patterns:
+                    if re.search(pattern, content):
+                        count += 1
+                        break
+            except Exception:
+                continue
+        
+        return count
+    
+    def get_relative_import_path(self, from_file: Path, to_file: Path) -> str:
+        from_dir = from_file.parent
+        to_path_no_ext = to_file.with_suffix('')
+        
+        try:
+            rel_path = os.path.relpath(to_path_no_ext, from_dir)
+            if not rel_path.startswith('.'):
+                rel_path = f'./{rel_path}'
+            return rel_path.replace(os.sep, '/')
+        except ValueError:
+            return str(to_path_no_ext)
+    
+    def update_imports_after_deletion(self, deleted_files: List[Path], kept_file: Path, backup_dir: Path) -> int:
+        updated_count = 0
+        
+        print(f"\n{Colors.CYAN}Updating imports in project files...{Colors.RESET}")
+        
+        for file_path in self.ts_files:
+            if file_path in deleted_files or file_path == kept_file:
+                continue
+            
+            try:
+                content = file_path.read_text(encoding='utf-8')
+                updated_content = content
+                file_modified = False
+                
+                for deleted_file in deleted_files:
+                    rel_deleted = deleted_file.relative_to(self.base_path)
+                    deleted_no_ext = str(rel_deleted.with_suffix(''))
+                    
+                    old_import_patterns = [
+                        (rf"(from\s+['\"])(.*/)?{re.escape(deleted_file.stem)}(['\"])", 'named'),
+                        (rf"(from\s+['\"]){re.escape(deleted_no_ext)}(['\"])", 'exact'),
+                    ]
+                    
+                    for pattern, pattern_type in old_import_patterns:
+                        matches = list(re.finditer(pattern, updated_content))
+                        if matches:
+                            backup_file = backup_dir / file_path.relative_to(self.base_path)
+                            backup_file.parent.mkdir(parents=True, exist_ok=True)
+                            if not backup_file.exists():
+                                shutil.copy2(file_path, backup_file)
+                            
+                            new_import_path = self.get_relative_import_path(file_path, kept_file)
+                            
+                            for match in matches:
+                                if pattern_type == 'named':
+                                    old_import = match.group(0)
+                                    new_import = f"{match.group(1)}{new_import_path}{match.group(3)}"
+                                    updated_content = updated_content.replace(old_import, new_import)
+                                else:
+                                    old_import = match.group(0)
+                                    new_import = f"{match.group(1)}{new_import_path}{match.group(2)}"
+                                    updated_content = updated_content.replace(old_import, new_import)
+                                
+                                file_modified = True
+                                print(f"  {Colors.GREEN}✓{Colors.RESET} {file_path.name}: Updated import")
+                
+                if file_modified:
+                    file_path.write_text(updated_content, encoding='utf-8')
+                    updated_count += 1
+                    
+            except Exception as e:
+                print(f"  {Colors.RED}✗{Colors.RESET} Error updating {file_path.name}: {e}")
+        
+        return updated_count
+
 class UnusedAnalyzer:
     def __init__(self, base_path: Path, file_types: List[str], exclude_dirs: Set[str], 
                  exclude_files: List[str], exclude_patterns: List[str]):
@@ -825,6 +984,147 @@ def show_unused_imports_report(imports_by_file: Dict[Path, List[UnusedImport]]):
             print(f"  {Colors.RED}✗{Colors.RESET} Line {imp.line_number}: "
                   f"{imp.import_name} from '{imp.import_path}' ({imp.import_type})")
 
+def interactive_handle_duplicates(detector: DuplicateDetector, duplicates: Dict[str, List[DuplicateFileInfo]], dry_run: bool = False) -> bool:
+    if not duplicates:
+        print(f"{Colors.GREEN}✅ No duplicate files found!{Colors.RESET}")
+        return True
+    
+    total_groups = len(duplicates)
+    total_files = sum(len(group) for group in duplicates.values())
+    
+    print(f"\n{Colors.YELLOW}📄 Found {total_files} duplicate files in {total_groups} groups{Colors.RESET}\n")
+    
+    files_to_delete = []
+    files_to_keep = []
+    
+    for group_num, (content_hash, file_group) in enumerate(duplicates.items(), 1):
+        clear_screen()
+        print_main_banner()
+        print(f"{Colors.CYAN}{Colors.BOLD}DUPLICATE GROUP {group_num}/{total_groups}{Colors.RESET}")
+        print("=" * 70)
+        print(f"\n{Colors.DIM}These files have identical content (ignoring whitespace):{Colors.RESET}\n")
+        
+        for idx, file_info in enumerate(file_group):
+            rel_path = file_info.file_path.relative_to(detector.base_path)
+            mtime_str = datetime.fromtimestamp(file_info.mtime).strftime('%Y-%m-%d %H:%M')
+            size_kb = file_info.size / 1024
+            path_depth = len(rel_path.parts)
+            
+            print(f"{Colors.GREEN}{idx + 1}.{Colors.RESET} {Colors.BRIGHT}{rel_path}{Colors.RESET}")
+            print(f"   Size: {size_kb:.1f}KB  |  Modified: {mtime_str}  |  Depth: {path_depth}  |  Imports: {file_info.import_count}")
+            print()
+        
+        print(f"{Colors.YELLOW}Which file would you like to KEEP?{Colors.RESET}")
+        print(f"{Colors.DIM}(All others will be deleted){Colors.RESET}")
+        print(f"\n{Colors.CYAN}Enter number [1-{len(file_group)}], 's' to skip, or 'q' to quit:{Colors.RESET} ", end='')
+        
+        while True:
+            choice = input().strip().lower()
+            
+            if choice == 'q':
+                print(f"\n{Colors.YELLOW}Operation cancelled.{Colors.RESET}")
+                return False
+            elif choice == 's':
+                print(f"{Colors.BLUE}Skipping this group...{Colors.RESET}")
+                time.sleep(0.5)
+                break
+            elif choice.isdigit():
+                choice_num = int(choice)
+                if 1 <= choice_num <= len(file_group):
+                    keep_file = file_group[choice_num - 1]
+                    files_to_keep.append(keep_file.file_path)
+                    
+                    for idx, file_info in enumerate(file_group):
+                        if idx != choice_num - 1:
+                            files_to_delete.append(file_info.file_path)
+                    
+                    print(f"\n{Colors.GREEN}✓{Colors.RESET} Will keep: {keep_file.file_path.name}")
+                    print(f"{Colors.RED}✗{Colors.RESET} Will delete {len(file_group) - 1} file(s)")
+                    time.sleep(1)
+                    break
+                else:
+                    print(f"{Colors.RED}Invalid choice. Enter 1-{len(file_group)}, 's', or 'q':{Colors.RESET} ", end='')
+            else:
+                print(f"{Colors.RED}Invalid input. Enter 1-{len(file_group)}, 's', or 'q':{Colors.RESET} ", end='')
+    
+    if not files_to_delete:
+        print(f"\n{Colors.YELLOW}No files selected for deletion.{Colors.RESET}")
+        return True
+    
+    clear_screen()
+    print_main_banner()
+    print(f"{Colors.CYAN}{Colors.BOLD}DELETION SUMMARY{Colors.RESET}")
+    print("=" * 70)
+    print(f"\n{Colors.GREEN}Files to keep:{Colors.RESET}")
+    for keep_file in files_to_keep:
+        rel_path = keep_file.relative_to(detector.base_path)
+        print(f"  ✓ {rel_path}")
+    
+    print(f"\n{Colors.RED}Files to delete:{Colors.RESET}")
+    for del_file in files_to_delete:
+        rel_path = del_file.relative_to(detector.base_path)
+        print(f"  ✗ {rel_path}")
+    
+    print(f"\n{Colors.YELLOW}Total: {len(files_to_delete)} file(s) will be deleted{Colors.RESET}")
+    
+    if dry_run:
+        print(f"\n{Colors.BLUE}DRY RUN: No changes will be made{Colors.RESET}")
+        return True
+    
+    print(f"\n{Colors.YELLOW}⚠️  This action cannot be undone (but backups will be created).{Colors.RESET}")
+    confirm = input(f"{Colors.CYAN}Proceed with deletion? [y/N]:{Colors.RESET} ").strip().lower()
+    
+    if confirm not in ['y', 'yes']:
+        print(f"\n{Colors.YELLOW}Operation cancelled.{Colors.RESET}")
+        return False
+    
+    home_dir = Path.home()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_dir = home_dir / '.config' / 'dotfiles' / 'ui' / 'backup-duplicates' / timestamp
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    
+    print(f"\n{Colors.CYAN}Creating backups...{Colors.RESET}")
+    for file_path in files_to_delete:
+        try:
+            rel_path = file_path.relative_to(detector.base_path)
+            backup_file = backup_dir / rel_path
+            backup_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(file_path, backup_file)
+            print(f"  {Colors.GREEN}✓{Colors.RESET} Backed up {rel_path}")
+        except Exception as e:
+            print(f"  {Colors.RED}✗{Colors.RESET} Failed to backup {file_path.name}: {e}")
+            return False
+    
+    print(f"\n{Colors.CYAN}Updating imports in project files...{Colors.RESET}")
+    files_updated = 0
+    
+    for keep_file in files_to_keep:
+        group_deletes = [f for f in files_to_delete if any(f.parent == keep_file.parent for _ in [1])]
+        relevant_deletes = [f for f in files_to_delete if f.stem == keep_file.stem]
+        
+        if relevant_deletes:
+            updated = detector.update_imports_after_deletion(relevant_deletes, keep_file, backup_dir)
+            files_updated += updated
+    
+    print(f"\n{Colors.CYAN}Deleting duplicate files...{Colors.RESET}")
+    deleted_count = 0
+    for file_path in files_to_delete:
+        try:
+            file_path.unlink()
+            rel_path = file_path.relative_to(detector.base_path)
+            print(f"  {Colors.GREEN}✓{Colors.RESET} Deleted {rel_path}")
+            deleted_count += 1
+        except Exception as e:
+            print(f"  {Colors.RED}✗{Colors.RESET} Failed to delete {file_path.name}: {e}")
+    
+    print(f"\n{Colors.GREEN}{Colors.BOLD}COMPLETE!{Colors.RESET}")
+    print("=" * 70)
+    print(f"  Files deleted: {deleted_count}")
+    print(f"  Imports updated in: {files_updated} files")
+    print(f"  Backup location: {backup_dir}")
+    
+    return True
+
 def interactive_cleanup_imports(unused_imports: List[UnusedImport], dry_run: bool) -> bool:
     if not unused_imports:
         print(f"{Colors.GREEN}✅ No unused imports found!{Colors.RESET}")
@@ -926,7 +1226,7 @@ def run_analyzer_interactive(base_path: Path, file_types: List[str], exclude_dir
     
     while True:
         show_analyzer_menu()
-        choice = input(f"{Colors.CYAN}Select option [0-6]:{Colors.RESET} ").strip()
+        choice = input(f"{Colors.CYAN}Select option [0-7]:{Colors.RESET} ").strip()
         
         if choice == '0':
             return
@@ -970,6 +1270,20 @@ def run_analyzer_interactive(base_path: Path, file_types: List[str], exclude_dir
             print(f"  Path: {base_path}")
             print(f"  Types: {', '.join(file_types)}")
             print(f"  Excluded dirs: {', '.join(list(exclude_dirs)[:5])}")
+            input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+        elif choice == '7':
+            clear_screen()
+            print_main_banner()
+            print(f"{Colors.CYAN}{Colors.BOLD}DUPLICATE FILE DETECTOR{Colors.RESET}")
+            print("=" * 70)
+            print()
+            
+            detector = DuplicateDetector(base_path, exclude_dirs)
+            duplicates = detector.find_duplicates()
+            
+            if duplicates:
+                interactive_handle_duplicates(detector, duplicates, dry_run=False)
+            
             input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
         else:
             print(f"{Colors.RED}Invalid option{Colors.RESET}")

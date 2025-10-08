@@ -1,0 +1,613 @@
+#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
+const { execSync, spawn } = require('child_process');
+const os = require('os');
+
+const colors = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  gray: '\x1b[90m'
+};
+
+function colorize(text, color) {
+  return `${colors[color]}${text}${colors.reset}`;
+}
+
+function log(message, color = 'reset') {
+  console.log(colorize(message, color));
+}
+
+function showHelp() {
+  log('\n🧹 Clean All - Comprehensive project cleanup tool\n', 'cyan');
+  log('Usage: npm run rmall [options]\n', 'bright');
+  
+  log('Options:', 'yellow');
+  log('  --help, -h              Show this help message', 'gray');
+  log('  --interactive, -i       Interactive mode - choose what to clean', 'gray');
+  log('  --dry, -d               Dry run - show what would be deleted', 'gray');
+  log('  --verbose, -vv          Verbose output with detailed information', 'gray');
+  log('  --nolock, -nl           Only remove lock files', 'gray');
+  log('  --revert, -rev          Restore from backup (expires after 15 min)', 'gray');
+  log('  --reinstall, -r         Clean and reinstall with Bun', 'gray');
+  log('  --reinstall:pnpm, -rp   Clean and reinstall with pnpm', 'gray');
+  log('  --reinstall:npm, -rn    Clean and reinstall with npm', 'gray');
+  log('  --reinstall:yarn, -ry   Clean and reinstall with yarn', 'gray');
+  
+  log('\nFramework-specific:', 'yellow');
+  log('  --next, -n              Clean Next.js specific files', 'gray');
+  log('  --vite, -v              Clean Vite specific files', 'gray');
+  log('  --svelte, -s            Clean SvelteKit specific files', 'gray');
+  log('  --solid, -so            Clean Solid specific files', 'gray');
+  log('  --qwik, -q              Clean Qwik specific files', 'gray');
+  log('  --tauri, -t             Clean Tauri specific files', 'gray');
+  log('  --electron, -e          Clean Electron specific files', 'gray');
+  log('  --astro, -a             Clean Astro specific files', 'gray');
+  log('  --nuxt, -nu             Clean Nuxt specific files', 'gray');
+  
+  log('\nExamples:', 'yellow');
+  log('  npm run rmall --dry                    # Preview what will be deleted', 'gray');
+  log('  npm run rmall --next --reinstall       # Clean Next.js and reinstall', 'gray');
+  log('  npm run rmall --interactive            # Choose what to clean', 'gray');
+  log('  npm run rmall --nolock                 # Only remove lock files', 'gray');
+  log('  npm run rmall --revert                 # Restore from backup\n', 'gray');
+  
+  log('Note:', 'yellow');
+  log('  Backups are created automatically and expire after 15 minutes.', 'gray');
+  log('  Only one backup is kept at a time to save disk space.\n', 'gray');
+}
+
+function getProjectPaths() {
+  return {
+    common: [
+      'node_modules',
+      'dist',
+      'build',
+      'out',
+      'tmp',
+      'temp',
+      '.temp',
+      'coverage',
+      '.nyc_output',
+      '.turbo',
+      '.cache'
+    ],
+    next: [
+      '.next'
+    ],
+    vite: [
+      '.vite',
+      'dist'
+    ],
+    svelte: [
+      '.svelte-kit'
+    ],
+    solid: [
+      '.solid'
+    ],
+    qwik: [
+      '.qwik',
+      'dist'
+    ],
+    tauri: [
+      'src-tauri/target',
+      'src-tauri/gen'
+    ],
+    electron: [
+      'src-electron/dist',
+      'release',
+      'app/dist'
+    ],
+    astro: [
+      '.astro'
+    ],
+    nuxt: [
+      '.nuxt',
+      '.output'
+    ],
+    locks: [
+      'bun.lock',
+      'bun.lockb',
+      'package-lock.json',
+      'pnpm-lock.yaml',
+      'yarn.lock',
+      'deno.lock'
+    ],
+    cargo: [
+      '.cargo/registry',
+      '.cargo/git'
+    ]
+  };
+}
+
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const options = {
+    help: false,
+    interactive: false,
+    dry: false,
+    verbose: false,
+    nolock: false,
+    revert: false,
+    reinstall: null,
+    frameworks: []
+  };
+
+  args.forEach(arg => {
+    switch(arg) {
+      case '--help':
+      case '-h':
+        options.help = true;
+        break;
+      case '--interactive':
+      case '-i':
+        options.interactive = true;
+        break;
+      case '--dry':
+      case '-d':
+        options.dry = true;
+        break;
+      case '--verbose':
+      case '-vv':
+        options.verbose = true;
+        break;
+      case '--nolock':
+      case '-nl':
+        options.nolock = true;
+        break;
+      case '--revert':
+      case '-rev':
+        options.revert = true;
+        break;
+      case '--reinstall':
+      case '-r':
+        options.reinstall = 'bun';
+        break;
+      case '--reinstall:pnpm':
+      case '-rp':
+        options.reinstall = 'pnpm';
+        break;
+      case '--reinstall:npm':
+      case '-rn':
+        options.reinstall = 'npm';
+        break;
+      case '--reinstall:yarn':
+      case '-ry':
+        options.reinstall = 'yarn';
+        break;
+      case '--next':
+      case '-n':
+        options.frameworks.push('next');
+        break;
+      case '--vite':
+      case '-v':
+        options.frameworks.push('vite');
+        break;
+      case '--svelte':
+      case '-s':
+        options.frameworks.push('svelte');
+        break;
+      case '--solid':
+      case '-so':
+        options.frameworks.push('solid');
+        break;
+      case '--qwik':
+      case '-q':
+        options.frameworks.push('qwik');
+        break;
+      case '--tauri':
+      case '-t':
+        options.frameworks.push('tauri');
+        break;
+      case '--electron':
+      case '-e':
+        options.frameworks.push('electron');
+        break;
+      case '--astro':
+      case '-a':
+        options.frameworks.push('astro');
+        break;
+      case '--nuxt':
+      case '-nu':
+        options.frameworks.push('nuxt');
+        break;
+    }
+  });
+
+  return options;
+}
+
+function getPathsToClean(options) {
+  const allPaths = getProjectPaths();
+  let pathsToRemove = [];
+
+  if (options.nolock) {
+    return allPaths.locks;
+  }
+
+  if (options.frameworks.length > 0) {
+    pathsToRemove = [...allPaths.common];
+    options.frameworks.forEach(framework => {
+      if (allPaths[framework]) {
+        pathsToRemove.push(...allPaths[framework]);
+      }
+    });
+    if (options.frameworks.includes('tauri')) {
+      pathsToRemove.push(...allPaths.cargo);
+    }
+    pathsToRemove.push(...allPaths.locks);
+  } else {
+    Object.values(allPaths).forEach(paths => {
+      pathsToRemove.push(...paths);
+    });
+  }
+
+  return [...new Set(pathsToRemove)];
+}
+
+function getFileSize(fullPath) {
+  try {
+    const stats = fs.statSync(fullPath);
+    if (stats.isDirectory()) {
+      let totalSize = 0;
+      const files = fs.readdirSync(fullPath);
+      files.forEach(file => {
+        const filePath = path.join(fullPath, file);
+        const fileStats = fs.lstatSync(filePath);
+        if (fileStats.isDirectory()) {
+          totalSize += getFileSize(filePath);
+        } else {
+          totalSize += fileStats.size;
+        }
+      });
+      return totalSize;
+    } else {
+      return stats.size;
+    }
+  } catch (error) {
+    return 0;
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function getBackupDir() {
+  const homeDir = os.homedir();
+  return path.join(homeDir, '.dotfiles', 'rmall', 'backups', 'latest');
+}
+
+function getBackupMetadataPath() {
+  return path.join(getBackupDir(), 'metadata.json');
+}
+
+function isBackupExpired() {
+  try {
+    const metadataPath = getBackupMetadataPath();
+    if (!fs.existsSync(metadataPath)) return true;
+    
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    const backupTime = new Date(metadata.timestamp).getTime();
+    const now = Date.now();
+    const fifteenMinutes = 15 * 60 * 1000;
+    
+    return (now - backupTime) > fifteenMinutes;
+  } catch (error) {
+    return true;
+  }
+}
+
+function cleanupExpiredBackup() {
+  const backupDir = getBackupDir();
+  
+  if (fs.existsSync(backupDir) && isBackupExpired()) {
+    try {
+      fs.rmSync(backupDir, { recursive: true, force: true });
+    } catch (error) {
+      // Silently fail
+    }
+  }
+}
+
+function cleanupOldBackup() {
+  const backupDir = getBackupDir();
+  
+  if (fs.existsSync(backupDir)) {
+    try {
+      fs.rmSync(backupDir, { recursive: true, force: true });
+    } catch (error) {
+      log(`⚠ Warning: Could not remove old backup: ${error.message}`, 'yellow');
+    }
+  }
+}
+
+function createBackup(pathsToBackup, cwd) {
+  cleanupOldBackup();
+  
+  const backupDir = getBackupDir();
+  const actualFiles = [];
+  
+  pathsToBackup.forEach(targetPath => {
+    const fullPath = path.join(cwd, targetPath);
+    if (fs.existsSync(fullPath)) {
+      actualFiles.push({ targetPath, fullPath });
+    }
+  });
+  
+  if (actualFiles.length === 0) {
+    return;
+  }
+  
+  try {
+    fs.mkdirSync(backupDir, { recursive: true });
+    
+    const metadata = {
+      timestamp: new Date().toISOString(),
+      cwd: cwd,
+      files: actualFiles.map(f => f.targetPath)
+    };
+    
+    fs.writeFileSync(getBackupMetadataPath(), JSON.stringify(metadata, null, 2));
+    
+    actualFiles.forEach(({ targetPath, fullPath }) => {
+      const backupPath = path.join(backupDir, targetPath);
+      const backupParentDir = path.dirname(backupPath);
+      
+      if (!fs.existsSync(backupParentDir)) {
+        fs.mkdirSync(backupParentDir, { recursive: true });
+      }
+      
+      const stats = fs.statSync(fullPath);
+      if (stats.isDirectory()) {
+        execSync(`cp -r "${fullPath}" "${backupPath}"`, { stdio: 'ignore' });
+      } else {
+        fs.copyFileSync(fullPath, backupPath);
+      }
+    });
+    
+  } catch (error) {
+    log(`⚠ Warning: Could not create backup: ${error.message}`, 'yellow');
+  }
+}
+
+function performRevert() {
+  cleanupExpiredBackup();
+  
+  const backupDir = getBackupDir();
+  const metadataPath = getBackupMetadataPath();
+  
+  if (!fs.existsSync(backupDir) || !fs.existsSync(metadataPath)) {
+    log('\n⚠ No backup available to restore.', 'yellow');
+    log('Backups expire after 15 minutes.\n', 'gray');
+    return;
+  }
+  
+  if (isBackupExpired()) {
+    log('\n⚠ Backup has expired (older than 15 minutes).', 'yellow');
+    cleanupExpiredBackup();
+    return;
+  }
+  
+  try {
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    const backupDate = new Date(metadata.timestamp);
+    const timeAgo = Math.floor((Date.now() - backupDate.getTime()) / 1000 / 60);
+    
+    log('\n🔄 Backup found!\n', 'cyan');
+    log(`Created: ${backupDate.toLocaleString()} (${timeAgo} minutes ago)`, 'gray');
+    log(`Original directory: ${metadata.cwd}`, 'gray');
+    log(`\nFiles to restore (${metadata.files.length}):`, 'yellow');
+    metadata.files.forEach(file => {
+      log(`  • ${file}`, 'gray');
+    });
+    
+    log('\n⚠ This will restore the above files/directories to the current location.', 'yellow');
+    process.stdout.write(colorize('\nContinue? (y/N): ', 'bright'));
+    
+    const readline = require('readline').createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    readline.question('', (answer) => {
+      readline.close();
+      
+      if (answer.toLowerCase() !== 'y') {
+        log('\nRevert cancelled.', 'yellow');
+        return;
+      }
+      
+      log('\n🔄 Restoring from backup...\n', 'cyan');
+      
+      const cwd = process.cwd();
+      let restoredCount = 0;
+      
+      metadata.files.forEach(file => {
+        const backupPath = path.join(backupDir, file);
+        const targetPath = path.join(cwd, file);
+        
+        if (fs.existsSync(backupPath)) {
+          try {
+            const targetParentDir = path.dirname(targetPath);
+            if (!fs.existsSync(targetParentDir)) {
+              fs.mkdirSync(targetParentDir, { recursive: true });
+            }
+            
+            const stats = fs.statSync(backupPath);
+            if (stats.isDirectory()) {
+              execSync(`cp -r "${backupPath}" "${targetPath}"`, { stdio: 'inherit' });
+            } else {
+              fs.copyFileSync(backupPath, targetPath);
+            }
+            
+            log(`✓ Restored: ${file}`, 'green');
+            restoredCount++;
+          } catch (error) {
+            log(`✗ Failed to restore ${file}: ${error.message}`, 'red');
+          }
+        }
+      });
+      
+      log('\n' + colorize('='.repeat(50), 'gray'));
+      log(`✓ Successfully restored: ${restoredCount}/${metadata.files.length}`, 'green');
+      log(colorize('='.repeat(50), 'gray'));
+      log('\n✨ Revert completed!\n', 'green');
+    });
+    
+  } catch (error) {
+    log(`\n✗ Failed to restore backup: ${error.message}`, 'red');
+  }
+}
+
+function removePath(fullPath, targetPath, options) {
+  const stats = fs.statSync(fullPath);
+  const type = stats.isDirectory() ? 'directory' : 'file';
+  
+  let size = 0;
+  if (options.verbose) {
+    size = getFileSize(fullPath);
+  }
+
+  if (options.dry) {
+    const sizeStr = options.verbose ? ` (${formatBytes(size)})` : '';
+    log(`[DRY RUN] Would remove ${type}: ${targetPath}${sizeStr}`, 'yellow');
+    return { success: true, size };
+  }
+
+  fs.rmSync(fullPath, { recursive: true, force: true });
+  const sizeStr = options.verbose ? ` (${formatBytes(size)})` : '';
+  log(`✓ Removed ${type}: ${targetPath}${sizeStr}`, 'green');
+  return { success: true, size };
+}
+
+function runInstall(packageManager) {
+  log(`\n📦 Installing dependencies with ${packageManager}...`, 'cyan');
+  
+  try {
+    const startTime = Date.now();
+    
+    if (packageManager === 'bun') {
+      execSync('bun install', { stdio: 'inherit' });
+    } else if (packageManager === 'pnpm') {
+      execSync('pnpm install', { stdio: 'inherit' });
+    } else if (packageManager === 'npm') {
+      execSync('npm install', { stdio: 'inherit' });
+    } else if (packageManager === 'yarn') {
+      execSync('yarn install', { stdio: 'inherit' });
+    }
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    log(`\n✓ Installation completed in ${duration}s`, 'green');
+  } catch (error) {
+    log(`\n✗ Installation failed: ${error.message}`, 'red');
+    process.exit(1);
+  }
+}
+
+function clean() {
+  cleanupExpiredBackup();
+  
+  const options = parseArgs();
+
+  if (options.help) {
+    showHelp();
+    return;
+  }
+  
+  if (options.revert) {
+    performRevert();
+    return;
+  }
+
+  const pathsToRemove = getPathsToClean(options);
+  const cwd = process.cwd();
+  let successCount = 0;
+  let notFoundCount = 0;
+  let errorCount = 0;
+  let totalSize = 0;
+
+  const modeLabel = options.dry ? '[DRY RUN] ' : '';
+  log(`\n${modeLabel}🧹 Starting cleanup...\n`, 'cyan');
+
+  if (options.verbose) {
+    log(`Working directory: ${cwd}`, 'gray');
+    log(`Paths to check: ${pathsToRemove.length}\n`, 'gray');
+  }
+  
+  const existingPaths = [];
+  pathsToRemove.forEach(targetPath => {
+    const fullPath = path.join(cwd, targetPath);
+    if (fs.existsSync(fullPath)) {
+      existingPaths.push(targetPath);
+    }
+  });
+  
+  if (existingPaths.length === 0) {
+    log('✨ Project is already clean! Nothing to remove.\n', 'green');
+    return;
+  }
+  
+  if (!options.dry) {
+    createBackup(pathsToRemove, cwd);
+  }
+
+  pathsToRemove.forEach(targetPath => {
+    const fullPath = path.join(cwd, targetPath);
+
+    try {
+      if (fs.existsSync(fullPath)) {
+        const result = removePath(fullPath, targetPath, options);
+        if (result.success) {
+          successCount++;
+          totalSize += result.size;
+        }
+      } else {
+        if (options.verbose) {
+          log(`⊘ Not found: ${targetPath}`, 'gray');
+        }
+        notFoundCount++;
+      }
+    } catch (error) {
+      log(`✗ Failed to remove ${targetPath}: ${error.message}`, 'red');
+      errorCount++;
+    }
+  });
+
+  log('\n' + colorize('='.repeat(50), 'gray'));
+  log(`✓ Successfully ${options.dry ? 'would remove' : 'removed'}: ${successCount}`, 'green');
+  if (options.verbose) {
+    log(`⊘ Not found: ${notFoundCount}`, 'gray');
+  }
+  if (errorCount > 0) {
+    log(`✗ Errors: ${errorCount}`, 'red');
+  }
+  if (options.verbose && totalSize > 0) {
+    log(`💾 Total space ${options.dry ? 'to free' : 'freed'}: ${formatBytes(totalSize)}`, 'magenta');
+  }
+  log(colorize('='.repeat(50), 'gray'));
+
+  if (errorCount > 0) {
+    log('\n⚠ Cleanup completed with errors', 'yellow');
+    process.exit(1);
+  } else {
+    const successMsg = options.dry ? 'Dry run completed!' : 'Cleanup completed successfully!';
+    log(`\n✨ ${successMsg}`, 'green');
+  }
+
+  if (options.reinstall && !options.dry) {
+    runInstall(options.reinstall);
+  }
+}
+
+clean();
