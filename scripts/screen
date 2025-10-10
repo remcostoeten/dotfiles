@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-HISTORY_DIR="$HOME/.config/dotfiles/scripts/xclip"
+HISTORY_DIR="$HOME/.dotfiles/logs/xclip"
 HISTORY_FILE="$HISTORY_DIR/history.log"
 MAX_HISTORY=500
 

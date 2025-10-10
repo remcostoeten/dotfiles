@@ -278,7 +278,7 @@ class SeedFile:
         self.size = size
 
 class CredentialManager:
-    STORAGE_DIR = os.path.expanduser('~/.config/dotfiles/postgres')
+    STORAGE_DIR = os.path.expanduser('~/.dotfiles/postgres')
     CONNECTIONS_FILE = 'connections.json'
     KEY_FILE = 'key.secret'
     
