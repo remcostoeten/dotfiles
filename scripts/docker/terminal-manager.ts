@@ -1,8 +1,8 @@
 import readline from 'readline';
-import type { TContainer, TMenuItem, TViewState } from './types';
-import * as DockerUtils from './docker-utils';
-import * as UI from './ui-components';
-import { clearScreen, COLORS, printError, printSuccess, printWarning } from './ui-utils';
+import type { TContainer, TMenuItem, TViewState } from './types.js';
+import * as DockerUtils from './docker-utils.js';
+import * as UI from './ui-components.js';
+import { clearScreen, COLORS, printError, printSuccess, printWarning } from './ui-utils.js';
 
 export class TerminalManager {
     private selectedIndex: number = 0;

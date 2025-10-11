@@ -1,8 +1,8 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { platform } from 'os';
-import type { TResult } from './types';
-import { COLORS } from './ui-utils';
+import type { TResult } from './types.js';
+import { COLORS } from './ui-utils.js';
 
 const execAsync = promisify(exec);
 

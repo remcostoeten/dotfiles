@@ -1,1 +1,17 @@
-/home/remco-stoeten/.config/dotfiles/scripts/screen
+#!/usr/bin/env bash
+
+# Bin wrapper for scripts/clip
+# This allows calling the script as 'clip' from anywhere when bin/ is in PATH
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(dirname "$SCRIPT_DIR")"
+SCRIPT_PATH="$DOTFILES_DIR/scripts/clip"
+
+# Check if script exists
+if [[ ! -f "$SCRIPT_PATH" ]]; then
+    echo "❌ Error: Cannot find clip script at $SCRIPT_PATH"
+    exit 1
+fi
+
+# Execute the script with all arguments passed through
+exec "$SCRIPT_PATH" "$@"

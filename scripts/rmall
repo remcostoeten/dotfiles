@@ -285,7 +285,7 @@ function formatBytes(bytes) {
 
 function getBackupDir() {
   const homeDir = os.homedir();
-  return path.join(homeDir, '.dotfiles', 'rmall', 'backups', 'latest');
+  return path.join(homeDir, '.config', 'dotfiles', 'scripts', 'rmall', 'backups', 'latest');
 }
 
 function getBackupMetadataPath() {

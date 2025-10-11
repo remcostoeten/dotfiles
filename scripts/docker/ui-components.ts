@@ -1,5 +1,5 @@
-import type { TContainer, TContainerStats, TViewState } from './types';
-import { COLORS, clearScreen, printMenuItem, printDivider, printBreadcrumb, colorizeStatus, formatSize, formatElapsedTime } from './ui-utils';
+import type { TContainer, TContainerStats, TViewState } from './types.js';
+import { COLORS, clearScreen, printMenuItem, printDivider, printBreadcrumb, colorizeStatus, formatSize, formatElapsedTime } from './ui-utils.js';
 
 /**
  * Prints the Docker whale ASCII art header
@@ -73,7 +73,7 @@ function createProgressBar(percent: number, width: number): string {
     const filled = Math.round(width * (percent / 100));
     const empty = width - filled;
     
-    let color = COLORS.GREEN;
+    let color: string = COLORS.GREEN;
     if (percent > 80) color = COLORS.RED;
     else if (percent > 60) color = COLORS.YELLOW;
 
@@ -109,7 +109,7 @@ export function printContainerLogs(logs: string[]): void {
 
     logs.forEach(line => {
         // Try to detect log level from the line content
-        let color = COLORS.RESET;
+        let color: string = COLORS.RESET;
         const lowerLine = line.toLowerCase();
         if (lowerLine.includes('error') || lowerLine.includes('fail')) {
             color = COLORS.RED;

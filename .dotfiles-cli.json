@@ -1,0 +1,8 @@
+{
+  "layout": "double",
+  "includeAliases": true,
+  "includeFunctions": true,
+  "groupAliases": true,
+  "preferBinOverScripts": true,
+  "fzfHeight": "85%"
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { TerminalManager } from './terminal-manager';
-import { COLORS, printError } from './ui-utils';
+import { TerminalManager } from './terminal-manager.js';
+import { COLORS, printError } from './ui-utils.js';
 
 // Commands that can be run directly
 const COMMANDS = {
@@ -79,7 +79,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 // Only run if this is the main module
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     main().catch((error) => {
         console.error(`${COLORS.RED}Fatal error: ${error}${COLORS.RESET}`);
         process.exit(1);

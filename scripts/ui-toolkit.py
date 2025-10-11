@@ -23,6 +23,26 @@ DEFAULT_EXCLUDE_DIRS = {
     ".pytest_cache", ".venv", "env", "venv"
 }
 
+EXCLUDED_PACKAGE_PATTERNS = [
+    r'^@types/',
+    r'^@typescript-eslint/',
+    r'^eslint',
+    r'^prettier',
+]
+
+EXCLUDED_PACKAGES = {
+    'react', 'react-dom', 'next', 'nextjs',
+    'typescript', 'tsconfig',
+    'vite', 'vitest', 'webpack', 'rollup', 'esbuild', 'turbo', 'turborepo',
+    'jest', 'mocha', 'chai', 'testing-library',
+    'tailwindcss', 'postcss', 'autoprefixer',
+    'babel', '@babel/core', '@babel/preset-env', '@babel/preset-react', '@babel/preset-typescript',
+    'dotenv', 'cross-env',
+    'nodemon', 'concurrently', 'npm-run-all',
+    'husky', 'lint-staged', 'commitlint',
+    'drizzle-orm', 'drizzle-kit',
+}
+
 BACKUP_DIR = ".unused_backups"
 QUARANTINE_DIR = ".unused"
 
@@ -64,6 +84,17 @@ class DuplicateFileInfo:
     mtime: float
     import_count: int = 0
 
+@dataclass
+class UnusedPackage:
+    name: str
+    version: str
+    is_dev: bool
+    found_in_files: List[str] = None
+    
+    def __post_init__(self):
+        if self.found_in_files is None:
+            self.found_in_files = []
+
 class Colors:
     RESET = '\033[0m'
     BRIGHT = '\033[1m'
@@ -99,6 +130,30 @@ def normalize_content(content: str) -> str:
         if stripped and not stripped.startswith('//'):
             lines.append(stripped)
     return '\n'.join(lines)
+
+def parse_gitignore(base_path: Path) -> Set[str]:
+    gitignore_path = base_path / '.gitignore'
+    exclude_patterns = set()
+    
+    if not gitignore_path.exists():
+        return exclude_patterns
+    
+    try:
+        with open(gitignore_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    pattern = line.rstrip('/')
+                    if pattern.startswith('**'):
+                        pattern = pattern[2:].lstrip('/')
+                    if pattern.startswith('*'):
+                        pattern = pattern[1:]
+                    if pattern:
+                        exclude_patterns.add(pattern)
+    except Exception:
+        pass
+    
+    return exclude_patterns
 
 def compute_content_hash(file_path: Path) -> Optional[str]:
     try:
@@ -176,6 +231,8 @@ def show_analyzer_menu():
     print(f"  {Colors.GREEN}5.{Colors.RESET} ⏪ Revert previous changes")
     print(f"  {Colors.GREEN}6.{Colors.RESET} ⚙️  Show configuration")
     print(f"  {Colors.GREEN}7.{Colors.RESET} 🔍 Find duplicate files")
+    print(f"  {Colors.GREEN}8.{Colors.RESET} 🧙 Find unused imports (comprehensive)")
+    print(f"  {Colors.GREEN}9.{Colors.RESET} 📦 Find and remove unused packages")
     print(f"  {Colors.RED}0.{Colors.RESET} ← Back to Main Menu")
     print()
 
@@ -687,6 +744,58 @@ class JavaScriptAnalyzer:
                     usage_lines.append(line_num)
         
         return usage_lines
+    
+    @staticmethod
+    def is_identifier_used(file_path: Path, identifier: str) -> bool:
+        try:
+            content = file_path.read_text(encoding='utf-8')
+        except Exception:
+            return False
+        
+        lines = content.split('\n')
+        in_import_block = False
+        in_multiline_comment = False
+        
+        for line_num, line in enumerate(lines):
+            stripped = line.strip()
+            
+            if '/*' in line:
+                in_multiline_comment = True
+            if '*/' in line:
+                in_multiline_comment = False
+                continue
+            if in_multiline_comment or stripped.startswith('//'):
+                continue
+            
+            if stripped.startswith('import '):
+                in_import_block = True
+                continue
+            elif in_import_block and stripped == '':
+                in_import_block = False
+            elif in_import_block:
+                continue
+            
+            jsx_pattern = rf'<\s*{re.escape(identifier)}[\s/>]'
+            if re.search(jsx_pattern, line):
+                return True
+            
+            type_patterns = [
+                rf':\s*{re.escape(identifier)}\b',
+                rf'<\s*{re.escape(identifier)}\s*>',
+                rf'extends\s+{re.escape(identifier)}\b',
+                rf'implements\s+{re.escape(identifier)}\b',
+                rf'as\s+{re.escape(identifier)}\b',
+            ]
+            for pattern in type_patterns:
+                if re.search(pattern, line):
+                    return True
+            
+            word_pattern = rf'\b{re.escape(identifier)}\b'
+            if re.search(word_pattern, line):
+                if not (stripped.startswith('export') or stripped.startswith('type ') or stripped.startswith('interface ')):
+                    return True
+        
+        return False
 
 class DuplicateDetector:
     def __init__(self, base_path: Path, exclude_dirs: Set[str]):
@@ -820,6 +929,172 @@ class DuplicateDetector:
                 print(f"  {Colors.RED}✗{Colors.RESET} Error updating {file_path.name}: {e}")
         
         return updated_count
+
+class ComprehensiveImportAnalyzer:
+    def __init__(self, base_path: Path, exclude_dirs: Set[str]):
+        self.base_path = base_path
+        self.exclude_dirs = exclude_dirs
+        self.ts_files = self._find_typescript_files()
+    
+    def _find_typescript_files(self) -> List[Path]:
+        files = []
+        for root, dirs, filenames in os.walk(self.base_path):
+            dirs[:] = [d for d in dirs if d not in self.exclude_dirs]
+            for filename in filenames:
+                if filename.endswith(('.ts', '.tsx')):
+                    files.append(Path(root) / filename)
+        return files
+    
+    def find_unused_imports(self) -> Dict[Path, List[UnusedImport]]:
+        unused_by_file = defaultdict(list)
+        total_files = len(self.ts_files)
+        
+        print(f"{Colors.BLUE}🔍 Scanning {total_files} TypeScript/TSX files for unused imports...{Colors.RESET}")
+        
+        for idx, file_path in enumerate(self.ts_files, 1):
+            if idx % 10 == 0 or idx == total_files:
+                print(f"{Colors.CYAN}Progress: {idx}/{total_files} files scanned{Colors.RESET}", end='\r')
+            
+            imports = JavaScriptAnalyzer.extract_imports_detailed(file_path)
+            
+            for import_info in imports:
+                if import_info.import_type == 'side-effect':
+                    continue
+                
+                if not import_info.imported_name:
+                    continue
+                
+                is_used = JavaScriptAnalyzer.is_identifier_used(file_path, import_info.imported_name)
+                
+                if not is_used:
+                    unused_by_file[file_path].append(UnusedImport(
+                        file_path=file_path,
+                        import_name=import_info.imported_name,
+                        import_path=import_info.import_path,
+                        line_number=import_info.line_number,
+                        import_type=import_info.import_type
+                    ))
+        
+        print(f"{Colors.GREEN}✓ Scan complete!{Colors.RESET}" + "" * 30)
+        return dict(unused_by_file)
+
+class UnusedPackageAnalyzer:
+    def __init__(self, base_path: Path, exclude_dirs: Set[str]):
+        self.base_path = base_path
+        self.exclude_dirs = exclude_dirs
+        self.package_json_path = base_path / 'package.json'
+        self.all_files = self._find_project_files()
+    
+    def _find_project_files(self) -> List[Path]:
+        files = []
+        extensions = ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.json', '.config.js', '.config.ts']
+        
+        for root, dirs, filenames in os.walk(self.base_path):
+            dirs[:] = [d for d in dirs if d not in self.exclude_dirs]
+            
+            for filename in filenames:
+                if any(filename.endswith(ext) for ext in extensions):
+                    files.append(Path(root) / filename)
+        
+        return files
+    
+    def _is_package_excluded(self, package_name: str) -> bool:
+        if package_name in EXCLUDED_PACKAGES:
+            return True
+        
+        for pattern in EXCLUDED_PACKAGE_PATTERNS:
+            if re.match(pattern, package_name):
+                return True
+        
+        return False
+    
+    def _check_package_usage(self, package_name: str) -> Tuple[bool, List[str]]:
+        found_in_files = []
+        
+        import_patterns = [
+            rf"from\s+['\"]({re.escape(package_name)})['\"]" ,
+            rf"from\s+['\"]({re.escape(package_name)})/[^'\"]*['\"]" ,
+            rf"import\s+['\"]({re.escape(package_name)})['\"]" ,
+            rf"import\s+['\"]({re.escape(package_name)})/[^'\"]*['\"]" ,
+            rf"require\s*\(\s*['\"]({re.escape(package_name)})['\"]\s*\)" ,
+            rf"require\s*\(\s*['\"]({re.escape(package_name)})/[^'\"]*['\"]\s*\)" ,
+            rf"['\"]({re.escape(package_name)})['\"]" ,
+        ]
+        
+        for file_path in self.all_files:
+            try:
+                content = file_path.read_text(encoding='utf-8')
+                
+                for pattern in import_patterns:
+                    if re.search(pattern, content):
+                        found_in_files.append(str(file_path.relative_to(self.base_path)))
+                        break
+                        
+            except Exception:
+                continue
+        
+        return len(found_in_files) > 0, found_in_files
+    
+    def find_unused_packages(self) -> Dict[str, List[UnusedPackage]]:
+        if not self.package_json_path.exists():
+            return {'error': 'package.json not found'}
+        
+        try:
+            with open(self.package_json_path, 'r', encoding='utf-8') as f:
+                package_data = json.load(f)
+        except Exception as e:
+            return {'error': f'Failed to parse package.json: {e}'}
+        
+        dependencies = package_data.get('dependencies', {})
+        dev_dependencies = package_data.get('devDependencies', {})
+        
+        unused_packages = {
+            'dependencies': [],
+            'devDependencies': []
+        }
+        
+        print(f"{Colors.BLUE}🔍 Scanning {len(self.all_files)} files for package usage...{Colors.RESET}")
+        print()
+        
+        total_packages = len(dependencies) + len(dev_dependencies)
+        current = 0
+        
+        for package_name, version in dependencies.items():
+            current += 1
+            print(f"{Colors.CYAN}Progress: {current}/{total_packages} - Checking {package_name}...{Colors.RESET}", end='\r')
+            
+            if self._is_package_excluded(package_name):
+                continue
+            
+            is_used, found_in = self._check_package_usage(package_name)
+            
+            if not is_used:
+                unused_packages['dependencies'].append(UnusedPackage(
+                    name=package_name,
+                    version=version,
+                    is_dev=False,
+                    found_in_files=found_in
+                ))
+        
+        for package_name, version in dev_dependencies.items():
+            current += 1
+            print(f"{Colors.CYAN}Progress: {current}/{total_packages} - Checking {package_name}...{Colors.RESET}", end='\r')
+            
+            if self._is_package_excluded(package_name):
+                continue
+            
+            is_used, found_in = self._check_package_usage(package_name)
+            
+            if not is_used:
+                unused_packages['devDependencies'].append(UnusedPackage(
+                    name=package_name,
+                    version=version,
+                    is_dev=True,
+                    found_in_files=found_in
+                ))
+        
+        print(f"{Colors.GREEN}✓ Scan complete!{Colors.RESET}" + " " * 50)
+        return unused_packages
 
 class UnusedAnalyzer:
     def __init__(self, base_path: Path, file_types: List[str], exclude_dirs: Set[str], 
@@ -1125,6 +1400,95 @@ def interactive_handle_duplicates(detector: DuplicateDetector, duplicates: Dict[
     
     return True
 
+def interactive_select_unused_imports(unused_by_file: Dict[Path, List[UnusedImport]]) -> List[Tuple[Path, UnusedImport]]:
+    selected_imports = []
+    file_list = list(unused_by_file.items())
+    
+    for file_idx, (file_path, imports) in enumerate(file_list, 1):
+        clear_screen()
+        print_main_banner()
+        print(f"{Colors.CYAN}{Colors.BOLD}SELECT UNUSED IMPORTS TO REMOVE{Colors.RESET}")
+        print("=" * 70)
+        print(f"\nFile {file_idx}/{len(file_list)}: {Colors.YELLOW}{file_path.name}{Colors.RESET}")
+        print(f"{Colors.DIM}Path: {file_path}{Colors.RESET}\n")
+        
+        selections = [False] * len(imports)
+        
+        print(f"{Colors.DIM}Use 'a' to select all, 'n' for none, number to toggle, 'c' to confirm, 's' to skip file:{Colors.RESET}\n")
+        
+        while True:
+            for idx, imp in enumerate(imports):
+                marker = f"{Colors.GREEN}[✓]{Colors.RESET}" if selections[idx] else f"{Colors.RED}[ ]{Colors.RESET}"
+                print(f"  {marker} {idx + 1}. Line {imp.line_number}: {imp.import_name} from '{imp.import_path}'")
+            
+            print(f"\n{Colors.CYAN}Selected: {sum(selections)}/{len(imports)}{Colors.RESET}")
+            choice = input(f"{Colors.CYAN}Enter choice: {Colors.RESET}").strip().lower()
+            
+            if choice == 'c':
+                for idx, imp in enumerate(imports):
+                    if selections[idx]:
+                        selected_imports.append((file_path, imp))
+                break
+            elif choice == 's':
+                break
+            elif choice == 'a':
+                selections = [True] * len(imports)
+            elif choice == 'n':
+                selections = [False] * len(imports)
+            elif choice.isdigit():
+                num = int(choice) - 1
+                if 0 <= num < len(imports):
+                    selections[num] = not selections[num]
+            
+            clear_screen()
+            print_main_banner()
+            print(f"{Colors.CYAN}{Colors.BOLD}SELECT UNUSED IMPORTS TO REMOVE{Colors.RESET}")
+            print("=" * 70)
+            print(f"\nFile {file_idx}/{len(file_list)}: {Colors.YELLOW}{file_path.name}{Colors.RESET}")
+            print(f"{Colors.DIM}Path: {file_path}{Colors.RESET}\n")
+            print(f"{Colors.DIM}Use 'a' to select all, 'n' for none, number to toggle, 'c' to confirm, 's' to skip file:{Colors.RESET}\n")
+    
+    return selected_imports
+
+def remove_selected_imports(imports_to_remove: List[Tuple[Path, UnusedImport]], backup_dir: Path) -> Tuple[int, int]:
+    files_by_path = defaultdict(list)
+    for file_path, import_info in imports_to_remove:
+        files_by_path[file_path].append(import_info)
+    
+    files_modified = 0
+    imports_removed = 0
+    
+    print(f"\n{Colors.CYAN}Creating backups and removing imports...{Colors.RESET}")
+    
+    for file_path, imports in files_by_path.items():
+        try:
+            rel_path = file_path.relative_to(Path.cwd()) if file_path.is_absolute() else file_path
+            backup_file = backup_dir / rel_path
+            backup_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(file_path, backup_file)
+            
+            content = file_path.read_text(encoding='utf-8')
+            lines = content.split('\n')
+            
+            sorted_imports = sorted(imports, key=lambda x: x.line_number, reverse=True)
+            
+            for imp in sorted_imports:
+                if imp.line_number <= len(lines):
+                    line = lines[imp.line_number - 1]
+                    if imp.import_name in line or imp.import_path in line:
+                        lines.pop(imp.line_number - 1)
+                        imports_removed += 1
+            
+            file_path.write_text('\n'.join(lines), encoding='utf-8')
+            files_modified += 1
+            
+            print(f"  {Colors.GREEN}✓{Colors.RESET} Modified {rel_path}")
+            
+        except Exception as e:
+            print(f"  {Colors.RED}✗{Colors.RESET} Error processing {file_path.name}: {e}")
+    
+    return files_modified, imports_removed
+
 def interactive_cleanup_imports(unused_imports: List[UnusedImport], dry_run: bool) -> bool:
     if not unused_imports:
         print(f"{Colors.GREEN}✅ No unused imports found!{Colors.RESET}")
@@ -1210,6 +1574,308 @@ def interactive_cleanup_imports(unused_imports: List[UnusedImport], dry_run: boo
     
     return True
 
+def run_package_cleanup(base_path: Path, exclude_dirs: Set[str]):
+    clear_screen()
+    print_main_banner()
+    print(f"{Colors.CYAN}{Colors.BOLD}UNUSED PACKAGE DETECTOR{Colors.RESET}")
+    print("=" * 70)
+    print()
+    
+    print(f"{Colors.CYAN}Scanning directory: {Colors.RESET}{base_path}")
+    print()
+    
+    analyzer = UnusedPackageAnalyzer(base_path, exclude_dirs)
+    
+    if not analyzer.package_json_path.exists():
+        print(f"{Colors.RED}❌ No package.json found in {base_path}{Colors.RESET}")
+        input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+        return
+    
+    unused_result = analyzer.find_unused_packages()
+    
+    if 'error' in unused_result:
+        print(f"\n{Colors.RED}❌ Error: {unused_result['error']}{Colors.RESET}")
+        input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+        return
+    
+    unused_deps = unused_result.get('dependencies', [])
+    unused_dev_deps = unused_result.get('devDependencies', [])
+    total_unused = len(unused_deps) + len(unused_dev_deps)
+    
+    if total_unused == 0:
+        clear_screen()
+        print_main_banner()
+        print(f"{Colors.GREEN}{Colors.BOLD}✅ No unused packages found!{Colors.RESET}")
+        print(f"{Colors.DIM}All packages are being used in your codebase.{Colors.RESET}")
+        input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+        return
+    
+    clear_screen()
+    print_main_banner()
+    print(f"{Colors.CYAN}{Colors.BOLD}UNUSED PACKAGES FOUND{Colors.RESET}")
+    print("=" * 70)
+    print()
+    print(f"{Colors.YELLOW}Found {total_unused} unused package(s){Colors.RESET}")
+    print()
+    
+    if unused_deps:
+        print(f"{Colors.RED}Dependencies ({len(unused_deps)}):{Colors.RESET}")
+        for pkg in unused_deps:
+            print(f"  • {pkg.name} ({pkg.version})")
+        print()
+    
+    if unused_dev_deps:
+        print(f"{Colors.YELLOW}Dev Dependencies ({len(unused_dev_deps)}):{Colors.RESET}")
+        for pkg in unused_dev_deps:
+            print(f"  • {pkg.name} ({pkg.version})")
+        print()
+    
+    print("What would you like to do?")
+    print(f"  {Colors.GREEN}1.{Colors.RESET} Remove ALL unused packages (with backup)")
+    print(f"  {Colors.GREEN}2.{Colors.RESET} Select packages interactively")
+    print(f"  {Colors.RED}0.{Colors.RESET} Cancel")
+    
+    while True:
+        choice = input(f"\n{Colors.CYAN}Choice [0-2]:{Colors.RESET} ").strip()
+        if choice in ['0', '1', '2']:
+            break
+        print(f"{Colors.RED}Invalid choice.{Colors.RESET}")
+    
+    if choice == '0':
+        return
+    
+    home_dir = Path.home()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_dir = home_dir / '.config' / 'dotfiles' / 'unused-packages' / timestamp
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    
+    print(f"\n{Colors.CYAN}Creating backup of package.json...{Colors.RESET}")
+    backup_file = backup_dir / 'package.json'
+    shutil.copy2(analyzer.package_json_path, backup_file)
+    print(f"  {Colors.GREEN}✓{Colors.RESET} Backup saved to: {backup_file}")
+    
+    packages_to_remove = []
+    
+    if choice == '1':
+        packages_to_remove = [pkg.name for pkg in unused_deps + unused_dev_deps]
+    elif choice == '2':
+        packages_to_remove = interactive_select_packages(unused_deps, unused_dev_deps)
+    
+    if not packages_to_remove:
+        print(f"\n{Colors.YELLOW}No packages selected for removal.{Colors.RESET}")
+        time.sleep(1)
+        return
+    
+    clear_screen()
+    print_main_banner()
+    print(f"{Colors.CYAN}{Colors.BOLD}REMOVAL SUMMARY{Colors.RESET}")
+    print("=" * 70)
+    print(f"\n{Colors.YELLOW}The following {len(packages_to_remove)} package(s) will be removed:{Colors.RESET}")
+    for pkg_name in packages_to_remove:
+        print(f"  • {pkg_name}")
+    print()
+    print(f"{Colors.CYAN}Backup location:{Colors.RESET} {backup_dir}")
+    
+    confirm = input(f"\n{Colors.BOLD}Proceed with removal using bun? [y/N]:{Colors.RESET} ").strip().lower()
+    
+    if confirm not in ['y', 'yes']:
+        print(f"{Colors.YELLOW}Operation cancelled.{Colors.RESET}")
+        time.sleep(1)
+        return
+    
+    print(f"\n{Colors.CYAN}Removing packages...{Colors.RESET}")
+    print()
+    
+    removed_count = 0
+    failed_packages = []
+    
+    for idx, pkg_name in enumerate(packages_to_remove, 1):
+        print(f"{Colors.CYAN}[{idx}/{len(packages_to_remove)}]{Colors.RESET} Removing {pkg_name}...", end=' ')
+        
+        try:
+            result = os.system(f'cd {base_path} && bun remove {pkg_name} > /dev/null 2>&1')
+            if result == 0:
+                print(f"{Colors.GREEN}✓{Colors.RESET}")
+                removed_count += 1
+            else:
+                print(f"{Colors.RED}✗{Colors.RESET}")
+                failed_packages.append(pkg_name)
+        except Exception as e:
+            print(f"{Colors.RED}✗ ({e}){Colors.RESET}")
+            failed_packages.append(pkg_name)
+    
+    print()
+    print(f"{Colors.GREEN}{Colors.BOLD}✅ COMPLETE!{Colors.RESET}")
+    print("=" * 70)
+    print(f"  Packages removed: {removed_count}/{len(packages_to_remove)}")
+    if failed_packages:
+        print(f"\n{Colors.RED}Failed to remove:{Colors.RESET}")
+        for pkg in failed_packages:
+            print(f"  • {pkg}")
+    print(f"\n  Backup location: {backup_dir}")
+    
+    input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+
+def interactive_select_packages(deps: List[UnusedPackage], dev_deps: List[UnusedPackage]) -> List[str]:
+    all_packages = deps + dev_deps
+    selections = [False] * len(all_packages)
+    
+    while True:
+        clear_screen()
+        print_main_banner()
+        print(f"{Colors.CYAN}{Colors.BOLD}SELECT PACKAGES TO REMOVE{Colors.RESET}")
+        print("=" * 70)
+        print()
+        print(f"{Colors.DIM}Use 'a' to select all, 'n' for none, number to toggle, 'c' to confirm:{Colors.RESET}")
+        print()
+        
+        for idx, pkg in enumerate(all_packages):
+            marker = f"{Colors.GREEN}[✓]{Colors.RESET}" if selections[idx] else f"{Colors.RED}[ ]{Colors.RESET}"
+            dep_type = f"{Colors.YELLOW}[dev]{Colors.RESET}" if pkg.is_dev else f"{Colors.RED}[dep]{Colors.RESET}"
+            print(f"  {marker} {idx + 1}. {dep_type} {pkg.name} ({pkg.version})")
+        
+        print(f"\n{Colors.CYAN}Selected: {sum(selections)}/{len(all_packages)}{Colors.RESET}")
+        choice = input(f"{Colors.CYAN}Enter choice: {Colors.RESET}").strip().lower()
+        
+        if choice == 'c':
+            break
+        elif choice == 'a':
+            selections = [True] * len(all_packages)
+        elif choice == 'n':
+            selections = [False] * len(all_packages)
+        elif choice.isdigit():
+            num = int(choice) - 1
+            if 0 <= num < len(all_packages):
+                selections[num] = not selections[num]
+    
+    return [pkg.name for idx, pkg in enumerate(all_packages) if selections[idx]]
+
+def run_comprehensive_import_check(base_path: Path, exclude_dirs: Set[str]):
+    clear_screen()
+    print_main_banner()
+    print(f"{Colors.CYAN}{Colors.BOLD}COMPREHENSIVE UNUSED IMPORTS CHECK{Colors.RESET}")
+    print("=" * 70)
+    print()
+    
+    gitignore_patterns = parse_gitignore(base_path)
+    all_exclude_dirs = exclude_dirs | gitignore_patterns
+    
+    print(f"{Colors.CYAN}Scanning directory: {Colors.RESET}{base_path}")
+    print(f"{Colors.CYAN}Excluded patterns: {Colors.RESET}{len(all_exclude_dirs)} patterns from .gitignore + defaults")
+    print()
+    
+    analyzer = ComprehensiveImportAnalyzer(base_path, all_exclude_dirs)
+    
+    if not analyzer.ts_files:
+        print(f"{Colors.YELLOW}No TypeScript/TSX files found!{Colors.RESET}")
+        input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+        return
+    
+    unused_by_file = analyzer.find_unused_imports()
+    
+    if not unused_by_file:
+        print(f"\n{Colors.GREEN}{Colors.BOLD}✅ No unused imports found!{Colors.RESET}")
+        print(f"{Colors.DIM}All imports are being used correctly.{Colors.RESET}")
+        input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+        return
+    
+    total_unused = sum(len(imports) for imports in unused_by_file.values())
+    
+    clear_screen()
+    print_main_banner()
+    print(f"{Colors.CYAN}{Colors.BOLD}UNUSED IMPORTS FOUND{Colors.RESET}")
+    print("=" * 70)
+    print()
+    print(f"{Colors.YELLOW}Found {total_unused} unused imports in {len(unused_by_file)} files{Colors.RESET}")
+    print()
+    
+    print(f"{Colors.DIM}Preview (first 5 files):{Colors.RESET}")
+    for idx, (file_path, imports) in enumerate(list(unused_by_file.items())[:5]):
+        rel_path = file_path.relative_to(base_path)
+        print(f"  {Colors.YELLOW}•{Colors.RESET} {rel_path}: {len(imports)} unused import(s)")
+    
+    if len(unused_by_file) > 5:
+        print(f"  {Colors.DIM}... and {len(unused_by_file) - 5} more files{Colors.RESET}")
+    
+    print()
+    print("What would you like to do?")
+    print(f"  {Colors.GREEN}1.{Colors.RESET} Remove ALL unused imports (with backup)")
+    print(f"  {Colors.GREEN}2.{Colors.RESET} Select imports interactively")
+    print(f"  {Colors.GREEN}3.{Colors.RESET} View detailed report")
+    print(f"  {Colors.RED}0.{Colors.RESET} Cancel")
+    
+    while True:
+        choice = input(f"\n{Colors.CYAN}Choice [0-3]:{Colors.RESET} ").strip()
+        if choice in ['0', '1', '2', '3']:
+            break
+        print(f"{Colors.RED}Invalid choice.{Colors.RESET}")
+    
+    if choice == '0':
+        return
+    
+    if choice == '3':
+        clear_screen()
+        print_main_banner()
+        show_unused_imports_report(unused_by_file)
+        input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+        return
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    home_dir = Path.home()
+    backup_dir = home_dir / '.config' / 'dotfiles' / 'unused-imports' / timestamp
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    
+    if choice == '1':
+        print(f"\n{Colors.YELLOW}⚠️  This will remove {total_unused} imports from {len(unused_by_file)} files{Colors.RESET}")
+        print(f"{Colors.CYAN}Backups will be saved to:{Colors.RESET} {backup_dir}")
+        confirm = input(f"\n{Colors.BOLD}Proceed? [y/N]:{Colors.RESET} ").strip().lower()
+        
+        if confirm not in ['y', 'yes']:
+            print(f"{Colors.YELLOW}Operation cancelled.{Colors.RESET}")
+            time.sleep(1)
+            return
+        
+        all_imports = [(fp, imp) for fp, imports in unused_by_file.items() for imp in imports]
+        files_modified, imports_removed = remove_selected_imports(all_imports, backup_dir)
+        
+        print(f"\n{Colors.GREEN}{Colors.BOLD}✅ COMPLETE!{Colors.RESET}")
+        print("=" * 70)
+        print(f"  Files modified: {files_modified}")
+        print(f"  Imports removed: {imports_removed}")
+        print(f"  Backup location: {backup_dir}")
+        
+    elif choice == '2':
+        selected_imports = interactive_select_unused_imports(unused_by_file)
+        
+        if not selected_imports:
+            print(f"\n{Colors.YELLOW}No imports selected.{Colors.RESET}")
+            time.sleep(1)
+            return
+        
+        clear_screen()
+        print_main_banner()
+        print(f"{Colors.CYAN}{Colors.BOLD}REMOVAL SUMMARY{Colors.RESET}")
+        print("=" * 70)
+        print(f"\n{Colors.YELLOW}Selected {len(selected_imports)} import(s) for removal{Colors.RESET}")
+        print(f"{Colors.CYAN}Backups will be saved to:{Colors.RESET} {backup_dir}")
+        
+        confirm = input(f"\n{Colors.BOLD}Proceed? [y/N]:{Colors.RESET} ").strip().lower()
+        
+        if confirm not in ['y', 'yes']:
+            print(f"{Colors.YELLOW}Operation cancelled.{Colors.RESET}")
+            time.sleep(1)
+            return
+        
+        files_modified, imports_removed = remove_selected_imports(selected_imports, backup_dir)
+        
+        print(f"\n{Colors.GREEN}{Colors.BOLD}✅ COMPLETE!{Colors.RESET}")
+        print("=" * 70)
+        print(f"  Files modified: {files_modified}")
+        print(f"  Imports removed: {imports_removed}")
+        print(f"  Backup location: {backup_dir}")
+    
+    input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+
 def run_analyzer_interactive(base_path: Path, file_types: List[str], exclude_dirs: Set[str]):
     analyzer = UnusedAnalyzer(
         base_path=base_path,
@@ -1226,7 +1892,7 @@ def run_analyzer_interactive(base_path: Path, file_types: List[str], exclude_dir
     
     while True:
         show_analyzer_menu()
-        choice = input(f"{Colors.CYAN}Select option [0-7]:{Colors.RESET} ").strip()
+        choice = input(f"{Colors.CYAN}Select option [0-9]:{Colors.RESET} ").strip()
         
         if choice == '0':
             return
@@ -1285,6 +1951,10 @@ def run_analyzer_interactive(base_path: Path, file_types: List[str], exclude_dir
                 interactive_handle_duplicates(detector, duplicates, dry_run=False)
             
             input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+        elif choice == '8':
+            run_comprehensive_import_check(base_path, exclude_dirs)
+        elif choice == '9':
+            run_package_cleanup(base_path, exclude_dirs)
         else:
             print(f"{Colors.RED}Invalid option{Colors.RESET}")
             time.sleep(1)
