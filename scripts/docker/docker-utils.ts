@@ -1,7 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import type { TContainer, TContainerStats, TResult } from './types';
-import { formatSize, formatElapsedTime } from './ui-utils';
+import type { TContainer, TContainerStats, TResult } from './types.js';
+import { formatSize, formatElapsedTime } from './ui-utils.js';
 
 const execAsync = promisify(exec);
 

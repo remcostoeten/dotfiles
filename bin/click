@@ -1,1 +1,2 @@
-/home/remco-stoeten/.config/dotfiles/scripts/click
+#!/usr/bin/env bash
+exec bash "$HOME/.config/dotfiles/scripts/click" "$@"

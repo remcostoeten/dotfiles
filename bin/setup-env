@@ -44,3 +44,4 @@ fi
 echo ""
 echo "✨ Setup complete! Restart your shell or run: source ~/.config/fish/config.fish"
 
+

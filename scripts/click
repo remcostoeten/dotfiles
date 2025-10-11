@@ -1,83 +1,515 @@
 #!/bin/bash
 
+# ============================================================================
+# Auto-Clicker Script with Interactive Mode, History, and Enhanced UI
+# ============================================================================
+
+# ============================================================================
+# Configuration & Globals
+# ============================================================================
+HISTORY_DIR="$HOME/.dotfiles/logs/click"
+HISTORY_FILE="$HISTORY_DIR/history.log"
+MAX_HISTORY=25
+
 # Default values
 duration=100
 clicks_per_second=10
+start_delay=0
+interactive_mode=false
+quit_requested=false
 
-# Color definitions
+# ============================================================================
+# Color & Style Definitions
+# ============================================================================
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[0;37m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
 
-# Help menu
-function show_help() {
-    echo -e "${BLUE}Usage: $(basename "$0") [options]${NC}"
-    echo ""
-    echo -e "${YELLOW}Options:${NC}"
-    echo -e "  ${GREEN}-h, --help${NC}       Show this help menu."
-    echo -e "  ${GREEN}-t, --total${NC}      Total duration in seconds (default: 100)."
-    echo -e "  ${GREEN}-c, --clicks${NC}     Number of clicks per second (default: 10)."
-    echo ""
-    echo -e "${YELLOW}Examples:${NC}"
-    echo -e "  $(basename "$0")"
-    echo -e "  $(basename "$0") --total 60 --clicks 5"
-    echo -e "  $(basename "$0") -t 30 -c 20"
+# Emoji/Symbols
+CHECK="✓"
+CROSS="✗"
+ARROW="➜"
+STAR="★"
+CLOCK="⏱"
+POINT="●"
+RIGHT="▶"
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+function print_box() {
+    local msg="$1"
+    local color="${2:-$CYAN}"
+    local width=60
+    local padding=$(( (width - ${#msg} - 2) / 2 ))
+    
+    echo -e "${color}╔$(printf '═%.0s' $(seq 1 $width))╗${NC}"
+    printf "${color}║${NC}%*s${BOLD}${WHITE}%s${NC}%*s${color}║${NC}\n" \
+        $padding "" "$msg" $((width - padding - ${#msg}))
+    echo -e "${color}╚$(printf '═%.0s' $(seq 1 $width))╝${NC}"
 }
 
-# Parse command-line arguments
+function print_line() {
+    echo -e "${DIM}${CYAN}$(printf '─%.0s' $(seq 1 60))${NC}"
+}
+
+function log_action() {
+    local msg="$1"
+    local level="${2:-info}"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    case $level in
+        info)
+            echo -e "${CYAN}${POINT}${NC} ${WHITE}$msg${NC}"
+            ;;
+        success)
+            echo -e "${GREEN}${CHECK}${NC} ${WHITE}$msg${NC}"
+            notify-send -u normal "Auto-Clicker ${CHECK}" "$msg"
+            ;;
+        warning)
+            echo -e "${YELLOW}${CLOCK}${NC} ${WHITE}$msg${NC}"
+            notify-send -u normal "Auto-Clicker ${CLOCK}" "$msg"
+            ;;
+        error)
+            echo -e "${RED}${CROSS}${NC} ${WHITE}$msg${NC}"
+            notify-send -u critical "Auto-Clicker ${CROSS}" "$msg"
+            ;;
+        start)
+            echo -e "${GREEN}${RIGHT}${NC} ${BOLD}${WHITE}$msg${NC}"
+            notify-send -u normal "Auto-Clicker ${RIGHT}" "$msg"
+            ;;
+    esac
+}
+
+function cleanup() {
+    if [ "$quit_requested" = true ]; then
+        log_action "Script terminated by user (Ctrl+C or Ctrl+Alt+K)" "error"
+    fi
+    exit 0
+}
+
+trap cleanup SIGINT SIGTERM
+
+# ============================================================================
+# Dependency Checks
+# ============================================================================
+
+function check_dependencies() {
+    local missing=()
+    
+    command -v xdotool >/dev/null 2>&1 || missing+=("xdotool")
+    command -v notify-send >/dev/null 2>&1 || missing+=("notify-send")
+    command -v bc >/dev/null 2>&1 || missing+=("bc")
+    
+    if [ ${#missing[@]} -gt 0 ]; then
+        log_action "Missing dependencies: ${missing[*]}" "error"
+        echo -e "${YELLOW}Install with: ${BOLD}sudo apt install ${missing[*]}${NC}"
+        exit 1
+    fi
+}
+
+# ============================================================================
+# History Management
+# ============================================================================
+
+function save_to_history() {
+    local clicks="$1"
+    local dur="$2"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local entry="${timestamp}|${clicks}|${dur}"
+    
+    mkdir -p "$HISTORY_DIR"
+    
+    if [ -f "$HISTORY_FILE" ]; then
+        grep -v "|${clicks}|${dur}$" "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" 2>/dev/null || true
+        mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE" 2>/dev/null || true
+    fi
+    
+    echo "$entry" >> "$HISTORY_FILE"
+    
+    if [ -f "$HISTORY_FILE" ]; then
+        tail -n $MAX_HISTORY "$HISTORY_FILE" > "${HISTORY_FILE}.tmp"
+        mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
+    fi
+}
+
+function show_history() {
+    if [ ! -f "$HISTORY_FILE" ] || [ ! -s "$HISTORY_FILE" ]; then
+        log_action "No history found" "warning"
+        return 1
+    fi
+    
+    print_box "Click History (Last $MAX_HISTORY Sessions)"
+    echo ""
+    
+    local idx=0
+    while IFS='|' read -r timestamp clicks dur; do
+        echo -e "  ${CYAN}${idx}.${NC} ${BOLD}${WHITE}$clicks${NC} clicks/sec for ${BOLD}${WHITE}${dur}s${NC} ${DIM}($timestamp)${NC}"
+        ((idx++))
+    done < <(tac "$HISTORY_FILE")
+    
+    echo ""
+}
+
+function load_from_history() {
+    local idx="$1"
+    
+    if [ ! -f "$HISTORY_FILE" ] || [ ! -s "$HISTORY_FILE" ]; then
+        log_action "No history found" "error"
+        return 1
+    fi
+    
+    local total_lines=$(wc -l < "$HISTORY_FILE")
+    local line_num=$((total_lines - idx))
+    
+    if [ $line_num -lt 1 ] || [ $line_num -gt $total_lines ]; then
+        log_action "Invalid history index: $idx (valid: 0-$((total_lines-1)))" "error"
+        return 1
+    fi
+    
+    local entry=$(sed -n "${line_num}p" "$HISTORY_FILE")
+    IFS='|' read -r timestamp clicks dur <<< "$entry"
+    
+    clicks_per_second="$clicks"
+    duration="$dur"
+    
+    log_action "Loaded from history: $clicks clicks/sec for ${dur}s" "success"
+}
+
+function reset_history() {
+    if [ -f "$HISTORY_FILE" ]; then
+        rm -f "$HISTORY_FILE"
+        log_action "History cleared" "success"
+    else
+        log_action "No history to clear" "warning"
+    fi
+}
+
+# ============================================================================
+# Input Validation
+# ============================================================================
+
+function validate_number() {
+    local value="$1"
+    local name="$2"
+    local min="${3:-1}"
+    
+    if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+        log_action "$name must be a positive number" "error"
+        return 1
+    fi
+    
+    if [ "$value" -lt "$min" ]; then
+        log_action "$name must be at least $min" "error"
+        return 1
+    fi
+    
+    return 0
+}
+
+# ============================================================================
+# Interactive Mode
+# ============================================================================
+
+function interactive_menu() {
+    clear
+    print_box "${STAR} Auto-Clicker Interactive Setup ${STAR}"
+    echo ""
+    
+    echo -e "${CYAN}${ARROW}${NC} ${BOLD}Options:${NC}"
+    echo -e "  ${GREEN}1.${NC} Enter custom configuration"
+    echo -e "  ${GREEN}2.${NC} Choose from previous sessions"
+    echo -e "  ${GREEN}3.${NC} Exit"
+    echo ""
+    
+    read -p "$(echo -e "${CYAN}${POINT}${NC} Select option [1-3]: ")" choice
+    
+    case $choice in
+        1)
+            interactive_custom_config
+            ;;
+        2)
+            interactive_history_select
+            ;;
+        3)
+            log_action "Exiting" "info"
+            exit 0
+            ;;
+        *)
+            log_action "Invalid option" "error"
+            sleep 1
+            interactive_menu
+            ;;
+    esac
+}
+
+function interactive_custom_config() {
+    clear
+    print_box "Custom Configuration"
+    echo ""
+    
+    while true; do
+        read -p "$(echo -e "${CYAN}${CLOCK}${NC} Clicks per second: ")" clicks_input
+        if validate_number "$clicks_input" "Clicks per second" 1; then
+            clicks_per_second="$clicks_input"
+            break
+        fi
+    done
+    
+    echo ""
+    
+    while true; do
+        read -p "$(echo -e "${CYAN}${CLOCK}${NC} Duration (seconds): ")" duration_input
+        if validate_number "$duration_input" "Duration" 1; then
+            duration="$duration_input"
+            break
+        fi
+    done
+    
+    echo ""
+    
+    while true; do
+        read -p "$(echo -e "${CYAN}${CLOCK}${NC} Start delay (seconds) [default: 0]: ")" delay_input
+        
+        if [ -z "$delay_input" ]; then
+            start_delay=0
+            break
+        elif validate_number "$delay_input" "Start delay" 0; then
+            start_delay="$delay_input"
+            break
+        fi
+    done
+    
+    echo ""
+    print_line
+    echo -e "${GREEN}${CHECK}${NC} ${BOLD}Configuration complete!${NC}"
+    echo -e "  ${POINT} Clicks: ${BOLD}${WHITE}$clicks_per_second${NC}/sec"
+    echo -e "  ${POINT} Duration: ${BOLD}${WHITE}${duration}${NC}s"
+    echo -e "  ${POINT} Start delay: ${BOLD}${WHITE}${start_delay}${NC}s"
+    print_line
+    echo ""
+    
+    read -p "$(echo -e "${CYAN}${ARROW}${NC} Press Enter to start...")" 
+}
+
+function interactive_history_select() {
+    clear
+    
+    if ! show_history; then
+        sleep 2
+        interactive_menu
+        return
+    fi
+    
+    read -p "$(echo -e "${CYAN}${ARROW}${NC} Enter session number (or 'b' to go back): ")" hist_choice
+    
+    if [ "$hist_choice" = "b" ] || [ "$hist_choice" = "B" ]; then
+        interactive_menu
+        return
+    fi
+    
+    if validate_number "$hist_choice" "Session number" 0; then
+        if load_from_history "$hist_choice"; then
+            start_delay=0
+            echo ""
+            read -p "$(echo -e "${CYAN}${ARROW}${NC} Press Enter to start...")" 
+        else
+            sleep 2
+            interactive_history_select
+        fi
+    else
+        sleep 2
+        interactive_history_select
+    fi
+}
+
+# ============================================================================
+# Help Menu
+# ============================================================================
+
+function show_help() {
+    clear
+    print_box "${STAR} Auto-Clicker Help Menu ${STAR}"
+    echo ""
+    echo -e "${BOLD}${CYAN}USAGE:${NC}"
+    echo -e "  ${WHITE}click${NC} ${DIM}[options]${NC}"
+    echo ""
+    echo -e "${BOLD}${CYAN}INTERACTIVE MODE:${NC}"
+    echo -e "  ${GREEN}click${NC}                        ${DIM}# Start interactive mode${NC}"
+    echo -e "  ${GREEN}click -i${NC}, ${GREEN}--interactive${NC}    ${DIM}# Start interactive mode${NC}"
+    echo -e "  ${GREEN}click i${NC}, ${GREEN}interactive${NC}      ${DIM}# Start interactive mode${NC}"
+    echo ""
+    echo -e "${BOLD}${CYAN}DIRECT COMMAND:${NC}"
+    echo -e "  ${GREEN}-t${NC}, ${GREEN}--total${NC} ${YELLOW}<seconds>${NC}     ${DIM}# Total duration${NC}"
+    echo -e "  ${GREEN}-c${NC}, ${GREEN}--clicks${NC} ${YELLOW}<number>${NC}     ${DIM}# Clicks per second${NC}"
+    echo ""
+    echo -e "${BOLD}${CYAN}HISTORY:${NC}"
+    echo -e "  ${GREEN}--history${NC}, ${GREEN}--h${NC}, ${GREEN}history${NC}   ${DIM}# Show click history${NC}"
+    echo -e "  ${GREEN}--previous${NC} ${YELLOW}<N>${NC}, ${GREEN}--p${NC} ${YELLOW}<N>${NC}     ${DIM}# Load session N from history${NC}"
+    echo -e "  ${GREEN}previous${NC} ${YELLOW}<N>${NC}              ${DIM}# (0=oldest, 99=newest)${NC}"
+    echo -e "  ${GREEN}--reset${NC}, ${GREEN}--r${NC}, ${GREEN}reset${NC}      ${DIM}# Clear all history${NC}"
+    echo ""
+    echo -e "${BOLD}${CYAN}OTHER:${NC}"
+    echo -e "  ${GREEN}--help${NC}, ${GREEN}-h${NC}, ${GREEN}help${NC}        ${DIM}# Show this help menu${NC}"
+    echo ""
+    echo -e "${BOLD}${CYAN}SHORTCUTS:${NC}"
+    echo -e "  ${RED}Ctrl+C${NC}                     ${DIM}# Stop autoclicker${NC}"
+    echo -e "  ${RED}Ctrl+Alt+K${NC}                 ${DIM}# Global quit (if configured)${NC}"
+    echo ""
+    echo -e "${BOLD}${CYAN}EXAMPLES:${NC}"
+    echo -e "  ${DIM}# Interactive mode${NC}"
+    echo -e "  ${WHITE}click${NC}"
+    echo ""
+    echo -e "  ${DIM}# Direct command${NC}"
+    echo -e "  ${WHITE}click --total 60 --clicks 5${NC}"
+    echo -e "  ${WHITE}click -t 30 -c 20${NC}"
+    echo ""
+    echo -e "  ${DIM}# Using history${NC}"
+    echo -e "  ${WHITE}click --history${NC}"
+    echo -e "  ${WHITE}click --previous 0${NC}    ${DIM}# Load oldest session${NC}"
+    echo -e "  ${WHITE}click --p 5${NC}           ${DIM}# Load 6th most recent${NC}"
+    echo ""
+    print_line
+}
+
+# ============================================================================
+# Main Click Execution
+# ============================================================================
+
+function start_clicking() {
+    interval=$(echo "scale=6; 1 / $clicks_per_second" | bc -l)
+    local total_clicks=$((clicks_per_second * duration))
+    
+    if [ "$start_delay" -gt 0 ]; then
+        for ((i=start_delay; i>0; i--)); do
+            log_action "Starting in ${i}..." "warning"
+            sleep 1
+        done
+    fi
+    
+    log_action "Starting now!" "start"
+    
+    print_box "Auto-Clicker Active"
+    echo -e "  ${POINT} ${BOLD}${WHITE}${clicks_per_second}${NC} clicks/sec"
+    echo -e "  ${POINT} ${BOLD}${WHITE}${duration}${NC} seconds"
+    echo -e "  ${POINT} ${BOLD}${WHITE}${total_clicks}${NC} total clicks"
+    print_line
+    echo -e "${DIM}Press ${RED}Ctrl+C${DIM} to stop${NC}"
+    echo ""
+    
+    notify-send -u normal "Auto-Clicker Started ${RIGHT}" "Running for ${duration}s at ${clicks_per_second} clicks/sec"
+    
+    end=$((SECONDS + duration))
+    halfway_notified=false
+    
+    while [ $SECONDS -lt $end ]; do
+        xdotool click 1
+        sleep "$interval"
+        
+        remaining_time=$((end - SECONDS))
+        progress=$(( ( (duration - remaining_time) * 100) / duration ))
+        
+        if [ "$progress" -ge 50 ] && [ "$halfway_notified" = false ]; then
+            log_action "50% complete - Halfway through!" "warning"
+            halfway_notified=true
+        fi
+        
+        if [ "$remaining_time" -le 10 ] && [ "$remaining_time" -gt 0 ]; then
+            echo -e "${YELLOW}${CLOCK}${NC} ${remaining_time} seconds remaining..."
+            if [ "$remaining_time" -le 5 ]; then
+                notify-send -u normal "Auto-Clicker" "${remaining_time} seconds remaining..."
+            fi
+        fi
+    done
+    
+    echo ""
+    log_action "Auto-clicker finished! Completed ${total_clicks} clicks in ${duration} seconds." "success"
+    
+    save_to_history "$clicks_per_second" "$duration"
+}
+
+# ============================================================================
+# Argument Parsing
+# ============================================================================
+
+check_dependencies
+
+if [ $# -eq 0 ]; then
+    interactive_mode=true
+    interactive_menu
+    start_clicking
+    exit 0
+fi
+
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        -h|--help)
+        -h|--help|help)
             show_help
             exit 0
             ;;
+        -i|--interactive|i|interactive)
+            interactive_mode=true
+            interactive_menu
+            ;;
+        --history|--h|history)
+            show_history
+            exit 0
+            ;;
+        --previous|--p|previous)
+            if [ -z "$2" ]; then
+                log_action "Missing history index" "error"
+                exit 1
+            fi
+            load_from_history "$2"
+            shift
+            ;;
+        --reset|--r|reset)
+            reset_history
+            exit 0
+            ;;
         -t|--total)
-            duration="$2"
+            if [ -z "$2" ]; then
+                log_action "Missing duration value" "error"
+                exit 1
+            fi
+            if validate_number "$2" "Duration" 1; then
+                duration="$2"
+            else
+                exit 1
+            fi
             shift
             ;;
         -c|--clicks)
-            clicks_per_second="$2"
+            if [ -z "$2" ]; then
+                log_action "Missing clicks value" "error"
+                exit 1
+            fi
+            if validate_number "$2" "Clicks per second" 1; then
+                clicks_per_second="$2"
+            else
+                exit 1
+            fi
             shift
             ;;
         *)
-            echo "Unknown parameter passed: $1"
-            show_help
+            log_action "Unknown parameter: $1" "error"
+            echo -e "${DIM}Use ${WHITE}click --help${DIM} for usage information${NC}"
             exit 1
             ;;
     esac
     shift
 done
 
-interval=$(echo "1 / $clicks_per_second" | bc -l)
-
-echo -e "${BLUE}Auto-clicker started.${NC}"
-echo -e "Will run for ${YELLOW}$duration seconds${NC}, clicking every ${YELLOW}$interval seconds${NC} (${YELLOW}$clicks_per_second clicks/sec${NC})."
-echo -e "${RED}Press Ctrl+C to stop.${NC}"
-
-end=$((SECONDS + duration))
-halfway_notified=false
-
-while [ $SECONDS -lt $end ]; do
-    xdotool click 1
-    sleep "$interval"
-
-    remaining_time=$((end - SECONDS))
-    progress=$(( ( (duration - remaining_time) * 100) / duration ))
-
-    # 50% notification
-    if [ "$progress" -ge 50 ] && [ "$halfway_notified" = false ]; then
-        notify-send "Auto-clicker at 50%" "Halfway through the clicking process."
-        halfway_notified=true
-    fi
-
-    # Countdown for last 10 seconds
-    if [ "$remaining_time" -le 10 ]; then
-        echo -e "${YELLOW}Countdown: $remaining_time seconds remaining...${NC}"
-        notify-send "Auto-clicker" "$remaining_time seconds remaining..."
-    fi
-done
-
-echo -e "${GREEN}Auto-clicker finished.${NC}"
-notify-send "Auto-clicker finished" "Completed $duration seconds of clicking."
+if [ "$interactive_mode" = true ]; then
+    start_clicking
+else
+    start_clicking
+fi

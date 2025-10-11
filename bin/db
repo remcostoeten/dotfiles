@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import subprocess
+from pathlib import Path
+from typing import Optional
+
+# Colors for better terminal output
+class Colors:
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    RED = '\033[31m'
+    GREEN = '\033[32m'
+    YELLOW = '\033[33m'
+    BLUE = '\033[34m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    WHITE = '\033[37m'
+    BRIGHT_CYAN = '\033[96m'
+
+class DatabaseManager:
+    def __init__(self):
+        self.dotfiles_path = Path.home() / ".config" / "dotfiles"
+        self.scripts_path = self.dotfiles_path / "scripts"
+        self.bin_path = self.dotfiles_path / "bin"
+        
+    def print_header(self):
+        header = f"""
+{Colors.CYAN}╔══════════════════════════════════════════════════════════════╗
+║                    🗄️  DATABASE MANAGER v1.0                 ║
+║                     Unified Database Toolkit                 ║
+╚══════════════════════════════════════════════════════════════╝{Colors.RESET}
+        """
+        print(header)
+    
+    def print_menu(self):
+        menu_items = [
+            ("1", "🐘 PostgreSQL Manager", "Interactive PostgreSQL database management"),
+            ("2", "🔍 Database Analyzer", "AI-powered database performance analysis"),
+            ("3", "🚀 Turso Environment Generator", "Generate Turso database configuration"),
+            ("4", "🐳 Docker Manager", "Container management for databases"),
+            ("5", "📋 Show All Tools Info", "Display detailed information about all tools"),
+            ("h", "❓ Help", "Show detailed usage information"),
+            ("q", "🚪 Quit", "Exit the database manager")
+        ]
+        
+        print(f"{Colors.BOLD}{Colors.WHITE}Available Database Tools:{Colors.RESET}\n")
+        
+        for key, title, description in menu_items:
+            key_color = Colors.BRIGHT_CYAN if key.isdigit() else Colors.YELLOW
+            print(f"  {key_color}[{key}]{Colors.RESET} {Colors.BOLD}{title}{Colors.RESET}")
+            print(f"      {Colors.DIM}{description}{Colors.RESET}\n")
+    
+    def show_help(self):
+        help_text = f"""
+{Colors.BOLD}{Colors.CYAN}DATABASE MANAGER - DETAILED HELP{Colors.RESET}
+
+{Colors.BOLD}Tool Descriptions:{Colors.RESET}
+
+{Colors.GREEN}1. PostgreSQL Manager{Colors.RESET}
+   • Interactive PostgreSQL database management
+   • Connection management with secure credential storage
+   • Query execution with syntax highlighting
+   • Table management and SQL snippets
+   • Support for cloud databases (Supabase, Neon, etc.)
+   • Location: ~/.config/dotfiles/scripts/postgres
+
+{Colors.GREEN}2. Database Analyzer{Colors.RESET}
+   • AI-powered database performance analysis
+   • Table statistics and usage patterns
+   • Index optimization recommendations
+   • Gemini AI integration for insights
+   • Query performance analysis
+   • Location: ~/.config/dotfiles/scripts/db_analyzer.py
+
+{Colors.GREEN}3. Turso Environment Generator{Colors.RESET}
+   • Generate Turso database environment variables
+   • Interactive configuration setup
+   • Secret management with reveal options
+   • Environment file generation
+   • Clipboard integration support
+   • Location: ~/.config/dotfiles/scripts/generate-turso-db.py
+
+{Colors.GREEN}4. Docker Manager{Colors.RESET}
+   • Interactive Docker container management
+   • Database container orchestration
+   • Container lifecycle management (start/stop/remove)
+   • Real-time logs and statistics
+   • System cleanup utilities
+   • Location: ~/.config/dotfiles/bin/docker
+
+{Colors.BOLD}Usage Examples:{Colors.RESET}
+
+  {Colors.CYAN}db{Colors.RESET}                    # Start interactive mode
+  {Colors.CYAN}db postgres{Colors.RESET}          # Launch PostgreSQL manager directly
+  {Colors.CYAN}db analyze{Colors.RESET}           # Run database analyzer
+  {Colors.CYAN}db turso{Colors.RESET}             # Generate Turso environment
+  {Colors.CYAN}db docker{Colors.RESET}            # Open Docker manager
+  {Colors.CYAN}db --help{Colors.RESET}            # Show this help
+
+{Colors.BOLD}Environment Requirements:{Colors.RESET}
+  • Python 3.8+ (for most tools)
+  • Node.js (for Docker manager)
+  • PostgreSQL client tools (for postgres manager)
+  • Optional: Rich library for enhanced UI (pip install rich)
+        """
+        print(help_text)
+    
+    def show_tools_info(self):
+        info_text = f"""
+{Colors.BOLD}{Colors.CYAN}DATABASE TOOLS - DETAILED INFORMATION{Colors.RESET}
+
+{Colors.BOLD}🐘 PostgreSQL Manager{Colors.RESET}
+   Status: {self._get_tool_status('postgres')}
+   Features:
+   • Interactive SQL query execution
+   • Cloud database support (Supabase, Neon, Railway)
+   • Secure credential management with keyring
+   • Table inspection and management
+   • Pre-built SQL snippets for common operations
+   • Transaction support with rollback
+
+{Colors.BOLD}🔍 Database Analyzer{Colors.RESET}
+   Status: {self._get_tool_status('db_analyzer.py')}
+   Features:
+   • Performance bottleneck detection
+   • Index usage analysis and recommendations
+   • Table size and row count statistics
+   • Query pattern analysis (with pg_stat_statements)
+   • AI-powered optimization suggestions via Gemini
+
+{Colors.BOLD}🚀 Turso Environment Generator{Colors.RESET}
+   Status: {self._get_tool_status('generate-turso-db.py')}
+   Features:
+   • Automated Turso database setup
+   • Environment variable generation
+   • Secret masking and reveal functionality
+   • Configuration persistence
+   • Multiple output formats (.env, JSON)
+
+{Colors.BOLD}🐳 Docker Manager{Colors.RESET}
+   Status: {self._get_tool_status('docker', is_bin=True)}
+   Features:
+   • Container lifecycle management
+   • Real-time monitoring and logs
+   • Database container templates
+   • System resource cleanup
+   • Interactive terminal interface
+
+{Colors.BOLD}Configuration Paths:{Colors.RESET}
+   • Config Directory: {self.dotfiles_path}
+   • Scripts Directory: {self.scripts_path}
+   • Executables: {self.bin_path}
+        """
+        print(info_text)
+    
+    def _get_tool_status(self, tool_name: str, is_bin: bool = False) -> str:
+        path = (self.bin_path if is_bin else self.scripts_path) / tool_name
+        if path.exists():
+            return f"{Colors.GREEN}✓ Available{Colors.RESET}"
+        else:
+            return f"{Colors.RED}✗ Not Found{Colors.RESET}"
+    
+    def run_postgres_manager(self):
+        postgres_script = self.scripts_path / "postgres"
+        if not postgres_script.exists():
+            print(f"{Colors.RED}Error: PostgreSQL manager not found at {postgres_script}{Colors.RESET}")
+            return False
+        
+        print(f"{Colors.CYAN}🐘 Launching PostgreSQL Manager...{Colors.RESET}")
+        try:
+            subprocess.run([sys.executable, str(postgres_script)], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"{Colors.RED}Error running PostgreSQL manager: {e}{Colors.RESET}")
+            return False
+        return True
+    
+    def run_db_analyzer(self):
+        analyzer_script = self.scripts_path / "db_analyzer.py"
+        if not analyzer_script.exists():
+            print(f"{Colors.RED}Error: Database analyzer not found at {analyzer_script}{Colors.RESET}")
+            return False
+        
+        print(f"{Colors.CYAN}🔍 Launching Database Analyzer...{Colors.RESET}")
+        print(f"{Colors.DIM}Note: You'll need to provide a PostgreSQL connection URL{Colors.RESET}\n")
+        
+        try:
+            subprocess.run([sys.executable, str(analyzer_script)], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"{Colors.RED}Error running database analyzer: {e}{Colors.RESET}")
+            return False
+        return True
+    
+    def run_turso_generator(self):
+        turso_script = self.scripts_path / "generate-turso-db.py"
+        if not turso_script.exists():
+            print(f"{Colors.RED}Error: Turso generator not found at {turso_script}{Colors.RESET}")
+            return False
+        
+        print(f"{Colors.CYAN}🚀 Launching Turso Environment Generator...{Colors.RESET}")
+        try:
+            subprocess.run([sys.executable, str(turso_script)], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"{Colors.RED}Error running Turso generator: {e}{Colors.RESET}")
+            return False
+        return True
+    
+    def run_docker_manager(self):
+        docker_script = self.bin_path / "docker"
+        if not docker_script.exists():
+            print(f"{Colors.RED}Error: Docker manager not found at {docker_script}{Colors.RESET}")
+            return False
+        
+        print(f"{Colors.CYAN}🐳 Launching Docker Manager...{Colors.RESET}")
+        try:
+            subprocess.run([str(docker_script)], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"{Colors.RED}Error running Docker manager: {e}{Colors.RESET}")
+            return False
+        return True
+    
+    def handle_direct_command(self, command: str) -> bool:
+        """Handle direct command execution"""
+        command_map = {
+            'postgres': self.run_postgres_manager,
+            'pg': self.run_postgres_manager,
+            'analyze': self.run_db_analyzer,
+            'analyzer': self.run_db_analyzer,
+            'turso': self.run_turso_generator,
+            'docker': self.run_docker_manager,
+            'help': self.show_help,
+            '--help': self.show_help,
+            '-h': self.show_help,
+            'info': self.show_tools_info,
+        }
+        
+        if command in command_map:
+            if command in ['help', '--help', '-h', 'info']:
+                command_map[command]()
+                return True
+            else:
+                return command_map[command]()
+        else:
+            print(f"{Colors.RED}Error: Unknown command '{command}'{Colors.RESET}")
+            print(f"{Colors.DIM}Available commands: {', '.join(command_map.keys())}{Colors.RESET}")
+            return False
+    
+    def interactive_mode(self):
+        """Run the interactive menu"""
+        while True:
+            print("\n" + "="*65)
+            self.print_header()
+            self.print_menu()
+            
+            try:
+                choice = input(f"{Colors.BOLD}{Colors.CYAN}Select an option: {Colors.RESET}").strip().lower()
+                
+                if choice in ['q', 'quit', 'exit']:
+                    print(f"\n{Colors.GREEN}👋 Goodbye! Database operations completed.{Colors.RESET}")
+                    break
+                elif choice == '1':
+                    self.run_postgres_manager()
+                elif choice == '2':
+                    self.run_db_analyzer()
+                elif choice == '3':
+                    self.run_turso_generator()
+                elif choice == '4':
+                    self.run_docker_manager()
+                elif choice == '5':
+                    self.show_tools_info()
+                elif choice in ['h', 'help']:
+                    self.show_help()
+                else:
+                    print(f"{Colors.RED}Invalid choice. Please try again.{Colors.RESET}")
+                
+                if choice.isdigit() and choice != '5':  # Don't pause for info display
+                    input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
+                    
+            except KeyboardInterrupt:
+                print(f"\n\n{Colors.YELLOW}👋 Interrupted. Goodbye!{Colors.RESET}")
+                break
+            except EOFError:
+                print(f"\n\n{Colors.YELLOW}👋 EOF received. Goodbye!{Colors.RESET}")
+                break
+
+def main():
+    """Main entry point"""
+    manager = DatabaseManager()
+    
+    # Handle command line arguments
+    if len(sys.argv) > 1:
+        command = sys.argv[1].lower()
+        success = manager.handle_direct_command(command)
+        sys.exit(0 if success else 1)
+    else:
+        # Interactive mode
+        manager.interactive_mode()
+
+if __name__ == "__main__":
+    main()

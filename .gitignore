@@ -2,3 +2,15 @@ node_modules/env
 **node_modules/** 
 tmp/
 scripts/docker/node_modules
+
+# Sensitive data - stored in private repo at ~/.dotfiles
+secrets/
+postgres/
+*.log
+*.secret
+key.secret
+connections.json
+secrets.json
+scripts/xclip/history.log
+scripts/screen-data/logging/
+click/history.log

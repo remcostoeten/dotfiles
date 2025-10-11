@@ -986,15 +986,27 @@ async function parseUnixOutput(stdout, port, cmd) {
   return processes.length > 0 ? processes : null;
 }
 
-async function killProcess(pid) {
+async function killProcess(pid, useSudo) {
   try {
-    const cmd = process.platform === 'win32'
-      ? `taskkill /PID ${pid} /F`
-      : `kill -9 ${pid}`;
+    let cmd;
+    if (process.platform === 'win32') {
+      cmd = `taskkill /PID ${pid} /F`;
+    } else {
+      cmd = useSudo ? `sudo kill -9 ${pid}` : `kill -9 ${pid}`;
+    }
     
     await execAsync(cmd);
     return true;
-  } catch {
+  } catch (error) {
+    if (!useSudo && process.platform !== 'win32') {
+      try {
+        verboseLog(`Retrying with sudo for PID ${pid}`);
+        await execAsync(`sudo kill -9 ${pid}`);
+        return true;
+      } catch {
+        return false;
+      }
+    }
     return false;
   }
 }
@@ -1235,19 +1247,21 @@ async function handleDryRun(selectedProcesses) {
 async function killSelectedProcesses(selectedProcesses) {
   console.log(`\n${globalOptions.force ? '⚡ Force killing' : 'Attempting to terminate'} selected processes...\n`);
   let successCount = 0;
+  const failedProcesses = [];
 
   for (let i = 0; i < selectedProcesses.length; i++) {
     const proc = selectedProcesses[i];
     const spinner = new Spinner(`Terminating process on port ${proc.port} (PID: ${proc.pid}) [${i + 1}/${selectedProcesses.length}]`);
     spinner.start();
     
-    const success = await killProcess(proc.pid);
+    const success = await killProcess(proc.pid, false);
     
     if (success) {
       spinner.succeed(`Terminated process (PID: ${proc.pid}) on port ${proc.port}`);
       successCount++;
     } else {
       spinner.fail(`Failed to terminate process (PID: ${proc.pid}) on port ${proc.port}`);
+      failedProcesses.push(proc);
     }
     
     if (i < selectedProcesses.length - 1) {
@@ -1257,7 +1271,7 @@ async function killSelectedProcesses(selectedProcesses) {
     }
   }
 
-  return successCount;
+  return { successCount, failedProcesses };
 }
 
 function displaySummary(successCount, totalCount) {
@@ -1432,8 +1446,37 @@ async function main() {
       }
     }
 
-    const successCount = await killSelectedProcesses(selectedProcesses);
-    displaySummary(successCount, selectedProcesses.length);
+    const { successCount, failedProcesses } = await killSelectedProcesses(selectedProcesses);
+    
+    if (failedProcesses.length > 0 && process.platform !== 'win32') {
+      console.log(chalk.yellow(`\n⚠️  ${failedProcesses.length} process(es) require elevated privileges.`));
+      const useSudo = await confirm('Retry with sudo?', true);
+      
+      if (useSudo) {
+        console.log(chalk.cyan('\n🔐 Retrying failed processes with sudo...\n'));
+        let sudoSuccessCount = 0;
+        
+        for (const proc of failedProcesses) {
+          const spinner = new Spinner(`Terminating process on port ${proc.port} with sudo (PID: ${proc.pid})`);
+          spinner.start();
+          
+          const success = await killProcess(proc.pid, true);
+          
+          if (success) {
+            spinner.succeed(`Terminated process (PID: ${proc.pid}) on port ${proc.port}`);
+            sudoSuccessCount++;
+          } else {
+            spinner.fail(`Failed to terminate process (PID: ${proc.pid}) on port ${proc.port}`);
+          }
+        }
+        
+        displaySummary(successCount + sudoSuccessCount, selectedProcesses.length);
+      } else {
+        displaySummary(successCount, selectedProcesses.length);
+      }
+    } else {
+      displaySummary(successCount, selectedProcesses.length);
+    }
     
     if (APP_CONFIG.flags.SAVE_HISTORY) {
       saveToHistory({
