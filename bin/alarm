@@ -1,0 +1,9 @@
+#!/usr/bin/env fish
+# Alarm executable wrapper - calls the actual alarm script
+
+# Get the dotfiles directory
+set -l dotfiles_dir (dirname (dirname (realpath (status filename))))
+set -l alarm_script "$dotfiles_dir/scripts/alarm.fish"
+
+# Execute the alarm script with all arguments
+exec fish $alarm_script $argv
