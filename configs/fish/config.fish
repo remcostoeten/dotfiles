@@ -17,6 +17,9 @@ if status is-interactive # Commands to run in interactive sessions can go here
         cat ~/.local/state/quickshell/user/generated/terminal/sequences.txt
     end
 
+    # Initialize zoxide
+    zoxide init fish | source
+
     # Aliases
     alias pamcan pacman
     alias ls 'eza --icons'

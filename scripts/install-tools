@@ -1,0 +1,128 @@
+#!/usr/bin/env fish
+
+# Installation script for recommended CLI tools
+# Usage: ./install-tools
+
+set_color cyan
+echo "╔══════════════════════════════════════════════════════════════════════╗"
+echo "║                    INSTALLING RECOMMENDED TOOLS                     ║"
+echo "╚══════════════════════════════════════════════════════════════════════╝"
+echo ""
+set_color normal
+
+set_color yellow
+echo "📦 Checking and installing modern CLI tools..."
+echo ""
+
+# Check package manager
+if command -q pacman
+    set PKG_MANAGER "sudo pacman -S"
+    set_color green
+    echo "✓ Detected pacman package manager"
+else if command -q apt
+    set PKG_MANAGER "sudo apt install"
+    set_color green
+    echo "✓ Detected apt package manager"
+else if command -q brew
+    set PKG_MANAGER "brew install"
+    set_color green
+    echo "✓ Detected Homebrew package manager"
+else
+    set_color red
+    echo "❌ No supported package manager found"
+    exit 1
+end
+
+echo ""
+
+# Install tools with availability checks
+set_color blue
+echo "🔧 Optional tools (you can skip if you don't need them):"
+echo ""
+
+# delta - better git diffs (optional)
+set_color cyan
+echo "📄 delta: Enhanced git diff viewer (optional)"
+if not command -q delta
+    set_color yellow
+    echo -n "   Install? [y/N]: "
+    read -l response
+    if string match -q "y" $response
+        eval $PKG_MANAGER git-delta 2>/dev/null
+        if command -q delta
+            set_color green
+            echo "   ✓ delta installed"
+        else
+            set_color red
+            echo "   ❌ Failed to install delta"
+        end
+    else
+        set_color white
+        echo "   - Skipped delta"
+    end
+else
+    set_color green
+    echo "   ✓ delta already installed"
+end
+echo ""
+
+# bottom - modern system monitor (optional)
+set_color cyan
+echo "📊 bottom: Modern system monitor like htop (optional)"
+if not command -q btm
+    set_color yellow
+    echo -n "   Install? [y/N]: "
+    read -l response
+    if string match -q "y" $response
+        eval $PKG_MANAGER bottom 2>/dev/null
+        if command -q btm
+            set_color green
+            echo "   ✓ bottom installed"
+        else
+            set_color red
+            echo "   ❌ Failed to install bottom"
+        end
+    else
+        set_color white
+        echo "   - Skipped bottom"
+    end
+else
+    set_color green
+    echo "   ✓ bottom already installed"
+end
+echo ""
+
+# dust - disk usage analyzer (optional)
+set_color cyan
+echo "💾 dust: Better disk usage analyzer (optional)"
+if not command -q dust
+    set_color yellow
+    echo -n "   Install? [y/N]: "
+    read -l response
+    if string match -q "y" $response
+        eval $PKG_MANAGER dust 2>/dev/null
+        if command -q dust
+            set_color green
+            echo "   ✓ dust installed"
+        else
+            set_color red
+            echo "   ❌ Failed to install dust"
+        end
+    else
+        set_color white
+        echo "   - Skipped dust"
+    end
+else
+    set_color green
+    echo "   ✓ dust already installed"
+end
+
+echo ""
+set_color cyan
+echo "🎉 Installation complete!"
+echo ""
+set_color yellow
+echo "💡 Reload your fish config with: source ~/.config/dotfiles/cfg"
+echo "💡 Or restart your terminal"
+echo ""
+set_color normal

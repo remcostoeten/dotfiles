@@ -11,8 +11,8 @@ if test -d ~/.config/dotfiles/bin
 end
 
 # Source aliases
-if test -d ~/.config/dotfiles/aliases
-    for alias_file in ~/.config/dotfiles/aliases/*.fish
+if test -d ~/.config/dotfiles/configs/fish/aliases
+    for alias_file in ~/.config/dotfiles/configs/fish/aliases/*.fish
         if test -f $alias_file
             source $alias_file
         end
@@ -77,6 +77,95 @@ if status is-interactive # Commands to run in interactive sessions can go here
         cat ~/.local/state/quickshell/user/generated/terminal/sequences.txt
     end
 
+    # Initialize zoxide
+    zoxide init fish | source
+
+    # Show dotfiles banner
+    function show_dotfiles_banner
+        set config_file ~/.config/dotfiles/.dotfiles-cli.json
+        if test -f $config_file
+            set banner_type (cat $config_file | grep '"banner"' | cut -d'"' -f4 2>/dev/null)
+            if test $banner_type = "classic"
+                # Define pastel colors matching the fish prompt
+                set -l pastel_pink (set_color faa2c1)
+                set -l pastel_purple (set_color d4bbf8)
+                set -l pastel_blue (set_color a5d8ff)
+                set -l pastel_green (set_color b2f2bb)
+                set -l pastel_yellow (set_color ffec99)
+                set -l pastel_orange (set_color ffd8a8)
+                set -l pastel_red (set_color ff8787)
+                set -l pastel_cyan (set_color 89dceb)
+                set -l pastel_magenta (set_color f5c2e7)
+                set -l normal (set_color normal)
+
+                echo -n '    '
+                echo -n "$pastel_pink"
+                echo '██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗███████╗'
+                echo -n "$pastel_magenta"
+                echo '    ██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝██╔════╝'
+                echo -n "$pastel_purple"
+                echo '    ██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗  ███████╗'
+                echo -n "$pastel_blue"
+                echo '    ██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝  ╚════██║'
+                echo -n "$pastel_cyan"
+                echo '    ██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗███████║'
+                echo -n "$pastel_green"
+                echo '    ╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝╚══════╝'
+                echo "$normal"
+                echo ''
+            else if test $banner_type = "new"
+                # Define pastel colors matching the fish prompt
+                set -l pastel_pink (set_color faa2c1)
+                set -l pastel_purple (set_color d4bbf8)
+                set -l pastel_blue (set_color a5d8ff)
+                set -l pastel_green (set_color b2f2bb)
+                set -l pastel_yellow (set_color ffec99)
+                set -l pastel_orange (set_color ffd8a8)
+                set -l pastel_red (set_color ff8787)
+                set -l pastel_cyan (set_color 89dceb)
+                set -l pastel_magenta (set_color f5c2e7)
+                set -l normal (set_color normal)
+
+                echo "$pastel_cyan" '╔══════════════════════════════════════════════════════════════════════╗'
+                echo "$pastel_pink" '║  DOTFILES ▸ Overview ▸ fzf                                           ║'
+                echo "$pastel_green" '╚══════════════════════════════════════════════════════════════════════╝'
+                echo "$normal"
+                echo ''
+            end
+        end
+
+        # Show footer info
+        if test -d ~/.config/dotfiles
+            set -l git_date (cd ~/.config/dotfiles && git log -1 --format="%ar" 2>/dev/null)
+            set -l git_timestamp (cd ~/.config/dotfiles && git log -1 --format="%ci" 2>/dev/null | cut -d' ' -f1 | sed 's/-/·/g')
+            if test -n "$git_date"
+                # Define pastel colors matching the fish prompt
+                set -l pastel_pink (set_color faa2c1)
+                set -l pastel_purple (set_color d4bbf8)
+                set -l pastel_blue (set_color a5d8ff)
+                set -l pastel_green (set_color b2f2bb)
+                set -l pastel_yellow (set_color ffec99)
+                set -l pastel_orange (set_color ffd8a8)
+                set -l pastel_red (set_color ff8787)
+                set -l pastel_cyan (set_color 89dceb)
+                set -l pastel_magenta (set_color f5c2e7)
+                set -l normal (set_color normal)
+
+                # Combine update info and hint on same row
+                echo -n "  "
+                echo -n "$pastel_yellow" "updated "
+                echo -n "$pastel_orange" "$git_date"
+                echo -n "$pastel_pink" " · $git_timestamp"
+                echo -n "$pastel_cyan" "  │  launch: "
+                echo -n "$pastel_blue" "df"
+                echo -n "$pastel_magenta" " → dotfiles menu"
+                echo "$normal"
+            end
+        end
+    end
+
+    show_dotfiles_banner
+
     # Aliases
     alias pamcan pacman
     alias ls 'eza --icons'
@@ -84,6 +173,16 @@ if status is-interactive # Commands to run in interactive sessions can go here
     alias q 'qs -c ii'
     alias c clear
     alias dot 'cd ~/.config/dotfiles'
+    # Function to launch dotfiles menu (takes precedence over df -h alias)
+function df
+    if test (count $argv) -eq 0
+        # No arguments - show dotfiles menu
+        dotfiles
+    else
+        # Arguments passed - delegate to original df command
+        command df $argv
+    end
+end
     alias x exit
     alias rm 'rm -rf'
     alias p pnpm
@@ -92,13 +191,31 @@ if status is-interactive # Commands to run in interactive sessions can go here
     alias i 'bun install'
     alias t 'bun run tauri dev'
 
+    # Modern CLI tool aliases (only the useful ones)
+    alias find 'fd'  # Better find replacement
+    alias grep 'rg'  # Faster grep replacement
+    alias top 'bottom'  # Modern system monitor
+
+    # Quick navigation
+    alias .. 'cd ..'
+    alias ... 'cd ../..'
+    alias .... 'cd ../../..'
+
     # Cargo
     if test -f $HOME/.cargo/env
-        bass source $HOME/.cargo/env
+        # Extract PATH from cargo env and add to fish PATH
+        if grep -q "PATH=" $HOME/.cargo/env
+            set cargo_path (bash -c "source $HOME/.cargo/env && echo \$PATH")
+            set -gx PATH $cargo_path $PATH
+        end
     end
 
     # Local bin env
     if test -f $HOME/.local/bin/env
-        bass source $HOME/.local/bin/env
+        # Extract PATH from local bin env and add to fish PATH
+        if grep -q "PATH=" $HOME/.local/bin/env
+            set local_path (bash -c "source $HOME/.local/bin/env && echo \$PATH")
+            set -gx PATH $local_path $PATH
+        end
     end
 end

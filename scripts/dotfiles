@@ -1,1 +1,1071 @@
-/home/remco-stoeten/.config/dotfiles/.cli/simple-menu.ts
+#!/usr/bin/env bun
+
+import { readdirSync, statSync, lstatSync, existsSync, readFileSync, writeFileSync } from 'fs';
+import { join, basename, resolve, dirname, extname } from 'path';
+import { spawnSync, spawn } from 'child_process';
+import readline from 'readline';
+
+type TItemType = 'bin' | 'script' | 'alias' | 'function' | 'docker' | 'wezterm' | 'system' | 'dev';
+
+type TItem = {
+    id: string;
+    type: TItemType;
+    category: string;
+    name: string;
+    path?: string;
+    aliases?: string[];
+    target?: string;
+    doc?: string;
+    description?: string;
+    usageCount?: number;
+};
+
+type TConfig = {
+    layout: 'single' | 'double' | 'categories';
+    banner: 'classic' | 'modern' | 'none';
+    includeAliases: boolean;
+    includeFunctions: boolean;
+    groupAliases: boolean;
+    preferBinOverScripts: boolean;
+    fzfHeight: string;
+    showDescriptions: boolean;
+    enableCategories: boolean;
+    recentItems: string[];
+};
+
+type TExecResult = {
+    code: number;
+    stdout: string;
+    stderr: string;
+};
+
+const CATEGORIES = {
+    dev: { name: 'Development', icon: '💻', color: '\x1b[38;5;219m' },      // Pink
+    system: { name: 'System', icon: '⚙️', color: '\x1b[38;5;208m' },      // Peach
+    docker: { name: 'Docker', icon: '🐳', color: '\x1b[38;5;116m' },       // Teal
+    wezterm: { name: 'Wezterm', icon: '🖥️', color: '\x1b[38;5;147m' },      // Mauve
+    utility: { name: 'Utilities', icon: '🔧', color: '\x1b[38;5;183m' },    // Lavender
+    git: { name: 'Git', icon: '📦', color: '\x1b[38;5;166m' },            // Green
+    database: { name: 'Database', icon: '🗄️', color: '\x1b[38;5;203m' },    // Red
+    config: { name: 'Configuration', icon: '⚡', color: '\x1b[38;5;150m' }   // Sky
+};
+
+function loadConfig(dotfilesRoot: string): TConfig {
+    const cfgPath = join(dotfilesRoot, '.dotfiles-cli.json');
+    const defaults: TConfig = {
+        layout: 'categories',
+        banner: 'modern',
+        includeAliases: true,
+        includeFunctions: true,
+        groupAliases: true,
+        preferBinOverScripts: true,
+        fzfHeight: '90%',
+        showDescriptions: true,
+        enableCategories: true,
+        recentItems: []
+    };
+    if (!existsSync(cfgPath)) return defaults;
+    try {
+        const raw = readFileSync(cfgPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        return { ...defaults, ...parsed } as TConfig;
+    } catch {
+        return defaults;
+    }
+}
+
+function saveConfig(dotfilesRoot: string, cfg: TConfig) {
+    const cfgPath = join(dotfilesRoot, '.dotfiles-cli.json');
+    writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+}
+
+function clearScreen() {
+    process.stdout.write('\x1B[2J\x1B[0f');
+}
+
+function bannerModern(): string {
+    const c = colors();
+    return [
+    `${c.lavender}┌─────────────────────────────────────────────────────────────────────────────────┐${c.reset}`,
+    `${c.lavender}│${c.reset} ${c.bright}${c.pink}DOTFILES MANAGER${c.reset} ${c.dim}${c.lavender}v2.0${c.reset} ${c.lavender}│${c.reset}`,
+    `${c.lavender}│${c.reset} ${c.dim}${c.subtext0}Your personal toolkit for development, system, and configuration${c.reset} ${c.lavender}│${c.reset}`,
+    `${c.lavender}└─────────────────────────────────────────────────────────────────────────────────┘${c.reset}`,
+    '',
+    `${c.dim}${c.text}Welcome back!${c.reset} ${c.bright}${c.mauve}85+ tools${c.reset} ${c.dim}${c.subtext1}at your fingertips${c.reset}`,
+    `${c.dim}${c.subtext0}Use ${c.reset}${c.bright}${c.pink}↑↓${c.reset}${c.dim}${c.subtext0} to navigate, ${c.reset}${c.bright}${c.pink}Enter${c.reset}${c.dim}${c.subtext0} to execute, ${c.reset}${c.bright}${c.pink}Ctrl+C${c.reset}${c.dim}${c.subtext0} to exit${c.reset}`
+    ].join('\n');
+}
+
+function bannerClassic(): string {
+    return [
+        '    ██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗███████╗',
+        '    ██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝██╔════╝',
+        '    ██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗  ███████╗',
+        '    ██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝  ╚════██║',
+        '    ██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗███████║',
+        '    ╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝╚══════╝'
+    ].join('\n');
+}
+
+function showBanner(cfg: TConfig) {
+    if (cfg.banner === 'none') return;
+    console.log(cfg.banner === 'classic' ? bannerClassic() : bannerModern());
+    console.log('');
+}
+
+function isExecutable(mode: number): boolean {
+    return (mode & 0o111) !== 0;
+}
+
+function isDocFile(name: string): boolean {
+    return name.endsWith('.md') || name.endsWith('.txt') || name.endsWith('.json') ||
+           name.endsWith('.yml') || name.endsWith('.yaml') || name.includes('README') ||
+           name.includes('readme') || name === 'package-lock.json' || name === '.gitignore';
+}
+
+function uniqueId(parts: string[]): string {
+    return parts.join('::');
+}
+
+function getScriptDescription(filePath: string): string | undefined {
+    try {
+        const lines = readFileSync(filePath, 'utf8').split('\n').slice(0, 20);
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('#!/')) continue;
+            if (trimmed.startsWith('# DOCSTRING:')) {
+                return trimmed.replace('# DOCSTRING:', '').trim();
+            }
+            if (trimmed.startsWith('# ') && !trimmed.startsWith('#!')) {
+                return trimmed.replace('#', '').trim();
+            }
+            if (trimmed.startsWith('// ')) {
+                return trimmed.replace('//', '').trim();
+            }
+        }
+        return undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+function categorizeItem(name: string, path: string): { type: TItemType; category: string } {
+    if (path.includes('docker')) return { type: 'docker', category: 'docker' };
+    if (path.includes('wezterm')) return { type: 'wezterm', category: 'wezterm' };
+    if (name.includes('postgres') || name.includes('db') || name.includes('database')) return { type: 'script', category: 'database' };
+    if (name.includes('git') || name.includes('commit') || name.includes('push')) return { type: 'script', category: 'git' };
+    if (name.includes('bun') || name.includes('npm') || name.includes('node') || name.includes('dev')) return { type: 'script', category: 'dev' };
+    if (path.includes('bin')) return { type: 'bin', category: 'utility' };
+    return { type: 'script', category: 'system' };
+}
+
+function collectAllExecutables(dotfilesRoot: string, cfg: TConfig): TItem[] {
+    const items: TItem[] = [];
+    const byName = new Map<string, TItem>();
+
+    // Define search directories
+    const searchDirs = [
+        { path: join(dotfilesRoot, 'bin'), relPath: 'bin' },
+        { path: join(dotfilesRoot, 'scripts'), relPath: 'scripts' },
+        { path: join(dotfilesRoot, 'configs/wezterm/.config/wezterm'), relPath: 'wezterm' },
+        { path: join(dotfilesRoot, 'configs/fish'), relPath: 'fish' },
+        { path: join(dotfilesRoot, 'scripts/docker'), relPath: 'docker' }
+    ];
+
+    for (const { path: dir, relPath } of searchDirs) {
+        if (!existsSync(dir)) continue;
+
+        function scanDirectory(currentDir: string, depth = 0) {
+            if (depth > 3) return; // Prevent infinite recursion
+
+            let files: string[] = [];
+            try {
+                files = readdirSync(currentDir);
+            } catch {
+                return;
+            }
+
+            for (const file of files) {
+                if (isDocFile(file)) continue;
+                if (file.startsWith('.') && file !== 'env-manager') continue;
+                if (file === 'node_modules' || file === '__pycache__') continue;
+                if (file === 'simple-menu.ts' || file === 'dotfiles') continue;
+
+                const fullPath = join(currentDir, file);
+                try {
+                    const stats = lstatSync(fullPath);
+                    const name = basename(file);
+
+                    if (stats.isDirectory()) {
+                        scanDirectory(fullPath, depth + 1);
+                        continue;
+                    }
+
+                    if (stats.isFile() && isExecutable(stats.mode)) {
+                        const { type, category } = categorizeItem(name, fullPath);
+                        const description = getScriptDescription(fullPath);
+                        const candidate: TItem = {
+                            id: uniqueId([type, category, name, fullPath]),
+                            type,
+                            category,
+                            name,
+                            path: fullPath,
+                            description
+                        };
+
+                        const existing = byName.get(name);
+                        if (!existing) {
+                            byName.set(name, candidate);
+                        } else if (cfg.preferBinOverScripts && existing.type !== 'bin' && type === 'bin') {
+                            byName.set(name, candidate);
+                        }
+                    }
+                } catch {
+                    continue;
+                }
+            }
+        }
+
+        scanDirectory(dir);
+    }
+
+    for (const item of byName.values()) {
+        items.push(item);
+    }
+
+    items.sort((a, b) => {
+        if (a.category !== b.category) {
+            return a.category.localeCompare(b.category);
+        }
+        return a.name.localeCompare(b.name);
+    });
+
+    return items;
+}
+
+function readLines(path: string): string[] {
+    try {
+        const raw = readFileSync(path, 'utf8');
+        return raw.split(/\r?\n/);
+    } catch {
+        return [];
+    }
+}
+
+function collectFishAliasFiles(dotfilesRoot: string): string[] {
+    const paths: string[] = [];
+    const candidates = [
+        join(dotfilesRoot, 'configs', 'fish', 'aliases'),
+        join(dotfilesRoot, 'fish', 'aliases')
+    ];
+    for (const dir of candidates) {
+        if (!existsSync(dir)) continue;
+        let files: string[] = [];
+        try {
+            files = readdirSync(dir).filter(x => x.endsWith('.fish'));
+        } catch {
+            files = [];
+        }
+        for (const f of files) paths.push(join(dir, f));
+    }
+    return paths;
+}
+
+function collectFishFunctionFiles(dotfilesRoot: string): string[] {
+    const paths: string[] = [];
+    const candidates = [
+        join(dotfilesRoot, 'configs', 'fish', 'functions'),
+        join(dotfilesRoot, 'fish', 'functions')
+    ];
+    for (const dir of candidates) {
+        if (!existsSync(dir)) continue;
+        let files: string[] = [];
+        try {
+            files = readdirSync(dir).filter(x => x.endsWith('.fish'));
+        } catch {
+            files = [];
+        }
+        for (const f of files) paths.push(join(dir, f));
+    }
+    return paths;
+}
+
+function parseAliasLine(line: string): { name: string; target: string } | null {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('alias ')) return null;
+    const restRaw = trimmed.slice(6).trim();
+    const rest = restRaw.split('#')[0].trim();
+    if (rest.includes('=')) {
+        const name = rest.split('=')[0].trim();
+        const target = rest.split('=').slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
+        return { name, target };
+    }
+    const parts = rest.split(/\s+/);
+    if (parts.length >= 2) {
+        const name = parts[0];
+        const target = parts.slice(1).join(' ').trim().replace(/^['"]|['"]$/g, '');
+        return { name, target };
+    }
+    return null;
+}
+
+function detectFunctionTarget(body: string[]): string | undefined {
+    for (const ln of body) {
+        const t = ln.trim();
+        if (!t || t.startsWith('#')) continue;
+        if (t.startsWith('set ') || t.startsWith('if ') || t.startsWith('for ') || t.startsWith('switch ')) continue;
+        const tok = t.split(/\s+/)[0];
+        if (tok && !['function', 'end'].includes(tok)) return tok;
+    }
+    return undefined;
+}
+
+function isBuiltinFishTarget(cmd: string | undefined): boolean {
+    if (!cmd) return false;
+    const builtins = new Set([
+        'set', 'set_color', 'echo', 'printf', 'cd', 'case', 'eval', 'source', 'exec',
+        'end', 'read', 'string', 'math', 'if', 'for', 'while', 'switch', 'command'
+    ]);
+    return builtins.has(cmd);
+}
+
+function primaryToken(s: string | undefined): string | undefined {
+    if (!s) return undefined;
+    const t = s.trim().split(/\s+/)[0] || '';
+    return t || undefined;
+}
+
+function collectAliasesAndFunctions(dotfilesRoot: string, cfg: TConfig): TItem[] {
+    type TRow = { kind: 'alias' | 'function'; name: string; doc?: string; prog?: string };
+    const aliasRows: TRow[] = [];
+    const fnRows: TRow[] = [];
+
+    if (cfg.includeAliases) {
+        const aliasFiles = collectFishAliasFiles(dotfilesRoot);
+        for (const file of aliasFiles) {
+            const lines = readLines(file);
+            let currentDoc = '';
+            let inFn = false;
+            let fnName = '';
+            const body: string[] = [];
+            for (const line of lines) {
+                if (line.includes('# NO DOCSTRING:')) { currentDoc = ''; continue; }
+                if (line.includes('# DOCSTRING:')) { currentDoc = line.replace('# DOCSTRING:', '').trim(); continue; }
+                if (line.trim().startsWith('alias ')) {
+                    const parsed = parseAliasLine(line);
+                    if (!parsed) continue;
+                    const prog = primaryToken(parsed.target);
+                    aliasRows.push({ kind: 'alias', name: parsed.name, doc: currentDoc || undefined, prog });
+                    currentDoc = '';
+                    continue;
+                }
+                if (!inFn && line.trim().startsWith('function ')) {
+                    inFn = true;
+                    fnName = (line.trim().split(/\s+/)[1] || '').trim();
+                    body.length = 0;
+                    continue;
+                }
+                if (inFn && line.trim() === 'end') {
+                    const prog = primaryToken(detectFunctionTarget(body));
+                    const isInternal = fnName.startsWith('_') || fnName === 'fish_prompt';
+                    if (!isInternal) fnRows.push({ kind: 'function', name: fnName, doc: currentDoc || undefined, prog });
+                    inFn = false; fnName = ''; currentDoc = '';
+                    continue;
+                }
+                if (inFn) body.push(line);
+            }
+        }
+    }
+
+    if (cfg.includeFunctions) {
+        const fnFiles = collectFishFunctionFiles(dotfilesRoot);
+        for (const file of fnFiles) {
+            const lines = readLines(file);
+            let currentDoc = '';
+            let inFn = false;
+            let fnName = '';
+            const body: string[] = [];
+            for (const line of lines) {
+                if (line.includes('# NO DOCSTRING:')) { currentDoc = ''; continue; }
+                if (line.includes('# DOCSTRING:')) { currentDoc = line.replace('# DOCSTRING:', '').trim(); continue; }
+                if (!inFn && line.trim().startsWith('function ')) {
+                    inFn = true;
+                    fnName = (line.trim().split(/\s+/)[1] || '').trim();
+                    body.length = 0;
+                    continue;
+                }
+                if (inFn && line.trim() === 'end') {
+                    const prog = primaryToken(detectFunctionTarget(body));
+                    const isInternal = fnName.startsWith('_') || fnName === 'fish_prompt';
+                    if (!isInternal) fnRows.push({ kind: 'function', name: fnName, doc: currentDoc || undefined, prog });
+                    inFn = false; fnName = ''; currentDoc = '';
+                    continue;
+                }
+                if (inFn) body.push(line);
+            }
+        }
+    }
+
+    const items: TItem[] = [];
+
+    if (cfg.groupAliases) {
+        const byProg = new Map<string, { names: Set<string>; doc?: string }>();
+        function addToGroup(row: TRow) {
+            if (!row.prog || isBuiltinFishTarget(row.prog)) return;
+            if (row.prog.startsWith('_')) return;
+            if (row.prog.startsWith('$')) return;
+            const g = byProg.get(row.prog) || { names: new Set<string>(), doc: undefined };
+            g.names.add(row.name);
+            if (!g.doc && row.doc) g.doc = row.doc;
+            byProg.set(row.prog, g);
+        }
+        for (const r of aliasRows) addToGroup(r);
+        for (const r of fnRows) addToGroup(r);
+        function toItem(prog: string, g: { names: Set<string>; doc?: string }): TItem {
+            const names = Array.from(g.names).sort(function compare(a, b) { return a.localeCompare(b); });
+            const nameJoined = names.join(',');
+            let category = 'utility';
+            if (prog === 'git') category = 'git';
+            else if (['bun', 'npm', 'pnpm', 'node'].includes(prog)) category = 'dev';
+            else if (['sudo'].includes(prog)) category = 'system';
+
+            return { id: uniqueId(['alias-group', nameJoined, prog]), type: 'alias', category, name: nameJoined, target: prog, doc: g.doc };
+        }
+        for (const [prog, g] of byProg.entries()) items.push(toItem(prog, g));
+
+        for (const r of fnRows) {
+            if (!r.prog || isBuiltinFishTarget(r.prog)) {
+                items.push({ id: uniqueId(['function', r.name]), type: 'function', category: 'utility', name: r.name, doc: r.doc });
+            }
+        }
+        for (const r of aliasRows) {
+            if (!r.prog || isBuiltinFishTarget(r.prog)) {
+                items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: 'utility', name: r.name, doc: r.doc });
+            }
+        }
+    } else {
+        for (const r of aliasRows) {
+            items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: 'utility', name: r.name, target: r.prog, doc: r.doc });
+        }
+        for (const r of fnRows) {
+            items.push({ id: uniqueId(['function', r.name]), type: 'function', category: 'utility', name: r.name, target: r.prog, doc: r.doc });
+        }
+    }
+
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    return items;
+}
+
+function tryRunHelp(pathOrCmd: string): string {
+    if (pathOrCmd.endsWith('.ts') || pathOrCmd.endsWith('.py')) return '';
+    const candidates = [['--help'], ['-h'], ['help']];
+    for (const args of candidates) {
+        try {
+            const res = spawnSync(pathOrCmd, args, { encoding: 'utf8', shell: false, timeout: 1200, stdio: ['ignore', 'pipe', 'ignore'] });
+            if (typeof res.status === 'number' && res.status >= 0) {
+                const out = `${res.stdout || ''}`.trim();
+                if (out && !out.includes('Syntax error')) return out.slice(0, 4000);
+            }
+        } catch {
+            continue;
+        }
+    }
+    return '';
+}
+
+function formatLabel(item: TItem, cfg: TConfig): string {
+    const category = CATEGORIES[item.category] || CATEGORIES.utility;
+    let label = '';
+
+    if (cfg.enableCategories && cfg.layout === 'categories') {
+        label = `${category.icon} ${item.name}`;
+    } else {
+        if (item.type === 'alias') {
+            label = `[alias] ${item.name}`;
+            if (item.target) label += ` → ${item.target}`;
+        } else if (item.type === 'function') {
+            label = `[fn] ${item.name}`;
+        } else if (item.type === 'bin') {
+            label = `[bin] ${item.name}`;
+        } else {
+            label = `[${item.category}] ${item.name}`;
+        }
+    }
+
+    return label;
+}
+
+function formatLabelColored(item: TItem, cfg: TConfig): string {
+    const c = colors();
+    const category = CATEGORIES[item.category] || CATEGORIES.utility;
+
+    let label = '';
+    if (cfg.enableCategories && cfg.layout === 'categories') {
+        const icon = category.color + category.icon + c.reset;
+        const name = c.bright + c.text + item.name + c.reset;
+        label = `${icon} ${name}`;
+    } else {
+        if (item.type === 'alias') {
+            const badge = c.sky + '[alias]' + c.reset;
+            const name = c.bright + c.text + item.name + c.reset;
+            if (item.target) {
+                label = `${badge} ${name} ${c.dim}${c.subtext0}→${c.reset} ${c.mauve}${item.target}${c.reset}`;
+            } else {
+                label = `${badge} ${name}`;
+            }
+        } else if (item.type === 'function') {
+            label = `${c.pink}[fn]${c.reset} ${c.bright}${c.text}${item.name}${c.reset}`;
+        } else if (item.type === 'bin') {
+            label = `${c.green}[bin]${c.reset} ${c.bright}${c.text}${item.name}${c.reset}`;
+        } else {
+            const categoryInfo = CATEGORIES[item.category] || CATEGORIES.utility;
+            label = `${categoryInfo.color}[${item.category}]${c.reset} ${c.bright}${c.text}${item.name}${c.reset}`;
+        }
+    }
+
+    if (cfg.showDescriptions && item.description) {
+        label += ` ${c.dim}${c.subtext1}- ${item.description}${c.reset}`;
+    }
+
+    return label;
+}
+
+function encodePayload(item: TItem): string {
+    const json = JSON.stringify(item);
+    const b64 = Buffer.from(json, 'utf8').toString('base64');
+    return b64;
+}
+
+function decodePayload(b64: string): TItem | null {
+    try {
+        const json = Buffer.from(b64, 'base64').toString('utf8');
+        return JSON.parse(json) as TItem;
+    } catch {
+        return null;
+    }
+}
+
+function haveFzf(): boolean {
+    try {
+        const res = spawnSync('fzf', ['--version'], { encoding: 'utf8' });
+        return typeof res.status === 'number' && res.status === 0;
+    } catch {
+        return false;
+    }
+}
+
+function buildFzfInput(items: TItem[], cfg: TConfig): string {
+    const lines: string[] = [];
+    const c = colors();
+
+    // Group by category for better organization
+    const byCategory = new Map<string, TItem[]>();
+    for (const item of items) {
+        const categoryItems = byCategory.get(item.category) || [];
+        categoryItems.push(item);
+        byCategory.set(item.category, categoryItems);
+    }
+
+    for (const [category, categoryItems] of byCategory.entries()) {
+        const categoryInfo = CATEGORIES[category] || CATEGORIES.utility;
+        lines.push(`${categoryInfo.color}${categoryInfo.icon} ${categoryInfo.name.toUpperCase()} (${categoryItems.length})${c.reset}`);
+        for (const item of categoryItems) {
+            const label = `${categoryInfo.icon} ${item.name}`;
+            lines.push(`  ${label}`);
+        }
+        lines.push(''); // Empty line between categories
+    }
+
+    return lines.join('\n');
+}
+
+function runFzf(dotfilesRoot: string, cfg: TConfig, items: TItem[]): Promise<TItem | null> {
+    return new Promise<TItem | null>((resolveSel) => {
+        const input = buildFzfInput(items, cfg);
+
+        try {
+            // Use echo and pipe to fzf instead of stdin
+            const child = spawn('bash', ['-c', `echo '${input.replace(/'/g, "'\"'\"'")}' | fzf --ansi --height 50% --reverse --prompt "> " --header "🚀 DOTFILES MANAGER - Enter: Execute | Ctrl+C: Exit"`], {
+                stdio: 'pipe',
+                env: { ...process.env, TERM: 'xterm-256color' }
+            });
+
+            let sel = '';
+
+            child.stdout.on('data', (chunk: Buffer) => {
+                sel += chunk.toString('utf8');
+            });
+
+            child.stderr.on('data', (data) => {
+                // Ignore stderr for now
+            });
+
+            child.on('exit', (code: number | null) => {
+                const selection = sel.trim();
+                if (!selection || code !== 0) {
+                    return resolveSel(null);
+                }
+
+                // Remove color codes and clean up the selection
+                const cleanSelection = selection.replace(/\x1b\[[0-9;]*m/g, '').trim();
+
+                // Find the matching item by name (ignore leading spaces and category headers)
+                const selectedItem = items.find(item => {
+                    const cleanName = item.name;
+                    return cleanSelection === cleanName || cleanSelection === `  ${cleanName}`;
+                });
+
+                resolveSel(selectedItem || null);
+            });
+
+            child.on('error', (error) => {
+                console.error('Failed to run fzf:', error.message);
+                resolveSel(null);
+            });
+
+        } catch (error) {
+            console.error('Error:', error);
+            resolveSel(null);
+        }
+    });
+}
+
+function showPreview(item: TItem): string {
+    const c = colors();
+    let output = [];
+
+    if (item.type === 'alias') {
+        output.push(`${c.bright}${c.sky}Alias${c.reset}`);
+        if (item.doc) output.push(`${c.dim}${c.subtext0}${item.doc}${c.reset}`);
+        if (item.target) output.push(`${c.mauve}Target: ${c.text}${item.target}${c.reset}`);
+        output.push(`${c.peach}Usage: ${c.text}${item.name.split(',')[0]}${c.reset}`);
+    } else if (item.type === 'function') {
+        output.push(`${c.bright}${c.pink}Function${c.reset}`);
+        if (item.doc) output.push(`${c.dim}${c.subtext0}${item.doc}${c.reset}`);
+        output.push(`${c.peach}Usage: ${c.text}${item.name}${c.reset}`);
+    } else {
+        const categoryInfo = CATEGORIES[item.category] || CATEGORIES.utility;
+        output.push(`${categoryInfo.color}${categoryInfo.name} - ${c.text}${item.type}${c.reset}`);
+        if (item.description) output.push(`${c.dim}${c.subtext1}${item.description}${c.reset}`);
+        if (item.path) output.push(`${c.mauve}Path: ${c.text}${item.path}${c.reset}`);
+
+        const help = tryRunHelp(item.path || item.name);
+        if (help) {
+            output.push('');
+            output.push(`${c.bright}${c.lavender}Help:${c.reset}`);
+            const lines = help.split('\n').slice(0, 15);
+            output.push(lines.map(line => `${c.dim}${c.subtext0}${line}${c.reset}`).join('\n'));
+        }
+    }
+
+    return output.join('\n');
+}
+
+function runItem(item: TItem): Promise<number> {
+    return new Promise<number>((resolveCode) => {
+        if (item.type === 'alias' || item.type === 'function') {
+            const primary = item.name.split(',')[0];
+            const cmd = `fish -c ${JSON.stringify(primary)}`;
+            const child = spawn(cmd, { stdio: 'inherit', shell: true } as any);
+            child.on('exit', function onExit(code) { resolveCode((code as number) || 0); });
+            return;
+        }
+        const cmd = item.path || item.name;
+        const child = spawn(cmd, [], { stdio: 'inherit', shell: true });
+        child.on('exit', (code) => resolveCode(code || 0));
+    });
+}
+
+type TColor = {
+    reset: string;
+    bright: string;
+    dim: string;
+    cyan: string;
+    blue: string;
+    green: string;
+    yellow: string;
+    magenta: string;
+    red: string;
+    gray: string;
+};
+
+function colors(): TColor {
+    return {
+        reset: '\x1b[0m',
+        bright: '\x1b[1m',
+        dim: '\x1b[2m',
+        // Catppuccin Mocha colors
+        cyan: '\x1b[38;5;116m',    // Teal
+        blue: '\x1b[38;5;137m',    // Mauve
+        green: '\x1b[38;5;166m',   // Peach
+        yellow: '\x1b[38;5;231m',  // Text
+        magenta: '\x1b[38;5;219m', // Pink
+        red: '\x1b[38;5;203m',     // Red
+        gray: '\x1b[38;5;147m',    // Lavender
+        // Additional Catppuccin colors
+        rosewater: '\x1b[38;5;226m',
+        flamingo: '\x1b[38;5;217m',
+        pink: '\x1b[38;5;219m',
+        mauve: '\x1b[38;5;147m',
+        red2: '\x1b[38;5;203m',
+        maroon: '\x1b[38;5;167m',
+        peach: '\x1b[38;5;208m',
+        yellow2: '\x1b[38;5;229m',
+        green2: '\x1b[38;5;166m',
+        teal: '\x1b[38;5;150m',
+        sky: '\x1b[38;5;116m',
+        sapphire: '\x1b[38;5;125m',
+        blue2: '\x1b[38;5;137m',
+        lavender: '\x1b[38;5;183m',
+        text: '\x1b[38;5;231m',
+        subtext1: '\x1b[38;5;224m',
+        subtext0: '\x1b[38;5;217m',
+        overlay2: '\x1b[38;5;210m',
+        overlay1: '\x1b[38;5;203m',
+        overlay0: '\x1b[38;5;196m',
+        surface2: '\x1b[38;5;189m',
+        surface1: '\x1b[38;5;182m',
+        surface0: '\x1b[38;5;175m',
+        base: '\x1b[38;5;168m',
+        mantle: '\x1b[38;5;161m',
+        crust: '\x1b[38;5;154m'
+    } as TColor & { [key: string]: string };
+}
+
+function printUsage() {
+    const c = colors();
+    console.log('');
+    console.log(`${c.lavender}┌─────────────────────────────────────────────────────────────────┐${c.reset}`);
+    console.log(`${c.lavender}│${c.reset}  ${c.bright}${c.pink}DOTFILES CLI v2.0${c.reset} ${c.dim}${c.lavender}- Interactive Command Center${c.reset}  ${c.lavender}│${c.reset}`);
+    console.log(`${c.lavender}└─────────────────────────────────────────────────────────────────┘${c.reset}`);
+    console.log('');
+    console.log(`${c.bright}${c.peach}USAGE${c.reset}`);
+    console.log(`  ${c.green}dotfiles${c.reset} ${c.dim}${c.subtext0}# Launch interactive menu (default)${c.reset}`);
+    console.log(`  ${c.green}dotfiles${c.reset} ${c.dim}${c.subtext0}[command]${c.reset} ${c.sky}[options]${c.reset}`);
+    console.log('');
+    console.log(`${c.bright}${c.peach}COMMANDS${c.reset}`);
+    console.log(`  ${c.bright}${c.mauve}interactive${c.reset}, ${c.mauve}i${c.reset}        Launch enhanced interactive menu`);
+    console.log(`  ${c.bright}${c.mauve}list${c.reset}                  List all available tools by category`);
+    console.log(`  ${c.bright}${c.mauve}search${c.reset} ${c.sky}<term>${c.reset}         Search for tools matching ${c.sky}<term>${c.reset}`);
+    console.log(`  ${c.bright}${c.mauve}run${c.reset} ${c.sky}<name>${c.reset}            Execute tool by ${c.sky}<name>${c.reset}`);
+    console.log(`  ${c.bright}${c.mauve}help${c.reset} ${c.sky}<name>${c.reset}           Show help for ${c.sky}<name>${c.reset}`);
+    console.log(`  ${c.bright}${c.mauve}categories${c.reset}           Show all available categories`);
+    console.log(`  ${c.bright}${c.mauve}config${c.reset} ${c.sky}show${c.reset}           Display current configuration`);
+    console.log(`  ${c.bright}${c.mauve}config set${c.reset} ${c.sky}<key> <val>${c.reset} Update config ${c.sky}<key>${c.reset} to ${c.sky}<val>${c.reset}`);
+    console.log('');
+    console.log(`${c.bright}${c.peach}CONFIG OPTIONS${c.reset}`);
+    console.log(`  ${c.sky}layout${c.reset}         single, double, categories`);
+    console.log(`  ${c.sky}banner${c.reset}         classic, modern, none`);
+    console.log(`  ${c.sky}enableCategories${c.reset} true, false`);
+    console.log(`  ${c.sky}showDescriptions${c.reset} true, false`);
+    console.log('');
+    console.log(`${c.dim}${c.subtext0}Just type ${c.bright}${c.pink}dotfiles${c.reset}${c.dim}${c.subtext0} to launch the interactive interface!${c.reset}`);
+    console.log('');
+}
+
+function buildIndex(dotfilesRoot: string, cfg: TConfig): TItem[] {
+    const execs = collectAllExecutables(dotfilesRoot, cfg);
+    const aliasFn = collectAliasesAndFunctions(dotfilesRoot, cfg);
+    const all = [...execs, ...aliasFn];
+
+    // Sort by category first, then by name
+    all.sort((a, b) => {
+        if (a.category !== b.category) {
+            return a.category.localeCompare(b.category);
+        }
+        return a.name.localeCompare(b.name);
+    });
+
+    return all;
+}
+
+function printCategories(items: TItem[]) {
+    const c = colors();
+    const byCategory = new Map<string, TItem[]>();
+
+    for (const item of items) {
+        const categoryItems = byCategory.get(item.category) || [];
+        categoryItems.push(item);
+        byCategory.set(item.category, categoryItems);
+    }
+
+    console.log('');
+    console.log(`${c.bright}${c.cyan}Available Categories:${c.reset}`);
+    console.log('');
+
+    for (const [category, categoryItems] of byCategory.entries()) {
+        const categoryInfo = CATEGORIES[category] || CATEGORIES.utility;
+        console.log(`  ${categoryInfo.color}${categoryInfo.icon} ${categoryInfo.name}${c.reset} ${c.dim}(${categoryItems.length} tools)${c.reset}`);
+    }
+    console.log('');
+}
+
+async function main() {
+    const dotfilesRoot = join(process.env.HOME!, '.config', 'dotfiles');
+    const cfg = loadConfig(dotfilesRoot);
+    const args = process.argv.slice(2);
+
+    if (args.length === 0) {
+        // Default to interactive mode when no arguments provided
+        args.push('interactive');
+    }
+
+    if (args[0] === 'interactive' || args[0] === 'i') {
+        const items = buildIndex(dotfilesRoot, cfg);
+        if (haveFzf()) {
+            const sel = await runFzf(dotfilesRoot, cfg, items);
+            if (sel) {
+                // Update recent items
+                const recentItems = cfg.recentItems || [];
+                const newRecent = [sel.id, ...recentItems.filter(id => id !== sel.id)].slice(0, 10);
+                saveConfig(dotfilesRoot, { ...cfg, recentItems: newRecent });
+
+                const code = await runItem(sel);
+                process.exit(code);
+            }
+            process.exit(0);
+        } else {
+            console.log('fzf not found. Please install fzf for interactive mode.');
+            process.exit(1);
+        }
+    }
+
+    if (args[0] === '--help' || args[0] === '-h') {
+        printUsage();
+        process.exit(0);
+    }
+
+    if (args[0] === '__preview') {
+        const encodedIdx = args.indexOf('--encoded');
+        if (encodedIdx >= 0 && args[encodedIdx + 1]) {
+            const item = decodePayload(args[encodedIdx + 1]);
+            if (item) {
+                const out = showPreview(item);
+                console.log(out);
+                process.exit(0);
+            }
+        }
+        process.exit(1);
+    }
+
+    if (args[0] === 'list') {
+        const c = colors();
+        const items = buildIndex(dotfilesRoot, cfg);
+
+        if (cfg.layout === 'categories') {
+            const byCategory = new Map<string, TItem[]>();
+            for (const item of items) {
+                const categoryItems = byCategory.get(item.category) || [];
+                categoryItems.push(item);
+                byCategory.set(item.category, categoryItems);
+            }
+
+            console.log('');
+            console.log(`${c.bright}${c.cyan}All Available Tools:${c.reset} ${c.dim}(${items.length} total)${c.reset}`);
+            console.log('');
+
+            for (const [category, categoryItems] of byCategory.entries()) {
+                const categoryInfo = CATEGORIES[category] || CATEGORIES.utility;
+                console.log(`${categoryInfo.color}${categoryInfo.icon} ${categoryInfo.name.toUpperCase()}${c.reset}`);
+                for (const item of categoryItems) {
+                    console.log(`  ${formatLabelColored(item, cfg)}`);
+                }
+                console.log('');
+            }
+        } else {
+            console.log('');
+            console.log(`${c.bright}${c.cyan}All Available Tools:${c.reset} ${c.dim}(${items.length} total)${c.reset}`);
+            console.log('');
+            for (const item of items) {
+                console.log(`  ${formatLabelColored(item, cfg)}`);
+            }
+            console.log('');
+        }
+        process.exit(0);
+    }
+
+    if (args[0] === 'categories') {
+        const items = buildIndex(dotfilesRoot, cfg);
+        printCategories(items);
+        process.exit(0);
+    }
+
+    if (args[0] === 'search') {
+        const c = colors();
+        const q = args.slice(1).join(' ').toLowerCase();
+        if (!q) {
+            console.log(`${c.red}Error: Search term required${c.reset}`);
+            console.log(`Usage: dotfiles search <term>`);
+            process.exit(1);
+        }
+
+        const all = buildIndex(dotfilesRoot, cfg);
+        function match(it: TItem): boolean {
+            const searchText = `${it.name} ${it.description || ''} ${it.category}`.toLowerCase();
+            return searchText.includes(q);
+        }
+
+        const items = all.filter(match);
+        console.log('');
+        console.log(`${c.bright}${c.cyan}Search Results for "${c.yellow}${q}${c.cyan}":${c.reset} ${c.dim}(${items.length} found)${c.reset}`);
+        console.log('');
+
+        if (items.length === 0) {
+            console.log(`  ${c.dim}No items found matching "${q}"${c.reset}`);
+        } else {
+            for (const item of items) {
+                console.log(`  ${formatLabelColored(item, cfg)}`);
+            }
+        }
+        console.log('');
+        process.exit(0);
+    }
+
+    if (args[0] === 'help') {
+        const c = colors();
+        const name = args.slice(1).join(' ');
+        if (!name) {
+            printUsage();
+            process.exit(0);
+        }
+
+        const items = buildIndex(dotfilesRoot, cfg);
+        function matches(it: TItem): boolean {
+            const parts = it.name.split(',');
+            for (let i = 0; i < parts.length; i++) if (parts[i] === name) return true;
+            return it.name === name;
+        }
+
+        const found = items.find(matches);
+        if (!found) {
+            console.log('');
+            console.log(`${c.red}✗${c.reset} ${c.bright}Not found:${c.reset} ${name}`);
+            console.log('');
+            process.exit(1);
+        }
+
+        console.log('');
+        console.log(`${c.bright}${c.cyan}Help for:${c.reset} ${formatLabelColored(found, cfg)}`);
+        console.log('');
+        const preview = showPreview(found);
+        if (preview) {
+            console.log(preview);
+        } else {
+            console.log(`${c.dim}No help available for this item${c.reset}`);
+        }
+        console.log('');
+        process.exit(0);
+    }
+
+    if (args[0] === 'run') {
+        const encodedIdx = args.indexOf('--encoded');
+        if (encodedIdx >= 0 && args[encodedIdx + 1]) {
+            const item = decodePayload(args[encodedIdx + 1]);
+            if (item) {
+                const code = await runItem(item);
+                process.exit(code);
+            }
+            process.exit(1);
+        }
+
+        const name = args.slice(1).join(' ');
+        if (!name) {
+            printUsage();
+            process.exit(1);
+        }
+
+        const items = buildIndex(dotfilesRoot, cfg);
+        function matches(it: TItem): boolean {
+            const parts = it.name.split(',');
+            for (let i = 0; i < parts.length; i++) if (parts[i] === name) return true;
+            return it.name === name;
+        }
+
+        const found = items.find(matches);
+        if (!found) {
+            const c = colors();
+            console.log('');
+            console.log(`${c.red}✗${c.reset} ${c.bright}Not found:${c.reset} ${name}`);
+            console.log('');
+            process.exit(1);
+        }
+
+        const code = await runItem(found);
+        process.exit(code);
+    }
+
+    if (args[0] === 'config') {
+        if (args[1] === 'show') {
+            console.log(JSON.stringify(cfg, null, 2));
+            process.exit(0);
+        }
+
+        if (args[1] === 'set') {
+            const c = colors();
+            const key = args[2];
+            const value = args[3];
+            if (!key || !value) {
+                console.log(`${c.red}Error: Both key and value required${c.reset}`);
+                console.log(`Usage: dotfiles config set <key> <value>`);
+                process.exit(1);
+            }
+
+            const next = { ...cfg } as any;
+            let v: any = value;
+            if (value === 'true') v = true;
+            else if (value === 'false') v = false;
+            else if (!isNaN(Number(value))) v = Number(value);
+
+            next[key] = v;
+            saveConfig(dotfilesRoot, next as TConfig);
+            console.log('');
+            console.log(`${c.green}✓${c.reset} ${c.bright}Config updated:${c.reset} ${c.cyan}${key}${c.reset} = ${c.yellow}${v}${c.reset}`);
+            console.log('');
+            process.exit(0);
+        }
+
+        if (args[1] === 'banner') {
+            const c = colors();
+            const v = args[2] as TConfig['banner'];
+            if (!v || !['classic', 'modern', 'none'].includes(v)) {
+                console.log(`${c.red}Error: Invalid banner option${c.reset}`);
+                console.log(`Options: classic, modern, none`);
+                process.exit(1);
+            }
+            const next = { ...cfg, banner: v };
+            saveConfig(dotfilesRoot, next);
+            console.log('');
+            console.log(`${c.green}✓${c.reset} ${c.bright}Banner updated:${c.reset} ${c.yellow}${v}${c.reset}`);
+            console.log('');
+            process.exit(0);
+        }
+
+        if (args[1] === 'layout') {
+            const c = colors();
+            const v = args[2] as TConfig['layout'];
+            if (!v || !['single', 'double', 'categories'].includes(v)) {
+                console.log(`${c.red}Error: Invalid layout option${c.reset}`);
+                console.log(`Options: single, double, categories`);
+                process.exit(1);
+            }
+            const next = { ...cfg, layout: v };
+            saveConfig(dotfilesRoot, next);
+            console.log('');
+            console.log(`${c.green}✓${c.reset} ${c.bright}Layout updated:${c.reset} ${c.yellow}${v}${c.reset}`);
+            console.log('');
+            process.exit(0);
+        }
+
+        printUsage();
+        process.exit(1);
+    }
+
+    printUsage();
+    process.exit(1);
+}
+
+main().catch(function onErr(err) {
+    console.error('Error:', err);
+    process.exit(1);
+});
