@@ -1,0 +1,235 @@
+#!/usr/bin/env node
+
+/**
+ * UI Import Transformer
+ *
+ * This script transforms individual component imports from @/components/ui
+ * into a single barrel import. It processes files and converts patterns like:
+ *
+ * import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+ * import { Button } from "@/components/ui/button";
+ *
+ * Into:
+ *
+ * import {
+ *     Avatar,
+ *     AvatarFallback,
+ *     AvatarImage,
+ *     Button,
+ * } from "@/components/ui";
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+// ANSI color codes for better output
+const colors = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+};
+
+function colorize(text, color) {
+  return `${color}${text}${colors.reset}`;
+}
+
+function printUsage() {
+  console.log(colorize('UI Import Transformer', colors.bright + colors.cyan));
+  console.log('');
+  console.log('Usage:');
+  console.log('  ui-import-transformer <file|directory> [options]');
+  console.log('');
+  console.log('Options:');
+  console.log('  --dry-run     Show changes without modifying files');
+  console.log('  --recursive   Process all files in directory recursively');
+  console.log('  --backup      Create backup files before modification');
+  console.log('  --help        Show this help message');
+  console.log('');
+  console.log('Examples:');
+  console.log('  ui-import-transformer src/components/UserCard.tsx');
+  console.log('  ui-import-transformer src/components --recursive');
+  console.log('  ui-import-transformer src/components --recursive --dry-run');
+}
+
+function parseArgs() {
+  const args = process.argv.slice(2);
+
+  if (args.includes('--help') || args.includes('-h')) {
+    printUsage();
+    process.exit(0);
+  }
+
+  return {
+    target: args[0],
+    dryRun: args.includes('--dry-run'),
+    recursive: args.includes('--recursive'),
+    backup: args.includes('--backup'),
+  };
+}
+
+function findFiles(dir, recursive = false) {
+  const files = [];
+
+  if (!fs.existsSync(dir)) {
+    console.error(colorize(`Error: Directory "${dir}" does not exist`, colors.red));
+    return files;
+  }
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+
+    if (entry.isFile() && /\.(tsx?|jsx?)$/.test(entry.name)) {
+      files.push(fullPath);
+    } else if (entry.isDirectory() && recursive) {
+      files.push(...findFiles(fullPath, recursive));
+    }
+  }
+
+  return files;
+}
+
+function transformImports(content) {
+  // Pattern to match individual UI component imports
+  const uiImportRegex = /import\s*\{([^}]+)\}\s*from\s*["']@\/components\/ui\/[^"']+["'];?\s*/g;
+
+  const components = new Set();
+  let transformedContent = content;
+  let match;
+
+  // Extract all UI component imports
+  while ((match = uiImportRegex.exec(content)) !== null) {
+    const componentList = match[1];
+    const componentsInImport = componentList
+      .split(',')
+      .map(comp => comp.trim())
+      .filter(comp => comp.length > 0);
+
+    componentsInImport.forEach(comp => components.add(comp));
+
+    // Remove the original import statement
+    transformedContent = transformedContent.replace(match[0], '');
+  }
+
+  if (components.size === 0) {
+    return { content: transformedContent, transformed: false };
+  }
+
+  // Sort components alphabetically
+  const sortedComponents = Array.from(components).sort();
+
+  // Create the new barrel import
+  const barrelImport = `import {\n${sortedComponents.map(comp => `    ${comp}`).join(',\n')},\n} from "@/components/ui";\n\n`;
+
+  // Insert the barrel import after "use client"; if it exists, or at the beginning
+  const useClientMatch = transformedContent.match(/^\s*["']use client["'];?\s*\n/);
+
+  if (useClientMatch) {
+    transformedContent = transformedContent.replace(
+      useClientMatch[0],
+      useClientMatch[0] + barrelImport
+    );
+  } else {
+    transformedContent = barrelImport + transformedContent;
+  }
+
+  return {
+    content: transformedContent,
+    transformed: true,
+    components: sortedComponents
+  };
+}
+
+function processFile(filePath, options) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const { content: transformedContent, transformed, components } = transformImports(content);
+
+    if (!transformed) {
+      console.log(colorize(`ℹ  No UI imports to transform in ${filePath}`, colors.yellow));
+      return false;
+    }
+
+    console.log(colorize(`🔄 Transforming ${filePath}`, colors.blue));
+    console.log(colorize(`   Components: ${components.join(', ')}`, colors.cyan));
+
+    if (options.dryRun) {
+      console.log(colorize(`   [DRY RUN] Would modify file`, colors.yellow));
+      console.log('---');
+      console.log(transformedContent);
+      console.log('---');
+    } else {
+      if (options.backup) {
+        const backupPath = `${filePath}.backup.${Date.now()}`;
+        fs.writeFileSync(backupPath, content);
+        console.log(colorize(`   Created backup: ${backupPath}`, colors.green));
+      }
+
+      fs.writeFileSync(filePath, transformedContent);
+      console.log(colorize(`   ✓ File transformed successfully`, colors.green));
+    }
+
+    return true;
+
+  } catch (error) {
+    console.error(colorize(`Error processing ${filePath}: ${error.message}`, colors.red));
+    return false;
+  }
+}
+
+function main() {
+  const args = parseArgs();
+
+  if (!args.target) {
+    console.error(colorize('Error: Please specify a file or directory', colors.red));
+    printUsage();
+    process.exit(1);
+  }
+
+  console.log(colorize('🚀 UI Import Transformer', colors.bright + colors.magenta));
+  console.log(`Target: ${args.target}`);
+  console.log(`Options: Dry run: ${args.dryRun}, Recursive: ${args.recursive}, Backup: ${args.backup}`);
+  console.log('');
+
+  let filesToProcess = [];
+  let transformedCount = 0;
+
+  if (fs.statSync(args.target).isFile()) {
+    filesToProcess = [args.target];
+  } else {
+    filesToProcess = findFiles(args.target, args.recursive);
+    console.log(colorize(`Found ${filesToProcess.length} TypeScript/JavaScript files`, colors.blue));
+  }
+
+  if (filesToProcess.length === 0) {
+    console.log(colorize('No files to process', colors.yellow));
+    return;
+  }
+
+  for (const file of filesToProcess) {
+    if (processFile(file, args)) {
+      transformedCount++;
+    }
+  }
+
+  console.log('');
+  console.log(colorize(`✨ Transformation complete!`, colors.bright + colors.green));
+  console.log(`Files processed: ${filesToProcess.length}`);
+  console.log(`Files transformed: ${transformedCount}`);
+
+  if (args.dryRun) {
+    console.log(colorize('This was a dry run. No files were actually modified.', colors.yellow));
+  }
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = { transformImports, processFile };

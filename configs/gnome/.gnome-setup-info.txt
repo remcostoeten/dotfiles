@@ -1,0 +1,62 @@
+╔════════════════════════════════════════════════════════════╗
+║                                                            ║
+║        🎨 GNOME Aesthetic Setup - Installation Info       ║
+║                                                            ║
+╚════════════════════════════════════════════════════════════╝
+
+📁 Location: ~/.config/dotfiles/configs/gnome/
+
+🚀 Quick Start:
+   ./setup-aesthetic-gnome.sh
+   
+   OR from anywhere:
+   gnome-aesthetic
+
+📚 Documentation:
+   - Full Guide: ./README.md
+   - Quick Ref:  ./QUICK-REFERENCE.md
+
+🎯 What You Get:
+   ✓ Transparent, blurred top panel
+   ✓ Beautiful window effects
+   ✓ Custom GTK theming
+   ✓ Aesthetic lock screen
+   ✓ Smooth animations
+   ✓ Hyprland-inspired look
+
+⚡ Quick Commands (Fish shell):
+   gnome-aesthetic       # Run full setup
+   gnome-apply          # Apply settings
+   gnome-gtk            # Apply GTK themes
+   gnome-lock           # Configure lock screen
+   gnome-blur 30        # Adjust blur strength
+   gnome-transparency 0.6  # Adjust transparency
+   gnome-dark           # Toggle dark mode
+   gnome-wallpaper ~/pic.jpg  # Set wallpaper
+   gnome-help           # View documentation
+   gnome-restart        # Restart GNOME Shell
+
+🎨 Customization Tips:
+   1. Extensions: gnome-extensions prefs <name>
+   2. GTK CSS: ~/.config/gtk-3.0/gtk.css
+   3. Blur settings: Use gnome-blur command
+   4. Transparency: Use gnome-transparency command
+
+🐛 Troubleshooting:
+   - Panel not transparent? Run: gnome-apply
+   - Extensions not working? Log out and back in
+   - GTK not styled? Run: gnome-gtk
+   - Need to reset? See README.md uninstall section
+
+💡 Pro Tips:
+   • Use dark wallpapers for best effect
+   • Install Inter font for crisp text
+   • Lower blur if experiencing lag
+   • Backup settings before major changes
+
+🔗 More Info:
+   https://extensions.gnome.org
+   ~/.config/dotfiles/configs/gnome/README.md
+
+Created: $(date)
+

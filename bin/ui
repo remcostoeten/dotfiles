@@ -1,14 +1,103 @@
 #!/usr/bin/env bash
 
 # UI Toolkit Wrapper Script
-# Forwards all arguments to the Python implementation
+# Handles both Python toolkit and import transformer functionality
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_SCRIPT="$SCRIPT_DIR/../scripts/ui-toolkit.py"
+IMPORT_TRANSFORMER="$SCRIPT_DIR/ui-import-transformer"
 
-if [ ! -f "$PYTHON_SCRIPT" ]; then
-    echo "❌ Error: ui-toolkit.py not found at: $PYTHON_SCRIPT"
-    exit 1
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+show_help() {
+    echo -e "${BOLD}${CYAN}UI Toolkit${NC}"
+    echo ""
+    echo "Usage: ui [command] [options]"
+    echo ""
+    echo "Commands:"
+    echo "  transform <file|dir>    Transform UI imports to barrel imports"
+    echo "  toolkit [args...]       Use the Python UI toolkit"
+    echo "  help                    Show this help message"
+    echo ""
+    echo "Transform Options:"
+    echo "  --dry-run              Show changes without modifying files"
+    echo "  --recursive            Process all files in directory recursively"
+    echo "  --backup               Create backup files before modification"
+    echo ""
+    echo "Examples:"
+    echo "  ui transform src/components/UserCard.tsx"
+    echo "  ui transform src/components --recursive --dry-run"
+    echo "  ui toolkit --help"
+    echo ""
+}
+
+handle_transform() {
+    if [ -z "$1" ]; then
+        echo -e "${RED}❌ Error: Please specify a file or directory to transform${NC}"
+        echo "Usage: ui transform <file|directory> [options]"
+        exit 1
+    fi
+
+    if [ ! -f "$IMPORT_TRANSFORMER" ]; then
+        echo -e "${RED}❌ Error: ui-import-transformer not found at: $IMPORT_TRANSFORMER${NC}"
+        exit 1
+    fi
+
+    # Build the command with all transform arguments
+    cmd="$IMPORT_TRANSFORMER \"$1\""
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run|--recursive|--backup)
+                cmd="$cmd $1"
+                ;;
+            *)
+                echo -e "${YELLOW}⚠️  Warning: Unknown option '$1' for transform command${NC}"
+                ;;
+        esac
+        shift
+    done
+
+    eval "$cmd"
+}
+
+# Check if the first argument is a known command
+if [ $# -eq 0 ]; then
+    show_help
+    exit 0
 fi
 
-exec python3 "$PYTHON_SCRIPT" "$@"
+case "$1" in
+    "transform")
+        shift
+        handle_transform "$@"
+        ;;
+    "toolkit")
+        shift
+        if [ ! -f "$PYTHON_SCRIPT" ]; then
+            echo -e "${RED}❌ Error: ui-toolkit.py not found at: $PYTHON_SCRIPT${NC}"
+            exit 1
+        fi
+        exec python3 "$PYTHON_SCRIPT" "$@"
+        ;;
+    "help"|"-h"|"--help")
+        show_help
+        ;;
+    *)
+        # Default behavior: forward to Python toolkit for backward compatibility
+        if [ ! -f "$PYTHON_SCRIPT" ]; then
+            echo -e "${RED}❌ Error: ui-toolkit.py not found at: $PYTHON_SCRIPT${NC}"
+            echo -e "${YELLOW}💡 Did you mean 'ui transform' or 'ui toolkit'?${NC}"
+            exit 1
+        fi
+        exec python3 "$PYTHON_SCRIPT" "$@"
+        ;;
+esac
