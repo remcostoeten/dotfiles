@@ -4,8 +4,14 @@ import os
 import sys
 import subprocess
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 import shutil
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+try:
+    from connection_manager import ConnectionManager
+except ImportError:
+    ConnectionManager = None
 
 # Colors for better terminal output
 class Colors:
@@ -28,6 +34,7 @@ class DatabaseManager:
         self.bin_path = self.dotfiles_path / "bin"
         self.missing_deps = []
         self._check_dependencies()
+        self.conn_manager = ConnectionManager() if ConnectionManager else None
         
     def _get_dotfiles_path(self) -> Path:
         env_path = os.getenv('DOTFILES_PATH')
@@ -112,7 +119,8 @@ class DatabaseManager:
             ("2", "🔍 Database Analyzer", "AI-powered database performance analysis"),
             ("3", "🚀 Turso Environment Generator", "Generate Turso database configuration"),
             ("4", "🐳 Docker Manager", "Container management for databases"),
-            ("5", "📋 Show All Tools Info", "Display detailed information about all tools"),
+            ("5", "💾 Saved Connections", "Manage saved database connections"),
+            ("6", "📋 Show All Tools Info", "Display detailed information about all tools"),
             ("h", "❓ Help", "Show detailed usage information"),
             ("q", "🚪 Quit", "Exit the database manager")
         ]
@@ -169,6 +177,9 @@ class DatabaseManager:
   {Colors.CYAN}db analyze{Colors.RESET}           # Run database analyzer
   {Colors.CYAN}db turso{Colors.RESET}             # Generate Turso environment
   {Colors.CYAN}db docker{Colors.RESET}            # Open Docker manager
+  {Colors.CYAN}db connections{Colors.RESET}       # List saved connections
+  {Colors.CYAN}db connect <name>{Colors.RESET}    # Connect using saved connection
+  {Colors.CYAN}db save <name>{Colors.RESET}       # Save current connection
   {Colors.CYAN}db --help{Colors.RESET}            # Show this help
 
 {Colors.BOLD}Environment Requirements:{Colors.RESET}
@@ -331,7 +342,123 @@ class DatabaseManager:
             return False
         return True
     
-    def handle_direct_command(self, command: str) -> bool:
+    def manage_connections(self):
+        if not self.conn_manager:
+            print(f"{Colors.RED}Connection manager not available{Colors.RESET}")
+            return False
+        
+        while True:
+            print(f"\n{Colors.BOLD}{Colors.CYAN}Connection Management{Colors.RESET}\n")
+            print(f"  {Colors.GREEN}[1]{Colors.RESET} List all connections")
+            print(f"  {Colors.GREEN}[2]{Colors.RESET} Save new connection")
+            print(f"  {Colors.GREEN}[3]{Colors.RESET} Connect to saved connection")
+            print(f"  {Colors.GREEN}[4]{Colors.RESET} Delete connection")
+            print(f"  {Colors.YELLOW}[q]{Colors.RESET} Back to main menu\n")
+            
+            choice = input(f"{Colors.BOLD}Select option: {Colors.RESET}").strip().lower()
+            
+            if choice == '1':
+                connections = self.conn_manager.list_connections()
+                self.conn_manager.print_connections_table(connections)
+            
+            elif choice == '2':
+                print(f"\n{Colors.BOLD}Save New Connection{Colors.RESET}\n")
+                name = input(f"Connection name: ").strip()
+                if not name:
+                    print(f"{Colors.RED}Name required{Colors.RESET}")
+                    continue
+                
+                print(f"\nDatabase type:")
+                print(f"  1. PostgreSQL")
+                print(f"  2. Turso")
+                db_type_choice = input(f"Select type (1-2): ").strip()
+                
+                db_type = "postgres" if db_type_choice == "1" else "turso"
+                
+                conn_str = input(f"Connection string: ").strip()
+                if not conn_str:
+                    print(f"{Colors.RED}Connection string required{Colors.RESET}")
+                    continue
+                
+                desc = input(f"Description (optional): ").strip()
+                
+                success, message = self.conn_manager.save_connection(name, db_type, conn_str, desc)
+                print(f"{Colors.GREEN if success else Colors.RED}{message}{Colors.RESET}")
+            
+            elif choice == '3':
+                connections = self.conn_manager.list_connections()
+                if not connections:
+                    print(f"{Colors.YELLOW}No saved connections{Colors.RESET}")
+                    continue
+                
+                self.conn_manager.print_connections_table(connections)
+                name = input(f"\nConnection name: ").strip()
+                
+                conn = self.conn_manager.get_connection(name)
+                if conn:
+                    print(f"\n{Colors.GREEN}✓ Connection retrieved{Colors.RESET}")
+                    print(f"Type: {Colors.CYAN}{conn['type']}{Colors.RESET}")
+                    print(f"Connection: {Colors.YELLOW}{conn['connection_string']}{Colors.RESET}")
+                    
+                    if conn['type'] == 'postgres':
+                        use_it = input(f"\nLaunch PostgreSQL manager with this connection? (y/N): ").strip().lower()
+                        if use_it == 'y':
+                            os.environ['DATABASE_URL'] = conn['connection_string']
+                            return self.run_postgres_manager()
+                    elif conn['type'] == 'turso':
+                        print(f"\n{Colors.DIM}Copy the connection string above to use with Turso tools{Colors.RESET}")
+                else:
+                    print(f"{Colors.RED}Connection not found{Colors.RESET}")
+            
+            elif choice == '4':
+                connections = self.conn_manager.list_connections()
+                if not connections:
+                    print(f"{Colors.YELLOW}No saved connections{Colors.RESET}")
+                    continue
+                
+                self.conn_manager.print_connections_table(connections)
+                name = input(f"\nConnection name to delete: ").strip()
+                
+                confirm = input(f"{Colors.RED}Are you sure? (yes/N): {Colors.RESET}").strip().lower()
+                if confirm == 'yes':
+                    success, message = self.conn_manager.delete_connection(name)
+                    print(f"{Colors.GREEN if success else Colors.RED}{message}{Colors.RESET}")
+                else:
+                    print(f"{Colors.YELLOW}Cancelled{Colors.RESET}")
+            
+            elif choice in ['q', 'quit', 'exit', 'back']:
+                break
+            else:
+                print(f"{Colors.RED}Invalid choice{Colors.RESET}")
+        
+        return True
+    
+    def connect_to_saved(self, name: str) -> bool:
+        if not self.conn_manager:
+            print(f"{Colors.RED}Connection manager not available{Colors.RESET}")
+            return False
+        
+        conn = self.conn_manager.get_connection(name)
+        if not conn:
+            print(f"{Colors.RED}Connection '{name}' not found{Colors.RESET}")
+            print(f"{Colors.DIM}Use 'db connections' to see saved connections{Colors.RESET}")
+            return False
+        
+        print(f"{Colors.GREEN}✓ Loaded connection '{name}'{Colors.RESET}")
+        print(f"Type: {Colors.CYAN}{conn['type']}{Colors.RESET}\n")
+        
+        if conn['type'] == 'postgres':
+            os.environ['DATABASE_URL'] = conn['connection_string']
+            return self.run_postgres_manager()
+        elif conn['type'] == 'turso':
+            os.environ['TURSO_DATABASE_URL'] = conn['connection_string']
+            print(f"{Colors.CYAN}Connection string loaded into environment{Colors.RESET}")
+            print(f"{Colors.DIM}Use with: db turso{Colors.RESET}")
+            return True
+        
+        return False
+    
+    def handle_direct_command(self, command: str, args: List[str] = None) -> bool:
         """Handle direct command execution"""
         command_map = {
             'postgres': self.run_postgres_manager,
@@ -340,11 +467,19 @@ class DatabaseManager:
             'analyzer': self.run_db_analyzer,
             'turso': self.run_turso_generator,
             'docker': self.run_docker_manager,
+            'connections': self.manage_connections,
+            'conn': self.manage_connections,
             'help': self.show_help,
             '--help': self.show_help,
             '-h': self.show_help,
             'info': self.show_tools_info,
         }
+        
+        if command == 'connect':
+            if not args or len(args) == 0:
+                print(f"{Colors.RED}Usage: db connect <connection_name>{Colors.RESET}")
+                return False
+            return self.connect_to_saved(args[0])
         
         if command in command_map:
             if command in ['help', '--help', '-h', 'info']:
@@ -379,13 +514,15 @@ class DatabaseManager:
                 elif choice == '4':
                     self.run_docker_manager()
                 elif choice == '5':
+                    self.manage_connections()
+                elif choice == '6':
                     self.show_tools_info()
                 elif choice in ['h', 'help']:
                     self.show_help()
                 else:
                     print(f"{Colors.RED}Invalid choice. Please try again.{Colors.RESET}")
                 
-                if choice.isdigit() and choice != '5':  # Don't pause for info display
+                if choice.isdigit() and choice not in ['5', '6']:  # Don't pause for connection mgmt or info
                     input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
                     
             except KeyboardInterrupt:
@@ -402,7 +539,8 @@ def main():
     # Handle command line arguments
     if len(sys.argv) > 1:
         command = sys.argv[1].lower()
-        success = manager.handle_direct_command(command)
+        args = sys.argv[2:] if len(sys.argv) > 2 else []
+        success = manager.handle_direct_command(command, args)
         sys.exit(0 if success else 1)
     else:
         # Interactive mode
