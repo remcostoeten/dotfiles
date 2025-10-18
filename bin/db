@@ -4,7 +4,8 @@ import os
 import sys
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Tuple
+import shutil
 
 # Colors for better terminal output
 class Colors:
@@ -22,10 +23,79 @@ class Colors:
 
 class DatabaseManager:
     def __init__(self):
-        self.dotfiles_path = Path.home() / ".config" / "dotfiles"
+        self.dotfiles_path = self._get_dotfiles_path()
         self.scripts_path = self.dotfiles_path / "scripts"
         self.bin_path = self.dotfiles_path / "bin"
+        self.missing_deps = []
+        self._check_dependencies()
         
+    def _get_dotfiles_path(self) -> Path:
+        env_path = os.getenv('DOTFILES_PATH')
+        if env_path:
+            path = Path(env_path)
+            if path.exists():
+                return path
+        
+        default_path = Path.home() / ".config" / "dotfiles"
+        if default_path.exists():
+            return default_path
+        
+        script_path = Path(__file__).parent.parent
+        if (script_path / "scripts").exists():
+            return script_path
+        
+        print(f"{Colors.RED}Error: Could not locate dotfiles directory{Colors.RESET}")
+        print(f"{Colors.DIM}Tried:{Colors.RESET}")
+        print(f"  - $DOTFILES_PATH: {env_path or 'not set'}")
+        print(f"  - {default_path}")
+        print(f"  - {script_path}")
+        print(f"\n{Colors.YELLOW}Set DOTFILES_PATH environment variable or ensure dotfiles are at ~/.config/dotfiles{Colors.RESET}")
+        sys.exit(1)
+    
+    def _check_dependencies(self):
+        self.missing_deps = []
+        
+        python_deps = [
+            ('psycopg2', 'psycopg2-binary', 'PostgreSQL adapter'),
+            ('rich', 'rich', 'Enhanced terminal UI'),
+            ('keyring', 'keyring', 'Secure credential storage'),
+            ('cryptography', 'cryptography', 'Encryption support')
+        ]
+        
+        for module_name, package_name, description in python_deps:
+            try:
+                __import__(module_name)
+            except ImportError:
+                self.missing_deps.append({
+                    'type': 'python',
+                    'name': description,
+                    'package': package_name,
+                    'install': f'pip install {package_name}'
+                })
+        
+        cli_deps = [
+            ('turso', 'Turso CLI', 'curl -sSfL https://get.tur.so/install.sh | bash'),
+        ]
+        
+        for cmd, name, install in cli_deps:
+            if not shutil.which(cmd):
+                self.missing_deps.append({
+                    'type': 'cli',
+                    'name': name,
+                    'package': cmd,
+                    'install': install
+                })
+    
+    def _show_dependency_warnings(self):
+        if not self.missing_deps:
+            return
+        
+        print(f"\n{Colors.YELLOW}⚠️  Optional Dependencies Missing:{Colors.RESET}")
+        for dep in self.missing_deps:
+            print(f"  {Colors.DIM}• {dep['name']}{Colors.RESET}")
+            print(f"    Install: {Colors.CYAN}{dep['install']}{Colors.RESET}")
+        print()
+    
     def print_header(self):
         header = f"""
 {Colors.CYAN}╔══════════════════════════════════════════════════════════════╗
@@ -34,6 +104,7 @@ class DatabaseManager:
 ╚══════════════════════════════════════════════════════════════╝{Colors.RESET}
         """
         print(header)
+        self._show_dependency_warnings()
     
     def print_menu(self):
         menu_items = [
@@ -163,6 +234,23 @@ class DatabaseManager:
         else:
             return f"{Colors.RED}✗ Not Found{Colors.RESET}"
     
+    def _test_connection(self, tool_name: str) -> Tuple[bool, str]:
+        if tool_name == 'postgres':
+            try:
+                import psycopg2
+                return True, "PostgreSQL adapter available"
+            except ImportError:
+                return False, "psycopg2 not installed (pip install psycopg2-binary)"
+        elif tool_name == 'turso':
+            if shutil.which('turso'):
+                result = subprocess.run(['turso', 'auth', 'status'], 
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0 and 'not logged in' not in result.stdout.lower():
+                    return True, "Turso CLI authenticated"
+                return False, "Turso CLI not authenticated (run: turso auth login)"
+            return False, "Turso CLI not installed"
+        return True, "No connection test available"
+    
     def run_postgres_manager(self):
         postgres_script = self.scripts_path / "postgres"
         if not postgres_script.exists():
@@ -170,6 +258,17 @@ class DatabaseManager:
             return False
         
         print(f"{Colors.CYAN}🐘 Launching PostgreSQL Manager...{Colors.RESET}")
+        print(f"{Colors.DIM}Testing connection requirements...{Colors.RESET}")
+        
+        success, message = self._test_connection('postgres')
+        if not success:
+            print(f"{Colors.YELLOW}⚠️  {message}{Colors.RESET}")
+            proceed = input(f"{Colors.BOLD}Continue anyway? (y/N): {Colors.RESET}").strip().lower()
+            if proceed != 'y':
+                return False
+        else:
+            print(f"{Colors.GREEN}✓ {message}{Colors.RESET}")
+        
         try:
             subprocess.run([sys.executable, str(postgres_script)], check=True)
         except subprocess.CalledProcessError as e:
@@ -200,6 +299,17 @@ class DatabaseManager:
             return False
         
         print(f"{Colors.CYAN}🚀 Launching Turso Environment Generator...{Colors.RESET}")
+        print(f"{Colors.DIM}Testing Turso CLI...{Colors.RESET}")
+        
+        success, message = self._test_connection('turso')
+        if not success:
+            print(f"{Colors.YELLOW}⚠️  {message}{Colors.RESET}")
+            proceed = input(f"{Colors.BOLD}Continue anyway? (y/N): {Colors.RESET}").strip().lower()
+            if proceed != 'y':
+                return False
+        else:
+            print(f"{Colors.GREEN}✓ {message}{Colors.RESET}")
+        
         try:
             subprocess.run([sys.executable, str(turso_script)], check=True)
         except subprocess.CalledProcessError as e:

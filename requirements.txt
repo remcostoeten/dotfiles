@@ -1,0 +1,17 @@
+# Database Manager Tool Dependencies
+# Install with: pip install -r requirements.txt
+
+# PostgreSQL Support
+psycopg2-binary>=2.9.0
+
+# Enhanced Terminal UI
+rich>=13.0.0
+
+# Secure Credential Storage
+keyring>=24.0.0
+
+# Encryption Support
+cryptography>=41.0.0
+
+# Optional: Clipboard support for Turso generator
+pyperclip>=1.8.0
