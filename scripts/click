@@ -104,11 +104,21 @@ trap cleanup SIGINT SIGTERM
 
 function check_dependencies() {
     local missing=()
-    
-    command -v xdotool >/dev/null 2>&1 || missing+=("xdotool")
+
     command -v notify-send >/dev/null 2>&1 || missing+=("notify-send")
     command -v bc >/dev/null 2>&1 || missing+=("bc")
-    
+
+    # Check for input simulation tools
+    if command -v ydotool >/dev/null 2>&1; then
+        CLICK_TOOL="ydotool"
+        log_action "Using ydotool for Wayland compatibility" "success"
+    elif command -v xdotool >/dev/null 2>&1; then
+        CLICK_TOOL="xdotool"
+        log_action "Using xdotool for X11/Wayland" "info"
+    else
+        missing+=("xdotool or ydotool")
+    fi
+
     if [ ${#missing[@]} -gt 0 ]; then
         log_action "Missing dependencies: ${missing[*]}" "error"
         echo -e "${YELLOW}Install with: ${BOLD}sudo apt install ${missing[*]}${NC}"
@@ -359,6 +369,7 @@ function show_help() {
     echo ""
     echo -e "${BOLD}${CYAN}OTHER:${NC}"
     echo -e "  ${GREEN}--help${NC}, ${GREEN}-h${NC}, ${GREEN}help${NC}        ${DIM}# Show this help menu${NC}"
+    echo -e "  ${GREEN}--setup${NC}                     ${DIM}# Setup system-wide permissions${NC}"
     echo ""
     echo -e "${BOLD}${CYAN}SHORTCUTS:${NC}"
     echo -e "  ${RED}Ctrl+C${NC}                     ${DIM}# Stop autoclicker${NC}"
@@ -381,12 +392,96 @@ function show_help() {
 }
 
 # ============================================================================
+# Setup System-wide Permissions
+# ============================================================================
+
+function setup_permissions() {
+    print_box "Setting up System-wide Permissions"
+    echo ""
+
+    log_action "Checking for Wayland/X11..." "info"
+
+    # Check if we're on Wayland
+    if [ -n "$WAYLAND_DISPLAY" ] || [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+        log_action "Wayland detected - setting up ydotool permissions" "warning"
+
+        # Check if ydotool is installed
+        if command -v ydotool >/dev/null 2>&1; then
+            log_action "ydotool found - checking uinput permissions" "info"
+
+            # Check uinput permissions
+            if [ ! -w /dev/uinput ]; then
+                log_action "Setting up uinput permissions for ydotool" "warning"
+
+                # Try to add user to input group
+                if ! groups $USER | grep -q input; then
+                    log_action "Adding user to input group..." "info"
+                    echo -e "${YELLOW}You may need to enter your password:${NC}"
+                    sudo usermod -a -G input $USER
+                    log_action "User added to input group. Please log out and log back in for changes to take effect." "success"
+                else
+                    log_action "User already in input group" "success"
+                fi
+
+                # Check if uinput module is loaded
+                if ! lsmod | grep -q uinput; then
+                    log_action "Loading uinput kernel module..." "info"
+                    echo -e "${YELLOW}You may need to enter your password:${NC}"
+                    sudo modprobe uinput
+                fi
+
+                # Try to create a udev rule for persistent access
+                log_action "Creating udev rule for persistent uinput access..." "info"
+                echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"' | sudo tee /etc/udev/rules.d/99-uinput.rules >/dev/null
+                sudo udevadm control --reload-rules
+
+                log_action "Setup complete! Please restart your session or reboot." "success"
+            else
+                log_action "uinput permissions already configured" "success"
+            fi
+        else
+            log_action "ydotool not found - installing..." "warning"
+            echo -e "${YELLOW}Install with: ${BOLD}sudo apt install ydotool${NC}"
+        fi
+
+    # Check if we're on X11
+    elif [ -n "$DISPLAY" ] || [ "$XDG_SESSION_TYPE" = "x11" ]; then
+        log_action "X11 detected - xdotool should work system-wide" "success"
+
+        # For X11, ensure proper permissions
+        if [ -z "$DISPLAY" ]; then
+            export DISPLAY=:0
+            log_action "DISPLAY set to $DISPLAY" "info"
+        fi
+
+        # Test xdotool access
+        if xdotool getwindowfocus >/dev/null 2>&1; then
+            log_action "xdotool has proper display access" "success"
+        else
+            log_action "xdotool cannot access display - check X11 permissions" "error"
+        fi
+    fi
+
+    echo ""
+    print_line
+    echo -e "${GREEN}${CHECK}${NC} ${BOLD}Setup complete!${NC}"
+    echo -e "${POINT} Try running: ${WHITE}click --total 5 --clicks 2${NC}"
+    echo -e "${POINT} Move your mouse to Brave browser and test!"
+    print_line
+}
+
+# ============================================================================
 # Main Click Execution
 # ============================================================================
 
 function start_clicking() {
     interval=$(echo "scale=6; 1 / $clicks_per_second" | bc -l)
     local total_clicks=$((clicks_per_second * duration))
+
+    # Ensure DISPLAY is set for xdotool
+    if [ "$CLICK_TOOL" = "xdotool" ] && [ -z "$DISPLAY" ]; then
+        export DISPLAY=:0
+    fi
     
     if [ "$start_delay" -gt 0 ]; then
         for ((i=start_delay; i>0; i--)); do
@@ -411,7 +506,11 @@ function start_clicking() {
     halfway_notified=false
     
     while [ $SECONDS -lt $end ]; do
-        xdotool click 1
+        if [ "$CLICK_TOOL" = "ydotool" ]; then
+            ydotool click 0x110000 >/dev/null 2>&1  # Left click
+        else
+            xdotool click 1
+        fi
         sleep "$interval"
         
         remaining_time=$((end - SECONDS))
@@ -453,6 +552,10 @@ while [[ "$#" -gt 0 ]]; do
     case $1 in
         -h|--help|help)
             show_help
+            exit 0
+            ;;
+        --setup)
+            setup_permissions
             exit 0
             ;;
         -i|--interactive|i|interactive)
