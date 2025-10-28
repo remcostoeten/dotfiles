@@ -59,8 +59,8 @@ end
 
 # DOCSTRING: Comprehensive dotfiles management hub - your central command center
 function dotfiles
-    # Use the new comprehensive menu system
-    dotfiles_menu $argv
+    # Use the new comprehensive CLI system
+    command dotfiles $argv
 end
 
 # Show help for dotfiles command
@@ -85,8 +85,8 @@ end
 # DOCSTRING: Show disk usage in human-readable format
 alias du='du -h'
 
-# DOCSTRING: Show disk free space
-alias df='df -h'
+# DOCSTRING: Show disk free space (handled by df function in config.fish)
+# alias df='df -h'  # Commented out to avoid conflict with df function
 
 # DOCSTRING: Show running processes
 alias ps='ps aux'
@@ -115,7 +115,7 @@ alias ....='cd ../../..'
 # DOCSTRING: Replace ls with exa
 alias ls='exa'
 
-# DOCSTRING: Custom list command showing size, children count, and name with ricer styling
+# DOCSTRING: Custom list command showing size and name with ricer styling
 function l
     # Check for help flag
     if test "$argv[1]" = "--help" -o "$argv[1]" = "-h"
@@ -136,7 +136,7 @@ function l
         set_color blue
         echo "Description:"
         echo "  🎨 Ricer-style directory listing with colors and visual flair"
-        echo "  📊 Shows: size • child count • type indicators • styled names"
+        echo "  📊 Shows: size • type indicators • styled names"
         echo "  🎯 Minimal output, maximum aesthetics"
         echo ""
         set_color purple
@@ -188,20 +188,6 @@ function l
         set exa_cmd $exa_cmd --all
     end
 
-    # Function to count children recursively
-    function count_children --description 'Count children in directory recursively'
-        set -l dir_path $argv[1]
-        set -l count_cmd "find \"$dir_path\" -mindepth 1 2>/dev/null | wc -l"
-
-        if test $show_hidden = true
-            set count_cmd "find \"$dir_path\" -mindepth 1 2>/dev/null | wc -l"
-        else
-            set count_cmd "find \"$dir_path\" -mindepth 1 -not -path '*/.*' 2>/dev/null | wc -l"
-        end
-
-        set -l count (eval $count_cmd)
-        echo $count
-    end
 
     # Run the command and post-process with colors and formatting
     set -l exa_output (eval $exa_cmd $target_path)
@@ -211,14 +197,14 @@ function l
         # Print header with styling
         set_color -o cyan
         echo "╭─────────────────────────────────────────────────────────────────╮"
-        echo "│ 📂 "(set_color -o yellow)(basename $target_path)(set_color -o cyan)" - Directory Contents (with child counts)           │"
+        echo "│ 📂 "(set_color -o yellow)(basename $target_path)(set_color -o cyan)" - Directory Contents           │"
         echo "╰─────────────────────────────────────────────────────────────────╯"
         set_color normal
         echo ""
 
         # Print column headers
         set_color -o cyan
-        printf "%-10s %-15s %s\n" "Size" "Children" "Name"
+        printf "%-10s %s\n" "Size" "Name"
         set_color -o white
         echo "─────────────────────────────────────────────────────────────────"
         set_color normal
@@ -236,68 +222,31 @@ function l
 
         # Parse the line format: "size name"
         set size_part (echo $line | awk '{print $1}')
-        set name_part (echo $line | cut -d' ' -f2-)
+        set name_part (echo $line | cut -d' ' -f2- | string trim)
 
         # Clean size_part from any remaining color codes
         set size_part (echo $size_part | string replace -r '\x1b\[[0-9;]*m' '')
 
         # Check if it's a directory
         if string match -q "*/" $name_part
-            # Directory - get child count
-            set dir_name (echo $name_part | sed 's/\/$//')
-
-            # Handle path correctly
-            if test $target_path = "."
-                set full_path $dir_name
-            else
-                set full_path "$target_path/$dir_name"
-            end
-
-            # Get child count (with timeout to avoid hanging)
-            set child_count (timeout 5s bash -c "find \"$full_path\" -mindepth 1 2>/dev/null | wc -l" 2>/dev/null)
-            if test $status -ne 0
-                set child_count 0
-            end
-
-            # Format child count with color coding
-            if test $child_count -eq 0
-                set child_count_display "📁 empty"
-                set_color -o white
-            else if test $child_count -lt 10
-                set child_count_display "📁 $child_count"
-                set_color -o green
-            else if test $child_count -lt 50
-                set child_count_display "📂 $child_count"
-                set_color -o yellow
-            else
-                set child_count_display "📂 $child_count"
-                set_color -o red
-            end
-
             # Print directory entry
             printf "%-10s " $size_part
-            printf "%-15s " $child_count_display
             set_color -o blue
             echo $name_part
             set_color normal
-
         else
-            # Regular file with size coloring - use clean size_part for matching
+            # Regular file with size coloring
             printf "%-10s " $size_part
-
+            
             # Determine color based on size pattern
             if string match -q "*B" $size_part
                 set_color -o green
-                printf "%-15s " ""
             else if string match -q "*K" $size_part
                 set_color -o yellow
-                printf "%-15s " ""
             else if string match -q "*M" $size_part
                 set_color -o orange
-                printf "%-15s " ""
             else
                 set_color -o red
-                printf "%-15s " ""
             end
 
             echo $name_part
@@ -388,4 +337,113 @@ function etree
     
     # Run exa tree with colors, icons, and git status
     exa --tree --level=$depth --color=always --icons --git-ignore $all_ignores $custom_path
+end
+
+# DOCSTRING: Start Android emulator without Android Studio
+function android
+    # Check for help flag
+    if test "$argv[1]" = "--help" -o "$argv[1]" = "-h"
+        set_color cyan
+        echo "╔══════════════════════════════════════════════════════════════════════════════╗"
+        echo "║                     ANDROID EMULATOR LAUNCHER                              ║"
+        echo "╚══════════════════════════════════════════════════════════════════════════════╝"
+        set_color normal
+        echo ""
+        set_color yellow
+        echo "Usage: android [OPTIONS]"
+        echo ""
+        set_color green
+        echo "Options:"
+        printf "  %-20s %s\n" (set_color -o magenta)"-h, --help"(set_color green) (set_color normal)"Show this help message"
+        printf "  %-20s %s\n" (set_color -o magenta)"-l, --list"(set_color green) (set_color normal)"List available AVDs"
+        printf "  %-20s %s\n" (set_color -o magenta)"-f, --fast"(set_color green) (set_color normal)"Start with performance optimizations"
+        printf "  %-20s %s\n" (set_color -o magenta)"-n, --no-window"(set_color green) (set_color normal)"Start without GUI window"
+        echo ""
+        set_color blue
+        echo "Description:"
+        echo "  🚀 Launch Android emulator directly without Android Studio"
+        echo "  💾 Uses less system resources than full Android Studio"
+        echo "  📱 Starts your Pixel 9 Pro emulator by default"
+        echo ""
+        set_color purple
+        echo "Examples:"
+        echo "  android          # Start Pixel 9 Pro emulator"
+        echo "  android -l       # List all available devices"
+        echo "  android -f       # Start with performance optimizations"
+        echo "  android -n       # Start without GUI (headless mode)"
+        set_color normal
+        return 0
+    end
+
+    # Set Android SDK path
+    set -l android_sdk "$HOME/Android/Sdk"
+    set -l emulator_path "$android_sdk/emulator/emulator"
+
+    # Check if emulator exists
+    if not test -f "$emulator_path"
+        set_color red
+        echo "❌ Android emulator not found at: $emulator_path"
+        echo "💡 Please make sure Android SDK is installed correctly"
+        set_color normal
+        return 1
+    end
+
+    # Parse arguments
+    set -l avd_name "Pixel_9_Pro"
+    set -l show_list false
+    set -l fast_mode false
+    set -l no_window false
+
+    for arg in $argv
+        switch $arg
+            case -l --list
+                set show_list true
+            case -f --fast
+                set fast_mode true
+            case -n --no-window
+                set no_window true
+            case '-*'
+                set_color red
+                echo "❌ Unknown option: $arg" >&2
+                set_color yellow
+                echo "💡 Use 'android --help' for usage information." >&2
+                set_color normal
+                return 1
+        end
+    end
+
+    # Show list of available AVDs
+    if test $show_list = true
+        set_color cyan
+        echo "📱 Available Android Virtual Devices:"
+        set_color normal
+        echo ""
+        $emulator_path -list-avds
+        echo ""
+        return 0
+    end
+
+    # Build emulator command
+    set -l emu_cmd "$emulator_path -avd $avd_name"
+
+    if test $fast_mode = true
+        set emu_cmd $emu_cmd " -no-snapshot -no-boot-anim -no-audio"
+        set_color yellow
+        echo "🚀 Starting emulator in fast mode..."
+    else
+        set_color yellow
+        echo "🚀 Starting Android emulator..."
+    end
+
+    if test $no_window = true
+        set emu_cmd $emu_cmd " -no-window"
+        echo "🖥️  Starting in headless mode..."
+    end
+
+    echo "📱 Device: $avd_name"
+    echo ""
+    set_color normal
+
+    # Launch emulator
+    eval $emu_cmd
 end

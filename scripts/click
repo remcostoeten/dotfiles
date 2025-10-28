@@ -211,17 +211,28 @@ function validate_number() {
     local value="$1"
     local name="$2"
     local min="${3:-1}"
-    
-    if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+    local allow_decimal="${4:-false}"
+
+    # Check if value is a valid number (integer or decimal)
+    if ! [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
         log_action "$name must be a positive number" "error"
         return 1
     fi
-    
-    if [ "$value" -lt "$min" ]; then
-        log_action "$name must be at least $min" "error"
-        return 1
+
+    # For decimal values, use bc for comparison
+    if [ "$allow_decimal" = true ]; then
+        if (( $(echo "$value < $min" | bc -l) )); then
+            log_action "$name must be at least $min" "error"
+            return 1
+        fi
+    else
+        # For integer values, use bash comparison
+        if [ "$value" -lt "$min" ]; then
+            log_action "$name must be at least $min" "error"
+            return 1
+        fi
     fi
-    
+
     return 0
 }
 
@@ -267,8 +278,8 @@ function interactive_custom_config() {
     echo ""
     
     while true; do
-        read -p "$(echo -e "${CYAN}${CLOCK}${NC} Clicks per second: ")" clicks_input
-        if validate_number "$clicks_input" "Clicks per second" 1; then
+        read -p "$(echo -e "${CYAN}${CLOCK}${NC} Clicks per second (e.g., 0.4, 1, 10): ")" clicks_input
+        if validate_number "$clicks_input" "Clicks per second" 0.1 true; then
             clicks_per_second="$clicks_input"
             break
         fi
@@ -476,7 +487,7 @@ function setup_permissions() {
 
 function start_clicking() {
     interval=$(echo "scale=6; 1 / $clicks_per_second" | bc -l)
-    local total_clicks=$((clicks_per_second * duration))
+    local total_clicks=$(echo "$clicks_per_second * $duration" | bc -l)
 
     # Ensure DISPLAY is set for xdotool
     if [ "$CLICK_TOOL" = "xdotool" ] && [ -z "$DISPLAY" ]; then
@@ -595,7 +606,7 @@ while [[ "$#" -gt 0 ]]; do
                 log_action "Missing clicks value" "error"
                 exit 1
             fi
-            if validate_number "$2" "Clicks per second" 1; then
+            if validate_number "$2" "Clicks per second" 0.1 true; then
                 clicks_per_second="$2"
             else
                 exit 1

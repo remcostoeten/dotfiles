@@ -1,3 +1,16 @@
+#!/usr/bin/env fish
+
+# Helper function to add paths without duplicates
+function add_to_path
+    for dir in $argv
+        if test -d "$dir"
+            if not contains "$dir" $PATH
+                set -gx PATH "$dir" $PATH
+            end
+        end
+    end
+end
+
 # Add dotfiles bin to PATH and make executables available
 if test -d ~/.config/dotfiles/bin
     contains ~/.config/dotfiles/bin $PATH; or set -gx PATH ~/.config/dotfiles/bin $PATH
@@ -19,19 +32,10 @@ if test -d ~/.config/dotfiles/configs/fish/aliases
     end
 end
 
-# Source fish functions
-if test -d ~/.config/dotfiles/fish/functions
+# Source functions from dotfiles/functions directory
+if test -d ~/.config/dotfiles/functions
     # Add functions directory to fish function path
-    contains ~/.config/dotfiles/fish/functions $fish_function_path; or set -gx fish_function_path ~/.config/dotfiles/fish/functions $fish_function_path
-end
-
-# Source fish conf.d files
-if test -d ~/.config/dotfiles/fish/conf.d
-    for conf_file in ~/.config/dotfiles/fish/conf.d/*.fish
-        if test -f $conf_file
-            source $conf_file
-        end
-    end
+    contains ~/.config/dotfiles/functions $fish_function_path; or set -gx fish_function_path ~/.config/dotfiles/functions $fish_function_path
 end
 
 # Add scripts directory to PATH
@@ -46,22 +50,31 @@ if test -d ~/.config/dotfiles/scripts
     end
 end
 
-function fish_prompt -d "Write out the prompt"
-    # This shows up as USER@HOST /home/user/ >, with the directory colored
-    # $USER and $hostname are set by fish, so you can just use them
-    # instead of using `whoami` and `hostname`
-    printf '%s@%s %s%s%s > ' $USER $hostname \
-        (set_color $fish_color_cwd) (prompt_pwd) (set_color normal)
-end
+# Simple directory preservation solution
+if status is-interactive
+    # Set a preferred directory for new terminals
+    # Change this to whatever directory you want as default
+    set -gx PREFERRED_HOME_DIR ~
 
-if status is-interactive # Commands to run in interactive sessions can go here
+    # Function to override the automatic directory reset
+    function _override_dir_reset --on-event fish_prompt
+        # Remove this function so it only runs once per session
+        functions --erase _override_dir_reset
+
+        # Check if we're stuck in dotfiles and change to preferred directory
+        if test (pwd) = ~/.config/dotfiles; and test -d "$PREFERRED_HOME_DIR"
+            cd "$PREFERRED_HOME_DIR"
+        end
+    end
+
+    # Commands to run in interactive sessions can go here
     # Editor
     set -gx EDITOR nvim
     set -gx SUDO_EDITOR $EDITOR
 
     # bun
     set -gx BUN_INSTALL $HOME/.bun
-    fish_add_path $BUN_INSTALL/bin
+    add_to_path $BUN_INSTALL/bin
 
     # Load secrets
     if test -f $HOME/.secrets

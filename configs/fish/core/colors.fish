@@ -48,7 +48,7 @@ function p -d "Print text in magenta"
     echo -e "$fish_color_magenta$argv$fish_color_reset"
 end
 
-function c -d "Print text in cyan"
+function cyan_text -d "Print text in cyan"
     echo -e "$fish_color_cyan$argv$fish_color_reset"
 end
 
