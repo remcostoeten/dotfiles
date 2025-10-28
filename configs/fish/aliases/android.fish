@@ -3,7 +3,7 @@
 # DOCSTRING: Android Emulator and App Launcher
 # Comprehensive suite for managing Android emulator and launching apps
 
-# DOCSTRING: Launch Android app by package name with toggle behavior
+# DOCSTRING: Launch Android app by package name with toggle behavior - auto-starts emulator if needed
 function launch_android_app
     set -l android_sdk "$HOME/Android/Sdk"
     set -l adb_path "$android_sdk/platform-tools/adb"
@@ -141,17 +141,17 @@ function launch_android_app
     end
 end
 
-# DOCSTRING: Launch Feeld app in Android emulator (toggle to quit)
+# DOCSTRING: Launch Feeld app in Android emulator (auto-starts emulator, toggle to quit)
 function feeld
     launch_android_app "Feeld" "co.feeld"
 end
 
-# DOCSTRING: Launch Govee app in Android emulator (toggle to quit)
+# DOCSTRING: Launch Govee app in Android emulator (auto-starts emulator, toggle to quit)
 function govee
     launch_android_app "Govee" "com.govee.home"
 end
 
-# DOCSTRING: List all installed packages on Android emulator
+# DOCSTRING: List all installed packages on Android emulator - search for app package names
 function android_packages
     set -l android_sdk "$HOME/Android/Sdk"
     set -l adb_path "$android_sdk/platform-tools/adb"
@@ -190,7 +190,7 @@ function android_packages
     end
 end
 
-# DOCSTRING: Start Android emulator without Android Studio
+# DOCSTRING: Start Android emulator without Android Studio - list AVDs, fast mode, headless
 function android
     # Check for help flag
     if test "$argv[1]" = "--help" -o "$argv[1]" = "-h"

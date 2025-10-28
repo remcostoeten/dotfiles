@@ -44,8 +44,10 @@ show_menu() {
     
     echo -e "${YELLOW}Quick App Launchers:${NC}"
     echo ""
-    echo -e "  ${GREEN}feeld${NC}           Launch Feeld app"
-    echo -e "  ${GREEN}govee${NC}           Launch Govee app"
+    echo -e "  ${GREEN}feeld${NC}           Launch Feeld app (Android)"
+    echo -e "  ${GREEN}govee${NC}           Launch Govee app (Android)"
+    echo -e "  ${GREEN}whatsapp${NC}        Launch WhatsApp (Desktop)"
+    echo -e "  ${GREEN}spotify${NC}         Launch Spotify (Desktop)"
     echo ""
     echo -e "${YELLOW}💡 Run without arguments to show this menu${NC}"
 }
@@ -254,6 +256,16 @@ cmd_govee() {
     govee
 }
 
+cmd_whatsapp() {
+    # Use the whatsapp function from apps.fish
+    fish -c "whatsapp"
+}
+
+cmd_spotify() {
+    # Use the spotify function from apps.fish
+    fish -c "spotify"
+}
+
 # Main command handler
 if [ $# -eq 0 ]; then
     show_menu
@@ -292,6 +304,12 @@ case "$command" in
         ;;
     govee)
         cmd_govee "$@"
+        ;;
+    whatsapp)
+        cmd_whatsapp "$@"
+        ;;
+    spotify)
+        cmd_spotify "$@"
         ;;
     --help|-h|help)
         show_menu
