@@ -5,7 +5,7 @@
 # Examples: alarm --in 10s, alarm --in 1h30m, alarm --repeat 5m
 
 # Source colors
-source ~/.config/dotfiles/core/colors.fish
+source ~/.config/dotfiles/configs/fish/core/colors.fish
 
 function show_help
     echo
