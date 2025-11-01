@@ -10,8 +10,9 @@ interface PackageArray {
 function PackageManager() {
   const [arrays, setArrays] = useState<PackageArray[]>([])
   const [selectedArray, setSelectedArray] = useState<string>('')
-  const [packageName, setPackageName] = useState('')
-  const [installCommand, setInstallCommand] = useState('')
+  const [packageEntry, setPackageEntry] = useState('')
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editValue, setEditValue] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -33,8 +34,15 @@ function PackageManager() {
   }
 
   const handleAddPackage = async () => {
-    if (!selectedArray || !packageName || !installCommand) {
-      setError('Please fill in all fields')
+    if (!selectedArray || !packageEntry.trim()) {
+      setError('Please enter a package entry')
+      return
+    }
+
+    // Validate format: should be "package:Display Name" or just "package"
+    const entry = packageEntry.trim()
+    if (!entry.match(/^[^:]+(:[^:]+)?$/)) {
+      setError('Invalid format. Use: "package-name" or "package-name:Display Name"')
       return
     }
 
@@ -45,18 +53,63 @@ function PackageManager() {
     try {
       await invoke('add_package_to_array', {
         arrayName: selectedArray,
-        packageName: packageName,
-        installCommand: installCommand
+        packageName: entry
       })
-      setSuccess(`Added ${packageName} to ${selectedArray}`)
-      setPackageName('')
-      setInstallCommand('')
+      setSuccess(`Added ${entry} to ${selectedArray}`)
+      setPackageEntry('')
       await loadArrays()
     } catch (err) {
       setError(`Failed to add package: ${err}`)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleEditPackage = (index: number, currentValue: string) => {
+    setEditingIndex(index)
+    setEditValue(currentValue)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!selectedArray || editingIndex === null || !editValue.trim()) {
+      setError('Invalid edit')
+      return
+    }
+
+    const entry = editValue.trim()
+    if (!entry.match(/^[^:]+(:[^:]+)?$/)) {
+      setError('Invalid format. Use: "package-name" or "package-name:Display Name"')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      // Remove old, add new
+      await invoke('remove_package_from_array', {
+        arrayName: selectedArray,
+        packageIndex: editingIndex
+      })
+      await invoke('add_package_to_array', {
+        arrayName: selectedArray,
+        packageName: entry
+      })
+      setSuccess(`Updated package in ${selectedArray}`)
+      setEditingIndex(null)
+      setEditValue('')
+      await loadArrays()
+    } catch (err) {
+      setError(`Failed to update package: ${err}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null)
+    setEditValue('')
   }
 
   const handleRemovePackage = async (arrayName: string, packageIndex: number) => {
@@ -111,23 +164,16 @@ function PackageManager() {
         </div>
 
         <div className="form-group">
-          <label>Package Name (semantic):</label>
+          <label>Package Entry:</label>
           <input
             type="text"
-            value={packageName}
-            onChange={(e) => setPackageName(e.target.value)}
-            placeholder="e.g., my-package:My Package Display Name"
+            value={packageEntry}
+            onChange={(e) => setPackageEntry(e.target.value)}
+            placeholder='e.g., "my-package" or "my-package:My Package Display Name"'
           />
-        </div>
-
-        <div className="form-group">
-          <label>Install Script/Command:</label>
-          <input
-            type="text"
-            value={installCommand}
-            onChange={(e) => setInstallCommand(e.target.value)}
-            placeholder="e.g., apt install my-package"
-          />
+          <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '0.25rem' }}>
+            Format: package-name or package-name:Display Name
+          </div>
         </div>
 
         <div className="button-group">
@@ -151,17 +197,57 @@ function PackageManager() {
                   borderRadius: '4px',
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  gap: '0.5rem'
                 }}
               >
-                <span>{pkg}</span>
-                <button
-                  onClick={() => handleRemovePackage(currentArray.name, index)}
-                  disabled={loading}
-                  style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}
-                >
-                  Remove
-                </button>
+                {editingIndex === index ? (
+                  <>
+                    <input
+                      type="text"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      style={{ flex: 1, padding: '0.4rem', fontSize: '0.9rem' }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveEdit()
+                        if (e.key === 'Escape') handleCancelEdit()
+                      }}
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={loading}
+                      style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      disabled={loading}
+                      style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ flex: 1 }}>{pkg}</span>
+                    <button
+                      onClick={() => handleEditPackage(index, pkg)}
+                      disabled={loading}
+                      style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleRemovePackage(currentArray.name, index)}
+                      disabled={loading}
+                      style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', background: '#4a1a1a' }}
+                    >
+                      Remove
+                    </button>
+                  </>
+                )}
               </li>
             ))}
           </ul>

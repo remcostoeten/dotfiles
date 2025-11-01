@@ -125,7 +125,6 @@ fn get_package_arrays() -> Result<Vec<PackageArray>, String> {
 fn add_package_to_array(
     array_name: String,
     package_name: String,
-    install_command: String,
 ) -> Result<(), String> {
     let dotfiles_path = get_dotfiles_path();
     let setup_sh_path = dotfiles_path.join("setup.sh");
@@ -137,7 +136,7 @@ fn add_package_to_array(
     let content = fs::read_to_string(&setup_sh_path)
         .map_err(|e| format!("Failed to read setup.sh: {}", e))?;
 
-    // Format: package_name:Display Name
+    // Format: package_name:Display Name (already formatted by frontend)
     let entry = format!("\"{}\"", package_name);
     
     // Find the array declaration and add the package
