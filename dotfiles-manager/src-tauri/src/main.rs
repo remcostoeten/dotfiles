@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 use std::fs;
 use std::process::{Command, Stdio};
+use std::io::{BufRead, BufReader};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +27,14 @@ struct FileInfo {
     name: String,
     #[serde(rename = "type")]
     file_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OutputLine {
+    #[serde(rename = "type")]
+    line_type: String,
+    message: String,
+    raw: String,
 }
 
 fn get_dotfiles_path() -> PathBuf {
@@ -75,6 +84,36 @@ fn parse_setup_sh() -> Vec<PackageArray> {
     }
 
     arrays
+}
+
+// Parse ANSI color codes and extract message type
+fn parse_output_line(line: &str) -> OutputLine {
+    // Remove ANSI color codes
+    let ansi_regex = Regex::new(r"\x1b\[[0-9;]*m").unwrap();
+    let clean_line = ansi_regex.replace_all(line, "").to_string();
+    
+    // Detect message type based on content
+    let line_type = if clean_line.contains("✓") || clean_line.contains("[SUCCESS]") {
+        "success"
+    } else if clean_line.contains("✗") || clean_line.contains("[ERROR]") || clean_line.contains("Failed") {
+        "error"
+    } else if clean_line.contains("⚠") || clean_line.contains("[WARNING]") {
+        "warning"
+    } else if clean_line.contains("→") || clean_line.contains("[STATUS]") {
+        "status"
+    } else if clean_line.contains("ℹ") || clean_line.contains("[INFO]") {
+        "info"
+    } else if clean_line.contains("[DRY RUN]") {
+        "dry-run"
+    } else {
+        "output"
+    };
+    
+    OutputLine {
+        line_type: line_type.to_string(),
+        message: clean_line.clone(),
+        raw: line.to_string(),
+    }
 }
 
 #[tauri::command]
@@ -305,61 +344,109 @@ fn open_in_system_file_manager(path: String) -> Result<(), String> {
     Ok(())
 }
 
+// Run setup with real-time output streaming
 #[tauri::command]
-fn run_setup() -> Result<(), String> {
+async fn run_setup(app: tauri::AppHandle) -> Result<(), String> {
     let dotfiles_path = get_dotfiles_path();
     let setup_sh = dotfiles_path.join("setup.sh");
     
-    Command::new("bash")
-        .arg(&setup_sh)
-        .spawn()
-        .map_err(|e| format!("Failed to run setup: {}", e))?;
-    
-    Ok(())
+    run_command_with_output(&app, setup_sh, vec![]).await
 }
 
 #[tauri::command]
-fn run_setup_dry_run() -> Result<(), String> {
+async fn run_setup_dry_run(app: tauri::AppHandle) -> Result<(), String> {
     let dotfiles_path = get_dotfiles_path();
     let setup_sh = dotfiles_path.join("setup.sh");
     
-    Command::new("bash")
-        .arg(&setup_sh)
-        .arg("--dry-run")
-        .spawn()
-        .map_err(|e| format!("Failed to run dry run: {}", e))?;
-    
-    Ok(())
+    run_command_with_output(&app, setup_sh, vec!["--dry-run"]).await
 }
 
 #[tauri::command]
-fn run_setup_section(section: String) -> Result<(), String> {
+async fn run_setup_section(app: tauri::AppHandle, section: String) -> Result<(), String> {
     let dotfiles_path = get_dotfiles_path();
     let setup_sh = dotfiles_path.join("setup.sh");
     
-    Command::new("bash")
-        .arg(&setup_sh)
-        .arg("--dry-run-section")
-        .arg(&section)
-        .spawn()
-        .map_err(|e| format!("Failed to run section: {}", e))?;
-    
-    Ok(())
+    run_command_with_output(&app, setup_sh, vec!["--dry-run-section", &section]).await
 }
 
 #[tauri::command]
-fn run_setup_dry_run_section(section: String) -> Result<(), String> {
+async fn run_setup_dry_run_section(app: tauri::AppHandle, section: String) -> Result<(), String> {
     let dotfiles_path = get_dotfiles_path();
     let setup_sh = dotfiles_path.join("setup.sh");
     
-    Command::new("bash")
-        .arg(&setup_sh)
-        .arg("--dry-run")
-        .arg("--dry-run-section")
-        .arg(&section)
+    run_command_with_output(&app, setup_sh, vec!["--dry-run", "--dry-run-section", &section]).await
+}
+
+// Helper function to run command and stream output
+async fn run_command_with_output(
+    app: &tauri::AppHandle,
+    script: PathBuf,
+    args: Vec<&str>,
+) -> Result<(), String> {
+    let mut child = Command::new("bash")
+        .arg(&script)
+        .args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Failed to run dry run section: {}", e))?;
+        .map_err(|e| format!("Failed to spawn process: {}", e))?;
+
+    let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+    let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
+
+    let app_clone = app.clone();
     
+    // Stream stdout
+    let stdout_handle = tokio::spawn(async move {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                let parsed = parse_output_line(&line);
+                let _ = app_clone.emit("setup-output", parsed);
+            }
+        }
+    });
+
+    // Stream stderr
+    let app_clone_err = app.clone();
+    let stderr_handle = tokio::spawn(async move {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                let parsed = parse_output_line(&line);
+                let _ = app_clone_err.emit("setup-output", parsed);
+            }
+        }
+    });
+
+    // Wait for process to complete
+    let status = child.wait().map_err(|e| format!("Process error: {}", e))?;
+    
+    // Wait for output streams to finish
+    let _ = stdout_handle.await;
+    let _ = stderr_handle.await;
+
+    // Emit completion event
+    let exit_code = status.code().unwrap_or(-1);
+    let completion_msg = if exit_code == 0 {
+        OutputLine {
+            line_type: "success".to_string(),
+            message: format!("✓ Setup completed successfully (exit code: {})", exit_code),
+            raw: String::new(),
+        }
+    } else {
+        OutputLine {
+            line_type: "error".to_string(),
+            message: format!("✗ Setup failed with exit code: {}", exit_code),
+            raw: String::new(),
+        }
+    };
+    let _ = app.emit("setup-complete", completion_msg);
+
+    if exit_code != 0 {
+        return Err(format!("Process exited with code: {}", exit_code));
+    }
+
     Ok(())
 }
 
@@ -384,4 +471,3 @@ fn main() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
