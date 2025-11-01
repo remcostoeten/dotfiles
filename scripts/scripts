@@ -120,7 +120,6 @@ function get_script_info() {
     if [[ -z "$description" ]]; then
         case "$script_name" in
             *-manager) description="Management utility" ;;
-            postgres) description="PostgreSQL database management" ;;
             click) description="Auto-clicker with interactive mode" ;;
             copy) description="File and clipboard utility" ;;
             emoji) description="Emoji picker and search" ;;

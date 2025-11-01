@@ -19,7 +19,7 @@ alias gnome-extensions "~/.config/dotfiles/configs/gnome/install-extensions.sh"
 
 # DOCSTRING: Restart GNOME Shell (X11 only)
 function gnome-restart
-    if test "$XDG_SESSION_TYPE" = "wayland"
+    if test "$XDG_SESSION_TYPE" = wayland
         echo "⚠️  On Wayland, you need to log out and log back in"
         echo "Run: gnome-session-quit --logout --no-prompt"
     else
@@ -30,9 +30,9 @@ end
 
 # DOCSTRING: Open GNOME aesthetic documentation
 function gnome-help
-    if command -v bat &> /dev/null
+    if command -v bat &>/dev/null
         bat ~/.config/dotfiles/configs/gnome/README.md
-    else if command -v less &> /dev/null
+    else if command -v less &>/dev/null
         less ~/.config/dotfiles/configs/gnome/README.md
     else
         cat ~/.config/dotfiles/configs/gnome/README.md
@@ -82,10 +82,10 @@ function gnome-dark
     set -l current (gsettings get org.gnome.desktop.interface color-scheme)
     if string match -q "*dark*" $current
         echo "☀️  Switching to light mode..."
-        gsettings set org.gnome.desktop.interface color-scheme 'prefer-light'
+        gsettings set org.gnome.desktop.interface color-scheme prefer-light
     else
         echo "🌙 Switching to dark mode..."
-        gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+        gsettings set org.gnome.desktop.interface color-scheme prefer-dark
     end
 end
 
@@ -106,4 +106,3 @@ function gnome-wallpaper
         end
     end
 end
-

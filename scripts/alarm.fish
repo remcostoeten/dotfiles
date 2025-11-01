@@ -109,11 +109,20 @@ function format_duration
 end
 
 function play_alarm_sound
-    set -l sound_file ~/Audio/2869-preview.mp3
+    # Try multiple possible alarm sound locations
+    set -l sound_files ~/Audio/alarm.mp3 ~/Audio/2869-preview.mp3
+    
+    set -l sound_file ""
+    for file in $sound_files
+        if test -f $file
+            set sound_file $file
+            break
+        end
+    end
 
-    if test -f $sound_file
+    if test -n "$sound_file"
         if command -v mpv >/dev/null
-            mpv --no-terminal $sound_file >/dev/null 2>&1 &
+            mpv --no-terminal --volume=80 $sound_file >/dev/null 2>&1 &
         else if command -v paplay >/dev/null
             paplay $sound_file >/dev/null 2>&1 &
         else if command -v aplay >/dev/null
@@ -122,7 +131,9 @@ function play_alarm_sound
             printf "%s%s[WARNING]%s No audio player found (mpv, paplay, aplay)\n" "$fish_color_yellow" "$fish_color_bold" "$fish_color_reset"
         end
     else
-        printf "%s%s[WARNING]%s Alarm sound not found at %s\n" "$fish_color_yellow" "$fish_color_bold" "$fish_color_reset" $sound_file
+        printf "%s%s[WARNING]%s Alarm sound not found. Please download one to ~/Audio/alarm.mp3\n" "$fish_color_yellow" "$fish_color_bold" "$fish_color_reset"
+        # Fallback: use system bell
+        printf "\a"
     end
 end
 

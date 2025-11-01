@@ -41,23 +41,33 @@ install_extension() {
     local extension_id=$1
     log_info "Installing extension ID: $extension_id"
     
-    if command -v gnome-extensions-cli &> /dev/null; then
-        gnome-extensions-cli install "$extension_id"
-    elif command -v gext &> /dev/null; then
-        gext install "$extension_id"
-    else
-        log_warning "No extension installer found. Installing gnome-shell-extension-installer..."
-        
-        if command -v wget &> /dev/null; then
-            wget -O /tmp/gnome-shell-extension-installer "https://github.com/brunelli/gnome-shell-extension-installer/raw/master/gnome-shell-extension-installer"
-            chmod +x /tmp/gnome-shell-extension-installer
-            sudo mv /tmp/gnome-shell-extension-installer /usr/local/bin/
-            /usr/local/bin/gnome-shell-extension-installer "$extension_id" --yes
-        else
-            log_warning "wget not found. Please install extensions manually from extensions.gnome.org"
-            log_info "Extension ID: $extension_id - Visit: https://extensions.gnome.org/extension/$extension_id/"
-            return 1
+    # Modern approach: Use built-in gnome-extensions CLI (GNOME 3.38+)
+    if command -v gnome-extensions &> /dev/null; then
+        # Enable extension if already installed
+        if gnome-extensions list | grep -q "@$extension_id"; then
+            log_success "Extension $extension_id already installed"
+            gnome-extensions enable "$extension_id" || true
+            return 0
         fi
+        
+        # Try to install via gnome-extensions (requires extension to be downloaded)
+        # For manual installation, we'll provide instructions
+        log_warning "Extension installer not available. Please install manually:"
+        log_info "  1. Visit: https://extensions.gnome.org/extension/$extension_id/"
+        log_info "  2. Click 'Install' and follow browser instructions"
+        log_info "  3. Or use: gnome-extensions install <extension-name>@<author>"
+        return 1
+    elif command -v gnome-extensions-cli &> /dev/null; then
+        # gnome-extensions-cli (third-party tool)
+        gnome-extensions-cli install "$extension_id"
+    else
+        log_warning "No extension installer found."
+        log_info "Install gnome-extensions-cli for automatic installation:"
+        log_info "  pip install --user gnome-extensions-cli"
+        log_info ""
+        log_info "Or install manually:"
+        log_info "  Visit: https://extensions.gnome.org/extension/$extension_id/"
+        return 1
     fi
 }
 

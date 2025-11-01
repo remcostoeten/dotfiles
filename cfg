@@ -32,10 +32,12 @@ if test -d ~/.config/dotfiles/configs/fish/aliases
     end
 end
 
-# Source functions from dotfiles/functions directory
-if test -d ~/.config/dotfiles/functions
-    # Add functions directory to fish function path
-    contains ~/.config/dotfiles/functions $fish_function_path; or set -gx fish_function_path ~/.config/dotfiles/functions $fish_function_path
+# Source functions from configs/fish/functions directory
+# Fish automatically loads functions from ~/.config/fish/functions/
+# We symlink configs/fish/functions/ → ~/.config/fish/functions/ in setup.sh
+if test -d ~/.config/fish/functions
+    # Functions are auto-loaded by fish from ~/.config/fish/functions/
+    # No need to manually source or add to fish_function_path
 end
 
 # Add scripts directory to PATH

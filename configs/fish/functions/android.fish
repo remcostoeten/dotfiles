@@ -8,7 +8,7 @@ function launch_android_app
     set -l android_sdk "$HOME/Android/Sdk"
     set -l adb_path "$android_sdk/platform-tools/adb"
     set -l emulator_path "$android_sdk/emulator/emulator"
-    
+
     if not test -f "$adb_path"
         set_color red
         echo "❌ ADB not found at: $adb_path"
@@ -16,7 +16,7 @@ function launch_android_app
         set_color normal
         return 1
     end
-    
+
     if test (count $argv) -ne 2
         set_color red
         echo "❌ Usage: launch_android_app <app_name> <package_name>"
@@ -26,17 +26,17 @@ function launch_android_app
         set_color normal
         return 1
     end
-    
+
     set -l app_name $argv[1]
     set -l package_name $argv[2]
-    
+
     # Check if emulator is running
     set -l device_count (string trim ($adb_path devices | tail -n +2 | grep -v '^$' | wc -l))
-    
+
     # If emulator is running, check if app is running and toggle
     if test "$device_count" -gt 0
         set -l app_running ($adb_path shell pidof $package_name 2>/dev/null)
-        
+
         if test -n "$app_running"
             set_color yellow
             echo "🛑 $app_name is running, shutting down emulator..."
@@ -48,13 +48,13 @@ function launch_android_app
             return 0
         end
     end
-    
+
     # Start emulator if not running
     if test "$device_count" -eq 0
         set_color yellow
         echo "🚀 Starting Android emulator (fast mode)..."
         set_color normal
-        
+
         # Ultra-fast emulator startup with maximum optimizations
         nohup $emulator_path -avd Pixel_9_Pro \
             -no-snapshot-load \
@@ -63,13 +63,12 @@ function launch_android_app
             -gpu host \
             -accel on \
             -memory 2048 \
-            -cores 4 \
-            >/dev/null 2>&1 &
-        
+            -cores 4 >/dev/null 2>&1 &
+
         set_color cyan
         echo "⏳ Booting..."
         set_color normal
-        
+
         # Wait for device to be online (with timeout)
         set -l timeout 90
         set -l elapsed 0
@@ -78,7 +77,7 @@ function launch_android_app
             if test "$device_count" -gt 0
                 # Device is listed, now wait for it to be fully booted
                 set -l boot_complete ($adb_path shell getprop sys.boot_completed 2>/dev/null | string trim)
-                if test "$boot_complete" = "1"
+                if test "$boot_complete" = 1
                     set_color green
                     echo "✅ Emulator ready!"
                     set_color normal
@@ -93,7 +92,7 @@ function launch_android_app
             end
         end
         echo ""
-        
+
         if test $elapsed -ge $timeout
             set_color red
             echo "❌ Emulator took too long to start"
@@ -101,14 +100,14 @@ function launch_android_app
             return 1
         end
     end
-    
+
     set_color yellow
     echo "📱 Launching $app_name..."
     set_color normal
-    
+
     # Try to launch the app
     $adb_path shell monkey -p $package_name -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-    
+
     if test $status -eq 0
         set_color green
         echo "✅ $app_name launched successfully!"
@@ -118,10 +117,10 @@ function launch_android_app
         echo "❌ Failed to launch $app_name"
         echo "💡 Searching for correct package name..."
         set_color normal
-        
+
         # Try to find the package by searching
         set -l found_packages ($adb_path shell pm list packages | grep -i (echo $app_name | string lower) | cut -d: -f2)
-        
+
         if test -n "$found_packages"
             set_color cyan
             echo "📦 Found possible packages:"
@@ -143,28 +142,28 @@ end
 
 # DOCSTRING: Launch Feeld app in Android emulator (auto-starts emulator, toggle to quit)
 function feeld
-    launch_android_app "Feeld" "co.feeld"
+    launch_android_app Feeld "co.feeld"
 end
 
 # DOCSTRING: Launch Govee app in Android emulator (auto-starts emulator, toggle to quit)
 function govee
-    launch_android_app "Govee" "com.govee.home"
+    launch_android_app Govee "com.govee.home"
 end
 
 # DOCSTRING: List all installed packages on Android emulator - search for app package names
 function android_packages
     set -l android_sdk "$HOME/Android/Sdk"
     set -l adb_path "$android_sdk/platform-tools/adb"
-    
+
     if not test -f "$adb_path"
         set_color red
         echo "❌ ADB not found"
         set_color normal
         return 1
     end
-    
+
     set -l device_count (string trim ($adb_path devices | tail -n +2 | grep -v '^$' | wc -l))
-    
+
     if test "$device_count" -eq 0
         set_color red
         echo "❌ No emulator running"
@@ -172,12 +171,12 @@ function android_packages
         set_color normal
         return 1
     end
-    
+
     set_color cyan
     echo "📦 Installed packages on emulator:"
     set_color normal
     echo ""
-    
+
     if test (count $argv) -gt 0
         # Search for specific package
         set_color yellow
@@ -193,15 +192,15 @@ end
 # DOCSTRING: Start Android emulator without Android Studio - list AVDs, fast mode, headless
 function android
     # Check for help flag
-    if test "$argv[1]" = "--help" -o "$argv[1]" = "-h"
+    if test "$argv[1]" = --help -o "$argv[1]" = -h
         _android_help
         return 0
     end
-    
+
     # Set Android SDK path
     set -l android_sdk "$HOME/Android/Sdk"
     set -l emulator_path "$android_sdk/emulator/emulator"
-    
+
     # Check if emulator exists
     if not test -f "$emulator_path"
         set_color red
@@ -210,13 +209,13 @@ function android
         set_color normal
         return 1
     end
-    
+
     # Parse arguments
-    set -l avd_name "Pixel_9_Pro"
+    set -l avd_name Pixel_9_Pro
     set -l show_list false
     set -l fast_mode false
     set -l no_window false
-    
+
     for arg in $argv
         switch $arg
             case -l --list
@@ -234,7 +233,7 @@ function android
                 return 1
         end
     end
-    
+
     # Show list of available AVDs
     if test $show_list = true
         set_color cyan
@@ -245,10 +244,10 @@ function android
         echo ""
         return 0
     end
-    
+
     # Build emulator command
     set -l emu_cmd "$emulator_path -avd $avd_name"
-    
+
     if test $fast_mode = true
         set emu_cmd $emu_cmd " -no-snapshot -no-boot-anim -no-audio"
         set_color yellow
@@ -257,16 +256,16 @@ function android
         set_color yellow
         echo "🚀 Starting Android emulator..."
     end
-    
+
     if test $no_window = true
         set emu_cmd $emu_cmd " -no-window"
         echo "🖥️  Starting in headless mode..."
     end
-    
+
     echo "📱 Device: $avd_name"
     echo ""
     set_color normal
-    
+
     # Launch emulator
     eval $emu_cmd
 end
@@ -311,4 +310,3 @@ function _android_help
     echo "  android_packages <name>  # Search for specific package"
     set_color normal
 end
-

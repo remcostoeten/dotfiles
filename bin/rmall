@@ -1,17 +1,1 @@
-#!/usr/bin/env bash
-
-# Bin wrapper for scripts/rmall
-# This allows calling the script as 'rmall' from anywhere when bin/ is in PATH
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_DIR="$(dirname "$SCRIPT_DIR")"
-NODE_SCRIPT="$DOTFILES_DIR/scripts/rmall"
-
-# Check if script exists
-if [[ ! -f "$NODE_SCRIPT" ]]; then
-    echo "❌ Error: Cannot find rmall script at $NODE_SCRIPT"
-    exit 1
-fi
-
-# Execute the Node.js script with all arguments passed through
-exec "$NODE_SCRIPT" "$@"
+../scripts/rmall

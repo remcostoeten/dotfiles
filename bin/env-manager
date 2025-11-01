@@ -1,2 +1,1 @@
-#!/usr/bin/env bash
-exec bash "$HOME/.config/dotfiles/scripts/env-manager" "$@"
+/home/remco-stoeten/.config/dotfiles/scripts/env-manager

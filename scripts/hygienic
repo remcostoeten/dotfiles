@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/ensure-global-npm-package" "@remcostoeten/hygienic" "hygienic"
-
-# Run the actual command (not our wrapper)
-"$ACTUAL_CMD_PATH" "$@"

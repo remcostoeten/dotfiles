@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Setup script for environment variables on new machines
+
+set -e
+
+DOTFILES_DIR="$HOME/.config/dotfiles"
+ENV_PRIVATE_DIR="$DOTFILES_DIR/env-private"
+
+echo "🔧 Setting up environment variables..."
+echo ""
+
+# Check if dotfiles directory exists
+if [ ! -d "$DOTFILES_DIR" ]; then
+    echo "❌ Dotfiles directory not found at $DOTFILES_DIR"
+    exit 1
+fi
+
+# Initialize submodules
+if [ ! -f "$ENV_PRIVATE_DIR/env" ]; then
+    echo "📦 Initializing git submodules..."
+    cd "$DOTFILES_DIR"
+    git submodule init
+    git submodule update
+    echo "✅ Submodules initialized"
+else
+    echo "✅ Environment variables already set up"
+fi
+
+# Verify env file exists
+if [ -f "$ENV_PRIVATE_DIR/env" ]; then
+    echo ""
+    echo "✅ Environment variables loaded from:"
+    echo "   $ENV_PRIVATE_DIR/env"
+    echo ""
+    echo "📋 Current variables:"
+    "$DOTFILES_DIR/bin/env" view
+else
+    echo ""
+    echo "⚠️  Warning: env file not found!"
+    echo "   Expected at: $ENV_PRIVATE_DIR/env"
+    exit 1
+fi
+
+echo ""
+echo "✨ Setup complete! Restart your shell or run: source ~/.config/fish/config.fish"
+
+
+

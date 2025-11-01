@@ -86,13 +86,9 @@ function clearScreen() {
 function bannerModern(): string {
     const c = colors();
     return [
-    `${c.lavender}┌─────────────────────────────────────────────────────────────────────────────────┐${c.reset}`,
-    `${c.lavender}│${c.reset} ${c.bright}${c.pink}DOTFILES MANAGER${c.reset} ${c.dim}${c.lavender}v2.0${c.reset} ${c.lavender}│${c.reset}`,
-    `${c.lavender}│${c.reset} ${c.dim}${c.subtext0}Your personal toolkit for development, system, and configuration${c.reset} ${c.lavender}│${c.reset}`,
-    `${c.lavender}└─────────────────────────────────────────────────────────────────────────────────┘${c.reset}`,
-    '',
-    `${c.dim}${c.text}Welcome back!${c.reset} ${c.bright}${c.mauve}85+ tools${c.reset} ${c.dim}${c.subtext1}at your fingertips${c.reset}`,
-    `${c.dim}${c.subtext0}Use ${c.reset}${c.bright}${c.pink}↑↓${c.reset}${c.dim}${c.subtext0} to navigate, ${c.reset}${c.bright}${c.pink}Enter${c.reset}${c.dim}${c.subtext0} to execute, ${c.reset}${c.bright}${c.pink}Ctrl+C${c.reset}${c.dim}${c.subtext0} to exit${c.reset}`
+    `${c.lavender}╭────────────────────────────────────────────╮${c.reset}`,
+    `${c.lavender}│${c.reset}  ${c.bright}${c.pink}⚡ DOTFILES${c.reset} ${c.dim}v2.0${c.reset}                  ${c.lavender}│${c.reset}`,
+    `${c.lavender}╰────────────────────────────────────────────╯${c.reset}`
     ].join('\n');
 }
 
@@ -276,7 +272,6 @@ function collectFishFunctionFiles(dotfilesRoot: string): string[] {
     const paths: string[] = [];
     const candidates = [
         join(dotfilesRoot, 'configs', 'fish', 'functions'),
-        join(dotfilesRoot, 'fish', 'functions')
     ];
     for (const dir of candidates) {
         if (!existsSync(dir)) continue;
@@ -569,12 +564,11 @@ function buildFzfInput(items: TItem[], cfg: TConfig): string {
 
     for (const [category, categoryItems] of byCategory.entries()) {
         const categoryInfo = CATEGORIES[category] || CATEGORIES.utility;
-        lines.push(`${categoryInfo.color}${categoryInfo.icon} ${categoryInfo.name.toUpperCase()} (${categoryItems.length})${c.reset}`);
         for (const item of categoryItems) {
-            const label = `${categoryInfo.icon} ${item.name}`;
-            lines.push(`  ${label}`);
+            const desc = item.description ? ` ${c.dim}- ${item.description}${c.reset}` : '';
+            const label = `${categoryInfo.color}${categoryInfo.icon}${c.reset} ${c.text}${item.name}${c.reset}${desc}`;
+            lines.push(label);
         }
-        lines.push(''); // Empty line between categories
     }
 
     return lines.join('\n');
@@ -583,25 +577,45 @@ function buildFzfInput(items: TItem[], cfg: TConfig): string {
 function runFzf(dotfilesRoot: string, cfg: TConfig, items: TItem[]): Promise<TItem | null> {
     return new Promise<TItem | null>((resolveSel) => {
         const input = buildFzfInput(items, cfg);
+        const itemsJson = JSON.stringify(items);
+
+        // Write items to temp file for matching
+        const tmpFile = join(dotfilesRoot, '.dotfiles-items.tmp');
+        writeFileSync(tmpFile, itemsJson);
 
         try {
-            // Use echo and pipe to fzf instead of stdin
-            const child = spawn('bash', ['-c', `echo '${input.replace(/'/g, "'\"'\"'")}' | fzf --ansi --height 50% --reverse --prompt "> " --header "🚀 DOTFILES MANAGER - Enter: Execute | Ctrl+C: Exit"`], {
-                stdio: 'pipe',
+            // Use a simpler approach: pipe input directly to fzf
+            const fzf = spawn('fzf', [
+                '--ansi',
+                '--height=90%',
+                '--layout=reverse',
+                '--border=rounded',
+                '--prompt=> ',
+                '--header=DOTFILES MANAGER'
+            ], {
+                stdio: ['pipe', 'pipe', 'inherit'],
                 env: { ...process.env, TERM: 'xterm-256color' }
             });
 
             let sel = '';
 
-            child.stdout.on('data', (chunk: Buffer) => {
+            fzf.stdout.on('data', (chunk: Buffer) => {
                 sel += chunk.toString('utf8');
             });
 
-            child.stderr.on('data', (data) => {
-                // Ignore stderr for now
-            });
+            // Write input to fzf stdin
+            fzf.stdin.write(input);
+            fzf.stdin.end();
 
-            child.on('exit', (code: number | null) => {
+            fzf.on('exit', (code: number | null) => {
+                // Clean up temp file
+                try {
+                    if (existsSync(tmpFile)) {
+                        const fs = require('fs');
+                        fs.unlinkSync(tmpFile);
+                    }
+                } catch {}
+
                 const selection = sel.trim();
                 if (!selection || code !== 0) {
                     return resolveSel(null);
@@ -610,16 +624,22 @@ function runFzf(dotfilesRoot: string, cfg: TConfig, items: TItem[]): Promise<TIt
                 // Remove color codes and clean up the selection
                 const cleanSelection = selection.replace(/\x1b\[[0-9;]*m/g, '').trim();
 
-                // Find the matching item by name (ignore leading spaces and category headers)
+                // Extract just the name (everything before the first dash if there's a description)
+                const namePart = cleanSelection.split(' - ')[0].trim();
+                // Remove the icon if present (first emoji character)
+                const nameOnly = namePart.replace(/^[^\w\s]+\s*/, '').trim();
+
+                // Find the matching item by name
                 const selectedItem = items.find(item => {
-                    const cleanName = item.name;
-                    return cleanSelection === cleanName || cleanSelection === `  ${cleanName}`;
+                    return item.name === nameOnly ||
+                           cleanSelection.includes(item.name) ||
+                           nameOnly === item.name;
                 });
 
                 resolveSel(selectedItem || null);
             });
 
-            child.on('error', (error) => {
+            fzf.on('error', (error) => {
                 console.error('Failed to run fzf:', error.message);
                 resolveSel(null);
             });
@@ -804,27 +824,41 @@ function printCategories(items: TItem[]) {
 async function main() {
     const dotfilesRoot = join(process.env.HOME!, '.config', 'dotfiles');
     const cfg = loadConfig(dotfilesRoot);
-    const args = process.argv.slice(2);
+    let args = process.argv.slice(2);
 
     if (args.length === 0) {
         // Default to interactive mode when no arguments provided
-        args.push('interactive');
+        args = ['interactive'];
     }
 
     if (args[0] === 'interactive' || args[0] === 'i') {
         const items = buildIndex(dotfilesRoot, cfg);
         if (haveFzf()) {
-            const sel = await runFzf(dotfilesRoot, cfg, items);
-            if (sel) {
-                // Update recent items
-                const recentItems = cfg.recentItems || [];
-                const newRecent = [sel.id, ...recentItems.filter(id => id !== sel.id)].slice(0, 10);
-                saveConfig(dotfilesRoot, { ...cfg, recentItems: newRecent });
+            try {
+                const sel = await runFzf(dotfilesRoot, cfg, items);
+                if (sel) {
+                    // Update recent items
+                    const recentItems = cfg.recentItems || [];
+                    const newRecent = [sel.id, ...recentItems.filter(id => id !== sel.id)].slice(0, 10);
+                    saveConfig(dotfilesRoot, { ...cfg, recentItems: newRecent });
 
-                const code = await runItem(sel);
-                process.exit(code);
+                    const code = await runItem(sel);
+                    process.exit(code);
+                }
+                process.exit(0);
+            } catch (error) {
+                console.error('Error in interactive mode:', error.message);
+                console.log('Falling back to list mode...');
+                // Fall back to showing the list
+                console.log('');
+                console.log('Available tools:');
+                for (const item of items.slice(0, 20)) { // Show first 20 items
+                    console.log(`  ${formatLabelColored(item, cfg)}`);
+                }
+                console.log(`  ... and ${items.length - 20} more tools`);
+                console.log('');
+                process.exit(0);
             }
-            process.exit(0);
         } else {
             console.log('fzf not found. Please install fzf for interactive mode.');
             process.exit(1);

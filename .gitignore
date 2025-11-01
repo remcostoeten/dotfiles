@@ -1,7 +1,23 @@
+# Dependencies
 node_modules/env
 **node_modules/** 
 tmp/
 scripts/docker/node_modules
+
+# Build artifacts
+**/dist/
+**/build/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Lock files
+**/bun.lock
+**/package-lock.json
+**/yarn.lock
+**/pnpm-lock.yaml
 
 # Sensitive data - stored in private repo at ~/.dotfiles
 secrets/
@@ -14,3 +30,15 @@ secrets.json
 scripts/xclip/history.log
 scripts/screen-data/logging/
 click/history.log
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace

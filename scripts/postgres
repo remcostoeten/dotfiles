@@ -21,11 +21,6 @@ scripts_dir = Path(__file__).parent
 if str(scripts_dir) not in sys.path:
     sys.path.insert(0, str(scripts_dir))
 
-try:
-    from db_analyzer import DatabaseAnalyzer
-except ImportError:
-    DatabaseAnalyzer = None
-
 # SQL snippets for quick access
 SNIPPETS = [
     {
@@ -1633,92 +1628,12 @@ class DatabaseManager:
         print(f"{Colors.BRIGHT}{Colors.WHITE}AI DATABASE ANALYSIS{Colors.RESET}")
         print(f"{Colors.DIM}Main Menu > Database Tools > AI Analysis{Colors.RESET}\n")
 
-        if not os.getenv("GEMINI_API_KEY"):
-            print(f"{Colors.YELLOW}⚠ GEMINI_API_KEY environment variable not set.{Colors.RESET}")
-            print("To use AI analysis features, please set your API key:")
-            print(f"{Colors.DIM}In fish shell: set -x GEMINI_API_KEY your-key-here{Colors.RESET}")
-            print('\n' + '─' * 70)
-            input("Press Enter to return...")
-            return
-
-        # Get current database connection
-        if self.cloud_db and self.cloud_db.is_connected():
-            conn_url = self.cloud_db.url
-        else:
-            # Get local database connection if available
-            databases = self.get_running_postgres()
-            if not databases:
-                print(f"{Colors.YELLOW}No running databases found.{Colors.RESET}")
-                input("Press Enter to return...")
-                return
-
-            print("Select a database to analyze:")
-            for i, db in enumerate(databases):
-                print(f"{i + 1}. {db.name}")
-            
-            choice = input("\nEnter database number (or Enter to cancel): ").strip()
-            if not choice.isdigit() or int(choice) < 1 or int(choice) > len(databases):
-                return
-
-            db = databases[int(choice) - 1]
-            if db.ports:
-                port = db.ports.split('->')[0].split(':')[1] if ':' in db.ports else '5432'
-                conn_url = f"postgresql://postgres:password@localhost:{port}/{db.name}"
-            else:
-                print(f"{Colors.RED}Cannot determine connection details for selected database.{Colors.RESET}")
-                input("Press Enter to return...")
-                return
-
-        print(f"\n{Colors.YELLOW}Analyzing database...{Colors.RESET}")
-        
-        try:
-            analyzer = DatabaseAnalyzer(conn_url)
-            success, message = analyzer.connect()
-            if not success:
-                print(f"\n{Colors.RED}✗ {message}{Colors.RESET}")
-                input("Press Enter to return...")
-                return
-
-            analysis = analyzer.analyze_database()
-            success, recommendations = analyzer.get_ai_recommendations(analysis)
-            
-            self.clear_screen()
-            self.print_header()
-            print(f"{Colors.BRIGHT}{Colors.WHITE}ANALYSIS RESULTS{Colors.RESET}\n")
-
-            # Print statistics
-            print(f"{Colors.CYAN}Database Statistics:{Colors.RESET}")
-            print("─" * 50)
-            for table in analysis['tables']:
-                print(f"\n{Colors.GREEN}● {table['name']}{Colors.RESET}")
-                stats = table['stats']
-                print(f"  Rows: {stats['rows']:,}")
-                print(f"  Size: {stats['total_size_mb']:.2f} MB")
-                print(f"  Index Size: {stats['index_size_mb']:.2f} MB")
-                print(f"  Index Usage Ratio: {stats['index_ratio']:.2f}")
-
-            # Print potential issues
-            if analysis['potential_issues']:
-                print(f"\n{Colors.YELLOW}Potential Issues:{Colors.RESET}")
-                print("─" * 50)
-                for issue in analysis['potential_issues']:
-                    print(f"! {issue}")
-
-            # Print AI recommendations
-            if success:
-                print(f"\n{Colors.MAGENTA}AI Recommendations:{Colors.RESET}")
-                print("─" * 50)
-                print(recommendations)
-            else:
-                print(f"\n{Colors.RED}Failed to get AI recommendations: {recommendations}{Colors.RESET}")
-
-            analyzer.disconnect()
-
-        except Exception as e:
-            print(f"\n{Colors.RED}Error during analysis: {str(e)}{Colors.RESET}")
-
+        print(f"{Colors.YELLOW}⚠ AI Database Analysis feature is currently unavailable.{Colors.RESET}")
+        print(f"{Colors.DIM}The db_analyzer module has been removed from this installation.{Colors.RESET}")
+        print(f"{Colors.DIM}This feature will be restored in a future update.{Colors.RESET}")
         print('\n' + '─' * 70)
         input("Press Enter to return...")
+        return
 
     def cleanup(self):
         self.clear_screen()

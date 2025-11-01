@@ -12,6 +12,9 @@ export class FishModule extends BaseModule {
     }
   ];
 
+  // Note: This assumes the setup script is run from the dotfiles root directory
+  // The 'cfg' file should be in the dotfiles root
+
   constructor() {
     super(
       'fish',

@@ -66,12 +66,13 @@ check_dependencies() {
     
     local missing_deps=()
     
+    # Check for gnome-shell-extensions package (provides gnome-extensions command)
     if ! command -v gnome-extensions &> /dev/null; then
         missing_deps+=("gnome-shell-extensions")
     fi
     
     if ! command -v gsettings &> /dev/null; then
-        missing_deps+=("gsettings")
+        missing_deps+=("dconf-cli")  # More accurate package name
     fi
     
     if [ ${#missing_deps[@]} -gt 0 ]; then

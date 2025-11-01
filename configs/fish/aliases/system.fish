@@ -31,6 +31,12 @@ alias py 'python3'
 # DOCSTRING: Use pip3 as pip
 alias pip 'pip3'
 
+# DOCSTRING: Quick access to dotfiles interactive menu
+alias df 'bun ~/.config/dotfiles/scripts/dotfiles.ts'
+
+# DOCSTRING: Dotfiles command - main interface
+alias dotfiles 'bun ~/.config/dotfiles/scripts/dotfiles.ts'
+
 # DOCSTRING: Reload fish configuration
 function reload
     # Check for help flag

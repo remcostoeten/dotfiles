@@ -1,0 +1,151 @@
+#!/bin/bash
+
+BG_DIR="${HOME}/.dotfiles/bg"
+BG_PIDS_FILE="${BG_DIR}/processes"
+BG_LOG_DIR="${BG_DIR}/logs"
+
+_init() {
+  mkdir -p "$BG_LOG_DIR"
+  touch "$BG_PIDS_FILE"
+}
+
+_color() {
+  local color=$1 text=$2
+  case $color in
+    green) echo -e "\033[32m${text}\033[0m" ;;
+    red) echo -e "\033[31m${text}\033[0m" ;;
+    yellow) echo -e "\033[33m${text}\033[0m" ;;
+    blue) echo -e "\033[34m${text}\033[0m" ;;
+    cyan) echo -e "\033[36m${text}\033[0m" ;;
+    gray) echo -e "\033[90m${text}\033[0m" ;;
+    bold) echo -e "\033[1m${text}\033[0m" ;;
+    *) echo "$text" ;;
+  esac
+}
+
+_border() {
+  _color cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
+_header() {
+  echo
+  _border
+  _color blue "  $1"
+  _border
+}
+
+_get_next_id() {
+  echo $(($(awk '{print $1}' "$BG_PIDS_FILE" 2>/dev/null | sort -n | tail -1 || echo 0) + 1))
+}
+
+_start() {
+  local id=$(_get_next_id)
+  local cmd="$*"
+  local log_file="$BG_LOG_DIR/process_${id}.log"
+  
+  nohup "$@" > "$log_file" 2>&1 &
+  local pid=$!
+  
+  echo "$id $pid $cmd" >> "$BG_PIDS_FILE"
+  
+  echo
+  _color green "  ✓ Started process"
+  _color bold "  [ $id ]  $cmd"
+  _color gray "  PID: $pid | Log: $log_file"
+  echo
+}
+
+_list() {
+  local active=0
+  
+  _header "Active Background Processes"
+  
+  if [ ! -s "$BG_PIDS_FILE" ]; then
+    echo
+    _color yellow "  ℹ No active processes"
+    echo
+    return
+  fi
+  
+  echo
+  while read -r id pid cmd; do
+    if kill -0 "$pid" 2>/dev/null; then
+      printf "  $(_color bold "[ $id ]")  %s\n" "$cmd"
+      _color gray "       └─ PID: $pid"
+      ((active++))
+    fi
+  done < "$BG_PIDS_FILE"
+  
+  echo
+  _color gray "  Total: $active process(es)"
+  echo
+}
+
+_kill() {
+  local id=$1
+  local pid=$(awk -v id="$id" '$1 == id {print $2}' "$BG_PIDS_FILE")
+  
+  if [ -z "$pid" ]; then
+    echo
+    _color red "  ✗ Process [ $id ] not found"
+    echo
+    return 1
+  fi
+  
+  if kill "$pid" 2>/dev/null; then
+    echo
+    _color green "  ✓ Terminated process"
+    _color bold "  [ $id ]  PID: $pid"
+    sed -i.bak "/^$id /d" "$BG_PIDS_FILE"
+    rm -f "$BG_PIDS_FILE.bak"
+    echo
+  else
+    echo
+    _color red "  ✗ Failed to terminate process [ $id ]"
+    echo
+    return 1
+  fi
+}
+
+_cleanup() {
+  sed -i.bak '/^[0-9]/!d' "$BG_PIDS_FILE" 2>/dev/null
+  rm -f "$BG_PIDS_FILE.bak"
+}
+
+_help() {
+  _header "Background Process Manager"
+  cat << 'EOF'
+  Usage: bg [COMMAND] [OPTIONS]
+
+  Commands:
+    bg <command>        Start a command in background
+    bg                  List all active processes
+    bg <id>             Kill process by ID
+    bg help             Show this help menu
+
+  Examples:
+    bg bun run dev
+    bg brave-browser http://localhost:3000
+    bg 1                (kill process #1)
+
+  Process locations:
+EOF
+  _color gray "    Processes: $BG_PIDS_FILE"
+  _color gray "    Logs: $BG_LOG_DIR"
+  echo
+}
+
+_init
+
+case "${1}" in
+  help|--help|-h)
+    _help
+    ;;
+  ""|list)
+    _cleanup
+    _list
+    ;;
+  *)
+    _start "$@"
+    ;;
+esac
