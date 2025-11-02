@@ -332,14 +332,42 @@ fn get_git_status() -> Result<GitStatus, String> {
     };
     
     for line in status_lines {
-        if line.starts_with(" M") || line.starts_with("MM") {
-            changes.modified.push(line[3..].trim().to_string());
-        } else if line.starts_with("A ") || line.starts_with("A ") {
-            changes.added.push(line[2..].trim().to_string());
-        } else if line.starts_with("D ") {
-            changes.deleted.push(line[2..].trim().to_string());
-        } else if line.starts_with("??") {
-            changes.untracked.push(line[3..].trim().to_string());
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        
+        // Git status format: XY filename
+        // X = index status, Y = working tree status
+        if trimmed.len() < 3 {
+            continue;
+        }
+        
+        let status = &trimmed[..2];
+        let filename = trimmed[3..].trim().to_string();
+        
+        if filename.is_empty() {
+            continue;
+        }
+        
+        match status {
+            s if s == " M" || s == "MM" || s == "M " || s == "MD" || s == "M!" => {
+                changes.modified.push(filename);
+            }
+            s if s == "A " || s == "AM" || s == "AD" => {
+                changes.added.push(filename);
+            }
+            s if s == "D " || s == "DM" || s == "DA" => {
+                changes.deleted.push(filename);
+            }
+            s if s == "??" => {
+                changes.untracked.push(filename);
+            }
+            s if s.chars().nth(1) == Some('M') => {
+                // Any status with M in second position (working tree modified)
+                changes.modified.push(filename);
+            }
+            _ => {}
         }
     }
     
