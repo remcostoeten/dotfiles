@@ -140,9 +140,9 @@ test-results/
 playwright-report/
 test-results.xml
 
-# Build artifacts
+# Build artifacts (commenting out dist for now since source files are missing)
 build/
-dist/
+# dist/
 out/
 
 # Local development
