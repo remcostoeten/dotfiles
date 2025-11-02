@@ -19,7 +19,7 @@ try:
 except ImportError:
     CRYPTO_AVAILABLE = False
 
-CONNECTIONS_FILE = Path.home() / ".db_connections.json"
+CONNECTIONS_FILE = Path.home() / ".dotfiles" / "connections.json"
 SERVICE_NAME = "db_tool_connections"
 
 class Colors:
@@ -41,6 +41,7 @@ class ConnectionManager:
     
     def _ensure_file_exists(self):
         if not self.connections_file.exists():
+            self.connections_file.parent.mkdir(parents=True, exist_ok=True)
             self.connections_file.write_text(json.dumps({"connections": []}, indent=2))
     
     def _get_encryption_key(self) -> bytes:

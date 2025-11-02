@@ -1,14 +1,6 @@
 #!/bin/bash
 
-# Interactive Dotfiles Setup Script for Ubuntu/Debian
-# Allows selective installation of packages and tools
-
-set -euo pipefail  # Exit on error, undefined vars, pipe failures
-
-# Override exit on error for specific functions - we handle errors manually
-set +e  # Don't exit on error - we'll handle it manually
-
-# Colors for output
+set +e
 readonly GREEN='\033[0;32m'
 readonly BLUE='\033[0;34m'
 readonly YELLOW='\033[1;33m'
@@ -16,15 +8,212 @@ readonly RED='\033[0;31m'
 readonly CYAN='\033[0;36m'
 readonly MAGENTA='\033[0;35m'
 readonly BOLD='\033[1m'
-readonly NC='\033[0m' # No Color
+readonly NC='\033[0m' # No Color 
 
 # Configuration file to save progress
 readonly PROGRESS_FILE="$HOME/.config/dotfiles/.setup_progress.json"
 readonly DOTFILES_DIR="$HOME/.config/dotfiles"
 
-# Dry run mode flag
+# ============================================================================
+# PACKAGE DEFINITIONS
+# ============================================================================
+#
+# Format: "package_name|install_method|extra_data|display_name"
+#
+# Install Methods:
+#   apt     - Standard apt-get install
+#   snap    - Snap package manager
+#   curl    - Download and run install script
+#   npm     - NPM global package
+#   cargo   - Rust cargo install
+#   github  - Download from GitHub releases
+#
+# Examples:
+#   "git|apt|Git"                                      → apt-get install git
+#   "code|snap|Visual Studio Code"                     → snap install code
+#   "pnpm|curl|https://get.pnpm.io/install.sh|pnpm"   → curl URL | bash
+#   "gemini-cli|npm|gemini-cli"                        → npm install -g gemini-cli
+#   "ripgrep|cargo|ripgrep"                            → cargo install ripgrep
+#   "lazygit|github|jesseduffield/lazygit|lazygit"    → Download from GitHub releases
+#
+# Note: For curl and github methods, extra_data field is required (URL or repo)
+# ============================================================================
+
+# Essential system packages
+declare -a ESSENTIAL_PACKAGES=(
+    "git|apt|Git"
+    "curl|apt|cURL"
+    "wget|apt|wget"
+    "build-essential|apt|Build Essential"
+    "ca-certificates|apt|CA Certificates"
+    "gnupg|apt|GnuPG"
+    "software-properties-common|apt|Software Properties Common"
+    "fish|apt|Fish Shell"
+)
+
+# Programming languages & runtimes
+declare -a LANGUAGES=(
+    "python3|apt|Python 3"
+    "python3-pip|apt|Python pip"
+    "python3-venv|apt|Python venv"
+    "nodejs|apt|Node.js"
+)
+
+# Code editors & IDEs
+declare -a EDITORS=(
+    "neovim|apt|Neovim"
+    "code|snap|Visual Studio Code"
+    "cursor|snap|Cursor Editor"
+)
+
+# Package managers
+declare -a PACKAGE_MANAGERS=(
+    "npm|apt|npm (Node Package Manager)"
+    "pnpm|curl|https://get.pnpm.io/install.sh|pnpm"
+    "bun|curl|https://bun.sh/install|Bun"
+)
+
+# Git tools
+declare -a GIT_TOOLS=(
+    "gh|apt|GitHub CLI"
+    "lazygit|github|jesseduffield/lazygit|lazygit"
+    "lazydocker|github|jesseduffield/lazydocker|lazydocker"
+)
+
+# Android emulator (optional)
+declare -a ANDROID_TOOLS=(
+    "android-studio:Android Studio"
+)
+
+# Modern CLI utilities
+declare -a CLI_UTILITIES=(
+    "ripgrep:ripgrep"
+    "fd-find:fd"
+    "fzf:fzf"
+    "zoxide:zoxide"
+    "eza:eza"
+    "bat:bat"
+    "htop:htop"
+    "tree:tree"
+    "jq:jq"
+    "unzip:unzip"
+    "zip:zip"
+    "xclip:xclip"
+    "wl-clipboard:wl-clipboard"
+    "wget:wget"
+    "bc:bc"
+    "libnotify-bin:libnotify-bin"
+)
+
+# Automation & Testing tools
+declare -a AUTOMATION_TOOLS=(
+    "xdotool:xdotool"
+    "ydotool:ydotool"
+)
+
+# Media playback (for alarm script)
+declare -a MEDIA_PLAYBACK=(
+    "mpv:mpv"
+    "pulseaudio-utils:pulseaudio-utils"
+)
+
+# GNOME specific tools
+declare -a GNOME_TOOLS=(
+    "gnome-shell-extensions:gnome-shell-extensions"
+    "dconf-cli:dconf-cli"
+)
+
+# Communication & Social
+declare -a COMMUNICATION_APPS=(
+    "discord:Discord"
+    "slack:Slack"
+    "telegram-desktop:Telegram"
+)
+
+# Media & Graphics
+declare -a MEDIA_APPS=(
+    "gimp:GIMP"
+    "inkscape:Inkscape"
+    "vlc:VLC Media Player"
+    "obs-studio:OBS Studio" 
+)
+
+# Browsers
+declare -a BROWSERS=(
+    "firefox:Firefox"
+    "google-chrome-stable:Google Chrome"
+    "brave-browser:Brave Browser"
+)
+
+# Container & DevOps
+declare -a DEVOPS_TOOLS=(
+    "docker.io:Docker"
+    "docker-compose:Docker Compose"
+    "kubectl:kubectl"
+)
+
+# System utilities
+declare -a SYSTEM_UTILS=(
+    "htop:htop"
+    "btop:btop"
+    "neofetch:neofetch"
+    "timeshift:Timeshift"
+)
+
+# Hardware & GPU tools
+declare -a HARDWARE_TOOLS=(
+    "openrgb:OpenRGB"
+    "nvidia-settings:NVIDIA Settings"
+    "nvidia-utils:NVIDIA Utils"
+)
+
+# Tools installed via snap
+declare -a SNAP_PACKAGES=(
+    "whatsapp-for-linux:WhatsApp"
+    "spotify:Spotify"
+    "obsidian:Obsidian"
+    "signal-desktop:Signal"
+    "code:Visual Studio Code"
+    "cursor:Cursor Editor"
+)
+
+# Tools installed via curl scripts
+declare -a CURL_TOOLS=(
+    "bun:https://bun.sh/install:bun"
+    "starship:https://starship.rs/install.sh:starship"
+    "nvm:https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh:nvm"
+    "pnpm:https://get.pnpm.io/install.sh:pnpm"
+    "turso:https://get.tur.so/install.sh:turso"
+    "uvx:https://astral.sh/uv/install.sh:uvx"
+    "vercel:https://vercel.com/cli.sh:vercel"
+    "netlify:https://cli.netlify.com/install.sh:netlify"
+)
+
+# CLI tools installed via npm/pnpm (after node is installed)
+declare -a NPM_CLI_TOOLS=(
+    "gemini-cli:gemini-cli"
+)
+
+declare -A CONFIG_APPS=(
+    ["nvim"]="neovim:~/.config/nvim"
+    ["wezterm"]="wezterm:~/.config/wezterm"
+    ["kitty"]="kitty:~/.config/kitty"
+    ["hyprland"]="hyprland:~/.config/hypr"
+    ["waybar"]="waybar:~/.config/waybar"
+)
+
+# Command line flags
 DRY_RUN=false
 DRY_RUN_SECTION=""
+DRY_RUN_INTERACTIVE=false
+SKIP_SYSTEM_UPDATE=false
+SKIP_FONTS=false
+VERBOSE=false
+QUIET=false
+INSTALL_SECTION=""
+INSTALL_INTERACTIVE=false
+SKIP_SECTION=""
+SKIP_INTERACTIVE=false
 
 # Parse command line arguments
 parse_args() {
@@ -39,16 +228,147 @@ parse_args() {
                 DRY_RUN_SECTION="$2"
                 shift 2
                 ;;
+            --dry-run-interactive|--dry-run-i)
+                DRY_RUN=true
+                DRY_RUN_INTERACTIVE=true
+                shift
+                ;;
+            --skip-system-update)
+                SKIP_SYSTEM_UPDATE=true
+                shift
+                ;;
+            --skip-fonts)
+                SKIP_FONTS=true
+                shift
+                ;;
+            --verbose|-v)
+                VERBOSE=true
+                shift
+                ;;
+            --quiet|-q)
+                QUIET=true
+                shift
+                ;;
+            --install)
+                INSTALL_SECTION="$2"
+                shift 2
+                ;;
+            --install-interactive|--install-i)
+                INSTALL_INTERACTIVE=true
+                shift
+                ;;
+            --skip)
+                SKIP_SECTION="$2"
+                shift 2
+                ;;
+            --skip-interactive|--skip-i)
+                SKIP_INTERACTIVE=true
+                shift
+                ;;
+            --list)
+                list_all_packages
+                exit 0
+                ;;
+            --source)
+                if command_exists xdg-open; then
+                    xdg-open "https://github.com/remcostoeten/dotfiles/blob/main/setup.sh" 2>/dev/null &
+                    echo -e "${GREEN}✓${NC} Opening source in browser..."
+                elif command_exists open; then
+                    open "https://github.com/remcostoeten/dotfiles/blob/main/setup.sh" 2>/dev/null &
+                    echo -e "${GREEN}✓${NC} Opening source in browser..."
+                else
+                    echo -e "${CYAN}Source:${NC} https://github.com/remcostoeten/dotfiles/blob/main/setup.sh"
+                fi
+                exit 0
+                ;;
             -h|--help)
-                echo "Usage: $0 [OPTIONS]"
-                echo ""
-                echo "Options:"
-                echo "  --dry-run              Show what would be installed without actually installing"
-                echo "  --dry-run-section NAME  Dry run for a specific section only"
-                echo "  -h, --help              Show this help message"
-                echo ""
-                echo "Example sections:"
-                echo "  dev, cli, browsers, snaps, config-apps, git, fish, fonts"
+                clear
+                echo -e "${BOLD}${MAGENTA}"
+                echo "╔════════════════════════════════════════════════════════════════════╗"
+                echo "║                    Dotfiles Setup Script                          ║"
+                echo "║              Interactive Environment Configuration                 ║"
+                echo "╚════════════════════════════════════════════════════════════════════╝"
+                echo -e "${NC}\n"
+                
+                echo -e "${BOLD}${CYAN}USAGE${NC}"
+                echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}[OPTIONS]${NC}\n"
+                
+                echo -e "${BOLD}${CYAN}OPTIONS${NC}"
+                echo -e "  ${GREEN}--dry-run${NC}                         Preview all installations without making changes"
+                echo -e "  ${GREEN}--dry-run-section${NC} ${YELLOW}<NAME>${NC}          Preview a specific section only"
+                echo -e "  ${GREEN}--dry-run-interactive, -i${NC}         Interactive dry-run mode (select sections to preview)"
+                echo -e "  ${GREEN}--skip-system-update${NC}              Skip apt update/upgrade step"
+                echo -e "  ${GREEN}--skip-fonts${NC}                      Skip Nerd Fonts installation"
+                echo -e "  ${GREEN}--verbose, -v${NC}                     Show detailed installation output"
+                echo -e "  ${GREEN}--quiet, -q${NC}                       Minimal output, errors only"
+                echo -e "  ${GREEN}--install${NC} ${YELLOW}<NAME>${NC}                 Install a specific section non-interactively"
+                echo -e "  ${GREEN}--install-interactive, --install-i${NC}  Select sections to install interactively"
+                echo -e "  ${GREEN}--skip${NC} ${YELLOW}<NAME>${NC}                    Skip a specific section"
+                echo -e "  ${GREEN}--skip-interactive, --skip-i${NC}      Select sections to skip interactively"
+                echo -e "  ${GREEN}--list${NC}                            List all available packages by category"
+                echo -e "  ${GREEN}--source${NC}                          Open script source on GitHub"
+                echo -e "  ${GREEN}-h, --help${NC}                        Display this help message\n"
+                
+                echo -e "${BOLD}${CYAN}AVAILABLE SECTIONS${NC}"
+                echo -e "  ${YELLOW}dev${NC}              Development tools (Python, Node.js, npm, neovim)"
+                echo -e "  ${YELLOW}git${NC}              Git tools (GitHub CLI, lazygit, lazydocker)"
+                echo -e "  ${YELLOW}cli${NC}              Modern CLI utilities (ripgrep, fzf, bat, eza, zoxide)"
+                echo -e "  ${YELLOW}browsers${NC}         Web browsers (Firefox, Chrome, Brave)"
+                echo -e "  ${YELLOW}snaps${NC}            Snap packages (VS Code, Cursor, WhatsApp, Spotify)"
+                echo -e "  ${YELLOW}communication${NC}    Communication apps (Discord, Slack, Telegram)"
+                echo -e "  ${YELLOW}media${NC}            Media & graphics (GIMP, Inkscape, VLC, OBS)"
+                echo -e "  ${YELLOW}devops${NC}           DevOps tools (Docker, kubectl)"
+                echo -e "  ${YELLOW}system${NC}           System utilities (htop, btop, neofetch, timeshift)"
+                echo -e "  ${YELLOW}hardware${NC}         Hardware tools (OpenRGB, NVIDIA settings)"
+                echo -e "  ${YELLOW}automation${NC}       Automation tools (xdotool, ydotool)"
+                echo -e "  ${YELLOW}gnome${NC}            GNOME desktop tools and aesthetics"
+                echo -e "  ${YELLOW}tools${NC}            Essential tools (bun, starship, nvm, pnpm, turso)"
+                echo -e "  ${YELLOW}npm-tools${NC}        NPM CLI tools (gemini-cli)"
+                echo -e "  ${YELLOW}android${NC}          Android development (Android Studio)"
+                echo -e "  ${YELLOW}config-apps${NC}      Config-based apps (nvim, wezterm, kitty, hyprland)"
+                echo -e "  ${YELLOW}fish${NC}             Fish shell setup and configuration"
+                echo -e "  ${YELLOW}fonts${NC}            Nerd Fonts installation\n"
+                
+                echo -e "${BOLD}${CYAN}EXAMPLES${NC}"
+                echo -e "  ${BLUE}#${NC} Run full interactive setup"
+                echo -e "  ${BOLD}./setup.sh${NC}\n"
+                
+                echo -e "  ${BLUE}#${NC} Preview all changes without installing"
+                echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--dry-run${NC}\n"
+                
+                echo -e "  ${BLUE}#${NC} Interactive dry-run (select sections to preview)"
+                echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--dry-run-interactive${NC}\n"
+                
+                echo -e "  ${BLUE}#${NC} Preview only development tools section"
+                echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--dry-run-section${NC} ${YELLOW}dev${NC}\n"
+                
+                echo -e "  ${BLUE}#${NC} Install only CLI utilities (non-interactive)"
+                echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--install${NC} ${YELLOW}cli${NC}\n"
+                
+                echo -e "  ${BLUE}#${NC} Skip system update and fonts"
+                echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--skip-system-update --skip-fonts${NC}\n"
+                
+                echo -e "  ${BLUE}#${NC} Verbose output for debugging"
+                echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--verbose${NC}\n"
+                
+                echo -e "  ${BLUE}#${NC} View script source on GitHub"
+                echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--source${NC}\n"
+                
+                echo -e "  ${BLUE}#${NC} List all available packages by category"
+                echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--list${NC}\n"
+                
+                echo -e "${BOLD}${CYAN}PACKAGE FORMAT${NC}"
+                echo -e "  Packages are defined as: ${YELLOW}name|method|extra|display${NC}"
+                echo -e "  Methods: ${GREEN}apt${NC}, ${GREEN}snap${NC}, ${GREEN}curl${NC}, ${GREEN}npm${NC}, ${GREEN}cargo${NC}, ${GREEN}github${NC}"
+                echo -e "  Example: ${DIM}lazygit|github|jesseduffield/lazygit|lazygit${NC}\n"
+                
+                echo -e "${BOLD}${CYAN}NOTES${NC}"
+                echo -e "  ${BLUE}•${NC} The script will prompt for selections in interactive mode"
+                echo -e "  ${BLUE}•${NC} Progress is saved and can be resumed if interrupted"
+                echo -e "  ${BLUE}•${NC} Existing configurations are backed up before changes"
+                echo -e "  ${BLUE}•${NC} Packages can use different install methods in same category"
+                echo -e "  ${BLUE}•${NC} Requires Ubuntu/Debian with sudo access\n"
+                
                 exit 0
                 ;;
             *)
@@ -61,17 +381,503 @@ parse_args() {
 }
 
 # Helper functions
-print_status() { echo -e "${BLUE}→${NC} $1"; }
-print_success() { echo -e "${GREEN}✓${NC} $1"; }
-print_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
-print_error() { echo -e "${RED}✗${NC} $1"; }
-print_info() { echo -e "${CYAN}ℹ${NC} $1"; }
-print_header() { echo -e "\n${BOLD}${MAGENTA}$1${NC}"; }
-print_dry_run() { echo -e "${YELLOW}[DRY RUN]${NC} $1"; }
+print_status() { 
+    [ "$QUIET" = true ] && return 0
+    echo -e "${BLUE}→${NC} $1"
+}
+print_success() { 
+    [ "$QUIET" = true ] && return 0
+    echo -e "${GREEN}✓${NC} $1"
+}
+print_warning() { 
+    echo -e "${YELLOW}⚠${NC} $1"
+}
+print_error() { 
+    echo -e "${RED}✗${NC} $1" >&2
+}
+print_info() { 
+    [ "$QUIET" = true ] && return 0
+    echo -e "${CYAN}ℹ${NC} $1"
+}
+print_header() { 
+    [ "$QUIET" = true ] && return 0
+    echo -e "\n${BOLD}${MAGENTA}$1${NC}"
+}
+print_dry_run() { 
+    echo -e "${YELLOW}[DRY RUN]${NC} $1"
+}
+print_verbose() {
+    [ "$VERBOSE" = true ] && echo -e "${CYAN}[VERBOSE]${NC} $1"
+}
 
 # Check if command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+# Show welcome screen and main menu
+show_main_menu() {
+    while true; do
+        clear
+        echo -e "${BOLD}${MAGENTA}"
+        echo "╔════════════════════════════════════════════════════════════════════╗"
+        echo "║                                                                    ║"
+        echo "║                    Dotfiles Setup Script                          ║"
+        echo "║                                                                    ║"
+        echo "║                    Welcome to the installer                        ║"
+        echo "║                                                                    ║"
+        echo "╚════════════════════════════════════════════════════════════════════╝"
+        echo -e "${NC}\n"
+        
+        echo -e "${CYAN}What would you like to do?${NC}\n"
+        
+        local options=(
+            "Full Interactive Setup|Run complete setup with package selection"
+            "Quick Install (All)|Install everything without prompts"
+            "Custom Install|Select specific categories to install"
+            "Dry Run|Preview what would be installed"
+            "List Packages|View all available packages"
+            "Resume Previous|Continue interrupted installation"
+            "Help|Show detailed help and options"
+            "Exit|Exit the installer"
+        )
+        
+        local selected=0
+        local total=${#options[@]}
+        
+        while true; do
+            # Display menu options
+            for i in "${!options[@]}"; do
+                IFS='|' read -ra parts <<< "${options[$i]}"
+                local title="${parts[0]}"
+                local desc="${parts[1]}"
+                local num=$((i + 1))
+                
+                if [ $i -eq $selected ]; then
+                    echo -e "  ${BOLD}${GREEN}[$num]${NC} ${BOLD}$title${NC}"
+                    echo -e "      ${DIM}$desc${NC}"
+                else
+                    echo -e "  ${CYAN}[$num]${NC} ${DIM}$title${NC}"
+                    echo -e "      ${DIM}$desc${NC}"
+                fi
+                echo ""
+            done
+            
+            echo -e "\n${DIM}Select: 1-8 or ↑/k ↓/j | Confirm: Enter | Quit: q/Esc${NC}"
+            
+            # Read single key
+            read -rsn1 key
+            
+            # Handle arrow keys (they send 3 characters: ESC [ A/B)
+            if [[ $key == $'\e' ]]; then
+                read -rsn2 -t 0.1 key2
+                case "$key2" in
+                    '[A') # Up arrow
+                        ((selected--))
+                        [ $selected -lt 0 ] && selected=$((total - 1))
+                        clear
+                        echo -e "${BOLD}${MAGENTA}"
+                        echo "╔════════════════════════════════════════════════════════════════════╗"
+                        echo "║                                                                    ║"
+                        echo "║                    Dotfiles Setup Script                          ║"
+                        echo "║                                                                    ║"
+                        echo "║                    Welcome to the installer                        ║"
+                        echo "║                                                                    ║"
+                        echo "╚════════════════════════════════════════════════════════════════════╝"
+                        echo -e "${NC}\n"
+                        echo -e "${CYAN}What would you like to do?${NC}\n"
+                        continue
+                        ;;
+                    '[B') # Down arrow
+                        ((selected++))
+                        [ $selected -ge $total ] && selected=0
+                        clear
+                        echo -e "${BOLD}${MAGENTA}"
+                        echo "╔════════════════════════════════════════════════════════════════════╗"
+                        echo "║                                                                    ║"
+                        echo "║                    Dotfiles Setup Script                          ║"
+                        echo "║                                                                    ║"
+                        echo "║                    Welcome to the installer                        ║"
+                        echo "║                                                                    ║"
+                        echo "╚════════════════════════════════════════════════════════════════════╝"
+                        echo -e "${NC}\n"
+                        echo -e "${CYAN}What would you like to do?${NC}\n"
+                        continue
+                        ;;
+                    *)
+                        # ESC key pressed (quit)
+                        echo -e "\n${YELLOW}Exiting installer...${NC}"
+                        exit 0
+                        ;;
+                esac
+            fi
+            
+            # Handle vim keys, number keys, and other inputs
+            case "$key" in
+                [1-8]) # Number keys - direct selection
+                    local choice=$((key - 1))
+                    if [ $choice -ge 0 ] && [ $choice -lt $total ]; then
+                        selected=$choice
+                        # Auto-execute the selection
+                        clear
+                        case $selected in
+                            0) # Full Interactive Setup
+                                return 0
+                                ;;
+                            1) # Quick Install (All)
+                                SKIP_INTERACTIVE=true
+                                return 0
+                                ;;
+                            2) # Custom Install
+                                INSTALL_INTERACTIVE=true
+                                return 0
+                                ;;
+                            3) # Dry Run
+                                DRY_RUN=true
+                                DRY_RUN_INTERACTIVE=true
+                                return 0
+                                ;;
+                            4) # List Packages
+                                list_all_packages_simple
+                                read -p "Press Enter to return to menu..."
+                                break
+                                ;;
+                            5) # Resume Previous
+                                if [ -f "$PROGRESS_FILE" ]; then
+                                    print_info "Resuming previous installation..."
+                                    return 0
+                                else
+                                    print_warning "No previous installation found"
+                                    sleep 2
+                                    break
+                                fi
+                                ;;
+                            6) # Help
+                                parse_arguments "--help"
+                                exit 0
+                                ;;
+                            7) # Exit
+                                echo -e "${YELLOW}Exiting installer...${NC}"
+                                exit 0
+                                ;;
+                        esac
+                    fi
+                    ;;
+                k|K) # Vim up
+                    ((selected--))
+                    [ $selected -lt 0 ] && selected=$((total - 1))
+                    clear
+                    echo -e "${BOLD}${MAGENTA}"
+                    echo "╔════════════════════════════════════════════════════════════════════╗"
+                    echo "║                                                                    ║"
+                    echo "║                    Dotfiles Setup Script                          ║"
+                    echo "║                                                                    ║"
+                    echo "║                    Welcome to the installer                        ║"
+                    echo "║                                                                    ║"
+                    echo "╚════════════════════════════════════════════════════════════════════╝"
+                    echo -e "${NC}\n"
+                    echo -e "${CYAN}What would you like to do?${NC}\n"
+                    ;;
+                j|J) # Vim down
+                    ((selected++))
+                    [ $selected -ge $total ] && selected=0
+                    clear
+                    echo -e "${BOLD}${MAGENTA}"
+                    echo "╔════════════════════════════════════════════════════════════════════╗"
+                    echo "║                                                                    ║"
+                    echo "║                    Dotfiles Setup Script                          ║"
+                    echo "║                                                                    ║"
+                    echo "║                    Welcome to the installer                        ║"
+                    echo "║                                                                    ║"
+                    echo "╚════════════════════════════════════════════════════════════════════╝"
+                    echo -e "${NC}\n"
+                    echo -e "${CYAN}What would you like to do?${NC}\n"
+                    ;;
+                q|Q) # Quit
+                    echo -e "\n${YELLOW}Exiting installer...${NC}"
+                    exit 0
+                    ;;
+                '') # Enter key
+                    clear
+                    case $selected in
+                        0) # Full Interactive Setup
+                            return 0
+                            ;;
+                        1) # Quick Install (All)
+                            SKIP_INTERACTIVE=true
+                            return 0
+                            ;;
+                        2) # Custom Install
+                            INSTALL_INTERACTIVE=true
+                            return 0
+                            ;;
+                        3) # Dry Run
+                            DRY_RUN=true
+                            DRY_RUN_INTERACTIVE=true
+                            return 0
+                            ;;
+                        4) # List Packages
+                            list_all_packages_simple
+                            read -p "Press Enter to return to menu..."
+                            break
+                            ;;
+                        5) # Resume Previous
+                            if [ -f "$PROGRESS_FILE" ]; then
+                                print_info "Resuming previous installation..."
+                                return 0
+                            else
+                                print_warning "No previous installation found"
+                                sleep 2
+                                break
+                            fi
+                            ;;
+                        6) # Help
+                            parse_arguments "--help"
+                            exit 0
+                            ;;
+                        7) # Exit
+                            echo -e "${YELLOW}Exiting installer...${NC}"
+                            exit 0
+                            ;;
+                    esac
+                    ;;
+            esac
+        done
+    done
+}
+
+# Simple package list for menu
+list_all_packages_simple() {
+    clear
+    echo -e "${BOLD}${CYAN}Available Package Categories${NC}\n"
+    
+    echo -e "${BOLD}Essential Packages${NC} (${#ESSENTIAL_PACKAGES[@]} packages)"
+    echo -e "${BOLD}Development Tools${NC} (${#DEV_TOOLS[@]} packages)"
+    echo -e "${BOLD}Git Tools${NC} (${#GIT_TOOLS[@]} packages)"
+    echo -e "${BOLD}CLI Utilities${NC} (${#CLI_UTILITIES[@]} packages)"
+    echo -e "${BOLD}Browsers${NC} (${#BROWSERS[@]} packages)"
+    echo -e "${BOLD}Communication Apps${NC} (${#COMMUNICATION_APPS[@]} packages)"
+    echo -e "${BOLD}Media & Graphics${NC} (${#MEDIA_APPS[@]} packages)"
+    echo -e "${BOLD}DevOps Tools${NC} (${#DEVOPS_TOOLS[@]} packages)"
+    echo -e "${BOLD}System Utilities${NC} (${#SYSTEM_UTILS[@]} packages)"
+    echo -e "${BOLD}Hardware Tools${NC} (${#HARDWARE_TOOLS[@]} packages)"
+    echo -e "${BOLD}Automation Tools${NC} (${#AUTOMATION_TOOLS[@]} packages)"
+    echo -e "${BOLD}GNOME Tools${NC} (${#GNOME_TOOLS[@]} packages)"
+    echo -e "${BOLD}Android Tools${NC} (${#ANDROID_TOOLS[@]} packages)"
+    echo ""
+}
+
+# List all available packages by category
+list_all_packages() {
+    clear
+    echo -e "${BOLD}${MAGENTA}"
+    echo "╔════════════════════════════════════════════════════════════════════╗"
+    echo "║              Available Packages by Category                       ║"
+    echo "╚════════════════════════════════════════════════════════════════════╝"
+    echo -e "${NC}\n"
+    
+    # Function to display a category
+    display_category() {
+        local category_name="$1"
+        local -n packages_ref="$2"
+        local count=${#packages_ref[@]}
+        
+        echo -e "${BOLD}${CYAN}$category_name${NC} ${DIM}($count packages)${NC}"
+        echo -e "${DIM}────────────────────────────────────────────────────────────────────${NC}"
+        
+        for package in "${packages_ref[@]}"; do
+            # Parse format: "name|method|extra|display"
+            IFS='|' read -ra parts <<< "$package"
+            local name="${parts[0]}"
+            local method="${parts[1]}"
+            local display="${parts[3]:-${parts[2]:-$name}}"
+            
+            # Check if installed
+            local status=""
+            if command_exists "$name" || dpkg -l 2>/dev/null | grep -q "^ii.*$name "; then
+                status="${GREEN}✓${NC}"
+            else
+                status="${DIM}○${NC}"
+            fi
+            
+            # Color code by install method
+            local method_color=""
+            case "$method" in
+                apt) method_color="${BLUE}" ;;
+                snap) method_color="${MAGENTA}" ;;
+                curl) method_color="${YELLOW}" ;;
+                npm) method_color="${GREEN}" ;;
+                cargo) method_color="${RED}" ;;
+                github) method_color="${CYAN}" ;;
+                *) method_color="${NC}" ;;
+            esac
+            
+            printf "  %b %-30s %b%-6s%b %s\n" "$status" "$display" "$method_color" "$method" "${NC}" "${DIM}($name)${NC}"
+        done
+        echo ""
+    }
+    
+    # Display all categories
+    display_category "Essential Packages" ESSENTIAL_PACKAGES
+    display_category "Programming Languages & Runtimes" LANGUAGES
+    display_category "Code Editors & IDEs" EDITORS
+    display_category "Package Managers" PACKAGE_MANAGERS
+    display_category "Git Tools" GIT_TOOLS
+    display_category "CLI Utilities" CLI_UTILITIES
+    display_category "Browsers" BROWSERS
+    display_category "Communication Apps" COMMUNICATION_APPS
+    display_category "Media & Graphics" MEDIA_APPS
+    display_category "DevOps Tools" DEVOPS_TOOLS
+    display_category "System Utilities" SYSTEM_UTILS
+    display_category "Hardware Tools" HARDWARE_TOOLS
+    display_category "Automation Tools" AUTOMATION_TOOLS
+    display_category "GNOME Tools" GNOME_TOOLS
+    display_category "Android Tools" ANDROID_TOOLS
+    
+    echo -e "${BOLD}${CYAN}Legend:${NC}"
+    echo -e "  ${GREEN}✓${NC} Installed    ${DIM}○${NC} Not installed"
+    echo -e "  ${BLUE}apt${NC}  ${MAGENTA}snap${NC}  ${YELLOW}curl${NC}  ${GREEN}npm${NC}  ${RED}cargo${NC}  ${CYAN}github${NC}"
+    echo ""
+}
+
+# Universal installer - parses format and installs accordingly
+install_universal() {
+    local package_string="$1"
+    
+    # Parse the package string: "name|method|extra|display"
+    IFS='|' read -ra parts <<< "$package_string"
+    local package="${parts[0]}"
+    local method="${parts[1]}"
+    local extra="${parts[2]}"
+    local display="${parts[3]:-$package}"
+    
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would install: $display (via $method)"
+        return 0
+    fi
+    
+    # Check if already completed
+    if is_completed "packages" "$package"; then
+        print_success "$display already installed (skipped)"
+        return 0
+    fi
+    
+    # Check if already installed
+    if command_exists "$package" || dpkg -l 2>/dev/null | grep -q "^ii.*$package "; then
+        print_success "$display already installed"
+        save_progress "packages" "$package" "completed"
+        return 0
+    fi
+    
+    print_status "Installing $display..."
+    
+    case "$method" in
+        apt)
+            if [ "$VERBOSE" = true ]; then
+                sudo apt-get install -y "$package"
+            else
+                sudo apt-get install -y "$package" >/dev/null 2>&1
+            fi
+            ;;
+        snap)
+            if command_exists snap; then
+                sudo snap install "$package" >/dev/null 2>&1
+            else
+                print_error "snapd not installed"
+                return 1
+            fi
+            ;;
+        curl)
+            # extra contains the URL
+            if [ "$VERBOSE" = true ]; then
+                curl -fsSL "$extra" | bash
+            else
+                curl -fsSL "$extra" | bash >/dev/null 2>&1
+            fi
+            ;;
+        npm)
+            if command_exists npm; then
+                npm install -g "$package" >/dev/null 2>&1
+            elif command_exists pnpm; then
+                pnpm add -g "$package" >/dev/null 2>&1
+            else
+                print_error "npm/pnpm not installed"
+                return 1
+            fi
+            ;;
+        github)
+            # extra contains repo like "owner/repo"
+            install_from_github "$package" "$extra" "$display"
+            return $?
+            ;;
+        cargo)
+            if command_exists cargo; then
+                cargo install "$package" >/dev/null 2>&1
+            else
+                print_error "cargo not installed"
+                return 1
+            fi
+            ;;
+        *)
+            print_error "Unknown install method: $method"
+            return 1
+            ;;
+    esac
+    
+    local result=$?
+    if [ $result -eq 0 ]; then
+        print_success "$display installed successfully"
+        save_progress "packages" "$package" "completed"
+        track_result 0
+    else
+        print_error "Failed to install $display"
+        save_progress "packages" "$package" "failed"
+        track_result 1
+    fi
+    
+    return $result
+}
+
+# Install from GitHub releases
+install_from_github() {
+    local package="$1"
+    local repo="$2"
+    local display="$3"
+    
+    local arch=""
+    case "$(uname -m)" in
+        x86_64) arch="x86_64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        *) print_error "Unsupported architecture"; return 1 ;;
+    esac
+    
+    local latest_url=$(curl -s "https://api.github.com/repos/$repo/releases/latest" | \
+                       grep "browser_download_url.*Linux.*${arch}.*tar.gz" | \
+                       head -1 | cut -d'"' -f4)
+    
+    if [ -z "$latest_url" ]; then
+        print_warning "Could not find download URL for $display"
+        return 1
+    fi
+    
+    local temp_dir=$(mktemp -d)
+    cd "$temp_dir" || return 1
+    
+    if wget -q "$latest_url" -O "${package}.tar.gz" 2>/dev/null; then
+        tar -xzf "${package}.tar.gz" 2>/dev/null
+        local binary=$(find . -name "$package" -type f | head -1)
+        if [ -n "$binary" ] && [ -f "$binary" ]; then
+            sudo mv "$binary" "/usr/local/bin/$package"
+            sudo chmod +x "/usr/local/bin/$package"
+            cd - >/dev/null
+            rm -rf "$temp_dir"
+            return 0
+        fi
+    fi
+    
+    cd - >/dev/null
+    rm -rf "$temp_dir"
+    return 1
 }
 
 # Save progress
@@ -80,17 +886,20 @@ save_progress() {
     local item="$2"
     local status="$3"
     
+    # Ensure directory exists
+    mkdir -p "$(dirname "$PROGRESS_FILE")"
+    
     if [ ! -f "$PROGRESS_FILE" ]; then
         echo "{}" > "$PROGRESS_FILE"
     fi
     
-    # Use jq if available, otherwise simple JSON manipulation
+    # Use jq if available, otherwise warn user
     if command_exists jq; then
         local content=$(cat "$PROGRESS_FILE")
         echo "$content" | jq ". + {\"$category\": (.${category} // {}) + {\"$item\": \"$status\"}}" > "$PROGRESS_FILE"
     else
-        # Fallback: simple append (won't handle duplicates perfectly)
-        echo "{\"$category\": {\"$item\": \"$status\"}}" >> "$PROGRESS_FILE"
+        print_warning "jq not installed - progress tracking disabled. Install jq for progress tracking."
+        return 0
     fi
 }
 
@@ -174,12 +983,14 @@ install_github_cli() {
     
     if is_completed "packages" "gh"; then
         print_success "$name already installed (skipped)"
+        install_gh_select_extension
         return 0
     fi
     
     if command_exists gh; then
         print_success "$name already installed"
         save_progress "packages" "gh" "completed"
+        install_gh_select_extension
         return 0
     fi
     
@@ -192,6 +1003,7 @@ install_github_cli() {
        sudo apt install -y gh >/dev/null 2>&1; then
         print_success "$name installed successfully"
         save_progress "packages" "gh" "completed"
+        install_gh_select_extension
         return 0
     else
         print_warning "Failed to install GitHub CLI via apt, trying alternative method..."
@@ -200,11 +1012,51 @@ install_github_cli() {
             if sudo snap install gh >/dev/null 2>&1; then
                 print_success "$name installed via snap"
                 save_progress "packages" "gh" "completed"
+                install_gh_select_extension
                 return 0
             fi
         fi
         print_error "Failed to install $name"
         save_progress "packages" "gh" "failed"
+        return 1
+    fi
+}
+
+# Install gh-select extension for GitHub CLI
+install_gh_select_extension() {
+    if ! command_exists gh; then
+        return 0
+    fi
+    
+    # Check if extension is already installed
+    if gh extension list 2>/dev/null | grep -q "remcostoeten/gh-select"; then
+        print_success "gh-select extension already installed"
+        return 0
+    fi
+    
+    # Check dependencies
+    local missing_deps=()
+    if ! command_exists fzf; then
+        missing_deps+=("fzf")
+    fi
+    if ! command_exists jq; then
+        missing_deps+=("jq")
+    fi
+    
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        print_warning "gh-select requires: ${missing_deps[*]}"
+        print_info "These will be installed in the CLI Utilities section"
+        return 0
+    fi
+    
+    print_status "Installing gh-select extension..."
+    if gh extension install remcostoeten/gh-select >/dev/null 2>&1; then
+        print_success "gh-select extension installed successfully"
+        save_progress "tools" "gh-select" "completed"
+        return 0
+    else
+        print_warning "Failed to install gh-select extension"
+        print_info "You can install it manually with: gh extension install remcostoeten/gh-select"
         return 1
     fi
 }
@@ -712,172 +1564,12 @@ select_snap_packages() {
     return $failed
 }
 
-# ============================================================================
-# PACKAGE DEFINITIONS - Organized by category
-# ============================================================================
-
-# Essential system packages
-declare -a ESSENTIAL_PACKAGES=(
-    "git"
-    "curl"
-    "wget"
-    "build-essential"
-    "ca-certificates"
-    "gnupg"
-    "software-properties-common"
-    "fish"
-)
-
-# Development tools
-declare -a DEV_TOOLS=(
-    "python3"
-    "python3-pip"
-    "python3-venv"
-    "nodejs"
-    "npm"
-    "neovim"
-)
-
-# Android Development (optional)
-declare -a ANDROID_TOOLS=(
-    "android-studio:Android Studio"
-)
-
-# Modern CLI utilities
-declare -a CLI_UTILITIES=(
-    "ripgrep:ripgrep"
-    "fd-find:fd"
-    "fzf:fzf"
-    "zoxide:zoxide"
-    "eza:eza"
-    "bat:bat"
-    "htop:htop"
-    "tree:tree"
-    "jq:jq"
-    "unzip:unzip"
-    "zip:zip"
-    "xclip:xclip"
-    "wl-clipboard:wl-clipboard"
-    "wget:wget"
-    "bc:bc"
-    "libnotify-bin:libnotify-bin"
-)
-
-# Automation & Testing tools
-declare -a AUTOMATION_TOOLS=(
-    "xdotool:xdotool"
-    "ydotool:ydotool"
-)
-
-# Media playback (for alarm script)
-declare -a MEDIA_PLAYBACK=(
-    "mpv:mpv"
-    "pulseaudio-utils:pulseaudio-utils"
-)
-
-# GNOME specific tools
-declare -a GNOME_TOOLS=(
-    "gnome-shell-extensions:gnome-shell-extensions"
-    "dconf-cli:dconf-cli"
-)
-
-# Communication & Social
-declare -a COMMUNICATION_APPS=(
-    "discord:Discord"
-    "slack:Slack"
-    "telegram-desktop:Telegram"
-)
-
-# Development editors & IDEs (moved to snap packages)
-# declare -a EDITORS=(
-#     "code:Visual Studio Code"
-#     "cursor:Cursor Editor"
-# )
-
-# Media & Graphics
-declare -a MEDIA_APPS=(
-    "gimp:GIMP"
-    "inkscape:Inkscape"
-    "vlc:VLC Media Player"
-    "obs-studio:OBS Studio"
-)
-
-# Browsers
-declare -a BROWSERS=(
-    "firefox:Firefox"
-    "google-chrome-stable:Google Chrome"
-    "brave-browser:Brave Browser"
-)
-
-# Container & DevOps
-declare -a DEVOPS_TOOLS=(
-    "docker.io:Docker"
-    "docker-compose:Docker Compose"
-    "kubectl:kubectl"
-)
-
-# System utilities
-declare -a SYSTEM_UTILS=(
-    "htop:htop"
-    "btop:btop"
-    "neofetch:neofetch"
-    "timeshift:Timeshift"
-)
-
-# Hardware & GPU tools
-declare -a HARDWARE_TOOLS=(
-    "openrgb:OpenRGB"
-    "nvidia-settings:NVIDIA Settings"
-    "nvidia-utils:NVIDIA Utils"
-)
-
-# Tools installed via snap
-declare -a SNAP_PACKAGES=(
-    "whatsapp-for-linux:WhatsApp"
-    "spotify:Spotify"
-    "obsidian:Obsidian"
-    "signal-desktop:Signal"
-    "code:Visual Studio Code"
-    "cursor:Cursor Editor"
-)
-
-# Tools installed via curl scripts
-declare -a CURL_TOOLS=(
-    "bun:https://bun.sh/install:bun"
-    "starship:https://starship.rs/install.sh:starship"
-    "nvm:https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh:nvm"
-    "pnpm:https://get.pnpm.io/install.sh:pnpm"
-    "turso:https://get.tur.so/install.sh:turso"
-    "uvx:https://astral.sh/uv/install.sh:uvx"
-    "vercel:https://vercel.com/cli.sh:vercel"
-    "netlify:https://cli.netlify.com/install.sh:netlify"
-)
-
-# CLI tools installed via npm/pnpm (after node is installed)
-declare -a NPM_CLI_TOOLS=(
-    "gemini-cli:gemini-cli"
-)
-
-# Config-based applications
-# Maps config directory names to their package names and symlink targets
-declare -A CONFIG_APPS=(
-    ["nvim"]="neovim:~/.config/nvim"
-    ["wezterm"]="wezterm:~/.config/wezterm"
-    ["kitty"]="kitty:~/.config/kitty"
-    ["hyprland"]="hyprland:~/.config/hypr"
-    ["waybar"]="waybar:~/.config/waybar"
-)
-
-# Special cases for configs that need different handling
-declare -A CONFIG_SPECIAL=(
-    ["wezterm"]="configs/wezterm/.config/wezterm:~/.config/wezterm"
-)
 
 # ============================================================================
 # INTERACTIVE SELECTION FUNCTIONS
 # ============================================================================
 
-# Show menu and get selections
+# Show menu and get selections (Universal format)
 select_packages() {
     local category="$1"
     local title="$2"
@@ -890,8 +1582,11 @@ select_packages() {
     
     # Display packages
     for package in "${packages[@]}"; do
-        local name="${package%%:*}"
-        local display="${package##*:}"
+        # Parse new format: "name|method|extra|display"
+        IFS='|' read -ra parts <<< "$package"
+        local name="${parts[0]}"
+        local method="${parts[1]}"
+        local display="${parts[3]:-${parts[2]:-$name}}"
         
         # Check if already installed
         local installed=""
@@ -925,13 +1620,10 @@ select_packages() {
         done
     fi
     
-    # Install selected packages
+    # Install selected packages using universal installer
     local failed=0
-    for package in "${selected[@]}"; do
-        local name="${package%%:*}"
-        local display="${package##*:}"
-        
-        if ! install_package "$name" "$display"; then
+    for package_string in "${selected[@]}"; do
+        if ! install_universal "$package_string"; then
             ((failed++))
         fi
     done
@@ -1080,11 +1772,28 @@ select_npm_tools() {
 # ============================================================================
 
 update_system() {
+    if [ "$SKIP_SYSTEM_UPDATE" = true ]; then
+        print_info "Skipping system update (--skip-system-update)"
+        return 0
+    fi
+    
     print_header "System Update"
     print_status "Updating package lists..."
-    sudo apt update
+    
+    if [ "$VERBOSE" = true ]; then
+        sudo apt update
+    else
+        sudo apt update >/dev/null 2>&1
+    fi
+    
     print_status "Upgrading system packages..."
-    sudo apt upgrade -y
+    
+    if [ "$VERBOSE" = true ]; then
+        sudo apt upgrade -y
+    else
+        sudo apt upgrade -y >/dev/null 2>&1
+    fi
+    
     print_success "System updated"
 }
 
@@ -1540,16 +2249,10 @@ create_config_symlink() {
     local source_dir="$DOTFILES_DIR/configs/$app"
     local symlink_target=""
     
-    # Check for special case mappings
-    if [ -n "${CONFIG_SPECIAL[$app]:-}" ]; then
-        local special_info="${CONFIG_SPECIAL[$app]}"
-        source_dir="$DOTFILES_DIR/${special_info%%:*}"
-        symlink_target="${special_info##*:}"
-    elif [ -n "${CONFIG_APPS[$app]:-}" ]; then
+    if [ -n "${CONFIG_APPS[$app]:-}" ]; then
         local package_info="${CONFIG_APPS[$app]}"
         symlink_target="${package_info##*:}"
     else
-        # Default: try to infer from app name
         symlink_target="$HOME/.config/$app"
     fi
     
@@ -1667,6 +2370,11 @@ setup_fish_shell() {
 }
 
 install_nerd_fonts() {
+    if [ "$SKIP_FONTS" = true ]; then
+        print_info "Skipping Nerd Fonts installation (--skip-fonts)"
+        return 0
+    fi
+    
     print_header "Nerd Fonts Installation"
     print_info "Installing popular Nerd Fonts in the background..."
     print_info "This may take a few minutes (fonts are large downloads)"
@@ -1750,8 +2458,13 @@ install_nerd_fonts() {
 # ============================================================================
 
 main() {
-    # Parse command line arguments
+    # Parse command line arguments first
     parse_args "$@"
+    
+    # If no arguments provided, show interactive menu
+    if [ $# -eq 0 ]; then
+        show_main_menu
+    fi
     
     clear
     if [ "$DRY_RUN" = true ]; then
