@@ -30,6 +30,21 @@ struct FileInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct GitStatus {
+    branch: String,
+    status: String,
+    changes: GitStatusChanges,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GitStatusChanges {
+    modified: Vec<String>,
+    added: Vec<String>,
+    deleted: Vec<String>,
+    untracked: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct OutputLine {
     #[serde(rename = "type")]
     line_type: String,
@@ -241,6 +256,117 @@ fn get_aliases() -> Result<Vec<Alias>, String> {
 fn read_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read file: {}", e))
+}
+
+#[tauri::command]
+fn write_file(path: String, content: String) -> Result<(), String> {
+    fs::write(&path, content)
+        .map_err(|e| format!("Failed to write file: {}", e))
+}
+
+#[tauri::command]
+fn get_functions() -> Result<Vec<Alias>, String> {
+    let dotfiles_path = get_dotfiles_path();
+    let functions_dir = dotfiles_path.join("configs").join("fish").join("functions");
+    
+    if !functions_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut functions = Vec::new();
+    
+    if let Ok(entries) = fs::read_dir(&functions_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("fish") {
+                let name = path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let path_str = path.to_string_lossy().to_string();
+                
+                functions.push(Alias {
+                    name,
+                    path: path_str,
+                    content: String::new(),
+                });
+            }
+        }
+    }
+
+    Ok(functions)
+}
+
+#[tauri::command]
+fn get_git_status() -> Result<GitStatus, String> {
+    let dotfiles_path = get_dotfiles_path();
+    
+    // Get current branch
+    let branch_output = Command::new("git")
+        .arg("branch")
+        .arg("--show-current")
+        .current_dir(&dotfiles_path)
+        .output()
+        .map_err(|e| format!("Failed to get branch: {}", e))?;
+    
+    let branch = String::from_utf8_lossy(&branch_output.stdout).trim().to_string();
+    
+    // Get status
+    let status_output = Command::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .current_dir(&dotfiles_path)
+        .output()
+        .map_err(|e| format!("Failed to get status: {}", e))?;
+    
+    let status_lines: Vec<String> = String::from_utf8_lossy(&status_output.stdout)
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
+    
+    let mut changes = GitStatusChanges {
+        modified: Vec::new(),
+        added: Vec::new(),
+        deleted: Vec::new(),
+        untracked: Vec::new(),
+    };
+    
+    for line in status_lines {
+        if line.starts_with(" M") || line.starts_with("MM") {
+            changes.modified.push(line[3..].trim().to_string());
+        } else if line.starts_with("A ") || line.starts_with("A ") {
+            changes.added.push(line[2..].trim().to_string());
+        } else if line.starts_with("D ") {
+            changes.deleted.push(line[2..].trim().to_string());
+        } else if line.starts_with("??") {
+            changes.untracked.push(line[3..].trim().to_string());
+        }
+    }
+    
+    Ok(GitStatus {
+        branch,
+        status: String::from_utf8_lossy(&status_output.stdout).to_string(),
+        changes,
+    })
+}
+
+#[tauri::command]
+fn run_git_command(command: String, args: Vec<String>) -> Result<String, String> {
+    let dotfiles_path = get_dotfiles_path();
+    
+    let output = Command::new("git")
+        .arg(&command)
+        .args(&args)
+        .current_dir(&dotfiles_path)
+        .output()
+        .map_err(|e| format!("Git command failed: {}", e))?;
+    
+    if !output.status.success() {
+        let error = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Git error: {}", error));
+    }
+    
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 #[tauri::command]
@@ -457,11 +583,15 @@ fn main() {
             add_package_to_array,
             remove_package_from_array,
             get_aliases,
+            get_functions,
             read_file,
+            write_file,
             list_files,
             get_dotfiles_path,
             open_in_github,
             open_in_system_file_manager,
+            get_git_status,
+            run_git_command,
             run_setup,
             run_setup_dry_run,
             run_setup_section,

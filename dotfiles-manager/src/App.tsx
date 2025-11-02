@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import PackageManager from './components/PackageManager'
 import AliasesViewer from './components/AliasesViewer'
+import FunctionsViewer from './components/FunctionsViewer'
+import ScriptsManager from './components/ScriptsManager'
 import FileViewer from './components/FileViewer'
+import GitManager from './components/GitManager'
 import SetupManager from './components/SetupManager'
 import './App.css'
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'packages' | 'aliases' | 'files' | 'setup'>('packages')
+  const [activeTab, setActiveTab] = useState<'packages' | 'aliases' | 'functions' | 'scripts' | 'files' | 'git' | 'setup'>('packages')
 
   return (
     <div className="app">
@@ -27,10 +30,28 @@ function App() {
             Aliases
           </button>
           <button 
+            className={activeTab === 'functions' ? 'active' : ''}
+            onClick={() => setActiveTab('functions')}
+          >
+            Functions
+          </button>
+          <button 
+            className={activeTab === 'scripts' ? 'active' : ''}
+            onClick={() => setActiveTab('scripts')}
+          >
+            Scripts
+          </button>
+          <button 
             className={activeTab === 'files' ? 'active' : ''}
             onClick={() => setActiveTab('files')}
           >
             Files
+          </button>
+          <button 
+            className={activeTab === 'git' ? 'active' : ''}
+            onClick={() => setActiveTab('git')}
+          >
+            Git
           </button>
           <button 
             className={activeTab === 'setup' ? 'active' : ''}
@@ -44,7 +65,10 @@ function App() {
       <main className="app-content">
         {activeTab === 'packages' && <PackageManager />}
         {activeTab === 'aliases' && <AliasesViewer />}
+        {activeTab === 'functions' && <FunctionsViewer />}
+        {activeTab === 'scripts' && <ScriptsManager />}
         {activeTab === 'files' && <FileViewer />}
+        {activeTab === 'git' && <GitManager />}
         {activeTab === 'setup' && <SetupManager />}
       </main>
     </div>

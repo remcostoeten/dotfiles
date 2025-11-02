@@ -3,68 +3,51 @@ import { invoke } from '@tauri-apps/api/core'
 import Editor from '@monaco-editor/react'
 import '../App.css'
 
-interface FileInfo {
-  path: string
+interface Function {
   name: string
-  type: 'file' | 'directory'
+  path: string
+  content: string
 }
 
-function FileViewer() {
-  const [files, setFiles] = useState<FileInfo[]>([])
-  const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null)
-  const [fileContent, setFileContent] = useState('')
+function FunctionsViewer() {
+  const [functions, setFunctions] = useState<Function[]>([])
+  const [selectedFunction, setSelectedFunction] = useState<Function | null>(null)
   const [editedContent, setEditedContent] = useState('')
   const [hasChanges, setHasChanges] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [currentPath, setCurrentPath] = useState('')
 
   useEffect(() => {
-    loadFiles()
+    loadFunctions()
   }, [])
 
-  const loadFiles = async (path?: string) => {
+  const loadFunctions = async () => {
     setLoading(true)
     setError('')
     try {
-      const dotfilesPath = await invoke<string>('get_dotfiles_path')
-      const targetPath = path || dotfilesPath
-      const files = await invoke<FileInfo[]>('list_files', { path: targetPath })
-      setFiles(files)
-      setCurrentPath(targetPath)
+      const functions = await invoke<Function[]>('get_functions')
+      setFunctions(functions)
     } catch (err) {
-      setError(`Failed to load files: ${err}`)
+      setError(`Failed to load functions: ${err}`)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleFileClick = async (file: FileInfo) => {
-    if (file.type === 'directory') {
-      await loadFiles(file.path)
-      setSelectedFile(null)
-      setFileContent('')
-      return
-    }
-
-    setSelectedFile(file)
-    setLoading(true)
-    setError('')
+  const handleFunctionClick = async (func: Function) => {
     try {
-      const content = await invoke<string>('read_file', { path: file.path })
-      setFileContent(content)
+      const content = await invoke<string>('read_file', { path: func.path })
+      setSelectedFunction({ ...func, content })
       setEditedContent(content)
       setHasChanges(false)
     } catch (err) {
-      setError(`Failed to read file: ${err}`)
-    } finally {
-      setLoading(false)
+      setError(`Failed to read function file: ${err}`)
     }
   }
 
   const handleSave = async () => {
-    if (!selectedFile) return
+    if (!selectedFunction) return
 
     setLoading(true)
     setError('')
@@ -72,12 +55,16 @@ function FileViewer() {
 
     try {
       await invoke('write_file', {
-        path: selectedFile.path,
+        path: selectedFunction.path,
         content: editedContent
       })
-      setSuccess('File saved successfully')
+      setSuccess('Function saved successfully')
       setHasChanges(false)
-      setFileContent(editedContent)
+      await loadFunctions()
+      // Reload content
+      const content = await invoke<string>('read_file', { path: selectedFunction.path })
+      setSelectedFunction({ ...selectedFunction, content })
+      setEditedContent(content)
     } catch (err) {
       setError(`Failed to save: ${err}`)
     } finally {
@@ -88,7 +75,7 @@ function FileViewer() {
   const handleContentChange = (value: string | undefined) => {
     if (value !== undefined) {
       setEditedContent(value)
-      setHasChanges(value !== fileContent)
+      setHasChanges(value !== selectedFunction?.content)
     }
   }
 
@@ -97,76 +84,52 @@ function FileViewer() {
     if (path.endsWith('.sh')) return 'shell'
     if (path.endsWith('.py')) return 'python'
     if (path.endsWith('.ts')) return 'typescript'
-    if (path.endsWith('.tsx')) return 'typescript'
     if (path.endsWith('.js')) return 'javascript'
-    if (path.endsWith('.jsx')) return 'javascript'
     if (path.endsWith('.rs')) return 'rust'
     if (path.endsWith('.toml')) return 'toml'
     if (path.endsWith('.json')) return 'json'
-    if (path.endsWith('.yaml') || path.endsWith('.yml')) return 'yaml'
-    if (path.endsWith('.md')) return 'markdown'
-    if (path.endsWith('.css')) return 'css'
-    if (path.endsWith('.html')) return 'html'
     return 'plaintext'
-  }
-
-  const handleOpenInGitHub = async () => {
-    if (!selectedFile) return
-    try {
-      await invoke('open_in_github', { path: selectedFile.path })
-    } catch (err) {
-      setError(`Failed to open in GitHub: ${err}`)
-    }
-  }
-
-  const handleOpenInSF = async () => {
-    if (!selectedFile) return
-    try {
-      await invoke('open_in_system_file_manager', { path: selectedFile.path })
-    } catch (err) {
-      setError(`Failed to open in file manager: ${err}`)
-    }
   }
 
   return (
     <div>
       <div className="card">
-        <h2>File Viewer</h2>
+        <h2>Fish Functions Viewer</h2>
         
         {error && <div className="error">{error}</div>}
-        {loading && <div>Loading...</div>}
-
-        <div style={{ marginBottom: '1rem' }}>
-          <strong>Current Path:</strong> {currentPath}
-        </div>
+        {success && <div className="success">{success}</div>}
+        {loading && <div>Loading functions...</div>}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
           <div>
-            <h3>Files</h3>
-            <ul style={{ listStyle: 'none', padding: 0, maxHeight: '500px', overflowY: 'auto' }}>
-              {files.map(file => (
+            <h3>Available Functions</h3>
+            <ul style={{ listStyle: 'none', padding: 0, maxHeight: '600px', overflowY: 'auto' }}>
+              {functions.map(func => (
                 <li
-                  key={file.path}
-                  onClick={() => handleFileClick(file)}
+                  key={func.name}
+                  onClick={() => handleFunctionClick(func)}
                   style={{
                     padding: '0.75rem',
                     margin: '0.5rem 0',
-                    background: selectedFile?.path === file.path ? '#646cff' : '#1a1a1a',
+                    background: selectedFunction?.name === func.name ? '#646cff' : '#1a1a1a',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     transition: 'background 0.2s'
                   }}
                 >
-                  {file.type === 'directory' ? '📁' : '📄'} {file.name}
+                  <div style={{ fontWeight: 'bold' }}>{func.name}</div>
+                  <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '0.25rem' }}>
+                    {func.path}
+                  </div>
                 </li>
               ))}
             </ul>
           </div>
 
-          {selectedFile && (
+          {selectedFunction && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3>{selectedFile.name}</h3>
+                <h3>{selectedFunction.name}</h3>
                 <div className="button-group">
                   {hasChanges && (
                     <span style={{ color: '#ffaa00', marginRight: '1rem' }}>● Unsaved changes</span>
@@ -174,20 +137,15 @@ function FileViewer() {
                   <button onClick={handleSave} disabled={loading || !hasChanges}>
                     {loading ? 'Saving...' : 'Save'}
                   </button>
-                  <button onClick={handleOpenInGitHub}>
-                    Open in GitHub
-                  </button>
-                  <button onClick={handleOpenInSF}>
-                    Open in File Manager
-                  </button>
                 </div>
               </div>
-              {error && <div className="error">{error}</div>}
-              {success && <div className="success">{success}</div>}
+              <div style={{ marginBottom: '1rem', fontSize: '0.9rem', color: '#888' }}>
+                Path: {selectedFunction.path}
+              </div>
               <div style={{ border: '1px solid #444', borderRadius: '8px', overflow: 'hidden' }}>
                 <Editor
                   height="600px"
-                  language={getLanguageFromPath(selectedFile.path)}
+                  language={getLanguageFromPath(selectedFunction.path)}
                   value={editedContent}
                   onChange={handleContentChange}
                   theme="vs-dark"
@@ -199,7 +157,6 @@ function FileViewer() {
                     scrollBeyondLastLine: false,
                     formatOnPaste: true,
                     formatOnType: true,
-                    readOnly: false,
                   }}
                 />
               </div>
@@ -211,5 +168,5 @@ function FileViewer() {
   )
 }
 
-export default FileViewer
+export default FunctionsViewer
 

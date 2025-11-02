@@ -12,5 +12,13 @@ export default defineConfig({
       ignored: ['**/src-tauri/**'],
     },
   },
+  resolve: {
+    alias: {
+      'vscode': 'monaco-languageclient/lib/vscode-compatibility'
+    }
+  },
+  optimizeDeps: {
+    include: ['monaco-editor']
+  }
 })
 
