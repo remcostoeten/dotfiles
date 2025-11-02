@@ -1962,6 +1962,11 @@ main() {
         install_nerd_fonts
     fi
     
+    # Custom Theming Setup
+    if [ -z "$run_section" ] || [ "$run_section" = "theming" ]; then
+        setup_custom_theming || true
+    fi
+    
     # Summary
     if [ "$DRY_RUN" = true ]; then
         echo ""
