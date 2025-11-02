@@ -42,3 +42,6 @@ click/history.log
 .vscode/
 .idea/
 *.code-workspace
+
+# Data directory (logs, progress, backups)
+/.dotfiles/

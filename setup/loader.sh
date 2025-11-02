@@ -10,6 +10,7 @@ source "$SETUP_DIR/core/colors.sh"
 source "$SETUP_DIR/core/config.sh"
 source "$SETUP_DIR/core/helpers.sh"
 source "$SETUP_DIR/core/progress.sh"
+source "$SETUP_DIR/core/args.sh"
 
 # Source installer functions
 source "$SETUP_DIR/installers/common.sh"
