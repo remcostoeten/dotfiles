@@ -32,6 +32,7 @@ scripts                    # Interactive selection
 ├── bin/
 │   ├── scripts                    # Wrapper executable
 │   ├── click [wrap]               # Auto-clicker
+│   ├── postgres [wrap]            # PostgreSQL manager
 │   ├── copy [link]                # File utility
 │   ├── emoji [link]               # Emoji picker
 │   └── ... (15+ more scripts)
