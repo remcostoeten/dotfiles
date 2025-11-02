@@ -1,0 +1,27 @@
+[package]
+name = "dotfiles-manager"
+version = "1.0.0"
+description = "A powerful Tauri-based application for managing your dotfiles configuration"
+authors = ["remco-stoeten"]
+license = "MIT"
+repository = "https://github.com/remcostoeten/dotfiles"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = ["tray-icon"] }
+tauri-plugin-shell = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+regex = "1.10"
+tokio = { version = "1.35", features = ["full"] }
+chrono = "0.4"
+tar = "0.4"
+flate2 = "1.0"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+

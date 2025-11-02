@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/icons/icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A powerful Tauri-based dotfiles management application">
+    <title>Dotfiles Manager</title>
+    <style>
+      #splash {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        z-index: 9999;
+        transition: opacity 0.5s ease-out;
+      }
+      #splash.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #splash img {
+        width: 128px;
+        height: 128px;
+        margin-bottom: 20px;
+        animation: pulse 2s ease-in-out infinite;
+      }
+      #splash h1 {
+        font-size: 32px;
+        margin: 0 0 10px 0;
+        font-weight: 600;
+      }
+      #splash p {
+        font-size: 16px;
+        margin: 0;
+        opacity: 0.9;
+      }
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+      .spinner {
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-top: 3px solid white;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin-top: 20px;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="splash">
+      <img src="/icons/icon.png" alt="Dotfiles Manager" />
+      <h1>Dotfiles Manager</h1>
+      <p>Loading your configuration...</p>
+      <div class="spinner"></div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

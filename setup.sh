@@ -25,6 +25,7 @@ readonly DOTFILES_DIR="$HOME/.config/dotfiles"
 # Dry run mode flag
 DRY_RUN=false
 DRY_RUN_SECTION=""
+FORCE_THEMING=false
 
 # Parse command line arguments
 parse_args() {
@@ -39,16 +40,21 @@ parse_args() {
                 DRY_RUN_SECTION="$2"
                 shift 2
                 ;;
+            --theming)
+                FORCE_THEMING=true
+                shift
+                ;;
             -h|--help)
                 echo "Usage: $0 [OPTIONS]"
                 echo ""
                 echo "Options:"
                 echo "  --dry-run              Show what would be installed without actually installing"
                 echo "  --dry-run-section NAME  Dry run for a specific section only"
+                echo "  --theming               Force theming setup (skip prompt)"
                 echo "  -h, --help              Show this help message"
                 echo ""
                 echo "Example sections:"
-                echo "  dev, cli, browsers, snaps, config-apps, git, fish, fonts"
+                echo "  dev, cli, browsers, snaps, config-apps, git, fish, fonts, theming"
                 exit 0
                 ;;
             *)
@@ -1315,6 +1321,39 @@ EOF
         done
     fi
     
+    # Create Starship config symlink
+    if [ -f "$DOTFILES_DIR/configs/starship/starship.toml" ]; then
+        print_status "Creating Starship config symlink..."
+        mkdir -p "$HOME/.config"
+        
+        local starship_config="$HOME/.config/starship.toml"
+        
+        # Check if already correctly symlinked
+        if [ -L "$starship_config" ]; then
+            local target=$(readlink "$starship_config")
+            if [ "$target" = "$DOTFILES_DIR/configs/starship/starship.toml" ] || [ "$target" = "../dotfiles/configs/starship/starship.toml" ]; then
+                print_success "✓ Starship config already correctly symlinked"
+            else
+                print_warning "Backing up existing Starship config..."
+                mv "$starship_config" "${starship_config}.bak.$(date +%s)" 2>/dev/null || true
+                ln -sf "$DOTFILES_DIR/configs/starship/starship.toml" "$starship_config"
+                print_success "✓ Created Starship config symlink: $starship_config → configs/starship/starship.toml"
+            fi
+        elif [ -e "$starship_config" ]; then
+            print_warning "Backing up existing Starship config..."
+            mv "$starship_config" "${starship_config}.bak.$(date +%s)" 2>/dev/null || true
+            ln -sf "$DOTFILES_DIR/configs/starship/starship.toml" "$starship_config"
+            print_success "✓ Created Starship config symlink: $starship_config → configs/starship/starship.toml"
+        else
+            ln -sf "$DOTFILES_DIR/configs/starship/starship.toml" "$starship_config"
+            print_success "✓ Created Starship config symlink: $starship_config → configs/starship/starship.toml"
+        fi
+    elif [ -f "$HOME/.config/starship.toml" ] && [ ! -L "$HOME/.config/starship.toml" ]; then
+        # If starship config exists but isn't in dotfiles, offer to copy it
+        print_info "Found existing Starship config at $HOME/.config/starship.toml"
+        print_info "To manage it in dotfiles, copy it to: $DOTFILES_DIR/configs/starship/starship.toml"
+    fi
+    
     # Initialize git submodules (e.g., env-private)
     if [ -f "$DOTFILES_DIR/.gitmodules" ]; then
         print_status "Initializing git submodules..."
@@ -1956,6 +1995,11 @@ main() {
         install_nerd_fonts
     fi
     
+    # Custom Theming Setup
+    if [ -z "$run_section" ] || [ "$run_section" = "theming" ]; then
+        setup_custom_theming || true
+    fi
+    
     # Summary
     if [ "$DRY_RUN" = true ]; then
         echo ""
@@ -1983,6 +2027,7 @@ main() {
     echo ""
     print_info "Progress saved to: $PROGRESS_FILE"
     print_info "You can rerun './setup.sh' to resume or install additional packages"
+    print_info "To set up theming later, run: ./setup.sh --theming"
     
     # Cleanup progress file on successful completion (optional)
     read -p "Remove progress file? (y/n): " -n 1 -r
@@ -1991,6 +2036,257 @@ main() {
         rm -f "$PROGRESS_FILE"
         print_success "Progress file removed"
     fi
+}
+
+# Custom Theming Setup
+setup_custom_theming() {
+    print_header "Custom Theming Setup"
+    
+    # Check if running on GNOME
+    if [ -z "$XDG_CURRENT_DESKTOP" ] || [[ ! "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]]; then
+        print_warning "Custom theming is optimized for GNOME desktop environment"
+        print_info "Current desktop: ${XDG_CURRENT_DESKTOP:-Unknown}"
+        read -p "Continue anyway? (y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Skipping custom theming setup"
+            return 0
+        fi
+    fi
+    
+    # Prompt user (unless forced)
+    if [ "$FORCE_THEMING" = false ]; then
+        print_info "This will install a custom GNOME theme (Alterf-PlyrctlF) with:"
+        echo "  • Beautiful GTK3 and GTK4 theming"
+        echo "  • Multiple theme variations (bordered/borderless, button styles)"
+        echo "  • Flatpak theme support"
+        echo "  • Easy theme switching via install.sh script"
+        echo ""
+        read -p "Do you want custom theming? (Recommended Y/n): " -n 1 -r
+        echo
+        REPLY=${REPLY:-Y}
+        
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Skipping custom theming setup"
+            print_info "You can revisit this later by running: ./setup.sh --theming"
+            return 0
+        fi
+    fi
+    
+    if [ "$DRY_RUN" = true ]; then
+        print_dry_run "Would install: curl, jq, gnome-tweaks"
+        print_dry_run "Would download theme from pling.com"
+        print_dry_run "Would download ocs-url tool"
+        print_dry_run "Would extract and install theme to ~/.themes and ~/.config/gtk-4.0"
+        print_dry_run "Would set up Flatpak theme overrides"
+        return 0
+    fi
+    
+    print_status "Creating folders for custom theming..."
+    
+    # Create necessary directories
+    local theme_dir="$HOME/.themes"
+    local gtk4_dir="$HOME/.config/gtk-4.0"
+    local downloads_dir="$HOME/Downloads"
+    
+    mkdir -p "$theme_dir" || {
+        print_error "Failed to create $theme_dir"
+        return 1
+    }
+    print_success "Created directory: $theme_dir"
+    
+    mkdir -p "$gtk4_dir" || {
+        print_error "Failed to create $gtk4_dir"
+        return 1
+    }
+    print_success "Created directory: $gtk4_dir"
+    
+    mkdir -p "$downloads_dir" || {
+        print_error "Failed to create $downloads_dir"
+        return 1
+    }
+    
+    # Install required packages
+    print_status "Installing required packages..."
+    
+    if ! command_exists curl; then
+        install_package "curl" "curl" || {
+            print_error "Failed to install curl"
+            return 1
+        }
+    fi
+    
+    if ! command_exists jq; then
+        install_package "jq" "jq" || {
+            print_error "Failed to install jq"
+            return 1
+        }
+    fi
+    
+    if ! command_exists gnome-tweaks; then
+        install_package "gnome-tweaks" "gnome-tweaks" || {
+            print_error "Failed to install gnome-tweaks"
+            return 1
+        }
+    fi
+    
+    # Download theme zip file
+    print_status "Downloading Alterf-PlyrctlF theme..."
+    local theme_url="https://www.pling.com/p/1961175"
+    local theme_zip="$downloads_dir/Alterf-PlyrctlF-v2.8.zip"
+    
+    # Try to get the actual download URL from pling.com
+    # Note: The URL provided might expire, so we'll try direct download first
+    local direct_url="https://ocs-dl.fra1.cdn.digitaloceanspaces.com/data/files/1672007007/Alterf-PlyrctlF-v2.8.zip?response-content-disposition=attachment%3B%2520Alterf-PlyrctlF-v2.8.zip&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=RWJAQUNCHT7V2NCLZ2AL%2F20251102%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20251102T002745Z&X-Amz-SignedHeaders=host&X-Amz-Expires=3600&X-Amz-Signature=6a8fc954c7243ae94c76a21b75f9138cf8e996d0444720a0fc4cad1c8d39920e"
+    
+    if curl -L -f -s -o "$theme_zip" "$direct_url" >/dev/null 2>&1; then
+        print_success "Downloaded theme to $theme_zip"
+    else
+        print_warning "Direct download failed, trying alternative method..."
+        print_info "Please download the theme manually from: $theme_url"
+        print_info "Save it as: $theme_zip"
+        read -p "Press Enter after downloading, or 's' to skip: " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Ss]$ ]] || [ ! -f "$theme_zip" ]; then
+            print_warning "Skipping theme installation"
+            return 1
+        fi
+    fi
+    
+    # Download ocs-url tool
+    print_status "Downloading ocs-url tool..."
+    local ocs_url="https://ocs-dl.fra1.cdn.digitaloceanspaces.com/data/files/1467909105/ocs-url-3.1.0-1-x86_64.pkg.tar.xz?response-content-disposition=attachment%3B%2520ocs-url-3.1.0-1-x86_64.pkg.tar.xz&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=RWJAQUNCHT7V2NCLZ2AL%2F20251102%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20251102T003157Z&X-Amz-SignedHeaders=host&X-Amz-Expires=3600&X-Amz-Signature=9ad36eb61df71aacdd049b5ce536fbdec4ecb3069d0db8da19cad6c49d2d451a"
+    local ocs_file="$downloads_dir/ocs-url-3.1.0-1-x86_64.pkg.tar.xz"
+    
+    if curl -L -f -s -o "$ocs_file" "$ocs_url" >/dev/null 2>&1; then
+        print_success "Downloaded ocs-url to $ocs_file"
+        print_info "ocs-url is an Arch package. On Ubuntu/Debian, you may need to extract it manually or install via other means."
+    else
+        print_warning "Failed to download ocs-url (optional tool)"
+    fi
+    
+    # Extract theme
+    print_status "Extracting theme..."
+    local temp_extract_dir=$(mktemp -d)
+    
+    if command_exists unzip; then
+        if unzip -q "$theme_zip" -d "$temp_extract_dir" 2>/dev/null; then
+            print_success "Extracted theme"
+        else
+            print_error "Failed to extract theme zip file"
+            rm -rf "$temp_extract_dir"
+            return 1
+        fi
+    else
+        print_error "unzip not found. Please install it: sudo apt install unzip"
+        rm -rf "$temp_extract_dir"
+        return 1
+    fi
+    
+    # Find the theme directory in the extracted files
+    local theme_extracted_dir=$(find "$temp_extract_dir" -type d -name "*Alterf*" -o -type d -name "*PlyrctlF*" | head -1)
+    
+    if [ -z "$theme_extracted_dir" ]; then
+        # Try to find any directory that looks like a theme
+        theme_extracted_dir=$(find "$temp_extract_dir" -type d -mindepth 1 -maxdepth 1 | head -1)
+    fi
+    
+    if [ -z "$theme_extracted_dir" ] || [ ! -d "$theme_extracted_dir" ]; then
+        print_error "Could not find theme directory in extracted files"
+        rm -rf "$temp_extract_dir"
+        return 1
+    fi
+    
+    # Move GTK3 theme (full folder) to ~/.themes
+    print_status "Installing GTK3 theme..."
+    local theme_name=$(basename "$theme_extracted_dir")
+    
+    if [ -d "$theme_dir/$theme_name" ]; then
+        print_warning "Theme directory already exists, backing up..."
+        mv "$theme_dir/$theme_name" "$theme_dir/${theme_name}.backup.$(date +%s)"
+    fi
+    
+    mv "$theme_extracted_dir" "$theme_dir/$theme_name" || {
+        print_error "Failed to move theme to $theme_dir"
+        rm -rf "$temp_extract_dir"
+        return 1
+    }
+    print_success "Installed GTK3 theme to $theme_dir/$theme_name"
+    
+    # Move GTK4 files (assets, gtk.css, gtk-dark.css) to ~/.config/gtk-4.0
+    print_status "Installing GTK4 theme..."
+    
+    local gtk4_source_dir="$theme_dir/$theme_name/gtk-4.0"
+    
+    if [ -d "$gtk4_source_dir" ]; then
+        # Copy GTK4 specific files
+        if [ -d "$gtk4_source_dir/assets" ]; then
+            cp -r "$gtk4_source_dir/assets" "$gtk4_dir/" || print_warning "Failed to copy assets"
+        fi
+        
+        if [ -f "$gtk4_source_dir/gtk.css" ]; then
+            cp "$gtk4_source_dir/gtk.css" "$gtk4_dir/" || print_warning "Failed to copy gtk.css"
+        fi
+        
+        if [ -f "$gtk4_source_dir/gtk-dark.css" ]; then
+            cp "$gtk4_source_dir/gtk-dark.css" "$gtk4_dir/" || print_warning "Failed to copy gtk-dark.css"
+        fi
+        
+        print_success "Installed GTK4 theme files to $gtk4_dir"
+    else
+        print_warning "GTK4 directory not found in theme, skipping GTK4 installation"
+    fi
+    
+    # Look for install.sh script
+    local install_script="$theme_dir/$theme_name/install.sh"
+    
+    if [ -f "$install_script" ]; then
+        print_status "Found install.sh script in theme directory"
+        print_info "You can run it manually with: cd $theme_dir/$theme_name && ./install.sh"
+        print_info "Example: ./install.sh -l --tweaks dragon mac outline float -t red"
+        print_info "For more options: ./install.sh --help"
+        
+        read -p "Run install.sh now? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            cd "$theme_dir/$theme_name"
+            if bash "$install_script" -l --tweaks dragon mac outline float -t red; then
+                print_success "Theme installation script completed"
+            else
+                print_warning "Theme installation script encountered some issues"
+            fi
+            cd - >/dev/null
+        fi
+    fi
+    
+    # Set up Flatpak theme overrides
+    print_status "Setting up Flatpak theme overrides..."
+    
+    if command_exists flatpak; then
+        sudo flatpak override --filesystem="$HOME/.themes" 2>/dev/null && \
+        sudo flatpak override --filesystem="$HOME/.icons" 2>/dev/null && \
+        flatpak override --user --filesystem=xdg-config/gtk-4.0 2>/dev/null && \
+        sudo flatpak override --filesystem=xdg-config/gtk-4.0 2>/dev/null && \
+        print_success "Flatpak theme overrides configured" || \
+        print_warning "Some Flatpak overrides may have failed (this is usually OK)"
+    else
+        print_info "Flatpak not installed, skipping Flatpak theme overrides"
+    fi
+    
+    # Cleanup
+    rm -rf "$temp_extract_dir"
+    
+    print_success "Custom theming setup completed!"
+    print_info ""
+    print_info "Next steps:"
+    echo "  1. Use GNOME Tweaks to select your theme: gnome-tweaks"
+    echo "  2. Or use gsettings:"
+    echo "     gsettings set org.gnome.desktop.interface gtk-theme '$theme_name'"
+    echo "  3. Restart applications or log out/in for changes to take effect"
+    echo "  4. Theme files are located in: $theme_dir/$theme_name"
+    echo ""
+    print_info "To apply different theme variations, run:"
+    echo "  cd $theme_dir/$theme_name && ./install.sh --help"
 }
 
 # Run main function
