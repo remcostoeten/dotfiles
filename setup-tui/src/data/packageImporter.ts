@@ -10,6 +10,7 @@ export type Package = {
   method: InstallMethod;
   extra?: string;
   optional: boolean;
+  dependencies?: string[];
 };
 
 type CategoryMap = {

@@ -1,35 +1,52 @@
 import { TextAttributes } from "@opentui/core";
 import { useEffect, useState } from "react";
+import { packages as allPackages } from "../data/packages";
+import { installBatch } from "../services/installer";
+import * as Progress from "../services/progress";
 
-interface InstallProgressProps {
+type Props = {
   packages: string[];
   onComplete: () => void;
-}
+};
 
-export function InstallProgress({ packages, onComplete }: InstallProgressProps) {
+export function InstallProgress({ packages, onComplete }: Props) {
+  const [status, setStatus] = useState<Record<string, "pending" | "installing" | "success" | "failed">>({});
   const [current, setCurrent] = useState(0);
-  const [status, setStatus] = useState<Record<string, "pending" | "installing" | "success" | "error">>({});
 
   useEffect(() => {
-    // Simulate installation
-    const installNext = async () => {
-      if (current >= packages.length) {
-        setTimeout(onComplete, 1000);
-        return;
-      }
+    async function runInstall() {
+      const pkgsToInstall = allPackages.filter(p => packages.includes(p.id));
+      
+      const progressState = Progress.createInitial(packages);
+      Progress.save(progressState);
 
-      const pkg = packages[current];
-      setStatus((prev) => ({ ...prev, [pkg]: "installing" }));
+      await installBatch(pkgsToInstall, {
+        onProgress: (pkg, state) => {
+          setStatus(prev => ({ ...prev, [pkg]: state }));
+          if (state === "success") {
+            setCurrent(prev => prev + 1);
+          }
+          
+          const updated = Progress.load();
+          if (updated) {
+            updated.packages[pkg] = state;
+            if (state === "success") {
+              updated.completed.push(pkg);
+            } else if (state === "failed") {
+              updated.failed.push(pkg);
+            }
+            Progress.save(updated);
+          }
+        },
+        onComplete: () => {
+          Progress.clear();
+          setTimeout(onComplete, 1000);
+        },
+      });
+    }
 
-      // Simulate installation time
-      await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 1000));
-
-      setStatus((prev) => ({ ...prev, [pkg]: "success" }));
-      setCurrent((prev) => prev + 1);
-    };
-
-    installNext();
-  }, [current, packages, onComplete]);
+    runInstall();
+  }, [packages, onComplete]);
 
   const progress = packages.length > 0 ? Math.round((current / packages.length) * 100) : 0;
 
@@ -57,13 +74,13 @@ export function InstallProgress({ packages, onComplete }: InstallProgressProps) 
                 {pkgStatus === "pending" && "⏳"}
                 {pkgStatus === "installing" && "⚙️ "}
                 {pkgStatus === "success" && "✓"}
-                {pkgStatus === "error" && "✗"}
+                {pkgStatus === "failed" && "✗"}
               </text>
               <text
                 fg={
                   pkgStatus === "success"
                     ? "green"
-                    : pkgStatus === "error"
+                    : pkgStatus === "failed"
                     ? "red"
                     : pkgStatus === "installing"
                     ? "yellow"
