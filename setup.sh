@@ -1321,6 +1321,39 @@ EOF
         done
     fi
     
+    # Create Starship config symlink
+    if [ -f "$DOTFILES_DIR/configs/starship/starship.toml" ]; then
+        print_status "Creating Starship config symlink..."
+        mkdir -p "$HOME/.config"
+        
+        local starship_config="$HOME/.config/starship.toml"
+        
+        # Check if already correctly symlinked
+        if [ -L "$starship_config" ]; then
+            local target=$(readlink "$starship_config")
+            if [ "$target" = "$DOTFILES_DIR/configs/starship/starship.toml" ] || [ "$target" = "../dotfiles/configs/starship/starship.toml" ]; then
+                print_success "✓ Starship config already correctly symlinked"
+            else
+                print_warning "Backing up existing Starship config..."
+                mv "$starship_config" "${starship_config}.bak.$(date +%s)" 2>/dev/null || true
+                ln -sf "$DOTFILES_DIR/configs/starship/starship.toml" "$starship_config"
+                print_success "✓ Created Starship config symlink: $starship_config → configs/starship/starship.toml"
+            fi
+        elif [ -e "$starship_config" ]; then
+            print_warning "Backing up existing Starship config..."
+            mv "$starship_config" "${starship_config}.bak.$(date +%s)" 2>/dev/null || true
+            ln -sf "$DOTFILES_DIR/configs/starship/starship.toml" "$starship_config"
+            print_success "✓ Created Starship config symlink: $starship_config → configs/starship/starship.toml"
+        else
+            ln -sf "$DOTFILES_DIR/configs/starship/starship.toml" "$starship_config"
+            print_success "✓ Created Starship config symlink: $starship_config → configs/starship/starship.toml"
+        fi
+    elif [ -f "$HOME/.config/starship.toml" ] && [ ! -L "$HOME/.config/starship.toml" ]; then
+        # If starship config exists but isn't in dotfiles, offer to copy it
+        print_info "Found existing Starship config at $HOME/.config/starship.toml"
+        print_info "To manage it in dotfiles, copy it to: $DOTFILES_DIR/configs/starship/starship.toml"
+    fi
+    
     # Initialize git submodules (e.g., env-private)
     if [ -f "$DOTFILES_DIR/.gitmodules" ]; then
         print_status "Initializing git submodules..."
