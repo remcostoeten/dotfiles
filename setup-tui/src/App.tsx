@@ -5,16 +5,23 @@ import { MainMenu } from "./components/MainMenu";
 import { PackageSelection } from "./components/PackageSelection";
 import { InstallProgress } from "./components/InstallProgress";
 import { Settings } from "./components/Settings";
+import { DryRun } from "./components/DryRun";
+import { Resume } from "./components/Resume";
+import { useSetup } from "./context/SetupContext";
 
 type Screen = "menu" | "packages" | "installing" | "complete" | "settings" | "dry-run" | "resume";
 
 export function App() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [selectedPackages, setSelectedPackages] = useState<string[]>([]);
+  const { selected } = useSetup();
 
   useKeyboard((key) => {
     if (key.ctrl && key.name === "c") {
       process.exit(0);
+    }
+    if (key.name === "escape" && (screen === "dry-run" || screen === "resume")) {
+      setScreen("menu");
     }
   });
 
@@ -60,28 +67,23 @@ export function App() {
         )}
         
         {screen === "dry-run" && (
-          <box style={{ flexDirection: "column" }}>
-            <text fg="#FFFF00" attributes={TextAttributes.BOLD}>
-              Dry Run Mode
-            </text>
-            <text attributes={TextAttributes.DIM}>
-              Coming soon - preview installations without executing
-            </text>
-            <text style={{ marginTop: 2 }}>
-              Press ESC to go back
-            </text>
-          </box>
+          <DryRun
+            onBack={() => setScreen("menu")}
+            onInstall={() => {
+              setSelectedPackages(Array.from(selected));
+              setScreen("installing");
+            }}
+          />
         )}
         
         {screen === "resume" && (
-          <box style={{ flexDirection: "column" }}>
-            <text fg="#FFFF00" attributes={TextAttributes.BOLD}>
-              Resume Installation
-            </text>
-            <text attributes={TextAttributes.DIM}>
-              Resuming from previous session...
-            </text>
-          </box>
+          <Resume
+            onBack={() => setScreen("menu")}
+            onResume={(packageIds) => {
+              setSelectedPackages(packageIds);
+              setScreen("installing");
+            }}
+          />
         )}
         
         {screen === "installing" && (
