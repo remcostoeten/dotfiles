@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { packages as allPackages } from "../data/packages";
 import { installBatch } from "../services/installer";
 import * as Progress from "../services/progress";
+import { ErrorDialog } from "./ErrorDialog";
+import type { InstallError } from "../services/errorHandler";
 
 type Props = {
   packages: string[];
@@ -12,6 +14,8 @@ type Props = {
 export function InstallProgress({ packages, onComplete }: Props) {
   const [status, setStatus] = useState<Record<string, "pending" | "installing" | "success" | "failed">>({});
   const [current, setCurrent] = useState(0);
+  const [errors, setErrors] = useState<InstallError[]>([]);
+  const [showErrors, setShowErrors] = useState(false);
 
   useEffect(() => {
     async function runInstall() {
@@ -38,9 +42,17 @@ export function InstallProgress({ packages, onComplete }: Props) {
             Progress.save(updated);
           }
         },
-        onComplete: () => {
-          Progress.clear();
-          setTimeout(onComplete, 1000);
+        onError: (error) => {
+          setErrors(prev => [...prev, error]);
+        },
+        onComplete: (results) => {
+          const failed = results.filter(r => !r.success);
+          if (failed.length > 0) {
+            setShowErrors(true);
+          } else {
+            Progress.clear();
+            setTimeout(onComplete, 1000);
+          }
         },
       });
     }
@@ -49,6 +61,50 @@ export function InstallProgress({ packages, onComplete }: Props) {
   }, [packages, onComplete]);
 
   const progress = packages.length > 0 ? Math.round((current / packages.length) * 100) : 0;
+
+  async function handleRetry(packageIds: string[]) {
+    setShowErrors(false);
+    setErrors([]);
+    
+    const pkgsToRetry = allPackages.filter(p => packageIds.includes(p.id));
+    await installBatch(pkgsToRetry, {
+      onProgress: (pkg, state) => {
+        setStatus(prev => ({ ...prev, [pkg]: state }));
+      },
+      onError: (error) => {
+        setErrors(prev => [...prev, error]);
+      },
+      onComplete: (results) => {
+        const stillFailed = results.filter(r => !r.success);
+        if (stillFailed.length > 0) {
+          setShowErrors(true);
+        } else {
+          Progress.clear();
+          setTimeout(onComplete, 1000);
+        }
+      },
+    });
+  }
+
+  function handleSkip() {
+    Progress.clear();
+    onComplete();
+  }
+
+  function handleViewLogs() {
+    console.log("Error logs location: ~/.dotfiles/logs/setup-errors.log");
+  }
+
+  if (showErrors && errors.length > 0) {
+    return (
+      <ErrorDialog
+        errors={errors}
+        onRetry={handleRetry}
+        onSkip={handleSkip}
+        onViewLogs={handleViewLogs}
+      />
+    );
+  }
 
   return (
     <box style={{ flexDirection: "column", gap: 1 }}>

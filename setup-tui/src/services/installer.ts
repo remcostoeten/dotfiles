@@ -1,16 +1,20 @@
 import type { Package } from "../data/packages";
 import { executeCommand } from "./executor";
 import type { ExecResult } from "./executor";
+import { createError, retryWithBackoff } from "./errorHandler";
+import type { InstallError } from "./errorHandler";
 
 export type InstallResult = {
   package: string;
   success: boolean;
   error?: string;
+  installError?: InstallError;
 };
 
 export type InstallCallbacks = {
   onProgress?: (pkg: string, status: "installing" | "success" | "failed") => void;
   onComplete?: (results: InstallResult[]) => void;
+  onError?: (error: InstallError) => void;
 };
 
 export async function checkInstalled(pkg: Package): Promise<boolean> {
@@ -32,7 +36,7 @@ export async function installPackage(pkg: Package): Promise<ExecResult> {
     };
   }
 
-  return executeCommand(pkg.method, pkg.id, pkg.extra);
+  return retryWithBackoff(() => executeCommand(pkg.method, pkg.id, pkg.extra), 3);
 }
 
 export async function installBatch(
@@ -51,6 +55,12 @@ export async function installBatch(
       success: result.success,
       error: result.error,
     };
+
+    if (!result.success) {
+      const installError = createError(pkg, result);
+      installResult.installError = installError;
+      callbacks?.onError?.(installError);
+    }
 
     results.push(installResult);
 
