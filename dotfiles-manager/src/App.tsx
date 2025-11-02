@@ -4,13 +4,14 @@ import PackageManager from './components/PackageManager'
 import AliasesViewer from './components/AliasesViewer'
 import FunctionsViewer from './components/FunctionsViewer'
 import ScriptsManager from './components/ScriptsManager'
+import ConfigsBrowser from './components/ConfigsBrowser'
 import FileViewer from './components/FileViewer'
 import GitManager from './components/GitManager'
 import SetupManager from './components/SetupManager'
 import './App.css'
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'packages' | 'aliases' | 'functions' | 'scripts' | 'files' | 'git' | 'setup'>('packages')
+  const [activeTab, setActiveTab] = useState<'packages' | 'aliases' | 'functions' | 'scripts' | 'configs' | 'files' | 'git' | 'setup'>('packages')
 
   return (
     <div className="app">
@@ -42,6 +43,12 @@ function App() {
             Scripts
           </button>
           <button 
+            className={activeTab === 'configs' ? 'active' : ''}
+            onClick={() => setActiveTab('configs')}
+          >
+            Configs
+          </button>
+          <button 
             className={activeTab === 'files' ? 'active' : ''}
             onClick={() => setActiveTab('files')}
           >
@@ -67,6 +74,7 @@ function App() {
         {activeTab === 'aliases' && <AliasesViewer />}
         {activeTab === 'functions' && <FunctionsViewer />}
         {activeTab === 'scripts' && <ScriptsManager />}
+        {activeTab === 'configs' && <ConfigsBrowser />}
         {activeTab === 'files' && <FileViewer />}
         {activeTab === 'git' && <GitManager />}
         {activeTab === 'setup' && <SetupManager />}

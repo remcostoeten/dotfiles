@@ -3,68 +3,68 @@ import { invoke } from '@tauri-apps/api/core'
 import Editor from '@monaco-editor/react'
 import '../App.css'
 
-interface Script {
-  name: string
+interface FileInfo {
   path: string
-  content: string
+  name: string
   type: 'file' | 'directory'
 }
 
-function ScriptsManager() {
-  const [scripts, setScripts] = useState<Script[]>([])
-  const [selectedScript, setSelectedScript] = useState<Script | null>(null)
+function ConfigsBrowser() {
+  const [files, setFiles] = useState<FileInfo[]>([])
+  const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null)
+  const [fileContent, setFileContent] = useState('')
   const [editedContent, setEditedContent] = useState('')
   const [hasChanges, setHasChanges] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [currentPath, setCurrentPath] = useState('')
-  const [currentView, setCurrentView] = useState<'scripts' | 'bin'>('scripts')
 
   useEffect(() => {
-    loadScripts()
-  }, [currentView])
+    loadFiles()
+  }, [])
 
-  const loadScripts = async (path?: string) => {
+  const loadFiles = async (path?: string) => {
     setLoading(true)
     setError('')
     try {
       const dotfilesPath = await invoke<string>('get_dotfiles_path')
-      const targetPath = path || (currentView === 'bin' ? `${dotfilesPath}/bin` : `${dotfilesPath}/scripts`)
-      const scripts = await invoke<Script[]>('list_files', { path: targetPath })
-      setScripts(scripts)
+      const targetPath = path || `${dotfilesPath}/configs`
+      const files = await invoke<FileInfo[]>('list_files', { path: targetPath })
+      setFiles(files)
       setCurrentPath(targetPath)
     } catch (err) {
-      setError(`Failed to load scripts: ${err}`)
+      setError(`Failed to load configs: ${err}`)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleScriptClick = async (script: Script) => {
-    if (script.type === 'directory') {
-      await loadScripts(script.path)
-      setSelectedScript(null)
-      setEditedContent('')
+  const handleFileClick = async (file: FileInfo) => {
+    if (file.type === 'directory') {
+      await loadFiles(file.path)
+      setSelectedFile(null)
+      setFileContent('')
       return
     }
 
-    setSelectedScript(script)
+    setSelectedFile(file)
     setLoading(true)
     setError('')
     try {
-      const content = await invoke<string>('read_file', { path: script.path })
+      const content = await invoke<string>('read_file', { path: file.path })
+      setFileContent(content)
       setEditedContent(content)
       setHasChanges(false)
     } catch (err) {
-      setError(`Failed to read script: ${err}`)
+      setError(`Failed to read file: ${err}`)
     } finally {
       setLoading(false)
     }
   }
 
   const handleSave = async () => {
-    if (!selectedScript) return
+    if (!selectedFile) return
 
     setLoading(true)
     setError('')
@@ -72,16 +72,12 @@ function ScriptsManager() {
 
     try {
       await invoke('write_file', {
-        path: selectedScript.path,
+        path: selectedFile.path,
         content: editedContent
       })
-      setSuccess('Script saved successfully')
+      setSuccess('File saved successfully')
       setHasChanges(false)
-      await loadScripts(currentPath)
-      // Reload content
-      const content = await invoke<string>('read_file', { path: selectedScript.path })
-      setSelectedScript({ ...selectedScript, content })
-      setEditedContent(content)
+      setFileContent(editedContent)
     } catch (err) {
       setError(`Failed to save: ${err}`)
     } finally {
@@ -92,7 +88,7 @@ function ScriptsManager() {
   const handleContentChange = (value: string | undefined) => {
     if (value !== undefined) {
       setEditedContent(value)
-      setHasChanges(value !== selectedScript?.content)
+      setHasChanges(value !== fileContent)
     }
   }
 
@@ -108,13 +104,41 @@ function ScriptsManager() {
     if (path.endsWith('.toml')) return 'toml'
     if (path.endsWith('.json')) return 'json'
     if (path.endsWith('.yaml') || path.endsWith('.yml')) return 'yaml'
+    if (path.endsWith('.md')) return 'markdown'
+    if (path.endsWith('.css')) return 'css'
+    if (path.endsWith('.html')) return 'html'
+    if (path.endsWith('.lua')) return 'lua'
+    if (path.endsWith('.conf')) return 'ini'
     return 'plaintext'
+  }
+
+  const handleOpenInGitHub = async () => {
+    if (!selectedFile) return
+    try {
+      await invoke('open_in_github', { path: selectedFile.path })
+    } catch (err) {
+      setError(`Failed to open in GitHub: ${err}`)
+    }
+  }
+
+  const handleOpenInSF = async () => {
+    if (!selectedFile) return
+    try {
+      await invoke('open_in_system_file_manager', { path: selectedFile.path })
+    } catch (err) {
+      setError(`Failed to open in file manager: ${err}`)
+    }
+  }
+
+  const handleBackToConfigs = async () => {
+    const dotfilesPath = await invoke<string>('get_dotfiles_path')
+    await loadFiles(`${dotfilesPath}/configs`)
   }
 
   return (
     <div>
       <div className="card">
-        <h2>Scripts Manager</h2>
+        <h2>Configs Browser</h2>
         
         {error && <div className="error">{error}</div>}
         {success && <div className="success">{success}</div>}
@@ -123,78 +147,47 @@ function ScriptsManager() {
         <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <strong>Current Path:</strong> {currentPath}
-            {(currentPath.includes('/scripts') || currentPath.includes('/bin')) && 
-             currentPath.split('/').length > currentPath.split(/\/scripts|\/bin/)[0].split('/').length + 1 && (
+            {currentPath !== (async () => {
+              const dotfilesPath = await invoke<string>('get_dotfiles_path')
+              return `${dotfilesPath}/configs`
+            })() && currentPath.includes('/configs') && (
               <button
-                onClick={async () => {
-                  const dotfilesPath = await invoke<string>('get_dotfiles_path')
-                  await loadScripts(currentView === 'bin' ? `${dotfilesPath}/bin` : `${dotfilesPath}/scripts`)
-                }}
+                onClick={handleBackToConfigs}
                 style={{ marginLeft: '1rem', padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}
               >
-                Back to {currentView}/
+                Back to configs/
               </button>
             )}
-          </div>
-          <div className="button-group" style={{ gap: '0.5rem' }}>
-            <button
-              onClick={() => {
-                setCurrentView('scripts')
-                setSelectedScript(null)
-              }}
-              style={{
-                padding: '0.4rem 0.8rem',
-                fontSize: '0.9rem',
-                background: currentView === 'scripts' ? '#646cff' : '#1a1a1a',
-                border: '1px solid #444'
-              }}
-            >
-              scripts/
-            </button>
-            <button
-              onClick={() => {
-                setCurrentView('bin')
-                setSelectedScript(null)
-              }}
-              style={{
-                padding: '0.4rem 0.8rem',
-                fontSize: '0.9rem',
-                background: currentView === 'bin' ? '#646cff' : '#1a1a1a',
-                border: '1px solid #444'
-              }}
-            >
-              bin/
-            </button>
           </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
           <div>
-            <h3>Scripts</h3>
+            <h3>Config Files</h3>
             <ul style={{ listStyle: 'none', padding: 0, maxHeight: '600px', overflowY: 'auto' }}>
-              {scripts.map(script => (
+              {files.map(file => (
                 <li
-                  key={script.path}
-                  onClick={() => handleScriptClick(script)}
+                  key={file.path}
+                  onClick={() => handleFileClick(file)}
                   style={{
                     padding: '0.75rem',
                     margin: '0.5rem 0',
-                    background: selectedScript?.path === script.path ? '#646cff' : '#1a1a1a',
+                    background: selectedFile?.path === file.path ? '#646cff' : '#1a1a1a',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     transition: 'background 0.2s'
                   }}
                 >
-                  {script.type === 'directory' ? '📁' : '📄'} {script.name}
+                  {file.type === 'directory' ? '📁' : '📄'} {file.name}
                 </li>
               ))}
             </ul>
           </div>
 
-          {selectedScript && (
+          {selectedFile && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3>{selectedScript.name}</h3>
+                <h3>{selectedFile.name}</h3>
                 <div className="button-group">
                   {hasChanges && (
                     <span style={{ color: '#ffaa00', marginRight: '1rem' }}>● Unsaved changes</span>
@@ -202,15 +195,23 @@ function ScriptsManager() {
                   <button onClick={handleSave} disabled={loading || !hasChanges}>
                     {loading ? 'Saving...' : 'Save'}
                   </button>
+                  <button onClick={handleOpenInGitHub}>
+                    Open in GitHub
+                  </button>
+                  <button onClick={handleOpenInSF}>
+                    Open in File Manager
+                  </button>
                 </div>
               </div>
+              {error && <div className="error">{error}</div>}
+              {success && <div className="success">{success}</div>}
               <div style={{ marginBottom: '1rem', fontSize: '0.9rem', color: '#888' }}>
-                Path: {selectedScript.path}
+                Path: {selectedFile.path}
               </div>
               <div style={{ border: '1px solid #444', borderRadius: '8px', overflow: 'hidden' }}>
                 <Editor
                   height="600px"
-                  language={getLanguageFromPath(selectedScript.path)}
+                  language={getLanguageFromPath(selectedFile.path)}
                   value={editedContent}
                   onChange={handleContentChange}
                   theme="vs-dark"
@@ -222,6 +223,7 @@ function ScriptsManager() {
                     scrollBeyondLastLine: false,
                     formatOnPaste: true,
                     formatOnType: true,
+                    readOnly: false,
                   }}
                 />
               </div>
@@ -233,5 +235,5 @@ function ScriptsManager() {
   )
 }
 
-export default ScriptsManager
+export default ConfigsBrowser
 
