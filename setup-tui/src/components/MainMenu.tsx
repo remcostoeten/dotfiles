@@ -1,6 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import * as Progress from "../services/progress";
 
 type MenuOption = {
   id: string;
@@ -8,35 +9,56 @@ type MenuOption = {
   description: string;
 };
 
-const options: MenuOption[] = [
-  {
-    id: "packages",
-    title: "Install Packages",
-    description: "Select and install system packages",
-  },
-  {
-    id: "quick",
-    title: "Quick Install (All)",
-    description: "Install all packages without prompts",
-  },
-  {
-    id: "dry-run",
-    title: "Dry Run",
-    description: "Preview what would be installed",
-  },
-  {
-    id: "exit",
-    title: "Exit",
-    description: "Exit the installer",
-  },
-];
-
-interface MainMenuProps {
+type Props = {
   onSelect: (screen: string) => void;
+};
+
+function getOptions(hasProgress: boolean): MenuOption[] {
+  const opts: MenuOption[] = [];
+  
+  if (hasProgress) {
+    opts.push({
+      id: "resume",
+      title: "Resume Previous Installation",
+      description: "Continue from where you left off",
+    });
+  }
+  
+  opts.push(
+    {
+      id: "packages",
+      title: "Install Packages",
+      description: "Select and install system packages",
+    },
+    {
+      id: "dry-run",
+      title: "Dry Run",
+      description: "Preview what would be installed",
+    },
+    {
+      id: "settings",
+      title: "Settings",
+      description: "Configure installation options",
+    },
+    {
+      id: "exit",
+      title: "Exit",
+      description: "Exit the installer",
+    }
+  );
+  
+  return opts;
 }
 
-export function MainMenu({ onSelect }: MainMenuProps) {
+export function MainMenu({ onSelect }: Props) {
   const [selected, setSelected] = useState(0);
+  const [hasProgress, setHasProgress] = useState(false);
+
+  useEffect(() => {
+    setHasProgress(Progress.canResume());
+  }, []);
+
+  const options = getOptions(hasProgress);
 
   useKeyboard((key) => {
     if (key.name === "up" || key.name === "k") {
@@ -47,6 +69,8 @@ export function MainMenu({ onSelect }: MainMenuProps) {
     }
     if (key.name === "return") {
       const option = options[selected];
+      if (!option) return;
+      
       if (option.id === "exit") {
         process.exit(0);
       }

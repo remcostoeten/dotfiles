@@ -4,8 +4,9 @@ import { useState } from "react";
 import { MainMenu } from "./components/MainMenu";
 import { PackageSelection } from "./components/PackageSelection";
 import { InstallProgress } from "./components/InstallProgress";
+import { Settings } from "./components/Settings";
 
-type Screen = "menu" | "packages" | "installing" | "complete";
+type Screen = "menu" | "packages" | "installing" | "complete" | "settings" | "dry-run" | "resume";
 
 export function App() {
   const [screen, setScreen] = useState<Screen>("menu");
@@ -43,6 +44,7 @@ export function App() {
       {/* Content */}
       <box style={{ flexGrow: 1 }}>
         {screen === "menu" && <MainMenu onSelect={setScreen} />}
+        
         {screen === "packages" && (
           <PackageSelection
             onBack={() => setScreen("menu")}
@@ -52,12 +54,43 @@ export function App() {
             }}
           />
         )}
+        
+        {screen === "settings" && (
+          <Settings onBack={() => setScreen("menu")} />
+        )}
+        
+        {screen === "dry-run" && (
+          <box style={{ flexDirection: "column" }}>
+            <text fg="#FFFF00" attributes={TextAttributes.BOLD}>
+              Dry Run Mode
+            </text>
+            <text attributes={TextAttributes.DIM}>
+              Coming soon - preview installations without executing
+            </text>
+            <text style={{ marginTop: 2 }}>
+              Press ESC to go back
+            </text>
+          </box>
+        )}
+        
+        {screen === "resume" && (
+          <box style={{ flexDirection: "column" }}>
+            <text fg="#FFFF00" attributes={TextAttributes.BOLD}>
+              Resume Installation
+            </text>
+            <text attributes={TextAttributes.DIM}>
+              Resuming from previous session...
+            </text>
+          </box>
+        )}
+        
         {screen === "installing" && (
           <InstallProgress
             packages={selectedPackages}
             onComplete={() => setScreen("complete")}
           />
         )}
+        
         {screen === "complete" && (
           <box
             style={{
