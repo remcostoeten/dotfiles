@@ -10,9 +10,10 @@ readonly MAGENTA='\033[0;35m'
 readonly BOLD='\033[1m'
 readonly NC='\033[0m' # No Color 
 
-# Configuration file to save progress
-readonly PROGRESS_FILE="$HOME/.config/dotfiles/.setup_progress.json"
+# Configuration
 readonly DOTFILES_DIR="$HOME/.config/dotfiles"
+readonly DOTFILES_DATA_DIR="$HOME/.dotfiles"
+readonly PROGRESS_FILE="$DOTFILES_DATA_DIR/setup/progress.json"
 
 # ============================================================================
 # PACKAGE DEFINITIONS
@@ -415,18 +416,64 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Initialize data directory structure
+init_data_directory() {
+    if [ ! -d "$DOTFILES_DATA_DIR" ]; then
+        mkdir -p "$DOTFILES_DATA_DIR"/{setup,logs,backups}
+        print_verbose "Created data directory structure at $DOTFILES_DATA_DIR"
+    fi
+    
+    update_gitignore
+}
+
+# Update .gitignore to exclude data directory
+update_gitignore() {
+    local gitignore="$DOTFILES_DIR/.gitignore"
+    local ignore_pattern="# Data directory (logs, progress, backups)"
+    local ignore_entry="/.dotfiles/"
+    
+    if [ ! -f "$gitignore" ]; then
+        touch "$gitignore"
+        print_verbose "Created .gitignore file"
+    fi
+    
+    if grep -q "^/.dotfiles/" "$gitignore" 2>/dev/null; then
+        print_verbose "Data directory already in .gitignore"
+        return 0
+    fi
+    
+    {
+        echo ""
+        echo "$ignore_pattern"
+        echo "$ignore_entry"
+    } >> "$gitignore"
+    
+    print_success "Added $DOTFILES_DATA_DIR to .gitignore"
+    print_info "Data directory will not be version controlled"
+}
+
+# Track installation results
+track_result() {
+    local result=$1
+    if [ $result -eq 0 ]; then
+        ((TOTAL_SUCCESS++))
+    else
+        ((TOTAL_FAILED++))
+    fi
+}
+
 # Show welcome screen and main menu
 show_main_menu() {
     while true; do
         clear
         echo -e "${BOLD}${MAGENTA}"
-        echo "╔════════════════════════════════════════════════════════════════════╗"
-        echo "║                                                                    ║"
-        echo "║                    Dotfiles Setup Script                          ║"
-        echo "║                                                                    ║"
-        echo "║                    Welcome to the installer                        ║"
-        echo "║                                                                    ║"
-        echo "╚════════════════════════════════════════════════════════════════════╝"
+        echo "╔══════════════════════════════════════════════════════════════════╗"
+        echo "║                                                                  ║"
+        echo "║                   Dotfiles Setup Script                          ║"
+        echo "║                                                                  ║"
+        echo "║                   Welcome to the installer                       ║"
+        echo "║                                                                  ║"
+        echo "╚══════════════════════════════════════════════════════════════════╝"
         echo -e "${NC}\n"
         
         echo -e "${CYAN}What would you like to do?${NC}\n"
@@ -477,13 +524,13 @@ show_main_menu() {
                         [ $selected -lt 0 ] && selected=$((total - 1))
                         clear
                         echo -e "${BOLD}${MAGENTA}"
-                        echo "╔════════════════════════════════════════════════════════════════════╗"
-                        echo "║                                                                    ║"
-                        echo "║                    Dotfiles Setup Script                          ║"
-                        echo "║                                                                    ║"
-                        echo "║                    Welcome to the installer                        ║"
-                        echo "║                                                                    ║"
-                        echo "╚════════════════════════════════════════════════════════════════════╝"
+                        echo "╔══════════════════════════════════════════════════════════════════╗"
+                        echo "║                                                                  ║"
+                        echo "║                   Dotfiles Setup Script                          ║"
+                        echo "║                                                                  ║"
+                        echo "║                   Welcome to the installer                       ║"
+                        echo "║                                                                  ║"
+                        echo "╚══════════════════════════════════════════════════════════════════╝"
                         echo -e "${NC}\n"
                         echo -e "${CYAN}What would you like to do?${NC}\n"
                         continue
@@ -493,13 +540,13 @@ show_main_menu() {
                         [ $selected -ge $total ] && selected=0
                         clear
                         echo -e "${BOLD}${MAGENTA}"
-                        echo "╔════════════════════════════════════════════════════════════════════╗"
-                        echo "║                                                                    ║"
-                        echo "║                    Dotfiles Setup Script                          ║"
-                        echo "║                                                                    ║"
-                        echo "║                    Welcome to the installer                        ║"
-                        echo "║                                                                    ║"
-                        echo "╚════════════════════════════════════════════════════════════════════╝"
+                        echo "╔══════════════════════════════════════════════════════════════════╗"
+                        echo "║                                                                  ║"
+                        echo "║                   Dotfiles Setup Script                          ║"
+                        echo "║                                                                  ║"
+                        echo "║                   Welcome to the installer                       ║"
+                        echo "║                                                                  ║"
+                        echo "╚══════════════════════════════════════════════════════════════════╝"
                         echo -e "${NC}\n"
                         echo -e "${CYAN}What would you like to do?${NC}\n"
                         continue
@@ -568,13 +615,13 @@ show_main_menu() {
                     [ $selected -lt 0 ] && selected=$((total - 1))
                     clear
                     echo -e "${BOLD}${MAGENTA}"
-                    echo "╔════════════════════════════════════════════════════════════════════╗"
-                    echo "║                                                                    ║"
-                    echo "║                    Dotfiles Setup Script                          ║"
-                    echo "║                                                                    ║"
-                    echo "║                    Welcome to the installer                        ║"
-                    echo "║                                                                    ║"
-                    echo "╚════════════════════════════════════════════════════════════════════╝"
+                    echo "╔══════════════════════════════════════════════════════════════════╗"
+                    echo "║                                                                  ║"
+                    echo "║                   Dotfiles Setup Script                          ║"
+                    echo "║                                                                  ║"
+                    echo "║                   Welcome to the installer                       ║"
+                    echo "║                                                                  ║"
+                    echo "╚══════════════════════════════════════════════════════════════════╝"
                     echo -e "${NC}\n"
                     echo -e "${CYAN}What would you like to do?${NC}\n"
                     ;;
@@ -583,13 +630,13 @@ show_main_menu() {
                     [ $selected -ge $total ] && selected=0
                     clear
                     echo -e "${BOLD}${MAGENTA}"
-                    echo "╔════════════════════════════════════════════════════════════════════╗"
-                    echo "║                                                                    ║"
-                    echo "║                    Dotfiles Setup Script                          ║"
-                    echo "║                                                                    ║"
-                    echo "║                    Welcome to the installer                        ║"
-                    echo "║                                                                    ║"
-                    echo "╚════════════════════════════════════════════════════════════════════╝"
+                    echo "╔══════════════════════════════════════════════════════════════════╗"
+                    echo "║                                                                  ║"
+                    echo "║                   Dotfiles Setup Script                          ║"
+                    echo "║                                                                  ║"
+                    echo "║                   Welcome to the installer                       ║"
+                    echo "║                                                                  ║"
+                    echo "╚══════════════════════════════════════════════════════════════════╝"
                     echo -e "${NC}\n"
                     echo -e "${CYAN}What would you like to do?${NC}\n"
                     ;;
@@ -652,7 +699,9 @@ list_all_packages_simple() {
     echo -e "${BOLD}${CYAN}Available Package Categories${NC}\n"
     
     echo -e "${BOLD}Essential Packages${NC} (${#ESSENTIAL_PACKAGES[@]} packages)"
-    echo -e "${BOLD}Development Tools${NC} (${#DEV_TOOLS[@]} packages)"
+    echo -e "${BOLD}Programming Languages${NC} (${#LANGUAGES[@]} packages)"
+    echo -e "${BOLD}Code Editors${NC} (${#EDITORS[@]} packages)"
+    echo -e "${BOLD}Package Managers${NC} (${#PACKAGE_MANAGERS[@]} packages)"
     echo -e "${BOLD}Git Tools${NC} (${#GIT_TOOLS[@]} packages)"
     echo -e "${BOLD}CLI Utilities${NC} (${#CLI_UTILITIES[@]} packages)"
     echo -e "${BOLD}Browsers${NC} (${#BROWSERS[@]} packages)"
@@ -671,9 +720,9 @@ list_all_packages_simple() {
 list_all_packages() {
     clear
     echo -e "${BOLD}${MAGENTA}"
-    echo "╔════════════════════════════════════════════════════════════════════╗"
-    echo "║              Available Packages by Category                       ║"
-    echo "╚════════════════════════════════════════════════════════════════════╝"
+    echo "╔══════════════════════════════════════════════════════════════════╗"
+    echo "║            Available Packages by Category                        ║"
+    echo "╚══════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}\n"
     
     # Function to display a category
@@ -2458,6 +2507,10 @@ install_nerd_fonts() {
 # ============================================================================
 
 main() {
+    # Initialize tracking variables
+    TOTAL_SUCCESS=0
+    TOTAL_FAILED=0
+    
     # Parse command line arguments first
     parse_args "$@"
     
@@ -2496,6 +2549,9 @@ main() {
         print_error "sudo is required but not installed"
         exit 1
     fi
+    
+    # Initialize data directory structure
+    init_data_directory
     
     # Check for resume
     if [ -f "$PROGRESS_FILE" ]; then
@@ -2563,16 +2619,26 @@ main() {
     print_info "You can now select which categories to install"
     echo ""
     
-    # Development tools
-    if [ -z "$run_section" ] || [ "$run_section" = "dev" ]; then
+    # Programming languages & runtimes
+    if [ -z "$run_section" ] || [ "$run_section" = "languages" ]; then
         print_info "Press Enter to continue or Ctrl+C to exit at any time"
         echo ""
-        select_packages "dev" "Development Tools" DEV_TOOLS || true
+        select_packages "languages" "Programming Languages & Runtimes" LANGUAGES || true
     fi
     
-    # Git tools (lazygit, lazydocker)
+    # Code editors & IDEs
+    if [ -z "$run_section" ] || [ "$run_section" = "editors" ]; then
+        select_packages "editors" "Code Editors & IDEs" EDITORS || true
+    fi
+    
+    # Package managers
+    if [ -z "$run_section" ] || [ "$run_section" = "package-managers" ]; then
+        select_packages "package-managers" "Package Managers" PACKAGE_MANAGERS || true
+    fi
+    
+    # Git tools
     if [ -z "$run_section" ] || [ "$run_section" = "git" ]; then
-        select_packages "git-tools" "Git Tools (lazygit, lazydocker)" GIT_TOOLS || true
+        select_packages "git-tools" "Git Tools (GitHub CLI, lazygit, lazydocker)" GIT_TOOLS || true
     fi
     
     # CLI utilities
