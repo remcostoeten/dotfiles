@@ -45,3 +45,8 @@ click/history.log
 
 # Data directory (logs, progress, backups)
 /.dotfiles/
+opentui-setup/PROJECT_STRUCTURE.md
+opentui-setup/QUICKSTART.md
+opentui-setup/README.md
+.gitignore
+opentui-setup/WHY_OPENTUI.md

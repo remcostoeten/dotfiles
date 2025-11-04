@@ -7,5 +7,4 @@ declare -a SNAP_PACKAGES=(
     "obsidian:Obsidian"
     "signal-desktop:Signal"
     "code:Visual Studio Code"
-    "cursor:Cursor Editor"
 )

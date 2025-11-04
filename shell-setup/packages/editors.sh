@@ -4,5 +4,4 @@
 declare -a EDITORS=(
     "neovim|apt|Neovim"
     "code|snap|Visual Studio Code"
-    "cursor|snap|Cursor Editor"
 )
