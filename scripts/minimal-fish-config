@@ -1,0 +1,113 @@
+#!/usr/bin/env fish
+
+# Minimal Fish Configuration
+# This is a temporary minimal config that replaces your full fish setup
+
+# Colors for output
+set -g __minimal_red (set_color red)
+set -g __minimal_green (set_color green)
+set -g __minimal_yellow (set_color yellow)
+set -g __minimal_blue (set_color blue)
+set -g __normal (set_color normal)
+
+function __minimal_echo
+    set -l color $argv[1]
+    set -l message $argv[2..]
+    echo -n "$color$message$__normal"
+end
+
+# Welcome message
+echo
+__minimal_echo $__minimal_blue "╔══════════════════════════════════════════════════════════════╗"
+echo
+__minimal_echo $__minimal_blue "║" ; __minimal_echo $__minimal_yellow "  MINIMAL FISH SHEEL - TEMPORARY CONFIGURATION            " ; __minimal_echo $__minimal_blue "║"
+echo
+__minimal_echo $__minimal_blue "╚══════════════════════════════════════════════════════════════╝"
+echo
+__minimal_echo $__minimal_green "✓" ; __minimal_echo $__normal " Your full fish config has been backed up"
+echo
+__minimal_echo $__minimal_yellow "Available commands:"
+echo
+__minimal_echo $__minimal_blue "  bash  " ; __minimal_echo $__normal "- Switch to bash shell"
+__minimal_echo $__minimal_blue "  sh    " ; __minimal_echo $__normal "- Switch to sh shell"
+__minimal_echo $__minimal_blue "  fish  " ; __minimal_echo $__normal "- Switch back to fish shell"
+__minimal_echo $__minimal_blue "  reload" ; __minimal_echo $__normal "- Restore your full fish configuration"
+echo
+__minimal_echo $__minimal_green "Type 'reload' to restore your full configuration or any command to continue."
+echo
+
+# Shell switching functions
+function bash
+    __minimal_echo $__minimal_blue "→ Switching to bash shell..." ; echo
+    exec bash
+end
+
+function sh
+    __minimal_echo $__minimal_blue "→ Switching to sh shell..." ; echo
+    exec sh
+end
+
+function fish
+    __minimal_echo $__minimal_blue "→ Restarting fish shell..." ; echo
+    exec fish
+end
+
+# The critical reload function that restores original config
+function reload
+    __minimal_echo $__minimal_yellow "→ Restoring your full fish configuration..." ; echo
+
+    # Store the current script location for restoration
+    set -l current_dir (dirname (status --current-filename))
+    set -l config_dir (dirname $current_dir)
+
+    # Restore original config
+    if test -f "$config_dir/cfg.bak"
+        rm "$config_dir/cfg"
+        mv "$config_dir/cfg.bak" "$config_dir/cfg"
+        __minimal_echo $__minimal_green "✓ Configuration restored!" ; echo
+
+        # Restart fish with the restored config
+        echo "Restarting fish with full configuration..."
+        exec fish
+    else
+        __minimal_echo $__minimal_red "✗ Error: Backup config not found at $config_dir/cfg.bak" ; echo
+        __minimal_echo $__minimal_yellow "  Cannot restore original configuration." ; echo
+    end
+end
+
+# Make sure reload alias exists even if function fails
+alias reload reload
+
+# Minimal prompt
+function fish_prompt
+    set -l last_status $status
+
+    # Show minimal prompt
+    if test $last_status -eq 0
+        __minimal_echo $__minimal_green "minimal"
+    else
+        __minimal_echo $__minimal_red "minimal"
+    end
+
+    __minimal_echo $__normal " \$ "
+end
+
+# Show warning on every command to remind user
+function __minimal_show_warning -e fish_postexec
+    set -l cmd $argv[1]
+
+    # Don't show warning for our special commands or if it's empty
+    if string match -q -v "reload" $cmd; and string match -q -v "bash" $cmd; and string match -q -v "sh" $cmd; and string match -q -v "fish" $cmd; and test -n "$cmd"
+        echo
+        __minimal_echo $__minimal_yellow "ℹ Minimal mode active. Type 'reload' to restore full configuration."
+        echo
+    end
+end
+
+# Basic environment
+set -gx TERM "xterm-256color"
+
+# Essential PATH (minimal)
+set -gx PATH /usr/bin /bin /usr/local/bin /sbin /usr/sbin
+
+echo "Minimal fish shell ready. Type 'reload' to restore full configuration."

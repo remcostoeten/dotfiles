@@ -1,10 +1,8 @@
 #!/usr/bin/env bun
-
 import { readdirSync, statSync, lstatSync, existsSync, readFileSync, writeFileSync } from 'fs';
 import { join, basename, resolve, dirname, extname } from 'path';
 import { spawnSync, spawn } from 'child_process';
 import readline from 'readline';
-
 type TItemType = 'bin' | 'script' | 'alias' | 'function' | 'docker' | 'wezterm' | 'system' | 'dev';
 
 type TItem = {
@@ -119,6 +117,46 @@ function isDocFile(name: string): boolean {
            name.includes('readme') || name === 'package-lock.json' || name === '.gitignore';
 }
 
+function isSourceFile(name: string): boolean {
+    return name.endsWith('.ts') || name.endsWith('.js') || name.endsWith('.d.ts') ||
+           name.endsWith('.mjs') || name.endsWith('.py') || name.endsWith('.html') ||
+           name.endsWith('.css') || name.endsWith('.fish') || name.endsWith('.sh');
+}
+
+function isUtilityFile(name: string): boolean {
+    return ['.', '..', '..', '....'].includes(name) ||
+           name.startsWith('.') && !['env-manager'].includes(name) ||
+           name.includes('debug') || name.includes('test') ||
+           name.includes('example') || name.includes('sample');
+}
+
+function isUnwantedAliasOrFunction(name: string): boolean {
+    const unwanted = [
+        '.', '..', '..', '....',
+        'fish_variables', 'scripts', 'ui-import-transformer',
+        'setup-env', 'minimal-fish-config', 'welcome_banner'
+    ];
+    return unwanted.includes(name) ||
+           name.startsWith('_') ||
+           name.includes('internal') ||
+           name === 'fish_prompt' ||
+           name === '...';
+}
+
+function isUnwantedExecutable(name: string): boolean {
+    const unwanted = [
+        '.', '..', '..', '....',
+        'fish_variables', 'scripts', 'ui-import-transformer',
+        'setup-env', 'minimal-fish-config', 'welcome_banner'
+    ];
+    return unwanted.includes(name) ||
+           name.startsWith('.') ||
+           name.includes('internal') ||
+           name.includes('config') ||
+           name.includes('manager') && !['env-manager'].includes(name) ||
+           name === '...';
+}
+
 function uniqueId(parts: string[]): string {
     return parts.join('::');
 }
@@ -184,7 +222,8 @@ function collectAllExecutables(dotfilesRoot: string, cfg: TConfig): TItem[] {
 
             for (const file of files) {
                 if (isDocFile(file)) continue;
-                if (file.startsWith('.') && file !== 'env-manager') continue;
+                if (isSourceFile(file)) continue;
+                if (isUtilityFile(file)) continue;
                 if (file === 'node_modules' || file === '__pycache__') continue;
                 if (file === 'simple-menu.ts' || file === 'dotfiles') continue;
 
@@ -198,7 +237,7 @@ function collectAllExecutables(dotfilesRoot: string, cfg: TConfig): TItem[] {
                         continue;
                     }
 
-                    if (stats.isFile() && isExecutable(stats.mode)) {
+                    if (stats.isFile() && isExecutable(stats.mode) && !isUnwantedExecutable(name)) {
                         const { type, category } = categorizeItem(name, fullPath);
                         const description = getScriptDescription(fullPath);
                         const candidate: TItem = {
@@ -249,41 +288,102 @@ function readLines(path: string): string[] {
     }
 }
 
-function collectFishAliasFiles(dotfilesRoot: string): string[] {
+// Helper function to safely read directory contents
+function safeReadDir(dir: string): string[] {
+    try {
+        return readdirSync(dir);
+    } catch {
+        return [];
+    }
+}
+
+// Helper function to collect fish files from multiple directories
+function collectFishFiles(dotfilesRoot: string, subDirs: string[]): string[] {
     const paths: string[] = [];
-    const candidates = [
-        join(dotfilesRoot, 'configs', 'fish', 'aliases'),
-        join(dotfilesRoot, 'fish', 'aliases')
-    ];
-    for (const dir of candidates) {
-        if (!existsSync(dir)) continue;
-        let files: string[] = [];
-        try {
-            files = readdirSync(dir).filter(x => x.endsWith('.fish'));
-        } catch {
-            files = [];
+    for (const subDir of subDirs) {
+        const dir = join(dotfilesRoot, 'configs', 'fish', subDir);
+        const altDir = join(dotfilesRoot, 'fish', subDir);
+
+        for (const checkDir of [dir, altDir]) {
+            if (existsSync(checkDir)) {
+                const files = safeReadDir(checkDir).filter(x => x.endsWith('.fish'));
+                paths.push(...files.map(f => join(checkDir, f)));
+            }
         }
-        for (const f of files) paths.push(join(dir, f));
     }
     return paths;
 }
 
-function collectFishFunctionFiles(dotfilesRoot: string): string[] {
-    const paths: string[] = [];
-    const candidates = [
-        join(dotfilesRoot, 'configs', 'fish', 'functions'),
-    ];
-    for (const dir of candidates) {
-        if (!existsSync(dir)) continue;
-        let files: string[] = [];
-        try {
-            files = readdirSync(dir).filter(x => x.endsWith('.fish'));
-        } catch {
-            files = [];
+// Helper function to parse fish file content (consolidates alias and function parsing)
+function parseFishFile(filePath: string): { aliasRows: TRow[], fnRows: TRow[] } {
+    const aliasRows: TRow[] = [];
+    const fnRows: TRow[] = [];
+    const lines = readLines(filePath);
+
+    let currentDoc = '';
+    let inFn = false;
+    let fnName = '';
+    const body: string[] = [];
+
+    for (const line of lines) {
+        if (line.includes('# NO DOCSTRING:')) { currentDoc = ''; continue; }
+        if (line.includes('# DOCSTRING:')) { currentDoc = line.replace('# DOCSTRING:', '').trim(); continue; }
+
+        if (line.trim().startsWith('alias ')) {
+            const parsed = parseAliasLine(line);
+            if (parsed) {
+                const prog = primaryToken(parsed.target);
+                aliasRows.push({ kind: 'alias', name: parsed.name, doc: currentDoc || undefined, prog });
+                currentDoc = '';
+            }
+            continue;
         }
-        for (const f of files) paths.push(join(dir, f));
+
+        if (!inFn && line.trim().startsWith('function ')) {
+            inFn = true;
+            fnName = (line.trim().split(/\s+/)[1] || '').trim();
+            body.length = 0;
+            continue;
+        }
+
+        if (inFn) {
+            if (line.trim() === 'end') {
+                const prog = primaryToken(detectFunctionTarget(body));
+                const isInternal = fnName.startsWith('_') || fnName === 'fish_prompt';
+                if (!isInternal) {
+                    fnRows.push({ kind: 'function', name: fnName, doc: currentDoc || undefined, prog });
+                }
+                inFn = false; fnName = ''; currentDoc = '';
+                continue;
+            }
+            body.push(line);
+        }
     }
-    return paths;
+
+    return { aliasRows, fnRows };
+}
+
+// Helper function to group items by category
+function groupItemsByCategory(items: TItem[]): Map<string, TItem[]> {
+    return items.reduce((acc, item) => {
+        const categoryItems = acc.get(item.category) || [];
+        categoryItems.push(item);
+        acc.set(item.category, categoryItems);
+        return acc;
+    }, new Map<string, TItem[]>());
+}
+
+// Helper function to check if item matches search term
+function itemMatches(item: TItem, searchTerm: string): boolean {
+    return item.name === searchTerm || item.name.split(',').includes(searchTerm);
+}
+
+function collectFishAliasFiles(dotfilesRoot: string): string[] {
+    return collectFishFiles(dotfilesRoot, ['aliases']);
+}
+
+function collectFishFunctionFiles(dotfilesRoot: string): string[] {
+    return collectFishFiles(dotfilesRoot, ['functions']);
 }
 
 function parseAliasLine(line: string): { name: string; target: string } | null {
@@ -339,66 +439,18 @@ function collectAliasesAndFunctions(dotfilesRoot: string, cfg: TConfig): TItem[]
     if (cfg.includeAliases) {
         const aliasFiles = collectFishAliasFiles(dotfilesRoot);
         for (const file of aliasFiles) {
-            const lines = readLines(file);
-            let currentDoc = '';
-            let inFn = false;
-            let fnName = '';
-            const body: string[] = [];
-            for (const line of lines) {
-                if (line.includes('# NO DOCSTRING:')) { currentDoc = ''; continue; }
-                if (line.includes('# DOCSTRING:')) { currentDoc = line.replace('# DOCSTRING:', '').trim(); continue; }
-                if (line.trim().startsWith('alias ')) {
-                    const parsed = parseAliasLine(line);
-                    if (!parsed) continue;
-                    const prog = primaryToken(parsed.target);
-                    aliasRows.push({ kind: 'alias', name: parsed.name, doc: currentDoc || undefined, prog });
-                    currentDoc = '';
-                    continue;
-                }
-                if (!inFn && line.trim().startsWith('function ')) {
-                    inFn = true;
-                    fnName = (line.trim().split(/\s+/)[1] || '').trim();
-                    body.length = 0;
-                    continue;
-                }
-                if (inFn && line.trim() === 'end') {
-                    const prog = primaryToken(detectFunctionTarget(body));
-                    const isInternal = fnName.startsWith('_') || fnName === 'fish_prompt';
-                    if (!isInternal) fnRows.push({ kind: 'function', name: fnName, doc: currentDoc || undefined, prog });
-                    inFn = false; fnName = ''; currentDoc = '';
-                    continue;
-                }
-                if (inFn) body.push(line);
-            }
+            const { aliasRows: fileAliasRows, fnRows: fileFnRows } = parseFishFile(file);
+            aliasRows.push(...fileAliasRows);
+            fnRows.push(...fileFnRows);
         }
     }
 
     if (cfg.includeFunctions) {
         const fnFiles = collectFishFunctionFiles(dotfilesRoot);
         for (const file of fnFiles) {
-            const lines = readLines(file);
-            let currentDoc = '';
-            let inFn = false;
-            let fnName = '';
-            const body: string[] = [];
-            for (const line of lines) {
-                if (line.includes('# NO DOCSTRING:')) { currentDoc = ''; continue; }
-                if (line.includes('# DOCSTRING:')) { currentDoc = line.replace('# DOCSTRING:', '').trim(); continue; }
-                if (!inFn && line.trim().startsWith('function ')) {
-                    inFn = true;
-                    fnName = (line.trim().split(/\s+/)[1] || '').trim();
-                    body.length = 0;
-                    continue;
-                }
-                if (inFn && line.trim() === 'end') {
-                    const prog = primaryToken(detectFunctionTarget(body));
-                    const isInternal = fnName.startsWith('_') || fnName === 'fish_prompt';
-                    if (!isInternal) fnRows.push({ kind: 'function', name: fnName, doc: currentDoc || undefined, prog });
-                    inFn = false; fnName = ''; currentDoc = '';
-                    continue;
-                }
-                if (inFn) body.push(line);
-            }
+            const { aliasRows: fileAliasRows, fnRows: fileFnRows } = parseFishFile(file);
+            aliasRows.push(...fileAliasRows);
+            fnRows.push(...fileFnRows);
         }
     }
 
@@ -419,7 +471,9 @@ function collectAliasesAndFunctions(dotfilesRoot: string, cfg: TConfig): TItem[]
         for (const r of fnRows) addToGroup(r);
         function toItem(prog: string, g: { names: Set<string>; doc?: string }): TItem {
             const names = Array.from(g.names).sort(function compare(a, b) { return a.localeCompare(b); });
-            const nameJoined = names.join(',');
+            const filteredNames = names.filter(name => !isUnwantedAliasOrFunction(name));
+            if (filteredNames.length === 0) return null as any;
+            const nameJoined = filteredNames.join(',');
             let category = 'utility';
             if (prog === 'git') category = 'git';
             else if (['bun', 'npm', 'pnpm', 'node'].includes(prog)) category = 'dev';
@@ -427,24 +481,35 @@ function collectAliasesAndFunctions(dotfilesRoot: string, cfg: TConfig): TItem[]
 
             return { id: uniqueId(['alias-group', nameJoined, prog]), type: 'alias', category, name: nameJoined, target: prog, doc: g.doc };
         }
-        for (const [prog, g] of byProg.entries()) items.push(toItem(prog, g));
+        for (const [prog, g] of byProg.entries()) {
+            const item = toItem(prog, g);
+            if (item) items.push(item);
+        }
 
         for (const r of fnRows) {
             if (!r.prog || isBuiltinFishTarget(r.prog)) {
-                items.push({ id: uniqueId(['function', r.name]), type: 'function', category: 'utility', name: r.name, doc: r.doc });
+                if (!isUnwantedAliasOrFunction(r.name)) {
+                    items.push({ id: uniqueId(['function', r.name]), type: 'function', category: 'utility', name: r.name, doc: r.doc });
+                }
             }
         }
         for (const r of aliasRows) {
             if (!r.prog || isBuiltinFishTarget(r.prog)) {
-                items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: 'utility', name: r.name, doc: r.doc });
+                if (!isUnwantedAliasOrFunction(r.name)) {
+                    items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: 'utility', name: r.name, doc: r.doc });
+                }
             }
         }
     } else {
         for (const r of aliasRows) {
-            items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: 'utility', name: r.name, target: r.prog, doc: r.doc });
+            if (!isUnwantedAliasOrFunction(r.name)) {
+                items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: 'utility', name: r.name, target: r.prog, doc: r.doc });
+            }
         }
         for (const r of fnRows) {
-            items.push({ id: uniqueId(['function', r.name]), type: 'function', category: 'utility', name: r.name, target: r.prog, doc: r.doc });
+            if (!isUnwantedAliasOrFunction(r.name)) {
+                items.push({ id: uniqueId(['function', r.name]), type: 'function', category: 'utility', name: r.name, target: r.prog, doc: r.doc });
+            }
         }
     }
 
@@ -555,12 +620,7 @@ function buildFzfInput(items: TItem[], cfg: TConfig): string {
     const c = colors();
 
     // Group by category for better organization
-    const byCategory = new Map<string, TItem[]>();
-    for (const item of items) {
-        const categoryItems = byCategory.get(item.category) || [];
-        categoryItems.push(item);
-        byCategory.set(item.category, categoryItems);
-    }
+    const byCategory = groupItemsByCategory(items);
 
     for (const [category, categoryItems] of byCategory.entries()) {
         const categoryInfo = CATEGORIES[category] || CATEGORIES.utility;
@@ -802,13 +862,7 @@ function buildIndex(dotfilesRoot: string, cfg: TConfig): TItem[] {
 
 function printCategories(items: TItem[]) {
     const c = colors();
-    const byCategory = new Map<string, TItem[]>();
-
-    for (const item of items) {
-        const categoryItems = byCategory.get(item.category) || [];
-        categoryItems.push(item);
-        byCategory.set(item.category, categoryItems);
-    }
+    const byCategory = groupItemsByCategory(items);
 
     console.log('');
     console.log(`${c.bright}${c.cyan}Available Categories:${c.reset}`);
@@ -888,12 +942,7 @@ async function main() {
         const items = buildIndex(dotfilesRoot, cfg);
 
         if (cfg.layout === 'categories') {
-            const byCategory = new Map<string, TItem[]>();
-            for (const item of items) {
-                const categoryItems = byCategory.get(item.category) || [];
-                categoryItems.push(item);
-                byCategory.set(item.category, categoryItems);
-            }
+            const byCategory = groupItemsByCategory(items);
 
             console.log('');
             console.log(`${c.bright}${c.cyan}All Available Tools:${c.reset} ${c.dim}(${items.length} total)${c.reset}`);
@@ -965,13 +1014,7 @@ async function main() {
         }
 
         const items = buildIndex(dotfilesRoot, cfg);
-        function matches(it: TItem): boolean {
-            const parts = it.name.split(',');
-            for (let i = 0; i < parts.length; i++) if (parts[i] === name) return true;
-            return it.name === name;
-        }
-
-        const found = items.find(matches);
+        const found = items.find(it => itemMatches(it, name));
         if (!found) {
             console.log('');
             console.log(`${c.red}✗${c.reset} ${c.bright}Not found:${c.reset} ${name}`);
@@ -1010,13 +1053,7 @@ async function main() {
         }
 
         const items = buildIndex(dotfilesRoot, cfg);
-        function matches(it: TItem): boolean {
-            const parts = it.name.split(',');
-            for (let i = 0; i < parts.length; i++) if (parts[i] === name) return true;
-            return it.name === name;
-        }
-
-        const found = items.find(matches);
+        const found = items.find(it => itemMatches(it, name));
         if (!found) {
             const c = colors();
             console.log('');

@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Wallpaper management script
+# Wrapper that calls the main wallpaper logic script
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WALLPAPER_SCRIPT="$SCRIPT_DIR/../scripts/wallpaper"
+
+# Check if the wallpaper script exists
+if [[ ! -f "$WALLPAPER_SCRIPT" ]]; then
+    echo -e "\033[1;31mError: Wallpaper script not found at $WALLPAPER_SCRIPT\033[0m" >&2
+    exit 1
+fi
+
+# Execute the wallpaper script with all arguments
+exec "$WALLPAPER_SCRIPT" "$@"

@@ -1,5 +1,4 @@
 #!/usr/bin/env fish
-
 # System aliases
 
 # DOCSTRING: Clear terminal screen
@@ -32,10 +31,46 @@ alias py 'python3'
 alias pip 'pip3'
 
 # DOCSTRING: Quick access to dotfiles interactive menu
-alias df 'bun ~/.config/dotfiles/scripts/dotfiles.ts'
+alias df 'dotfiles'
 
 # DOCSTRING: Dotfiles command - main interface
-alias dotfiles 'bun ~/.config/dotfiles/scripts/dotfiles.ts'
+function dotfiles
+    # Check if interactive mode is requested
+    if test (count $argv) -eq 0
+        # No arguments - show help instead of interactive mode
+        echo "⚠️  Use 'dotfiles -i' or 'dotfiles i' for interactive mode. Showing help instead:"
+        echo ""
+        command bun ~/.config/dotfiles/scripts/dotfiles.ts --help
+        echo ""
+        echo "💡 You can use these specific commands:"
+        echo "   • dotfiles -i / dotfiles i          - Interactive menu (when terminal supports it)"
+        echo "   • dotfiles list                    - Show all available tools"
+        echo "   • dotfiles search <term>           - Search for tools"
+        echo "   • dotfiles run <tool_name>         - Execute a specific tool"
+        echo "   • dotfiles categories              - Show all categories"
+    else if contains -- --i $argv[1]; or contains -- -i $argv[1]; or contains -- i $argv[1]
+        # Interactive mode requested - try it with error handling
+        if test -t 1; and status --is-interactive
+            echo "🚀 Launching interactive dotfiles menu..."
+            command bun ~/.config/dotfiles/scripts/dotfiles.ts interactive
+            if test $status -ne 0
+                echo ""
+                echo "❌ Interactive mode failed. Falling back to help:"
+                command bun ~/.config/dotfiles/scripts/dotfiles.ts --help
+            end
+        else
+            echo "⚠️  Interactive mode requires a proper terminal. Showing help instead:"
+            echo ""
+            command bun ~/.config/dotfiles/scripts/dotfiles.ts --help
+            echo ""
+            echo "💡 To use interactive mode, run this in a proper terminal:"
+            echo "   bun ~/.config/dotfiles/scripts/dotfiles.ts"
+        end
+    else
+        # Other arguments provided, pass them through
+        command bun ~/.config/dotfiles/scripts/dotfiles.ts $argv
+    end
+end
 
 # DOCSTRING: Reload fish configuration
 function reload
@@ -58,16 +93,11 @@ function reload
         echo "  reload -h     # Show this help"
         return 0
     end
-    
+
     echo "Reloading fish configuration..."
     exec fish
 end
 
-# DOCSTRING: Comprehensive dotfiles management hub - your central command center
-function dotfiles
-    # Use the new comprehensive CLI system
-    command dotfiles $argv
-end
 
 # Show help for dotfiles command
 function _show_dotfiles_help
@@ -243,7 +273,7 @@ function l
         else
             # Regular file with size coloring
             printf "%-10s " $size_part
-            
+
             # Determine color based on size pattern
             if string match -q "*B" $size_part
                 set_color -o green
@@ -282,14 +312,14 @@ end
 function tree
     # Comprehensive ignore patterns - always ignore these directories and files
     set -l ignore_patterns '.git|node_modules|.next|.nuxt|dist|build|tmp|temp|.tmp|.temp|*.log|.DS_Store|.vscode|.idea|coverage|.nyc_output|.cache|.parcel-cache|.turbo|.vercel|.netlify|__pycache__|*.pyc|.pytest_cache|target|Cargo.lock|vendor|.bundle|.sass-cache|.env.local|.env.*.local'
-    
+
     # Enhanced default options with better colors and file info
     set -l default_opts -C -a -F --dirsfirst -I $ignore_patterns
-    
+
     # Set custom colors for tree (using environment variables)
     # Directories: bold blue, files: white, executables: green, links: cyan
     set -x LS_COLORS 'di=01;34:fi=00:ex=01;32:ln=01;36:*.md=01;33:*.json=01;35:*.js=01;31:*.ts=01;31:*.tsx=01;31:*.jsx=01;31:*.py=01;36:*.go=01;32:*.rs=01;33:*.php=01;35:*.css=01;36:*.scss=01;36:*.html=01;33:*.vue=01;32:*.svelte=01;32:*.yaml=01;35:*.yml=01;35:*.toml=01;35:*.xml=01;33:*.sql=01;36:*.sh=01;32:*.fish=01;32:*.zsh=01;32:*.bash=01;32'
-    
+
     # If no arguments provided, use default depth of 3
     if test (count $argv) -eq 0
         command tree $default_opts -L 3
@@ -302,7 +332,7 @@ function tree
                 break
             end
         end
-        
+
         if test $has_depth_flag = false
             command tree $default_opts -L 3 $argv
         else
@@ -321,12 +351,12 @@ function etree
     set -l ignore_dot '--ignore-glob=.{next,nuxt,vscode,idea,DS_Store,sass-cache,nyc_output,bundle}'
     set -l ignore_env '--ignore-glob=.env*.local'
     set -l ignore_logs '--ignore-glob=*.log'
-    
+
     set -l all_ignores $ignore_git $ignore_node $ignore_build $ignore_cache $ignore_dot $ignore_env $ignore_logs
-    
+
     # Default depth
     set -l depth 3
-    
+
     # Check if user provided custom depth
     set -l custom_path '.'
     for i in (seq (count $argv))
@@ -340,7 +370,7 @@ function etree
             set custom_path $argv[$i]
         end
     end
-    
+
     # Run exa tree with colors, icons, and git status
     exa --tree --level=$depth --color=always --icons --git-ignore $all_ignores $custom_path
 end

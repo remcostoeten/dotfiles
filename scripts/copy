@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-
 # Copy Utility Script
 # Interactive display utility for development workflows
 # Works with files, directories, git remotes, and more
-
 set -euo pipefail
 
 # Configuration
@@ -32,7 +30,7 @@ info() { blue "[INFO]" && printf " %s" "$@"; }
 function copy_to_clipboard() {
     local content="$1"
     local title="${2:-Content}"
-    
+
     # Copy to clipboard using xclip or wl-copy
     if command -v xclip >/dev/null 2>&1; then
         echo -n "$content" | xclip -selection clipboard
@@ -42,7 +40,7 @@ function copy_to_clipboard() {
         echo "ERROR: Neither xclip nor wl-copy found. Please install one of them."
         exit 1
     fi
-    
+
     # Display the copied content
     echo
     printf "%s\n" "$(bold "$(cyan "=== $title ===")")
@@ -58,29 +56,29 @@ function copy_to_clipboard() {
 # Handle file display
 function handle_file() {
     local file_path="$1"
-    
+
     if [[ ! -f "$file_path" ]]; then
         printf "%s %s\n" "$(error "File not found:")" "$file_path"
         return 1
     fi
-    
+
     if [[ ! -r "$file_path" ]]; then
         printf "%s %s\n" "$(error "Cannot read file:")" "$file_path"
         return 1
     fi
-    
+
     local content
     if ! content=$(cat "$file_path"); then
         printf "%s %s\n" "$(error "Failed to read file:")" "$file_path"
         return 1
     fi
-    
+
     copy_to_clipboard "$content" "File: $file_path"
-    
+
     local file_size=$(wc -c < "$file_path")
     local line_count=$(wc -l < "$file_path")
     printf "%s 📄 File size: %s bytes, %s lines\n" "$(info)" "$(bold "$file_size")" "$(bold "$line_count")"
-    
+
     return 0
 }
 
@@ -88,13 +86,13 @@ function handle_file() {
 function handle_pwd() {
     local target_path="${1:-$(pwd)}"
     local resolved_path
-    
+
     # Try to resolve the path
     if ! resolved_path=$(realpath "$target_path" 2>/dev/null); then
         printf "%s %s\n" "$(error "Invalid path:")" "$target_path"
         return 1
     fi
-    
+
     if [[ "$target_path" == "$(pwd)" ]] || [[ "$target_path" == "." ]]; then
         copy_to_clipboard "$resolved_path" "Current Directory"
         printf "%s 📂 Current directory path displayed above\n" "$(success)"
@@ -102,7 +100,7 @@ function handle_pwd() {
         copy_to_clipboard "$resolved_path" "Directory Path"
         printf "%s 📂 Path displayed above\n" "$(success)"
     fi
-    
+
     return 0
 }
 
@@ -113,9 +111,9 @@ function handle_remote() {
         printf "%s Not in a git repository\n" "$(error)"
         return 1
     fi
-    
+
     local remote_url
-    
+
     # Try to get the remote URL (prefer origin)
     if remote_url=$(git remote get-url origin 2>/dev/null); then
         :  # Success, use remote_url
@@ -125,25 +123,25 @@ function handle_remote() {
         # List available remotes
         local remotes
         remotes=$(git remote)
-        
+
         if [[ -z "$remotes" ]]; then
             printf "%s No git remotes configured\n" "$(error)"
             return 1
         fi
-        
+
         printf "%s No 'origin' remote found. Available remotes:\n" "$(warning)"
         echo "$remotes" | while read -r remote; do
             local url
             url=$(git remote get-url "$remote" 2>/dev/null || echo "unknown")
             printf "  %s: %s\n" "$(cyan "$remote")" "$url"
         done
-        
+
         return 1
     fi
-    
+
     copy_to_clipboard "$remote_url" "Git Remote URL"
     printf "%s 🔗 Git remote URL displayed above\n" "$(success)"
-    
+
     return 0
 }
 
@@ -156,16 +154,16 @@ function handle_tree() {
     local exclude_extensions=""
     local include_extensions=""
     local has_custom_filters=false
-    
+
     # Check if tree command exists
     if ! command -v tree >/dev/null 2>&1; then
         printf "%s tree command not found. Please install it first.\n" "$(error)"
         return 1
     fi
-    
+
     # Default exclusions (always ignore common generated folders unless overridden)
     local default_exclude="node_modules|.next|dist|build|.dist|.cache|tmp|temp|coverage|.coverage|out|.output|generated|.generated|target|vendor|venv|.venv|__pycache__|.pytest_cache|.tox|.mypy_cache|.ruff_cache|.turbo|.parcel-cache|.nuxt|.docusaurus|.svelte-kit|.astro|.angular|.gradle|__snapshots__|.DS_Store|.idea|.vscode|*.egg-info|.cargo|pkg|obj|bin"
-    
+
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -293,17 +291,17 @@ function handle_tree() {
                 ;;
         esac
     done
-    
+
     # Validate path
     if [[ ! -d "$tree_path" ]]; then
         printf "%s Directory not found: %s\n" "$(error)" "$tree_path"
         return 1
     fi
-    
+
     # Build final filter patterns
     local final_exclude=""
     local final_include=""
-    
+
     # Handle include patterns (takes precedence)
     if [[ -n "$custom_include" ]] || [[ -n "$include_extensions" ]]; then
         if [[ -n "$custom_include" ]] && [[ -n "$include_extensions" ]]; then
@@ -317,12 +315,12 @@ function handle_tree() {
     else
         # Handle exclude patterns
         local all_excludes=""
-        
+
         # Add default exclusions unless disabled
         if [[ -n "$default_exclude" ]]; then
             all_excludes="$default_exclude"
         fi
-        
+
         # Add custom exclusions
         if [[ -n "$custom_exclude" ]]; then
             if [[ -n "$all_excludes" ]]; then
@@ -331,7 +329,7 @@ function handle_tree() {
                 all_excludes="$custom_exclude"
             fi
         fi
-        
+
         # Add extension exclusions
         if [[ -n "$exclude_extensions" ]]; then
             if [[ -n "$all_excludes" ]]; then
@@ -340,27 +338,27 @@ function handle_tree() {
                 all_excludes="$exclude_extensions"
             fi
         fi
-        
+
         # Apply exclusions if any
         if [[ -n "$all_excludes" ]]; then
             tree_args+=("-I" "$all_excludes")
             final_exclude="$all_excludes"
         fi
     fi
-    
+
     # Generate tree output
     local tree_output
     if ! tree_output=$(tree "${tree_args[@]}" "$tree_path" 2>/dev/null); then
         printf "%s Failed to generate tree output\n" "$(error)"
         return 1
     fi
-    
+
     # Get resolved path for title
     local resolved_path
     resolved_path=$(realpath "$tree_path" 2>/dev/null || echo "$tree_path")
-    
+
     copy_to_clipboard "$tree_output" "Directory Tree: $resolved_path"
-    
+
     # Display tree stats
     local dir_count file_count
     if [[ "$tree_output" =~ ([0-9]+)\ director(y|ies),\ ([0-9]+)\ files? ]]; then
@@ -370,7 +368,7 @@ function handle_tree() {
     else
         printf "%s 🌳 Directory tree displayed above\n" "$(success)"
     fi
-    
+
     # Show applied filters
     if [[ -n "$final_include" ]]; then
         printf "%s 📋 Filters: Including only: %s\n" "$(info)" "$final_include"
@@ -381,7 +379,7 @@ function handle_tree() {
     else
         printf "%s 📋 Filters: Default exclusions (generated folders: node_modules, .next, dist, build, cache, etc.)\n" "$(info)"
     fi
-    
+
     return 0
 }
 
@@ -419,7 +417,7 @@ function handle_help() {
 function interactive_mode() {
     printf "%s 🔄 Entering interactive mode...\n" "$(info)"
     echo
-    
+
     while true; do
         printf "%s\n" "$(bold "Select what to display:")"
         printf "1) %s\n" "$(cyan "File contents")"
@@ -429,11 +427,11 @@ function interactive_mode() {
         printf "5) %s\n" "$(cyan "Directory tree")"
         printf "6) %s\n" "$(cyan "Quit")"
         echo
-        
+
         printf "%s " "$(bold "Choice (1-6):")"
         read -r choice
         echo
-        
+
         case $choice in
             1)
                 printf "%s " "$(blue "Enter filename:")"
@@ -465,29 +463,29 @@ function interactive_mode() {
                 if [[ -z "$treepath" ]]; then
                     treepath="."
                 fi
-                
+
                 printf "%s " "$(blue "Enter tree level limit (or press Enter for no limit):")"
                 read -r level
-                
+
                 printf "%s " "$(blue "Exclude patterns (comma-separated, or press Enter to skip):")"
                 read -r excludes
-                
+
                 printf "%s " "$(blue "Include only patterns (comma-separated, or press Enter to skip):")"
                 read -r includes
-                
+
                 printf "%s " "$(blue "Exclude file extensions (comma-separated, or press Enter to skip):")"
                 read -r exclude_exts
-                
+
                 printf "%s " "$(blue "Include only file extensions (comma-separated, or press Enter to skip):")"
                 read -r include_exts
-                
+
                 # Build arguments array
                 local tree_interactive_args=()
-                
+
                 if [[ -n "$level" ]] && [[ "$level" =~ ^[0-9]+$ ]]; then
                     tree_interactive_args+=("-l" "$level")
                 fi
-                
+
                 if [[ -n "$excludes" ]]; then
                     IFS=',' read -ra exclude_array <<< "$excludes"
                     for exclude in "${exclude_array[@]}"; do
@@ -497,7 +495,7 @@ function interactive_mode() {
                         fi
                     done
                 fi
-                
+
                 if [[ -n "$includes" ]]; then
                     IFS=',' read -ra include_array <<< "$includes"
                     for include in "${include_array[@]}"; do
@@ -507,7 +505,7 @@ function interactive_mode() {
                         fi
                     done
                 fi
-                
+
                 if [[ -n "$exclude_exts" ]]; then
                     IFS=',' read -ra exclude_ext_array <<< "$exclude_exts"
                     for ext in "${exclude_ext_array[@]}"; do
@@ -517,7 +515,7 @@ function interactive_mode() {
                         fi
                     done
                 fi
-                
+
                 if [[ -n "$include_exts" ]]; then
                     IFS=',' read -ra include_ext_array <<< "$include_exts"
                     for ext in "${include_ext_array[@]}"; do
@@ -527,7 +525,7 @@ function interactive_mode() {
                         fi
                     done
                 fi
-                
+
                 tree_interactive_args+=("$treepath")
                 handle_tree "${tree_interactive_args[@]}" && break
                 ;;
@@ -550,10 +548,10 @@ main() {
         interactive_mode
         return 0
     fi
-    
+
     local command="$1"
     shift
-    
+
     case "$command" in
         help|--help|-h)
             handle_help

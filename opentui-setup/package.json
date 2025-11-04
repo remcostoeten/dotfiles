@@ -20,7 +20,7 @@
   "dependencies": {
     "@opentui/react": "0.1.32",
     "@opentui/core": "0.1.32",
-    "react": "^18.2.0"
+    "react": "18.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.26",

@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # Modern Setup Script Launcher
 # This is a convenience wrapper around the OpenTUI-based setup application
 
@@ -16,7 +15,7 @@ NC='\033[0m' # No Color
 
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════════════════╗"
-echo "║          MODERN SYSTEM SETUP - OpenTUI Edition          ║"
+echo "║          MODERN SYSTEM SETUP - OpenTUI Edition            ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 # DOCSTRING: Android Emulator Management Tool
 # Comprehensive helper for managing Android emulator and apps
 
@@ -8,54 +7,195 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
+
+# Pastel colors matching cfg/docker scripts
+PASTEL_PINK='\033[38;2;250;162;193m'
+PASTEL_MAGENTA='\033[38;2;212;187;248m'
+PASTEL_PURPLE='\033[38;2;165;216;255m'
+PASTEL_BLUE='\033[38;2;178;242;187m'
+PASTEL_CYAN='\033[38;2;255;236;153m'
+PASTEL_GREEN='\033[38;2;255;216;168m'
+PASTEL_ORANGE='\033[38;2;255;135;135m'
+PASTEL_RED='\033[38;2;137;220;235m'
 
 android_sdk="$HOME/Android/Sdk"
 adb_path="$android_sdk/platform-tools/adb"
 emulator_path="$android_sdk/emulator/emulator"
-default_avd="Pixel_9_Pro"
+
+# Preferred devices in order of preference
+preferred_devices=(
+    "Pixel_9_Pro_Fold"
+    "Pixel_9_Pro"
+    "Pixel_9_Pro_Test"
+    "Pixel_9_Pro_Test_API_35"
+    "Pixel_9"
+    "Pixel_8_Pro"
+)
+
+# Enhanced logging functions
+log_info() {
+    echo -e "${CYAN}ℹ️  $1${NC}"
+}
+
+log_success() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+log_warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+log_error() {
+    echo -e "${RED}❌ $1${NC}"
+}
+
+log_debug() {
+    if [ "${DEBUG:-0}" = "1" ]; then
+        echo -e "${MAGENTA}🐛 DEBUG: $1${NC}"
+    fi
+}
+
+get_version() {
+    local version_file="$(dirname "$0")/../VERSION"
+    if [ -f "$version_file" ]; then
+        cat "$version_file" | tr -d '\n'
+    else
+        echo "unknown"
+    fi
+}
+
+remove_ansi() {
+    echo -e "$1" | sed 's/\x1b\[[0-9;]*m//g'
+}
+
+create_gradient_text() {
+    local text="$1"
+    local colors=("$PASTEL_PINK" "$PASTEL_MAGENTA" "$PASTEL_PURPLE" "$PASTEL_BLUE" "$PASTEL_CYAN" "$PASTEL_GREEN")
+    local result=""
+    local text_len=${#text}
+
+    if [ $text_len -eq 0 ]; then
+        echo "$text"
+        return
+    fi
+
+    for ((i=0; i<text_len; i++)); do
+        local position=$((i * 100 / (text_len - 1)))
+        local color_index=$((position * (${#colors[@]} - 1) / 100))
+        result+="${colors[$color_index]}${text:$i:1}"
+    done
+    printf '%b' "${result}${NC}"
+}
 
 show_banner() {
-    echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║        📱 ANDROID EMULATOR MANAGEMENT TOOL                   ║${NC}"
-    echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+    local version=$(get_version)
+    local tagline="By Remco Stoeten v$version"
+    local gradient_tagline=$(create_gradient_text "$tagline")
+
+    # Android robot ASCII art with gradient colors
+    local ascii_lines=(
+        "    ${PASTEL_PINK}      .--.           .--.            ${NC}"
+        "    ${PASTEL_MAGENTA}     /  _  \\.       /  _  \\.           ${NC}"
+        "    ${PASTEL_PURPLE}     |  (_   o  _  |  (_   o  _           ${NC}"
+        "    ${PASTEL_BLUE}      |   _.,----._   |   _.,----._       ${NC}"
+        "    ${PASTEL_CYAN}       \\  '._'  _.'  / \\  '._'  _.'  /      ${NC}"
+        "    ${PASTEL_GREEN}        '._|'--'| '._'   '._|'--'| '._'      ${NC}"
+        "    ${PASTEL_PINK}            |  | |  |           |  | |  |       ${NC}"
+        "    ${PASTEL_MAGENTA}          |  | |  |           |  | |  |       ${NC}"
+        "    ${PASTEL_PINK}      _______________________   ${NC}"
+        "    ${PASTEL_MAGENTA}     ║                     ║   ${NC}"
+        "    ${PASTEL_PURPLE}     ║   ANDROID EMULATOR   ║   ${NC}"
+        "    ${PASTEL_BLUE}      ╚_____________________╝   ${NC}"
+    )
+
+    # Calculate padding for centered tagline
+    local max_width=0
+    for line in "${ascii_lines[@]}"; do
+        local clean_line=$(remove_ansi "$line")
+        local line_length=${#clean_line}
+        if [ $line_length -gt $max_width ]; then
+            max_width=$line_length
+        fi
+    done
+
+    local tagline_length=${#tagline}
+    local left_pad=$(((max_width - tagline_length) / 2))
+
+    # Print ASCII art and tagline
+    for line in "${ascii_lines[@]}"; do
+        echo -e "$line"
+    done
+    echo "$(printf ' %.0s' $(seq 1 $((left_pad + 1))))$gradient_tagline"
     echo ""
 }
 
 show_menu() {
     show_banner
-    echo -e "${YELLOW}Available Commands:${NC}"
+    echo -e "${YELLOW}📱 Android Emulator Management Tool${NC}"
     echo ""
-    
+
     echo -e "${GREEN}Usage:${NC} android-emulator <command>"
     echo ""
-    echo -e "${CYAN}Commands:${NC}"
+    echo -e "${CYAN}🔧 Core Commands:${NC}"
     echo ""
-    
-    echo -e "  ${GREEN}start${NC}           Start Android emulator (with optimizations)"
+
+    echo -e "  ${GREEN}start${NC}           Start Android emulator (smart device detection)"
     echo -e "  ${GREEN}stop${NC}            Stop running emulator"
+    echo -e "  ${GREEN}restart${NC}         Stop and restart emulator"
     echo -e "  ${GREEN}status${NC}          Check emulator status"
     echo -e "  ${GREEN}list${NC}            List available AVDs"
     echo -e "  ${GREEN}devices${NC}          List connected devices"
+    echo ""
+
+    echo -e "${CYAN}📋 Device Management:${NC}"
+    echo ""
+
     echo -e "  ${GREEN}packages${NC}        List installed packages"
     echo -e "  ${GREEN}logcat${NC}          Show device logs (live)"
     echo -e "  ${GREEN}screenshot${NC}     Take screenshot"
     echo ""
-    
-    echo -e "${YELLOW}Quick App Launchers:${NC}"
+
+    echo -e "${CYAN}🚀 Quick App Launchers:${NC}"
     echo ""
+
     echo -e "  ${GREEN}feeld${NC}           Launch Feeld app (Android)"
     echo -e "  ${GREEN}govee${NC}           Launch Govee app (Android)"
     echo -e "  ${GREEN}whatsapp${NC}        Launch WhatsApp (Desktop)"
     echo -e "  ${GREEN}spotify${NC}         Launch Spotify (Desktop)"
     echo ""
+
+    echo -e "${YELLOW}💡 Features:${NC}"
+    echo -e "   • ${GREEN}Smart device detection${NC} - Automatically finds your Pixel 9 Pro Fold"
+    echo -e "   • ${GREEN}Enhanced error messages${NC} - Clear guidance for troubleshooting"
+    echo -e "   • ${GREEN}Fallback options${NC} - Prompts for device selection if preferred not found"
+    echo ""
+
+    echo -e "${YELLOW}💡 Examples:${NC}"
+    echo -e "   • ${CYAN}android-emulator start${NC}                    # Start with auto-detection"
+    echo -e "   • ${CYAN}DEBUG=1 android-emulator start${NC}            # Start with debug output"
+    echo -e "   • ${CYAN}NON_INTERACTIVE=1 android-emulator start${NC}  # Non-interactive mode"
+    echo ""
+
     echo -e "${YELLOW}💡 Run without arguments to show this menu${NC}"
 }
 
 check_adb() {
     if [ ! -f "$adb_path" ]; then
-        echo -e "${RED}❌ ADB not found at: $adb_path${NC}"
-        echo -e "${YELLOW}💡 Please install Android SDK${NC}"
+        log_error "ADB not found at: $adb_path"
+        echo -e "${YELLOW}🔧 To fix this issue:${NC}"
+        echo -e "   1. Install Android Studio from: ${BLUE}https://developer.android.com/studio${NC}"
+        echo -e "   2. Open Android Studio and go to ${CYAN}Settings → Appearance & Behavior → System Settings → Android SDK${NC}"
+        echo -e "   3. Make sure 'Android SDK Command-line Tools (latest)' is installed"
+        echo -e "   4. Verify the SDK path is: ${BLUE}$android_sdk${NC}"
+        echo -e "   5. Add to your shell profile: ${CYAN}export ANDROID_HOME=$android_sdk${NC}"
+        echo -e "   6. Add to PATH: ${CYAN}export PATH=\$ANDROID_HOME/platform-tools:\$PATH${NC}"
+        echo ""
+        echo -e "${YELLOW}💡 Or run this to add to your shell automatically:${NC}"
+        echo -e "   echo 'export ANDROID_HOME=$android_sdk' >> ~/.bashrc"
+        echo -e "   echo 'export PATH=\$ANDROID_HOME/platform-tools:\$PATH' >> ~/.bashrc"
         return 1
     fi
     return 0
@@ -63,11 +203,123 @@ check_adb() {
 
 check_emulator() {
     if [ ! -f "$emulator_path" ]; then
-        echo -e "${RED}❌ Emulator not found at: $emulator_path${NC}"
-        echo -e "${YELLOW}💡 Please install Android SDK${NC}"
+        log_error "Emulator not found at: $emulator_path"
+        echo -e "${YELLOW}🔧 To fix this issue:${NC}"
+        echo -e "   1. Install Android Studio from: ${BLUE}https://developer.android.com/studio${NC}"
+        echo -e "   2. In Android Studio, go to ${CYAN}Tools → SDK Manager${NC}"
+        echo -e "   3. Select 'SDK Tools' tab"
+        echo -e "   4. Check 'Android Emulator' and click 'Apply'"
+        echo -e "   5. Restart Android Studio after installation"
         return 1
     fi
     return 0
+}
+
+get_available_avds() {
+    if ! check_emulator; then
+        return 1
+    fi
+
+    log_debug "Getting available AVDs"
+    local avds
+    avds=$($emulator_path -list-avds 2>/dev/null)
+
+    if [ -z "$avds" ]; then
+        log_warning "No AVDs found"
+        return 1
+    fi
+
+    echo "$avds"
+    return 0
+}
+
+find_best_device() {
+    log_debug "Looking for available devices"
+    local available_avds
+    available_avds=$(get_available_avds)
+
+    if [ $? -ne 0 ] || [ -z "$available_avds" ]; then
+        log_error "No Android Virtual Devices found!"
+        echo ""
+        echo -e "${YELLOW}🔧 To create an AVD:${NC}"
+        echo -e "   1. Open Android Studio"
+        echo -e "   2. Go to ${CYAN}Tools → Device Manager${NC}"
+        echo -e "   3. Click ${CYAN}Create device${NC}"
+        echo -e "   4. Select a device (e.g., Pixel 9 Pro Fold)"
+        echo -e "   5. Select a system image (e.g., API 35)"
+        echo -e "   6. Finish the setup"
+        echo ""
+        echo -e "${YELLOW}💡 Recommended devices:${NC}"
+        echo -e "   • ${GREEN}Pixel 9 Pro Fold${NC} (latest)"
+        echo -e "   • ${GREEN}Pixel 9 Pro${NC}"
+        echo -e "   • ${GREEN}Pixel 9${NC}"
+        return 1
+    fi
+
+    log_debug "Available AVDs:"
+    log_debug "$available_avds"
+
+    # Try to find preferred devices in order
+    for preferred_device in "${preferred_devices[@]}"; do
+        if echo "$available_avds" | grep -q "^$preferred_device$"; then
+            log_success "Found preferred device: $preferred_device"
+            echo "$preferred_device"
+            return 0
+        fi
+    done
+
+    # If no preferred device found, show all available and ask user
+    log_warning "Preferred devices not found. Available devices:"
+    echo ""
+
+    local i=1
+    while IFS= read -r device; do
+        echo -e "   ${BLUE}$i)${NC} $device"
+        i=$((i + 1))
+    done <<< "$available_avds"
+
+    echo ""
+    echo -e "${YELLOW}💡 To set a preferred device, you can:${NC}"
+    echo -e "   1. ${CYAN}Choose from the list above${NC} (enter number)"
+    echo -e "   2. ${CYAN}Rename your AVD${NC} to match preferred names:"
+    echo -e "      ${MAGENTA}Pixel_9_Pro_Fold${NC}, ${MAGENTA}Pixel_9_Pro${NC}, etc."
+
+    return 2  # Special return code to indicate user interaction needed
+}
+
+prompt_user_device_selection() {
+    local available_avds
+    available_avds=$(get_available_avds)
+
+    echo ""
+    echo -e "${CYAN}📱 Please select a device to start:${NC}"
+    echo ""
+
+    local i=1
+    while IFS= read -r device; do
+        echo -e "   ${BLUE}$i)${NC} $device"
+        i=$((i + 1))
+    done <<< "$available_avds"
+
+    echo ""
+    echo -e "${YELLOW}Enter device number (1-$((i-1))) or press Enter for default: ${NC}"
+    read -r user_choice
+
+    if [ -z "$user_choice" ]; then
+        # Use first device as default
+        echo "$available_avds" | head -n1
+        return 0
+    fi
+
+    if [[ "$user_choice" =~ ^[0-9]+$ ]] && [ "$user_choice" -ge 1 ] && [ "$user_choice" -lt "$i" ]; then
+        local selected_device
+        selected_device=$(echo "$available_avds" | sed -n "${user_choice}p")
+        echo "$selected_device"
+        return 0
+    else
+        log_error "Invalid selection. Please enter a number between 1 and $((i-1))"
+        return 1
+    fi
 }
 
 get_devices() {
@@ -83,48 +335,127 @@ cmd_start() {
     if ! check_emulator; then
         return 1
     fi
-    
+
+    if ! check_adb; then
+        return 1
+    fi
+
     if is_emulator_running; then
-        echo -e "${YELLOW}✅ Emulator is already running${NC}"
-        echo -e "${YELLOW}💡 Run 'android-emulator stop' to stop it first${NC}"
+        log_success "Emulator is already running"
+        log_info "Run 'android-emulator stop' to stop it first"
         return 0
     fi
-    
-    echo -e "${YELLOW}🚀 Starting Android emulator in fast mode...${NC}"
-    
+
+    # Smart device selection
+    log_info "Looking for available Android emulators..."
+    local selected_device
+    selected_device=$(find_best_device)
+    local device_selection_result=$?
+
+    case $device_selection_result in
+        1)
+            # No devices found
+            log_error "Cannot start emulator - no AVDs available"
+            return 1
+            ;;
+        2)
+            # User needs to select device
+            if [ "${NON_INTERACTIVE:-0}" = "1" ]; then
+                log_error "Non-interactive mode: no preferred devices found"
+                return 1
+            fi
+
+            selected_device=$(prompt_user_device_selection)
+            if [ $? -ne 0 ]; then
+                log_error "Invalid device selection"
+                return 1
+            fi
+            ;;
+        0)
+            # Found preferred device
+            log_success "Using device: $selected_device"
+            ;;
+    esac
+
+    if [ -z "$selected_device" ]; then
+        log_error "No device selected"
+        return 1
+    fi
+
+    log_info "🚀 Starting Android emulator: $selected_device"
+    log_info "Starting in optimized mode..."
+
     # Start with optimizations in background
-    nohup $emulator_path -avd $default_avd \
+    nohup $emulator_path -avd "$selected_device" \
         -no-snapshot-load \
         -no-boot-anim \
         -no-audio \
         -gpu host \
         -accel on \
-        -memory 2048 \
+        -memory 4096 \
         -cores 4 \
+        -no-window \
         >/dev/null 2>&1 &
-    
-    echo -e "${CYAN}⏳ Waiting for emulator to boot...${NC}"
-    
-    # Wait for boot completion
-    timeout=90
-    elapsed=0
+
+    local emulator_pid=$!
+    log_debug "Emulator started with PID: $emulator_pid"
+
+    log_info "⏳ Waiting for emulator to boot..."
+
+    # Wait for boot completion with better progress indication
+    local timeout=120
+    local elapsed=0
+    local progress_interval=10
+
     while [ $elapsed -lt $timeout ]; do
         if is_emulator_running; then
+            local boot_complete
             boot_complete=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
             if [ "$boot_complete" = "1" ]; then
-                echo -e "${GREEN}✅ Emulator ready!${NC}"
+                log_success "Emulator is ready! 🎉"
+                log_info "Device: $selected_device"
+                log_info "You can now run Android apps on this emulator"
+
+                # Show device info
+                echo ""
+                echo -e "${CYAN}📱 Device Information:${NC}"
+                echo -e "   Name: ${GREEN}$selected_device${NC}"
+                echo -e "   Status: ${GREEN}Running${NC}"
+                echo -e "   ADB: ${BLUE}adb devices${NC}"
+                echo ""
+                echo -e "${YELLOW}💡 Useful commands:${NC}"
+                echo -e "   • android-emulator status   - Check status"
+                echo -e "   • android-emulator logcat    - View logs"
+                echo -e "   • android-emulator packages - List apps"
+
                 return 0
             fi
         fi
+
+        # Progress indicator
+        if [ $((elapsed % progress_interval)) -eq 0 ] && [ $elapsed -gt 0 ]; then
+            log_info "Still booting... ($elapsed/${timeout}s)"
+        fi
+
         sleep 1
         elapsed=$((elapsed + 1))
-        if [ $((elapsed % 5)) -eq 0 ]; then
-            echo -n "."
-        fi
     done
+
     echo ""
-    
-    echo -e "${RED}❌ Emulator took too long to start${NC}"
+    log_error "Emulator took too long to start (timeout: ${timeout}s)"
+    echo ""
+    echo -e "${YELLOW}🔧 Troubleshooting tips:${NC}"
+    echo -e "   1. Check if emulator is hung: ${CYAN}android-emulator status${NC}"
+    echo -e "   2. Try restarting: ${CYAN}android-emulator stop && android-emulator start${NC}"
+    echo -e "   3. Increase memory in Android Studio Device Manager"
+    echo -e "   4. Try with different AVD"
+    echo -e "   5. Check system resources (RAM, CPU)"
+
+    # Clean up the failed process
+    if [ -n "$emulator_pid" ]; then
+        kill "$emulator_pid" 2>/dev/null
+    fi
+
     return 1
 }
 
@@ -132,16 +463,16 @@ cmd_stop() {
     if ! check_adb; then
         return 1
     fi
-    
+
     if ! is_emulator_running; then
         echo -e "${YELLOW}⚠️  No emulator is running${NC}"
         return 0
     fi
-    
+
     echo -e "${YELLOW}🛑 Stopping emulator...${NC}"
-    
+
     adb emu kill >/dev/null 2>&1
-    
+
     echo -e "${GREEN}✅ Emulator stopped${NC}"
 }
 
@@ -149,27 +480,88 @@ cmd_status() {
     if ! check_adb; then
         return 1
     fi
-    
+
     echo -e "${CYAN}📱 Android Emulator Status${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    
+
     if is_emulator_running; then
-        echo -e "${GREEN}✅ Emulator is running${NC}"
-        
-        devices=$(adb devices | tail -n +2 | grep -v '^$')
-        echo "Connected devices:"
-        echo "$devices"
+        log_success "Emulator is running"
+
+        # Get device information
+        local devices
+        devices=$(adb devices 2>/dev/null | tail -n +2 | grep -v '^$')
+
+        if [ -n "$devices" ]; then
+            echo -e "${YELLOW}Connected devices:${NC}"
+            echo "$devices"
+
+            # Get additional device info
+            while IFS= read -r device_line; do
+                if [ -n "$device_line" ]; then
+                    local device_id
+                    device_id=$(echo "$device_line" | awk '{print $1}')
+
+                    echo ""
+                    echo -e "${CYAN}Device Info for $device_id:${NC}"
+
+                    # Get device model
+                    local model
+                    model=$(adb -s "$device_id" shell getprop ro.product.model 2>/dev/null | tr -d '\r')
+                    echo -e "   Model: ${GREEN}$model${NC}"
+
+                    # Get Android version
+                    local android_version
+                    android_version=$(adb -s "$device_id" shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')
+                    echo -e "   Android: ${GREEN}$android_version${NC}"
+
+                    # Get API level
+                    local api_level
+                    api_level=$(adb -s "$device_id" shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')
+                    echo -e "   API Level: ${GREEN}$api_level${NC}"
+
+                    # Get boot status
+                    local boot_complete
+                    boot_complete=$(adb -s "$device_id" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+                    if [ "$boot_complete" = "1" ]; then
+                        echo -e "   Status: ${GREEN}Ready${NC}"
+                    else
+                        echo -e "   Status: ${YELLOW}Booting...${NC}"
+                    fi
+                fi
+            done <<< "$devices"
+        fi
     else
-        echo -e "${RED}❌ No emulator running${NC}"
+        log_error "No emulator running"
+        echo ""
+        echo -e "${YELLOW}💡 To start an emulator:${NC}"
+        echo -e "   ${CYAN}android-emulator start${NC}"
+
+        # Show available devices
+        local available_avds
+        available_avds=$(get_available_avds 2>/dev/null)
+        if [ -n "$available_avds" ]; then
+            echo ""
+            echo -e "${YELLOW}💡 Available devices:${NC}"
+            while IFS= read -r avd; do
+                echo -e "   • ${GREEN}$avd${NC}"
+            done <<< "$available_avds"
+        fi
     fi
+}
+
+cmd_restart() {
+    log_info "Restarting Android emulator..."
+    cmd_stop
+    sleep 2
+    cmd_start
 }
 
 cmd_list() {
     if ! check_emulator; then
         return 1
     fi
-    
+
     echo -e "${CYAN}📱 Available Android Virtual Devices:${NC}"
     echo ""
     $emulator_path -list-avds
@@ -180,7 +572,7 @@ cmd_devices() {
     if ! check_adb; then
         return 1
     fi
-    
+
     echo -e "${CYAN}📱 Connected Devices:${NC}"
     echo ""
     adb devices
@@ -190,16 +582,16 @@ cmd_packages() {
     if ! check_adb; then
         return 1
     fi
-    
+
     if ! is_emulator_running; then
         echo -e "${RED}❌ No emulator running${NC}"
         echo -e "${YELLOW}💡 Start an emulator first${NC}"
         return 1
     fi
-    
+
     echo -e "${CYAN}📦 Installed Packages on Emulator:${NC}"
     echo ""
-    
+
     if [ $# -gt 1 ]; then
         echo -e "${YELLOW}Searching for: $2${NC}"
         adb shell pm list packages | grep -i "$2" | cut -d: -f2 | sort
@@ -212,15 +604,15 @@ cmd_logcat() {
     if ! check_adb; then
         return 1
     fi
-    
+
     if ! is_emulator_running; then
         echo -e "${RED}❌ No emulator running${NC}"
         return 1
     fi
-    
+
     echo -e "${YELLOW}📋 Showing live logs (Ctrl+C to exit)...${NC}"
     echo ""
-    
+
     adb logcat
 }
 
@@ -228,17 +620,17 @@ cmd_screenshot() {
     if ! check_adb; then
         return 1
     fi
-    
+
     if ! is_emulator_running; then
         echo -e "${RED}❌ No emulator running${NC}"
         return 1
     fi
-    
+
     filename="screenshot-$(date +%Y%m%d-%H%M%S).png"
     path="$HOME/$filename"
-    
+
     adb shell screencap -p > "$path" 2>/dev/null
-    
+
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Screenshot saved: $path${NC}"
     else
@@ -280,6 +672,9 @@ case "$command" in
         ;;
     stop)
         cmd_stop "$@"
+        ;;
+    restart)
+        cmd_restart "$@"
         ;;
     status)
         cmd_status "$@"

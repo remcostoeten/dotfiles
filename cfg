@@ -1,5 +1,4 @@
 #!/usr/bin/env fish
-
 # Helper function to add paths without duplicates
 function add_to_path
     for dir in $argv
@@ -14,7 +13,7 @@ end
 # Add dotfiles bin to PATH and make executables available
 if test -d ~/.config/dotfiles/bin
     contains ~/.config/dotfiles/bin $PATH; or set -gx PATH ~/.config/dotfiles/bin $PATH
-    
+
     # Ensure all files are executable
     for file in ~/.config/dotfiles/bin/*
         if test -f $file
@@ -43,7 +42,7 @@ end
 # Add scripts directory to PATH
 if test -d ~/.config/dotfiles/scripts
     contains ~/.config/dotfiles/scripts $PATH; or set -gx PATH ~/.config/dotfiles/scripts $PATH
-    
+
     # Ensure all files are executable
     for file in ~/.config/dotfiles/scripts/*
         if test -f $file
@@ -205,6 +204,10 @@ end
     alias b 'bun run build'
     alias i 'bun install'
     alias t 'bun run tauri dev'
+
+    # Claude CLI aliases with dangerous permission skip
+    alias cl 'claude --dangerously-skip-permissions'
+    alias claude 'claude --dangerously-skip-permissions'
 
     # Modern CLI tool aliases (only the useful ones)
     alias find 'fd'  # Better find replacement

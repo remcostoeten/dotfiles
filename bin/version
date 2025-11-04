@@ -1,0 +1,3 @@
+#!/bin/bash
+# Version command wrapper
+exec "$(dirname "$0")/../scripts/version-manager.sh" "$@"

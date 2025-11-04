@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-
 # ============================================================================
 # Scrits - Interactive Script Selector
 # Select and execute any script from your dotfiles bin directory
 # ============================================================================
-
 # Configuration & Globals
 DOTFILES_ROOT="$HOME/.config/dotfiles"
 BIN_DIR="$DOTFILES_ROOT/bin"
@@ -39,7 +37,7 @@ RIGHT="▶"
 function log_message() {
     local msg="$1"
     local level="${2:-info}"
-    
+
     case $level in
         info)
             echo -e "${CYAN}${POINT}${NC} ${WHITE}$msg${NC}"
@@ -86,7 +84,7 @@ function get_script_info() {
     local script_name="$(basename "$script_path")"
     local description=""
     local type=""
-    
+
     # Determine type
     if [[ "$script_path" == */bin/* ]]; then
         type="executable"
@@ -99,23 +97,23 @@ function get_script_info() {
     else
         type="script"
     fi
-    
+
     # Extract description from script comments
     if [[ -f "$script_path" && -r "$script_path" ]]; then
         # Look for description in first 10 lines
         description=$(head -10 "$script_path" | grep -E "^#.*[Dd]escription|^#.*[Pp]urpose|^#.*[Ww]hat|^# [A-Z]" | head -1 | sed 's/^#[[:space:]]*//' | cut -c1-50)
-        
+
         # If no description found, try to get it from usage/help patterns
         if [[ -z "$description" ]]; then
             description=$(head -20 "$script_path" | grep -i "# .*utility\\|# .*tool\\|# .*script\\|# .*manager" | head -1 | sed 's/^#[[:space:]]*//' | cut -c1-50)
         fi
-        
+
         # Fallback: look for any meaningful comment
         if [[ -z "$description" ]]; then
             description=$(head -20 "$script_path" | grep "^# [A-Z].*" | grep -v "#!/" | head -1 | sed 's/^#[[:space:]]*//' | cut -c1-50)
         fi
     fi
-    
+
     # Default descriptions based on script name patterns
     if [[ -z "$description" ]]; then
         case "$script_name" in
@@ -129,7 +127,7 @@ function get_script_info() {
             *) description="CLI utility" ;;
         esac
     fi
-    
+
     echo "${type}|${description}"
 }
 
@@ -139,7 +137,7 @@ function collect_scripts() {
     local info
     local type
     local description
-    
+
     # Collect from bin directory
     if [[ -d "$BIN_DIR" ]]; then
         while IFS= read -r -d '' file; do
@@ -148,29 +146,29 @@ function collect_scripts() {
             if [[ "$name" == "scripts" || "$name" == "dotfiles" ]]; then
                 continue
             fi
-            
+
             info=$(get_script_info "$file")
             type=$(echo "$info" | cut -d'|' -f1)
             description=$(echo "$info" | cut -d'|' -f2)
-            
+
             scripts+=("${name}|${file}|${type}|${description}")
         done < <(find "$BIN_DIR" -maxdepth 1 -type f -executable -print0 2>/dev/null)
-        
+
         # Also collect symlinks
         while IFS= read -r -d '' file; do
             local name=$(basename "$file")
             if [[ "$name" == "scripts" || "$name" == "dotfiles" ]]; then
                 continue
             fi
-            
+
             info=$(get_script_info "$file")
             type=$(echo "$info" | cut -d'|' -f1)
             description=$(echo "$info" | cut -d'|' -f2)
-            
+
             scripts+=("${name}|${file}|${type}|${description}")
         done < <(find "$BIN_DIR" -maxdepth 1 -type l -print0 2>/dev/null)
     fi
-    
+
     # Sort scripts by name
     printf '%s\n' "${scripts[@]}" | sort
 }
@@ -182,7 +180,7 @@ function collect_scripts() {
 function run_fzf_selector() {
     local scripts_data="$1"
     local selected
-    
+
     # Create formatted list for fzf (plain text, colors handled by fzf)
     local fzf_input=""
     while IFS='|' read -r name path type desc; do
@@ -194,10 +192,10 @@ function run_fzf_selector() {
             executable) type_badge="[exec]" ;;
             script) type_badge="[scrpt]" ;;
         esac
-        
+
         fzf_input+="${name} ${type_badge} - ${desc}\n"
     done <<< "$scripts_data"
-    
+
     # Run fzf with clean, simple options
     selected=$(printf "%s" "$fzf_input" | fzf \
         --height=70% \
@@ -224,7 +222,7 @@ function run_fzf_selector() {
         ' \
         --header="Use arrows to navigate, Enter to select, Ctrl+C to cancel" \
         --no-multi)
-    
+
     if [[ -n "$selected" ]]; then
         # Extract script name from selection
         echo "$selected" | cut -d' ' -f1
@@ -240,27 +238,27 @@ function run_fallback_selector() {
     local scripts_array=()
     local current_selection=0
     local total_scripts=0
-    
+
     # Parse scripts into array
     while IFS='|' read -r name path type desc; do
         scripts_array+=("$name|$path|$type|$desc")
         ((total_scripts++))
     done <<< "$scripts_data"
-    
+
     if [[ $total_scripts -eq 0 ]]; then
         log_message "No executable scripts found" "error"
         return 1
     fi
-    
+
     while true; do
         print_header
         log_message "Navigate with arrow keys, Enter to select, 'q' to quit" "info"
         echo
-        
+
         # Display scripts with selection indicator
         for i in "${!scripts_array[@]}"; do
             IFS='|' read -r name path type desc <<< "${scripts_array[i]}"
-            
+
             if [[ $i -eq $current_selection ]]; then
                 # Highlighted selection
                 echo -e "${BOLD}${GREEN}${ARROW} ${name}${NC} ${DIM}[${type}]${NC} - ${desc}"
@@ -269,13 +267,13 @@ function run_fallback_selector() {
                 echo -e "  ${WHITE}${name}${NC} ${DIM}[${type}]${NC} - ${desc}"
             fi
         done
-        
+
         echo
         echo -e "${DIM}Selection: $((current_selection + 1))/$total_scripts${NC}"
-        
+
         # Read single character
         read -rsn1 key
-        
+
         case $key in
             $'\x1b')  # Arrow keys start with escape sequence
                 read -rsn2 key
@@ -325,36 +323,36 @@ function run_fallback_selector() {
 function execute_script() {
     local script_name="$1"
     local script_path="$BIN_DIR/$script_name"
-    
+
     echo
     log_message "Executing: $script_name" "title"
     echo -e "${DIM}Path: $script_path${NC}"
     echo
-    
+
     if [[ ! -f "$script_path" && ! -L "$script_path" ]]; then
         log_message "Script not found: $script_path" "error"
         return 1
     fi
-    
+
     if [[ ! -x "$script_path" ]]; then
         log_message "Script is not executable: $script_path" "error"
         return 1
     fi
-    
+
     echo -e "${GREEN}${ROCKET}${NC} ${BOLD}Starting $script_name...${NC}"
     echo
-    
+
     # Execute the script with any arguments passed to scrits
     "$script_path" "${@:2}"
     local exit_code=$?
-    
+
     echo
     if [[ $exit_code -eq 0 ]]; then
         log_message "Script completed successfully" "success"
     else
         log_message "Script exited with code $exit_code" "error"
     fi
-    
+
     return $exit_code
 }
 
@@ -364,7 +362,7 @@ function execute_script() {
 
 function show_help() {
     print_header
-    
+
     echo -e "${BOLD}${CYAN}USAGE:${NC}"
     echo -e "  ${WHITE}scripts${NC}              ${DIM}# Interactive script selector${NC}"
     echo -e "  ${WHITE}scripts --help${NC}       ${DIM}# Show this help${NC}"
@@ -396,21 +394,21 @@ function show_help() {
 
 function list_scripts() {
     print_header
-    
+
     log_message "Available scripts in $BIN_DIR:" "title"
     echo
-    
+
     local scripts_data=$(collect_scripts)
     local count=0
-    
+
     if [[ -z "$scripts_data" ]]; then
         log_message "No executable scripts found" "warning"
         return 0
     fi
-    
+
     printf "${BOLD}%-20s %-8s %s${NC}\n" "NAME" "TYPE" "DESCRIPTION"
     echo -e "${DIM}$(printf '%.0s─' {1..70})${NC}"
-    
+
     while IFS='|' read -r name path type desc; do
         local type_color=""
         local type_display=""
@@ -420,11 +418,11 @@ function list_scripts() {
             executable) type_color="${GREEN}"; type_display="exec" ;;
             script) type_color="${BLUE}"; type_display="scrpt" ;;
         esac
-        
+
         printf "%-20s ${type_color}%-8s${NC} %s\n" "$name" "[$type_display]" "$desc"
         ((count++))
     done <<< "$scripts_data"
-    
+
     echo
     log_message "Found $count executable scripts" "success"
 }
@@ -453,13 +451,13 @@ function main() {
             exit 1
             ;;
     esac
-    
+
     # Check if directories exist
     if [[ ! -d "$BIN_DIR" ]]; then
         log_message "Bin directory not found: $BIN_DIR" "error"
         exit 1
     fi
-    
+
     # Collect available scripts
     local scripts_data=$(collect_scripts)
     if [[ -z "$scripts_data" ]]; then
@@ -467,10 +465,10 @@ function main() {
         log_message "No executable scripts found in $BIN_DIR" "warning"
         exit 1
     fi
-    
+
     # Show selection interface
     local selected_script=""
-    
+
     if check_dependencies; then
         # Use fzf if available (no header needed, fzf handles the UI)
         selected_script=$(run_fzf_selector "$scripts_data")
@@ -478,7 +476,7 @@ function main() {
         # Use fallback navigation
         selected_script=$(run_fallback_selector "$scripts_data")
     fi
-    
+
     # Execute selected script
     if [[ -n "$selected_script" ]]; then
         execute_script "$selected_script" "$@"

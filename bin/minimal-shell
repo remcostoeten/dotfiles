@@ -1,0 +1,217 @@
+#!/bin/bash
+
+# Minimal Shell - Temporarily disables fish config
+# Usage: minimal-shell [enable|disable|status]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(dirname "$SCRIPT_DIR")"
+CONFIG_FILE="$DOTFILES_DIR/cfg"
+BACKUP_FILE="$DOTFILES_DIR/cfg.bak"
+MINIMAL_CONFIG="$DOTFILES_DIR/scripts/minimal-fish-config"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+NC='\033[0m'
+
+print_status() {
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${WHITE}Minimal Shell Manager${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}✓${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}✗${NC} $1"
+}
+
+print_info() {
+    echo -e "${BLUE}ℹ${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠${NC} $1"
+}
+
+# Check if minimal mode is currently active
+check_status() {
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        print_error "Config file not found: $CONFIG_FILE"
+        return 1
+    fi
+
+    # Check if current config is the minimal one
+    if grep -q "MINIMAL FISH SHEEL" "$CONFIG_FILE" 2>/dev/null; then
+        echo -e "${GREEN}Status: Minimal mode is ACTIVE${NC}"
+        print_info "Full config is backed up at: $BACKUP_FILE"
+        return 0
+    else
+        echo -e "${BLUE}Status: Full fish config is ACTIVE${NC}"
+        print_info "Minimal mode is not currently enabled"
+        return 1
+    fi
+}
+
+# Enable minimal mode
+enable_minimal() {
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        print_error "Config file not found: $CONFIG_FILE"
+        return 1
+    fi
+
+    if [[ ! -f "$MINIMAL_CONFIG" ]]; then
+        print_error "Minimal config template not found: $MINIMAL_CONFIG"
+        return 1
+    fi
+
+    # Check if already in minimal mode
+    if grep -q "MINIMAL FISH SHEEL" "$CONFIG_FILE" 2>/dev/null; then
+        print_warning "Minimal mode is already active"
+        return 0
+    fi
+
+    print_status
+    print_info "Enabling minimal shell mode..."
+
+    # Create backup of current config
+    if [[ -f "$BACKUP_FILE" ]]; then
+        print_warning "Backup already exists at $BACKUP_FILE"
+        read -p "$(echo -e "${YELLOW}Overwrite existing backup? (y/N): ${NC}")" -n 1 -r response
+        echo
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            print_info "Operation cancelled"
+            return 1
+        fi
+    fi
+
+    # Backup current config
+    if cp "$CONFIG_FILE" "$BACKUP_FILE"; then
+        print_success "Current config backed up to: $BACKUP_FILE"
+    else
+        print_error "Failed to backup current config"
+        return 1
+    fi
+
+    # Replace with minimal config
+    if cp "$MINIMAL_CONFIG" "$CONFIG_FILE"; then
+        print_success "Minimal config activated"
+        echo
+        print_info "Your fish configuration has been replaced with a minimal version."
+        print_info "The minimal config provides:"
+        echo -e "  ${GREEN}•${NC} bash, sh, fish - Switch between shells"
+        echo -e "  ${GREEN}•${NC} reload - Restore your full configuration"
+        echo
+        print_warning "To restore your full config, type: reload"
+        print_info "Or use this script: minimal-shell disable"
+        echo
+    else
+        print_error "Failed to activate minimal config"
+        # Try to restore backup
+        if [[ -f "$BACKUP_FILE" ]]; then
+            cp "$BACKUP_FILE" "$CONFIG_FILE"
+            print_info "Restored original config from backup"
+        fi
+        return 1
+    fi
+}
+
+# Disable minimal mode (restore full config)
+disable_minimal() {
+    if [[ ! -f "$BACKUP_FILE" ]]; then
+        print_error "No backup found at: $BACKUP_FILE"
+        print_info "Cannot restore full configuration"
+        return 1
+    fi
+
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        print_error "Config file not found: $CONFIG_FILE"
+        return 1
+    fi
+
+    print_status
+    print_info "Restoring full fish configuration..."
+
+    # Check if we're not even in minimal mode
+    if ! grep -q "MINIMAL FISH SHEEL" "$CONFIG_FILE" 2>/dev/null; then
+        print_warning "Minimal mode is not currently active"
+        read -p "$(echo -e "${YELLOW}Restore from backup anyway? (y/N): ${NC}")" -n 1 -r response
+        echo
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            print_info "Operation cancelled"
+            return 0
+        fi
+    fi
+
+    # Restore from backup
+    if cp "$BACKUP_FILE" "$CONFIG_FILE"; then
+        print_success "Full fish configuration restored"
+        print_info "Removed backup file: $BACKUP_FILE"
+        rm -f "$BACKUP_FILE"
+        echo
+        print_info "Your full fish configuration has been restored."
+        print_info "Restart your fish shell or open a new terminal to apply changes."
+        echo
+    else
+        print_error "Failed to restore configuration from backup"
+        return 1
+    fi
+}
+
+# Show help
+show_help() {
+    print_status
+    echo -e "${WHITE}USAGE:${NC}"
+    echo -e "  minimal-shell [COMMAND]"
+    echo
+    echo -e "${WHITE}COMMANDS:${NC}"
+    echo -e "  ${GREEN}enable${NC}    Enable minimal shell mode (backup full config)"
+    echo -e "  ${GREEN}disable${NC}   Disable minimal mode (restore full config)"
+    echo -e "  ${GREEN}status${NC}    Show current status"
+    echo -e "  ${GREEN}help${NC}      Show this help message"
+    echo
+    echo -e "${WHITE}MINIMAL MODE FEATURES:${NC}"
+    echo -e "  • Replaces full fish config with minimal version"
+    echo -e "  • Provides bash, sh, fish, reload commands"
+    echo -e "  • Backs up original config automatically"
+    echo -e "  • Easy restoration with 'reload' command"
+    echo
+    echo -e "${WHITE}FILES:${NC}"
+    echo -e "  Config:     ${BLUE}$CONFIG_FILE${NC}"
+    echo -e "  Backup:     ${BLUE}$BACKUP_FILE${NC}"
+    echo -e "  Template:   ${BLUE}$MINIMAL_CONFIG${NC}"
+}
+
+# Main execution
+main() {
+    local command="${1:-help}"
+
+    case "$command" in
+        "enable"|"on")
+            enable_minimal
+            ;;
+        "disable"|"off")
+            disable_minimal
+            ;;
+        "status"|"st")
+            check_status
+            ;;
+        "help"|"-h"|"--help")
+            show_help
+            ;;
+        *)
+            print_error "Unknown command: $command"
+            echo
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Run main function with all arguments
+main "$@"
