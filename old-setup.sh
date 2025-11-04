@@ -65,7 +65,6 @@ declare -a LANGUAGES=(
 declare -a EDITORS=(
     "neovim|apt|Neovim"
     "code|snap|Visual Studio Code"
-    "cursor|snap|Cursor Editor"
 )
 
 # Package managers
@@ -176,7 +175,6 @@ declare -a SNAP_PACKAGES=(
     "obsidian:Obsidian"
     "signal-desktop:Signal"
     "code:Visual Studio Code"
-    "cursor:Cursor Editor"
 )
 
 # Tools installed via curl scripts
@@ -316,7 +314,7 @@ parse_args() {
                 echo -e "  ${YELLOW}git${NC}              Git tools (GitHub CLI, lazygit, lazydocker)"
                 echo -e "  ${YELLOW}cli${NC}              Modern CLI utilities (ripgrep, fzf, bat, eza, zoxide)"
                 echo -e "  ${YELLOW}browsers${NC}         Web browsers (Firefox, Chrome, Brave)"
-                echo -e "  ${YELLOW}snaps${NC}            Snap packages (VS Code, Cursor, WhatsApp, Spotify)"
+                echo -e "  ${YELLOW}snaps${NC}            Snap packages (VS Code, WhatsApp, Spotify)"
                 echo -e "  ${YELLOW}communication${NC}    Communication apps (Discord, Slack, Telegram)"
                 echo -e "  ${YELLOW}media${NC}            Media & graphics (GIMP, Inkscape, VLC, OBS)"
                 echo -e "  ${YELLOW}devops${NC}           DevOps tools (Docker, kubectl)"
