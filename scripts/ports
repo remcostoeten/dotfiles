@@ -633,15 +633,15 @@ function showHelp() {
 
   // Port/network themed ASCII art with gradient colors
   const asciiLines = [
-    '    ' + chalk.pastelPink('██████╗ ██╗  ██╗ █████╗ ████████╗██╗ ██████╗ ███╗   ██╗'),
-    '    ' + chalk.pastelMagenta('██╔══██╗██║  ██║██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║'),
-    '    ' + chalk.pastelPurple('██████╔╝███████║███████║   ██║   ██║██║   ██║██╔██╗ ██║'),
-    '    ' + chalk.pastelBlue('██╔══██╗██╔══██║██╔══██║   ██║   ██║██║   ██║██║╚██╗██║'),
-    '    ' + chalk.pastelCyan('██║  ██║██║  ██║██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║'),
-    '    ' + chalk.pastelGreen('╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝'),
-    '    ' + chalk.pastelPink('╔════════════════════════════════════════════════════════════╗'),
-    '    ' + chalk.pastelMagenta('║                     PORT TERMINATOR                      ║'),
-    '    ' + chalk.pastelPurple('╚════════════════════════════════════════════════════════════╝'),
+    '    ' + chalk.pastelPink('  _____   _____   _____   _____   _____   _____   _____  '),
+    '    ' + chalk.pastelMagenta(' |8   8| |8~~~8| |8   8| |8ooo8| |8   8| |8   8| |8   8| '),
+    '    ' + chalk.pastelPurple(' |8   8| |8   8| |8ooo8| |8~~~8| |8ooo8| |8ooo8| |8ooo8| '),
+    '    ' + chalk.pastelBlue(' |8ooo8| |8ooo8| |8~~~8| |8   8| |8~~~8| |8~~~8| |8~~~8| '),
+    '    ' + chalk.pastelCyan('                                                           '),
+    '    ' + chalk.pastelGreen('  PORT   NETWORK   TERMINAL   KILLER   TOOL   FOR   DEVS  '),
+    '    ' + chalk.pastelPink('-----------------------------------------------------------'),
+    '    ' + chalk.pastelMagenta('                    PORT TERMINATOR                     '),
+    '    ' + chalk.pastelPurple('-----------------------------------------------------------'),
   ];
 
   // Calculate padding for centered tagline
@@ -1212,21 +1212,15 @@ function displayHeader() {
 
   // Port/network themed ASCII art with gradient colors
   const asciiLines = [
-    '    ' + chalk.pastelPink('██████╗ ██╗  ██╗ █████╗ ████████╗██╗ ██████╗ ███╗   ██╗'),
-    '    ' + chalk.pastelMagenta('██╔══██╗██║  ██║██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║'),
-    '    ' + chalk.pastelPurple('██████╔╝███████║███████║   ██║   ██║██║   ██║██╔██╗ ██║'),
-    '    ' + chalk.pastelBlue('██╔══██╗██╔══██║██╔══██║   ██║   ██║██║   ██║██║╚██╗██║'),
-    '    ' + chalk.pastelCyan('██║  ██║██║  ██║██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║'),
-    '    ' + chalk.pastelGreen('╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝'),
-    '    ' + chalk.pastelPink('██╗███╗   ██╗███████╗████████╗    ██████╗ ██╗   ██╗███████╗███████╗'),
-    '    ' + chalk.pastelMagenta('██║████╗  ██║██╔════╝╚══██╔══╝    ██╔══██╗██║   ██║██╔════╝██╔════╝'),
-    '    ' + chalk.pastelPurple('██║██╔██╗ ██║███████╗   ██║       ██║  ██║██║   ██║█████╗  ███████╗'),
-    '    ' + chalk.pastelBlue('██║██║╚██╗██║╚════██║   ██║       ██║  ██║██║   ██║██╔══╝  ╚════██║'),
-    '    ' + chalk.pastelCyan('██║██║ ╚████║███████║   ██║       ██████╔╝╚██████╔╝███████╗███████║'),
-    '    ' + chalk.pastelGreen('╚═╝╚═╝  ╚═══╝╚══════╝   ╚═╝       ╚═════╝  ╚═════╝ ╚══════╝╚══════╝'),
-    '    ' + chalk.pastelPink('╔════════════════════════════════════════════════════════════╗'),
-    '    ' + chalk.pastelMagenta('║                     PORT TERMINATOR                      ║'),
-    '    ' + chalk.pastelPurple('╚════════════════════════════════════════════════════════════╝'),
+    '    ' + chalk.pastelPink('  _____   _____   _____   _____   _____   _____   _____  '),
+    '    ' + chalk.pastelMagenta(' |8   8| |8~~~8| |8   8| |8ooo8| |8   8| |8   8| |8   8| '),
+    '    ' + chalk.pastelPurple(' |8   8| |8   8| |8ooo8| |8~~~8| |8ooo8| |8ooo8| |8ooo8| '),
+    '    ' + chalk.pastelBlue(' |8ooo8| |8ooo8| |8~~~8| |8   8| |8~~~8| |8~~~8| |8~~~8| '),
+    '    ' + chalk.pastelCyan('                                                           '),
+    '    ' + chalk.pastelGreen('  PORT   NETWORK   TERMINAL   KILLER   TOOL   FOR   DEVS  '),
+    '    ' + chalk.pastelPink('-----------------------------------------------------------'),
+    '    ' + chalk.pastelMagenta('                    PORT TERMINATOR                     '),
+    '    ' + chalk.pastelPurple('-----------------------------------------------------------'),
   ];
 
   // Calculate padding for centered tagline
