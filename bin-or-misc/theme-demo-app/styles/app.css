@@ -2,22 +2,18 @@
 @import "./tailwind-theme.css";
 
 /* Global Styles */
-body {
-    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
-    background: var(--color-background);
-    color: var(--color-foreground);
-    margin: 0;
-    padding: 0;
-    min-height: 100vh;
-}
-
 .container {
     max-width: 1400px;
     margin: 0 auto;
     padding: 0 2rem;
 }
 
+/* Global Styles */
 body {
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    min-height: 100vh;
     padding: 2rem;
     max-width: 1400px;
     margin: 0 auto;
