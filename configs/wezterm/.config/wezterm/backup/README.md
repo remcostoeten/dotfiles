@@ -24,7 +24,7 @@ This configuration uses a modular architecture to keep WezTerm settings organize
 - Font fallbacks and ligature settings
 - Bold/italic font rules
 
-### `layout.lua` 
+### `layout.lua`
 - Window decorations and padding
 - Transparency and opacity
 - Tab bar configuration
@@ -67,7 +67,7 @@ A notification will appear showing the current theme.
 Each module can be modified independently:
 
 1. **Change fonts**: Edit `modules/font.lua`
-2. **Adjust appearance**: Edit `modules/layout.lua` 
+2. **Adjust appearance**: Edit `modules/layout.lua`
 3. **Add keybindings**: Edit `modules/keys.lua`
 4. **Create themes**: Edit `modules/themes.lua`
 

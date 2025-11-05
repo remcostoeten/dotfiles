@@ -43,7 +43,7 @@ case "$1" in
     "list")
         echo "Available themes:"
         echo "  modern    - Modern Gradient 🌈"
-        echo "  cyber     - Cyberdream 🌃" 
+        echo "  cyber     - Cyberdream 🌃"
         echo "  cat       - Catppuccin 🌙"
         echo "  pumpkin   - Pumpkin Spice 🎃"
         echo ""
@@ -76,7 +76,7 @@ case "$1" in
         echo "Themes:"
         echo "  modern    - Modern Gradient 🌈"
         echo "  cyber     - Cyberdream 🌃"
-        echo "  cat       - Catppuccin 🌙" 
+        echo "  cat       - Catppuccin 🌙"
         echo "  pumpkin   - Pumpkin Spice 🎃"
         echo ""
         echo "Commands:"

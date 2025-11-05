@@ -2,7 +2,7 @@
 
 ################################################################################
 # Dotfiles Setup Script - Modular Version
-# 
+#
 # This is the main orchestrator that sources modular components from setup/
 # For the original monolithic version, see: setup.sh.original (2,776 lines)
 #
@@ -34,10 +34,10 @@ source "$SCRIPT_DIR/setup/loader.sh"
 main() {
     # Initialize data directory
     init_data_directory
-    
+
     # Parse command line arguments
     parse_args "$@"
-    
+
     # Show main menu if no arguments provided
     if [ $# -eq 0 ]; then
         echo "Interactive menu not yet implemented in modular version."
@@ -47,9 +47,9 @@ main() {
         echo "  ./setup.sh.original"
         exit 0
     fi
-    
+
     print_header "Starting Dotfiles Setup"
-    
+
     # System update
     if [ "$SKIP_SYSTEM_UPDATE" != true ] && [ "$DRY_RUN" != true ]; then
         print_status "Updating system packages..."
@@ -64,7 +64,7 @@ main() {
     elif [ "$DRY_RUN" = true ]; then
         print_dry_run "Would update system packages"
     fi
-    
+
     # Install essential packages
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "essential" ]; then
         print_header "Essential Packages"
@@ -72,7 +72,7 @@ main() {
             install_package_new "$pkg"
         done
     fi
-    
+
     # Install languages
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "languages" ]; then
         print_header "Programming Languages"
@@ -80,7 +80,7 @@ main() {
             install_package_new "$pkg"
         done
     fi
-    
+
     # Install editors
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "editors" ]; then
         print_header "Code Editors"
@@ -88,7 +88,7 @@ main() {
             install_package_new "$pkg"
         done
     fi
-    
+
     # Install package managers
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "package-managers" ]; then
         print_header "Package Managers"
@@ -96,7 +96,7 @@ main() {
             install_package_new "$pkg"
         done
     fi
-    
+
     # Install git tools
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "git" ]; then
         print_header "Git Tools"
@@ -104,7 +104,7 @@ main() {
             install_package_new "$pkg"
         done
     fi
-    
+
     # Install CLI utilities
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "cli" ]; then
         print_header "CLI Utilities"
@@ -117,7 +117,7 @@ main() {
             install_package_new "$package|apt||$display"
         done
     fi
-    
+
     # Install browsers
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "browsers" ]; then
         print_header "Browsers"
@@ -126,7 +126,7 @@ main() {
             install_package_new "${parts[0]}|apt||${parts[1]}"
         done
     fi
-    
+
     # Install communication apps
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "communication" ]; then
         print_header "Communication Apps"
@@ -135,7 +135,7 @@ main() {
             install_package_new "${parts[0]}|apt||${parts[1]}"
         done
     fi
-    
+
     # Install media apps
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "media" ]; then
         print_header "Media & Graphics"
@@ -144,7 +144,7 @@ main() {
             install_package_new "${parts[0]}|apt||${parts[1]}"
         done
     fi
-    
+
     # Install DevOps tools
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "devops" ]; then
         print_header "DevOps Tools"
@@ -153,7 +153,7 @@ main() {
             install_package_new "${parts[0]}|apt||${parts[1]}"
         done
     fi
-    
+
     # Install system utilities
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "system" ]; then
         print_header "System Utilities"
@@ -162,7 +162,7 @@ main() {
             install_package_new "${parts[0]}|apt||${parts[1]}"
         done
     fi
-    
+
     # Install hardware tools
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "hardware" ]; then
         print_header "Hardware Tools"
@@ -171,7 +171,7 @@ main() {
             install_package_new "${parts[0]}|apt||${parts[1]}"
         done
     fi
-    
+
     # Install automation tools
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "automation" ]; then
         print_header "Automation Tools"
@@ -180,7 +180,7 @@ main() {
             install_package_new "${parts[0]}|apt||${parts[1]}"
         done
     fi
-    
+
     # Install GNOME tools
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "gnome" ]; then
         if [ -n "$XDG_CURRENT_DESKTOP" ] && [[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]]; then
@@ -191,7 +191,7 @@ main() {
             done
         fi
     fi
-    
+
     # Install snap packages
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "snaps" ]; then
         print_header "Snap Packages"
@@ -200,7 +200,7 @@ main() {
             install_package_new "${parts[0]}|snap||${parts[1]}"
         done
     fi
-    
+
     # Install curl tools
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "tools" ]; then
         print_header "Essential Tools"
@@ -212,7 +212,7 @@ main() {
             install_package_new "$name|curl|$url|$display"
         done
     fi
-    
+
     # Install NPM tools
     if [ -z "$INSTALL_SECTION" ] || [ "$INSTALL_SECTION" = "npm-tools" ]; then
         print_header "NPM CLI Tools"
@@ -221,7 +221,7 @@ main() {
             install_package_new "${parts[0]}|npm||${parts[1]}"
         done
     fi
-    
+
     # Summary
     if [ "$DRY_RUN" = true ]; then
         echo ""
@@ -229,13 +229,13 @@ main() {
         print_info "No changes were made. Run without --dry-run to install."
         return 0
     fi
-    
+
     echo ""
     print_header "Setup Complete!"
     print_success "Installation finished"
     print_info "Successful: $TOTAL_SUCCESS | Failed: $TOTAL_FAILED"
     echo ""
-    
+
     # Show failed installations if any
     if [ -f "$PROGRESS_FILE" ] && command_exists jq; then
         local failed=$(jq -r '.[] | to_entries[] | select(.value == "failed") | .key' "$PROGRESS_FILE" 2>/dev/null | wc -l)
@@ -243,7 +243,7 @@ main() {
             print_warning "$failed installation(s) failed. You can rerun this script to retry."
         fi
     fi
-    
+
     print_info "Next steps:"
     echo "  1. Restart your terminal or run: source ~/.bashrc"
     echo "  2. Run './setup.sh --help' for more options"

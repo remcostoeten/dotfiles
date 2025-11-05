@@ -9,7 +9,7 @@ readonly RED='\033[0;31m'
 readonly CYAN='\033[0;36m'
 readonly MAGENTA='\033[0;35m'
 readonly BOLD='\033[1m'
-readonly NC='\033[0m' # No Color 
+readonly NC='\033[0m' # No Color
 
 # Configuration
 readonly DOTFILES_DIR="$HOME/.config/dotfiles"
@@ -136,7 +136,7 @@ declare -a MEDIA_APPS=(
     "gimp:GIMP"
     "inkscape:Inkscape"
     "vlc:VLC Media Player"
-    "obs-studio:OBS Studio" 
+    "obs-studio:OBS Studio"
 )
 
 # Browsers
@@ -289,10 +289,10 @@ parse_args() {
                 echo "║              Interactive Environment Configuration                 ║"
                 echo "╚════════════════════════════════════════════════════════════════════╝"
                 echo -e "${NC}\n"
-                
+
                 echo -e "${BOLD}${CYAN}USAGE${NC}"
                 echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}[OPTIONS]${NC}\n"
-                
+
                 echo -e "${BOLD}${CYAN}OPTIONS${NC}"
                 echo -e "  ${GREEN}--dry-run${NC}                         Preview all installations without making changes"
                 echo -e "  ${GREEN}--dry-run-section${NC} ${YELLOW}<NAME>${NC}          Preview a specific section only"
@@ -308,7 +308,7 @@ parse_args() {
                 echo -e "  ${GREEN}--list${NC}                            List all available packages by category"
                 echo -e "  ${GREEN}--source${NC}                          Open script source on GitHub"
                 echo -e "  ${GREEN}-h, --help${NC}                        Display this help message\n"
-                
+
                 echo -e "${BOLD}${CYAN}AVAILABLE SECTIONS${NC}"
                 echo -e "  ${YELLOW}dev${NC}              Development tools (Python, Node.js, npm, neovim)"
                 echo -e "  ${YELLOW}git${NC}              Git tools (GitHub CLI, lazygit, lazydocker)"
@@ -328,47 +328,47 @@ parse_args() {
                 echo -e "  ${YELLOW}config-apps${NC}      Config-based apps (nvim, wezterm, kitty, hyprland)"
                 echo -e "  ${YELLOW}fish${NC}             Fish shell setup and configuration"
                 echo -e "  ${YELLOW}fonts${NC}            Nerd Fonts installation\n"
-                
+
                 echo -e "${BOLD}${CYAN}EXAMPLES${NC}"
                 echo -e "  ${BLUE}#${NC} Run full interactive setup"
                 echo -e "  ${BOLD}./setup.sh${NC}\n"
-                
+
                 echo -e "  ${BLUE}#${NC} Preview all changes without installing"
                 echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--dry-run${NC}\n"
-                
+
                 echo -e "  ${BLUE}#${NC} Interactive dry-run (select sections to preview)"
                 echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--dry-run-interactive${NC}\n"
-                
+
                 echo -e "  ${BLUE}#${NC} Preview only development tools section"
                 echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--dry-run-section${NC} ${YELLOW}dev${NC}\n"
-                
+
                 echo -e "  ${BLUE}#${NC} Install only CLI utilities (non-interactive)"
                 echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--install${NC} ${YELLOW}cli${NC}\n"
-                
+
                 echo -e "  ${BLUE}#${NC} Skip system update and fonts"
                 echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--skip-system-update --skip-fonts${NC}\n"
-                
+
                 echo -e "  ${BLUE}#${NC} Verbose output for debugging"
                 echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--verbose${NC}\n"
-                
+
                 echo -e "  ${BLUE}#${NC} View script source on GitHub"
                 echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--source${NC}\n"
-                
+
                 echo -e "  ${BLUE}#${NC} List all available packages by category"
                 echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--list${NC}\n"
-                
+
                 echo -e "${BOLD}${CYAN}PACKAGE FORMAT${NC}"
                 echo -e "  Packages are defined as: ${YELLOW}name|method|extra|display${NC}"
                 echo -e "  Methods: ${GREEN}apt${NC}, ${GREEN}snap${NC}, ${GREEN}curl${NC}, ${GREEN}npm${NC}, ${GREEN}cargo${NC}, ${GREEN}github${NC}"
                 echo -e "  Example: ${DIM}lazygit|github|jesseduffield/lazygit|lazygit${NC}\n"
-                
+
                 echo -e "${BOLD}${CYAN}NOTES${NC}"
                 echo -e "  ${BLUE}•${NC} The script will prompt for selections in interactive mode"
                 echo -e "  ${BLUE}•${NC} Progress is saved and can be resumed if interrupted"
                 echo -e "  ${BLUE}•${NC} Existing configurations are backed up before changes"
                 echo -e "  ${BLUE}•${NC} Packages can use different install methods in same category"
                 echo -e "  ${BLUE}•${NC} Requires Ubuntu/Debian with sudo access\n"
-                
+
                 exit 0
                 ;;
             *)
@@ -381,29 +381,29 @@ parse_args() {
 }
 
 # Helper functions
-print_status() { 
+print_status() {
     [ "$QUIET" = true ] && return 0
     echo -e "${BLUE}→${NC} $1"
 }
-print_success() { 
+print_success() {
     [ "$QUIET" = true ] && return 0
     echo -e "${GREEN}✓${NC} $1"
 }
-print_warning() { 
+print_warning() {
     echo -e "${YELLOW}⚠${NC} $1"
 }
-print_error() { 
+print_error() {
     echo -e "${RED}✗${NC} $1" >&2
 }
-print_info() { 
+print_info() {
     [ "$QUIET" = true ] && return 0
     echo -e "${CYAN}ℹ${NC} $1"
 }
-print_header() { 
+print_header() {
     [ "$QUIET" = true ] && return 0
     echo -e "\n${BOLD}${MAGENTA}$1${NC}"
 }
-print_dry_run() { 
+print_dry_run() {
     echo -e "${YELLOW}[DRY RUN]${NC} $1"
 }
 print_verbose() {
@@ -421,7 +421,7 @@ init_data_directory() {
         mkdir -p "$DOTFILES_DATA_DIR"/{setup,logs,backups}
         print_verbose "Created data directory structure at $DOTFILES_DATA_DIR"
     fi
-    
+
     update_gitignore
 }
 
@@ -430,23 +430,23 @@ update_gitignore() {
     local gitignore="$DOTFILES_DIR/.gitignore"
     local ignore_pattern="# Data directory (logs, progress, backups)"
     local ignore_entry="/.dotfiles/"
-    
+
     if [ ! -f "$gitignore" ]; then
         touch "$gitignore"
         print_verbose "Created .gitignore file"
     fi
-    
+
     if grep -q "^/.dotfiles/" "$gitignore" 2>/dev/null; then
         print_verbose "Data directory already in .gitignore"
         return 0
     fi
-    
+
     {
         echo ""
         echo "$ignore_pattern"
         echo "$ignore_entry"
     } >> "$gitignore"
-    
+
     print_success "Added $DOTFILES_DATA_DIR to .gitignore"
     print_info "Data directory will not be version controlled"
 }
@@ -474,9 +474,9 @@ show_main_menu() {
         echo "║                                                                  ║"
         echo "╚══════════════════════════════════════════════════════════════════╝"
         echo -e "${NC}\n"
-        
+
         echo -e "${CYAN}What would you like to do?${NC}\n"
-        
+
         local options=(
             "Full Interactive Setup|Run complete setup with package selection"
             "Quick Install (All)|Install everything without prompts"
@@ -487,10 +487,10 @@ show_main_menu() {
             "Help|Show detailed help and options"
             "Exit|Exit the installer"
         )
-        
+
         local selected=0
         local total=${#options[@]}
-        
+
         while true; do
             # Display menu options
             for i in "${!options[@]}"; do
@@ -498,7 +498,7 @@ show_main_menu() {
                 local title="${parts[0]}"
                 local desc="${parts[1]}"
                 local num=$((i + 1))
-                
+
                 if [ $i -eq $selected ]; then
                     echo -e "  ${BOLD}${GREEN}[$num]${NC} ${BOLD}$title${NC}"
                     echo -e "      ${DIM}$desc${NC}"
@@ -508,12 +508,12 @@ show_main_menu() {
                 fi
                 echo ""
             done
-            
+
             echo -e "\n${DIM}Select: 1-8 or ↑/k ↓/j | Confirm: Enter | Quit: q/Esc${NC}"
-            
+
             # Read single key
             read -rsn1 key
-            
+
             # Handle arrow keys (they send 3 characters: ESC [ A/B)
             if [[ $key == $'\e' ]]; then
                 read -rsn2 -t 0.1 key2
@@ -557,7 +557,7 @@ show_main_menu() {
                         ;;
                 esac
             fi
-            
+
             # Handle vim keys, number keys, and other inputs
             case "$key" in
                 [1-8]) # Number keys - direct selection
@@ -696,7 +696,7 @@ show_main_menu() {
 list_all_packages_simple() {
     clear
     echo -e "${BOLD}${CYAN}Available Package Categories${NC}\n"
-    
+
     echo -e "${BOLD}Essential Packages${NC} (${#ESSENTIAL_PACKAGES[@]} packages)"
     echo -e "${BOLD}Programming Languages${NC} (${#LANGUAGES[@]} packages)"
     echo -e "${BOLD}Code Editors${NC} (${#EDITORS[@]} packages)"
@@ -723,23 +723,23 @@ list_all_packages() {
     echo "║            Available Packages by Category                        ║"
     echo "╚══════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}\n"
-    
+
     # Function to display a category
     display_category() {
         local category_name="$1"
         local -n packages_ref="$2"
         local count=${#packages_ref[@]}
-        
+
         echo -e "${BOLD}${CYAN}$category_name${NC} ${DIM}($count packages)${NC}"
         echo -e "${DIM}────────────────────────────────────────────────────────────────────${NC}"
-        
+
         for package in "${packages_ref[@]}"; do
             # Parse format: "name|method|extra|display"
             IFS='|' read -ra parts <<< "$package"
             local name="${parts[0]}"
             local method="${parts[1]}"
             local display="${parts[3]:-${parts[2]:-$name}}"
-            
+
             # Check if installed
             local status=""
             if command_exists "$name" || dpkg -l 2>/dev/null | grep -q "^ii.*$name "; then
@@ -747,7 +747,7 @@ list_all_packages() {
             else
                 status="${DIM}○${NC}"
             fi
-            
+
             # Color code by install method
             local method_color=""
             case "$method" in
@@ -759,12 +759,12 @@ list_all_packages() {
                 github) method_color="${CYAN}" ;;
                 *) method_color="${NC}" ;;
             esac
-            
+
             printf "  %b %-30s %b%-6s%b %s\n" "$status" "$display" "$method_color" "$method" "${NC}" "${DIM}($name)${NC}"
         done
         echo ""
     }
-    
+
     # Display all categories
     display_category "Essential Packages" ESSENTIAL_PACKAGES
     display_category "Programming Languages & Runtimes" LANGUAGES
@@ -781,7 +781,7 @@ list_all_packages() {
     display_category "Automation Tools" AUTOMATION_TOOLS
     display_category "GNOME Tools" GNOME_TOOLS
     display_category "Android Tools" ANDROID_TOOLS
-    
+
     echo -e "${BOLD}${CYAN}Legend:${NC}"
     echo -e "  ${GREEN}✓${NC} Installed    ${DIM}○${NC} Not installed"
     echo -e "  ${BLUE}apt${NC}  ${MAGENTA}snap${NC}  ${YELLOW}curl${NC}  ${GREEN}npm${NC}  ${RED}cargo${NC}  ${CYAN}github${NC}"
@@ -791,34 +791,34 @@ list_all_packages() {
 # Universal installer - parses format and installs accordingly
 install_universal() {
     local package_string="$1"
-    
+
     # Parse the package string: "name|method|extra|display"
     IFS='|' read -ra parts <<< "$package_string"
     local package="${parts[0]}"
     local method="${parts[1]}"
     local extra="${parts[2]}"
     local display="${parts[3]:-$package}"
-    
+
     if [ "$DRY_RUN" = true ]; then
         print_dry_run "Would install: $display (via $method)"
         return 0
     fi
-    
+
     # Check if already completed
     if is_completed "packages" "$package"; then
         print_success "$display already installed (skipped)"
         return 0
     fi
-    
+
     # Check if already installed
     if command_exists "$package" || dpkg -l 2>/dev/null | grep -q "^ii.*$package "; then
         print_success "$display already installed"
         save_progress "packages" "$package" "completed"
         return 0
     fi
-    
+
     print_status "Installing $display..."
-    
+
     case "$method" in
         apt)
             if [ "$VERBOSE" = true ]; then
@@ -871,7 +871,7 @@ install_universal() {
             return 1
             ;;
     esac
-    
+
     local result=$?
     if [ $result -eq 0 ]; then
         print_success "$display installed successfully"
@@ -882,7 +882,7 @@ install_universal() {
         save_progress "packages" "$package" "failed"
         track_result 1
     fi
-    
+
     return $result
 }
 
@@ -891,26 +891,26 @@ install_from_github() {
     local package="$1"
     local repo="$2"
     local display="$3"
-    
+
     local arch=""
     case "$(uname -m)" in
         x86_64) arch="x86_64" ;;
         aarch64|arm64) arch="arm64" ;;
         *) print_error "Unsupported architecture"; return 1 ;;
     esac
-    
+
     local latest_url=$(curl -s "https://api.github.com/repos/$repo/releases/latest" | \
                        grep "browser_download_url.*Linux.*${arch}.*tar.gz" | \
                        head -1 | cut -d'"' -f4)
-    
+
     if [ -z "$latest_url" ]; then
         print_warning "Could not find download URL for $display"
         return 1
     fi
-    
+
     local temp_dir=$(mktemp -d)
     cd "$temp_dir" || return 1
-    
+
     if wget -q "$latest_url" -O "${package}.tar.gz" 2>/dev/null; then
         tar -xzf "${package}.tar.gz" 2>/dev/null
         local binary=$(find . -name "$package" -type f | head -1)
@@ -922,7 +922,7 @@ install_from_github() {
             return 0
         fi
     fi
-    
+
     cd - >/dev/null
     rm -rf "$temp_dir"
     return 1
@@ -933,14 +933,14 @@ save_progress() {
     local category="$1"
     local item="$2"
     local status="$3"
-    
+
     # Ensure directory exists
     mkdir -p "$(dirname "$PROGRESS_FILE")"
-    
+
     if [ ! -f "$PROGRESS_FILE" ]; then
         echo "{}" > "$PROGRESS_FILE"
     fi
-    
+
     # Use jq if available, otherwise warn user
     if command_exists jq; then
         local content=$(cat "$PROGRESS_FILE")
@@ -955,11 +955,11 @@ save_progress() {
 is_completed() {
     local category="$1"
     local item="$2"
-    
+
     if [ ! -f "$PROGRESS_FILE" ]; then
         return 1
     fi
-    
+
     if command_exists jq; then
         local status=$(jq -r ".${category}.${item} // \"\"" "$PROGRESS_FILE" 2>/dev/null)
         [ "$status" = "completed" ]
@@ -972,47 +972,47 @@ is_completed() {
 install_package() {
     local package="$1"
     local name="${2:-$package}"
-    
+
     if [ "$DRY_RUN" = true ]; then
         print_dry_run "Would install: $name"
         return 0
     fi
-    
+
     if is_completed "packages" "$package"; then
         print_success "$name already installed (skipped)"
         return 0
     fi
-    
+
     # Special handling for GitHub CLI
     if [ "$package" = "gh" ]; then
         install_github_cli "$name"
         return $?
     fi
-    
+
     # Special handling for lazygit and lazydocker
     if [ "$package" = "lazygit" ] || [ "$package" = "lazydocker" ]; then
         install_lazy_tool "$package" "$name"
         return $?
     fi
-    
+
     # Special handling for OpenRGB
     if [ "$package" = "openrgb" ]; then
         install_openrgb "$name"
         return $?
     fi
-    
+
     # Special handling for NVIDIA tools
     if [ "$package" = "nvidia-settings" ] || [ "$package" = "nvidia-utils" ]; then
         install_nvidia_tools "$package" "$name"
         return $?
     fi
-    
+
     if dpkg -l | grep -q "^ii.*$package "; then
         print_success "$name already installed"
         save_progress "packages" "$package" "completed"
         return 0
     fi
-    
+
     print_status "Installing $name..."
     if sudo apt-get install -y "$package" >/dev/null 2>&1; then
         print_success "$name installed successfully"
@@ -1028,22 +1028,22 @@ install_package() {
 # Install GitHub CLI
 install_github_cli() {
     local name="${1:-gh}"
-    
+
     if is_completed "packages" "gh"; then
         print_success "$name already installed (skipped)"
         install_gh_select_extension
         return 0
     fi
-    
+
     if command_exists gh; then
         print_success "$name already installed"
         save_progress "packages" "gh" "completed"
         install_gh_select_extension
         return 0
     fi
-    
+
     print_status "Installing GitHub CLI..."
-    
+
     # Add GitHub CLI repository and install
     if curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null 2>&1 && \
        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null 2>&1 && \
@@ -1075,13 +1075,13 @@ install_gh_select_extension() {
     if ! command_exists gh; then
         return 0
     fi
-    
+
     # Check if extension is already installed
     if gh extension list 2>/dev/null | grep -q "remcostoeten/gh-select"; then
         print_success "gh-select extension already installed"
         return 0
     fi
-    
+
     # Check dependencies
     local missing_deps=()
     if ! command_exists fzf; then
@@ -1090,13 +1090,13 @@ install_gh_select_extension() {
     if ! command_exists jq; then
         missing_deps+=("jq")
     fi
-    
+
     if [ ${#missing_deps[@]} -gt 0 ]; then
         print_warning "gh-select requires: ${missing_deps[*]}"
         print_info "These will be installed in the CLI Utilities section"
         return 0
     fi
-    
+
     print_status "Installing gh-select extension..."
     if gh extension install remcostoeten/gh-select >/dev/null 2>&1; then
         print_success "gh-select extension installed successfully"
@@ -1113,20 +1113,20 @@ install_gh_select_extension() {
 install_lazy_tool() {
     local package="$1"
     local name="${2:-$package}"
-    
+
     if is_completed "packages" "$package"; then
         print_success "$name already installed (skipped)"
         return 0
     fi
-    
+
     if command_exists "$package"; then
         print_success "$name already installed"
         save_progress "packages" "$package" "completed"
         return 0
     fi
-    
+
     print_status "Installing $name..."
-    
+
     # Get latest release URL from GitHub
     local repo=""
     if [ "$package" = "lazygit" ]; then
@@ -1137,7 +1137,7 @@ install_lazy_tool() {
         print_error "Unknown lazy tool: $package"
         return 1
     fi
-    
+
     # Detect architecture
     local arch=""
     case "$(uname -m)" in
@@ -1145,20 +1145,20 @@ install_lazy_tool() {
         aarch64|arm64) arch="arm64" ;;
         *) print_error "Unsupported architecture for $name"; return 1 ;;
     esac
-    
+
     # Get latest release
     local latest_url=$(curl -s https://api.github.com/repos/$repo/releases/latest | grep "browser_download_url.*Linux_${arch}.tar.gz" | head -1 | cut -d'"' -f4)
-    
+
     if [ -z "$latest_url" ]; then
         print_warning "Could not determine download URL for $name"
         print_info "You can install manually from: https://github.com/$repo/releases"
         return 1
     fi
-    
+
     # Download and install
     local temp_dir=$(mktemp -d)
     cd "$temp_dir" || return 1
-    
+
     if wget -q "$latest_url" -O "${package}.tar.gz" 2>/dev/null; then
         tar -xzf "${package}.tar.gz" 2>/dev/null
         local binary=$(find . -name "$package" -type f | head -1)
@@ -1172,7 +1172,7 @@ install_lazy_tool() {
             return 0
         fi
     fi
-    
+
     print_error "Failed to install $name"
     save_progress "packages" "$package" "failed"
     cd - >/dev/null
@@ -1184,12 +1184,12 @@ install_lazy_tool() {
 install_snap() {
     local package="$1"
     local name="${2:-$package}"
-    
+
     if is_completed "snaps" "$package"; then
         print_success "$name already installed (skipped)"
         return 0
     fi
-    
+
     if ! command_exists snap; then
         print_warning "snapd not installed. Installing snapd..."
         if ! install_package "snapd" "snapd"; then
@@ -1198,7 +1198,7 @@ install_snap() {
         fi
         sudo systemctl enable --now snapd.socket
     fi
-    
+
     print_status "Installing $name via snap..."
     if sudo snap install "$package" >/dev/null 2>&1; then
         print_success "$name installed successfully"
@@ -1216,12 +1216,12 @@ install_curl_script() {
     local url="$1"
     local name="$2"
     local args="${3:-}"
-    
+
     if is_completed "tools" "$name"; then
         print_success "$name already installed (skipped)"
         return 0
     fi
-    
+
     # Special handling for uvx (uv installer)
     if [ "$name" = "uvx" ]; then
         if command_exists uv; then
@@ -1230,52 +1230,52 @@ install_curl_script() {
             return 0
         fi
     fi
-    
+
     # Check if already installed
     if [ "$name" = "bun" ] && [ -d "$HOME/.bun" ] && [ -f "$HOME/.bun/bin/bun" ]; then
         print_success "$name already installed"
         save_progress "tools" "$name" "completed"
         return 0
     fi
-    
+
     if [ "$name" = "pnpm" ] && command_exists pnpm; then
         print_success "$name already installed"
         save_progress "tools" "$name" "completed"
         return 0
     fi
-    
+
     if [ "$name" = "turso" ] && command_exists turso; then
         print_success "$name already installed"
         save_progress "tools" "$name" "completed"
         return 0
     fi
-    
+
     if [ "$name" = "uvx" ] && command_exists uv; then
         print_success "$name already installed (uv available)"
         save_progress "tools" "$name" "completed"
         return 0
     fi
-    
+
     if [ "$name" = "nvm" ] && [ -d "$HOME/.nvm" ]; then
         print_success "$name already installed"
         save_progress "tools" "$name" "completed"
         return 0
     fi
-    
+
     if [ "$name" = "vercel" ] && command_exists vercel; then
         print_success "$name already installed"
         save_progress "tools" "$name" "completed"
         return 0
     fi
-    
+
     if [ "$name" = "netlify" ] && command_exists netlify; then
         print_success "$name already installed"
         save_progress "tools" "$name" "completed"
         return 0
     fi
-    
+
     print_status "Installing $name..."
-    
+
     # Different installers need different handling
     local install_cmd=""
     if [ "$name" = "starship" ]; then
@@ -1295,11 +1295,11 @@ install_curl_script() {
     else
         install_cmd="curl -fsSL \"$url\" | bash"
     fi
-    
+
     if eval "$install_cmd" >/dev/null 2>&1; then
         print_success "$name installed successfully"
         save_progress "tools" "$name" "completed"
-        
+
         # Add to PATH if needed
         if [ "$name" = "bun" ]; then
             export BUN_INSTALL="$HOME/.bun"
@@ -1311,7 +1311,7 @@ install_curl_script() {
                 echo "export PATH=\"\$BUN_INSTALL/bin:\$PATH\"" >> "$HOME/.bashrc"
             fi
         fi
-        
+
         if [ "$name" = "pnpm" ]; then
             export PNPM_HOME="$HOME/.local/share/pnpm"
             export PATH="$PNPM_HOME:$PATH"
@@ -1322,7 +1322,7 @@ install_curl_script() {
                 echo "export PATH=\"\$PNPM_HOME:\$PATH\"" >> "$HOME/.bashrc"
             fi
         fi
-        
+
         if [ "$name" = "turso" ]; then
             export TURSO_INSTALL="$HOME/.turso"
             export PATH="$TURSO_INSTALL:$PATH"
@@ -1333,7 +1333,7 @@ install_curl_script() {
                 echo "export PATH=\"\$TURSO_INSTALL:\$PATH\"" >> "$HOME/.bashrc"
             fi
         fi
-        
+
         if [ "$name" = "uvx" ]; then
             export PATH="$HOME/.cargo/bin:$PATH"
             if [ -f "$HOME/.bashrc" ] && ! grep -q "\.cargo/bin" "$HOME/.bashrc"; then
@@ -1342,7 +1342,7 @@ install_curl_script() {
                 echo "export PATH=\"\$HOME/.cargo/bin:\$PATH\"" >> "$HOME/.bashrc"
             fi
         fi
-        
+
         if [ "$name" = "nvm" ]; then
             export NVM_DIR="$HOME/.nvm"
             if [ -f "$HOME/.bashrc" ] && ! grep -q "NVM_DIR" "$HOME/.bashrc"; then
@@ -1353,7 +1353,7 @@ install_curl_script() {
                 echo "[ -s \"\$NVM_DIR/bash_completion\" ] && \. \"\$NVM_DIR/bash_completion\"" >> "$HOME/.bashrc"
             fi
         fi
-        
+
         if [ "$name" = "vercel" ] || [ "$name" = "netlify" ]; then
             # These typically install to ~/.local/bin or similar
             if [ -f "$HOME/.bashrc" ] && ! grep -q "\.local/bin" "$HOME/.bashrc"; then
@@ -1362,7 +1362,7 @@ install_curl_script() {
                 echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$HOME/.bashrc"
             fi
         fi
-        
+
         return 0
     else
         print_error "Failed to install $name"
@@ -1375,17 +1375,17 @@ install_curl_script() {
 install_cargo() {
     local package="$1"
     local name="${2:-$package}"
-    
+
     if is_completed "cargo" "$package"; then
         print_success "$name already installed (skipped)"
         return 0
     fi
-    
+
     if ! command_exists cargo; then
         print_warning "Cargo not found. Install Rust first."
         return 1
     fi
-    
+
     print_status "Installing $name via cargo..."
     if cargo install "$package" >/dev/null 2>&1; then
         print_success "$name installed successfully"
@@ -1403,21 +1403,21 @@ install_npm() {
     local package="$1"
     local name="${2:-$package}"
     local global="${3:-true}"
-    
+
     if is_completed "npm" "$package"; then
         print_success "$name already installed (skipped)"
         return 0
     fi
-    
+
     if ! command_exists npm; then
         print_warning "npm not found. Install Node.js first."
         return 1
     fi
-    
+
     print_status "Installing $name via npm..."
     local cmd="npm install"
     [ "$global" = "true" ] && cmd="npm install -g"
-    
+
     if $cmd "$package" >/dev/null 2>&1; then
         print_success "$name installed successfully"
         save_progress "npm" "$package" "completed"
@@ -1433,32 +1433,32 @@ install_npm() {
 install_npm_tool() {
     local package="$1"
     local name="${2:-$package}"
-    
+
     if is_completed "tools" "$name"; then
         print_success "$name already installed (skipped)"
         return 0
     fi
-    
+
     if command_exists "$name" || command_exists "$package"; then
         print_success "$name already installed"
         save_progress "tools" "$name" "completed"
         return 0
     fi
-    
+
     if ! command_exists npm && ! command_exists pnpm; then
         print_warning "npm or pnpm not found. Please install Node.js first."
         return 1
     fi
-    
+
     print_status "Installing $name via npm/pnpm..."
-    
+
     local install_cmd=""
     if command_exists pnpm; then
         install_cmd="pnpm add -g $package"
     else
         install_cmd="npm install -g $package"
     fi
-    
+
     if eval "$install_cmd" >/dev/null 2>&1; then
         print_success "$name installed successfully"
         save_progress "tools" "$name" "completed"
@@ -1473,27 +1473,27 @@ install_npm_tool() {
 # Install OpenRGB
 install_openrgb() {
     local name="${1:-OpenRGB}"
-    
+
     if is_completed "packages" "openrgb"; then
         print_success "$name already installed (skipped)"
         return 0
     fi
-    
+
     if command_exists openrgb; then
         print_success "$name already installed"
         save_progress "packages" "openrgb" "completed"
         return 0
     fi
-    
+
     print_status "Installing $name..."
-    
+
     # Try apt first
     if sudo apt-get install -y openrgb >/dev/null 2>&1; then
         print_success "$name installed successfully via apt"
         save_progress "packages" "openrgb" "completed"
         return 0
     fi
-    
+
     # Try adding PPA if apt install fails
     print_status "Adding OpenRGB PPA..."
     if sudo add-apt-repository -y ppa:thopiekar/openrgb >/dev/null 2>&1; then
@@ -1504,7 +1504,7 @@ install_openrgb() {
             return 0
         fi
     fi
-    
+
     print_error "Failed to install $name"
     print_info "You can try installing manually: sudo add-apt-repository ppa:thopiekar/openrgb && sudo apt update && sudo apt install openrgb"
     save_progress "packages" "openrgb" "failed"
@@ -1515,36 +1515,36 @@ install_openrgb() {
 install_nvidia_tools() {
     local package="$1"
     local name="${2:-$package}"
-    
+
     if is_completed "packages" "$package"; then
         print_success "$name already installed (skipped)"
         return 0
     fi
-    
+
     if dpkg -l | grep -q "^ii.*$package "; then
         print_success "$name already installed"
         save_progress "packages" "$package" "completed"
         return 0
     fi
-    
+
     print_status "Installing $name..."
-    
+
     # Check if NVIDIA GPU is present
     if ! lspci | grep -i nvidia >/dev/null 2>&1; then
         print_warning "No NVIDIA GPU detected. Skipping $name installation."
         return 1
     fi
-    
+
     if sudo apt-get install -y "$package" >/dev/null 2>&1; then
         print_success "$name installed successfully"
         save_progress "packages" "$package" "completed"
-        
+
         # For nvidia-settings, provide helpful info
         if [ "$package" = "nvidia-settings" ]; then
             print_info "NVIDIA Settings installed. You can configure fan curves with: nvidia-settings"
             print_info "For automatic fan control, consider installing: nvidia-ml-py3 (Python package)"
         fi
-        
+
         return 0
     else
         print_error "Failed to install $name"
@@ -1558,35 +1558,35 @@ select_snap_packages() {
     local category="$1"
     local title="$2"
     local -n packages="$3"
-    
+
     print_header "$title"
-    
+
     local selected=()
     local index=1
-    
+
     for package in "${packages[@]}"; do
         local name="${package%%:*}"
         local display="${package##*:}"
-        
+
         local installed=""
         if snap list "$name" >/dev/null 2>&1; then
             installed=" [INSTALLED]"
         fi
-        
+
         echo -e "  ${CYAN}[$index]${NC} $display$installed"
         ((index++))
     done
-    
+
     echo -e "  ${CYAN}[a]${NC} Select all"
     echo -e "  ${CYAN}[s]${NC} Skip this category"
     echo ""
-    
+
     read -p "Select packages (comma-separated numbers, 'a' for all, 's' to skip): " selection
-    
+
     if [ "$selection" = "s" ] || [ -z "$selection" ]; then
         return 1
     fi
-    
+
     if [ "$selection" = "a" ]; then
         selected=("${packages[@]}")
     else
@@ -1598,17 +1598,17 @@ select_snap_packages() {
             fi
         done
     fi
-    
+
     local failed=0
     for package in "${selected[@]}"; do
         local name="${package%%:*}"
         local display="${package##*:}"
-        
+
         if ! install_snap "$name" "$display"; then
             ((failed++))
         fi
     done
-    
+
     return $failed
 }
 
@@ -1622,12 +1622,12 @@ select_packages() {
     local category="$1"
     local title="$2"
     local -n packages="$3"
-    
+
     print_header "$title"
-    
+
     local selected=()
     local index=1
-    
+
     # Display packages
     for package in "${packages[@]}"; do
         # Parse new format: "name|method|extra|display"
@@ -1635,27 +1635,27 @@ select_packages() {
         local name="${parts[0]}"
         local method="${parts[1]}"
         local display="${parts[3]:-${parts[2]:-$name}}"
-        
+
         # Check if already installed
         local installed=""
         if command_exists "$name" || dpkg -l | grep -q "^ii.*$name "; then
             installed=" [INSTALLED]"
         fi
-        
+
         echo -e "  ${CYAN}[$index]${NC} $display$installed"
         ((index++))
     done
-    
+
     echo -e "  ${CYAN}[a]${NC} Select all"
     echo -e "  ${CYAN}[s]${NC} Skip this category"
     echo ""
-    
+
     read -p "Select packages (comma-separated numbers, 'a' for all, 's' to skip): " selection
-    
+
     if [ "$selection" = "s" ] || [ -z "$selection" ]; then
         return 1
     fi
-    
+
     if [ "$selection" = "a" ]; then
         selected=("${packages[@]}")
     else
@@ -1667,7 +1667,7 @@ select_packages() {
             fi
         done
     fi
-    
+
     # Install selected packages using universal installer
     local failed=0
     for package_string in "${selected[@]}"; do
@@ -1675,12 +1675,12 @@ select_packages() {
             ((failed++))
         fi
     done
-    
+
     if [ $failed -gt 0 ]; then
         print_warning "$failed package(s) failed to install"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -1689,37 +1689,37 @@ select_curl_tools() {
     local category="$1"
     local title="$2"
     local -n tools="$3"
-    
+
     print_header "$title"
-    
+
     local selected=()
     local index=1
-    
+
     for tool in "${tools[@]}"; do
         IFS=':' read -ra parts <<< "$tool"
         local name="${parts[0]}"
         local url="${parts[1]}"
         local display="${parts[2]:-$name}"
-        
+
         local installed=""
         if command_exists "$name"; then
             installed=" [INSTALLED]"
         fi
-        
+
         echo -e "  ${CYAN}[$index]${NC} $display$installed"
         ((index++))
     done
-    
+
     echo -e "  ${CYAN}[a]${NC} Select all"
     echo -e "  ${CYAN}[s]${NC} Skip this category"
     echo ""
-    
+
     read -p "Select tools (comma-separated numbers, 'a' for all, 's' to skip): " selection
-    
+
     if [ "$selection" = "s" ] || [ -z "$selection" ]; then
         return 1
     fi
-    
+
     if [ "$selection" = "a" ]; then
         selected=("${tools[@]}")
     else
@@ -1731,19 +1731,19 @@ select_curl_tools() {
             fi
         done
     fi
-    
+
     local failed=0
     for tool in "${selected[@]}"; do
         IFS=':' read -ra parts <<< "$tool"
         local name="${parts[0]}"
         local url="${parts[1]}"
         local display="${parts[2]:-$name}"
-        
+
         if ! install_curl_script "$url" "$name"; then
             ((failed++))
         fi
     done
-    
+
     return $failed
 }
 
@@ -1752,43 +1752,43 @@ select_npm_tools() {
     local category="$1"
     local title="$2"
     local -n tools="$3"
-    
+
     # Check if Node.js is installed
     if ! command_exists npm && ! command_exists pnpm; then
         print_warning "npm or pnpm not found. Skipping npm CLI tools installation."
         print_info "Please install Node.js first (it's in Development Tools)"
         return 1
     fi
-    
+
     print_header "$title"
-    
+
     local selected=()
     local index=1
-    
+
     for tool in "${tools[@]}"; do
         IFS=':' read -ra parts <<< "$tool"
         local package="${parts[0]}"
         local name="${parts[1]:-$package}"
-        
+
         local installed=""
         if command_exists "$package" || command_exists "$name"; then
             installed=" [INSTALLED]"
         fi
-        
+
         echo -e "  ${CYAN}[$index]${NC} $name$installed"
         ((index++))
     done
-    
+
     echo -e "  ${CYAN}[a]${NC} Select all"
     echo -e "  ${CYAN}[s]${NC} Skip this category"
     echo ""
-    
+
     read -p "Select tools (comma-separated numbers, 'a' for all, 's' to skip): " selection
-    
+
     if [ "$selection" = "s" ] || [ -z "$selection" ]; then
         return 1
     fi
-    
+
     if [ "$selection" = "a" ]; then
         selected=("${tools[@]}")
     else
@@ -1800,18 +1800,18 @@ select_npm_tools() {
             fi
         done
     fi
-    
+
     local failed=0
     for tool in "${selected[@]}"; do
         IFS=':' read -ra parts <<< "$tool"
         local package="${parts[0]}"
         local name="${parts[1]:-$package}"
-        
+
         if ! install_npm_tool "$package" "$name"; then
             ((failed++))
         fi
     done
-    
+
     return $failed
 }
 
@@ -1824,30 +1824,30 @@ update_system() {
         print_info "Skipping system update (--skip-system-update)"
         return 0
     fi
-    
+
     print_header "System Update"
     print_status "Updating package lists..."
-    
+
     if [ "$VERBOSE" = true ]; then
         sudo apt update
     else
         sudo apt update >/dev/null 2>&1
     fi
-    
+
     print_status "Upgrading system packages..."
-    
+
     if [ "$VERBOSE" = true ]; then
         sudo apt upgrade -y
     else
         sudo apt upgrade -y >/dev/null 2>&1
     fi
-    
+
     print_success "System updated"
 }
 
 setup_dotfiles() {
     print_header "Dotfiles Setup"
-    
+
     if [ ! -d "$DOTFILES_DIR" ]; then
         print_warning "Dotfiles directory not found at $DOTFILES_DIR"
         read -p "Enter dotfiles directory path (or press Enter to skip): " custom_dir
@@ -1858,15 +1858,15 @@ setup_dotfiles() {
             return 1
         fi
     fi
-    
+
     # Create fish config symlink (cfg is the entry point)
     if [ -f "$DOTFILES_DIR/cfg" ]; then
         print_status "Creating fish config symlink..."
         mkdir -p "$HOME/.config/fish"
-        
+
         local fish_config="$HOME/.config/fish/config.fish"
         local already_linked=false
-        
+
         # Check if already correctly symlinked
         if [ -L "$fish_config" ]; then
             local target=$(readlink "$fish_config")
@@ -1876,14 +1876,14 @@ setup_dotfiles() {
                 print_info "  cfg → ~/.config/fish/config.fish (entry point)"
             fi
         fi
-        
+
         if [ "$already_linked" = false ]; then
             # Backup existing config if it exists
             if [ -e "$fish_config" ] && [ ! -L "$fish_config" ]; then
                 print_warning "Backing up existing fish config..."
                 mv "$fish_config" "${fish_config}.bak.$(date +%s)" 2>/dev/null || true
             fi
-            
+
             # Create symlink
             if ln -sf "$DOTFILES_DIR/cfg" "$fish_config" 2>/dev/null; then
                 print_success "✓ Created fish config symlink: $fish_config → cfg"
@@ -1896,18 +1896,18 @@ setup_dotfiles() {
     else
         print_warning "cfg file not found at $DOTFILES_DIR/cfg"
     fi
-    
+
     # Create symlinks for fish functions (to standard fish location)
     if [ -d "$DOTFILES_DIR/configs/fish/functions" ]; then
         print_status "Creating fish functions symlinks..."
         mkdir -p "$HOME/.config/fish/functions"
-        
+
         local function_count=0
         for func_file in "$DOTFILES_DIR/configs/fish/functions"/*.fish; do
             if [ -f "$func_file" ]; then
                 local func_name=$(basename "$func_file")
                 local fish_func_target="$HOME/.config/fish/functions/$func_name"
-                
+
                 # Check if already correctly symlinked
                 if [ -L "$fish_func_target" ]; then
                     local target=$(readlink "$fish_func_target")
@@ -1915,19 +1915,19 @@ setup_dotfiles() {
                         continue
                     fi
                 fi
-                
+
                 # Backup existing function if it exists
                 if [ -e "$fish_func_target" ] && [ ! -L "$fish_func_target" ]; then
                     mv "$fish_func_target" "${fish_func_target}.bak.$(date +%s)" 2>/dev/null || true
                 fi
-                
+
                 # Create symlink
                 if ln -sf "$func_file" "$fish_func_target" 2>/dev/null; then
                     ((function_count++))
                 fi
             fi
         done
-        
+
         if [ $function_count -gt 0 ]; then
             print_success "✓ Created $function_count fish function symlinks"
             print_info "  configs/fish/functions/*.fish → ~/.config/fish/functions/*.fish"
@@ -1935,7 +1935,7 @@ setup_dotfiles() {
             print_info "All fish functions already symlinked"
         fi
     fi
-    
+
     # Create symlinks for all scripts in scripts/ directory
     print_status "Creating symlinks from scripts/ to bin/..."
     if [ -d "$DOTFILES_DIR/scripts" ]; then
@@ -1949,9 +1949,9 @@ setup_dotfiles() {
                    [[ "$script_name" == *.pyc ]] || [[ "$script_name" == "__pycache__" ]]; then
                     continue
                 fi
-                
+
                 local bin_target="$DOTFILES_DIR/bin/$script_name"
-                
+
                 # Skip if already a correct symlink
                 if [ -L "$bin_target" ]; then
                     local target=$(readlink "$bin_target")
@@ -1959,13 +1959,13 @@ setup_dotfiles() {
                         continue
                     fi
                 fi
-                
+
                 # Create symlink
                 if [ -e "$bin_target" ] && [ ! -L "$bin_target" ]; then
                     print_warning "Backing up existing $script_name"
                     mv "$bin_target" "${bin_target}.backup.$(date +%s)" 2>/dev/null || true
                 fi
-                
+
                 if ln -sf "../scripts/$script_name" "$bin_target" 2>/dev/null; then
                     ((symlink_count++))
                 fi
@@ -1977,7 +1977,7 @@ setup_dotfiles() {
             print_info "All scripts already symlinked"
         fi
     fi
-    
+
     # Add to PATH
     if [ -d "$DOTFILES_DIR/bin" ]; then
         if [ -f "$HOME/.bashrc" ] && ! grep -q "dotfiles/bin" "$HOME/.bashrc"; then
@@ -1986,18 +1986,18 @@ setup_dotfiles() {
             echo "export PATH=\"\$HOME/.config/dotfiles/bin:\$PATH\"" >> "$HOME/.bashrc"
             print_success "Added dotfiles/bin to .bashrc"
         fi
-        
+
         find "$DOTFILES_DIR/bin" -type f -exec chmod +x {} \; 2>/dev/null || true
     fi
-    
+
     if [ -d "$DOTFILES_DIR/scripts" ]; then
         if [ -f "$HOME/.bashrc" ] && ! grep -q "dotfiles/scripts" "$HOME/.bashrc"; then
             echo "export PATH=\"\$HOME/.config/dotfiles/scripts:\$PATH\"" >> "$HOME/.bashrc"
         fi
-        
+
         find "$DOTFILES_DIR/scripts" -type f \( -name "*.sh" -o -name "*.py" -o -name "*.ts" -o -name "*.fish" -o -name "*.js" \) -exec chmod +x {} \; 2>/dev/null || true
     fi
-    
+
     # Create dotfiles CLI config
     if [ ! -f "$DOTFILES_DIR/.dotfiles-cli.json" ]; then
         print_status "Creating dotfiles CLI config..."
@@ -2017,12 +2017,12 @@ setup_dotfiles() {
 EOF
         print_success "Created dotfiles CLI config"
     fi
-    
+
     # Create git config symlink
     if [ -f "$DOTFILES_DIR/configs/git/.gitconfig" ]; then
         print_status "Creating git config symlink..."
         local git_config="$HOME/.gitconfig"
-        
+
         if [ -L "$git_config" ]; then
             local target=$(readlink "$git_config")
             if [ "$target" = "$DOTFILES_DIR/configs/git/.gitconfig" ] || [ "$target" = "../dotfiles/configs/git/.gitconfig" ]; then
@@ -2043,35 +2043,35 @@ EOF
             print_success "✓ Created git config symlink: $git_config → configs/git/.gitconfig"
         fi
     fi
-    
+
     # Create Cursor config symlinks (settings.json and keybindings.json)
     if [ -d "$DOTFILES_DIR/configs/cursor" ]; then
         print_status "Creating Cursor config symlinks..."
         mkdir -p "$HOME/.config/Cursor/User"
-        
+
         for config_file in settings.json keybindings.json; do
             if [ -f "$DOTFILES_DIR/configs/cursor/$config_file" ]; then
                 local cursor_config="$HOME/.config/Cursor/User/$config_file"
-                
+
                 if [ -L "$cursor_config" ]; then
                     local target=$(readlink "$cursor_config")
                     if [ "$target" = "$DOTFILES_DIR/configs/cursor/$config_file" ] || [ "$target" = "../../dotfiles/configs/cursor/$config_file" ]; then
                         continue
                     fi
                 fi
-                
+
                 if [ -e "$cursor_config" ] && [ ! -L "$cursor_config" ]; then
                     print_warning "Backing up existing Cursor $config_file..."
                     mv "$cursor_config" "${cursor_config}.bak.$(date +%s)" 2>/dev/null || true
                 fi
-                
+
                 if ln -sf "$DOTFILES_DIR/configs/cursor/$config_file" "$cursor_config" 2>/dev/null; then
                     print_success "✓ Created Cursor $config_file symlink"
                 fi
             fi
         done
     fi
-    
+
     # Initialize git submodules (e.g., env-private)
     if [ -f "$DOTFILES_DIR/.gitmodules" ]; then
         print_status "Initializing git submodules..."
@@ -2082,7 +2082,7 @@ EOF
             print_warning "Failed to initialize git submodules. Please check .gitmodules."
         fi
     fi
-    
+
     # Create common directories
     print_status "Creating common directories..."
     local dirs=(
@@ -2092,7 +2092,7 @@ EOF
         "$HOME/dev"
         "$HOME/Audio"
     )
-    
+
     for dir in "${dirs[@]}"; do
         if [ ! -d "$dir" ]; then
             if mkdir -p "$dir" 2>/dev/null; then
@@ -2104,7 +2104,7 @@ EOF
             print_info "Directory already exists: $dir"
         fi
     done
-    
+
     # Download alarm sound if Audio directory exists and sound doesn't exist
     if [ -d "$HOME/Audio" ] && [ ! -f "$HOME/Audio/alarm.mp3" ]; then
         print_status "Downloading alarm sound..."
@@ -2124,12 +2124,12 @@ setup_config_apps() {
     print_header "Configuration-Based Applications"
     print_info "Detecting applications with configs in configs/ directory..."
     echo ""
-    
+
     if [ ! -d "$DOTFILES_DIR/configs" ]; then
         print_warning "configs/ directory not found"
         return 1
     fi
-    
+
     local config_dirs=()
     for dir in "$DOTFILES_DIR/configs"/*; do
         if [ -d "$dir" ]; then
@@ -2140,45 +2140,45 @@ setup_config_apps() {
             fi
         fi
     done
-    
+
     if [ ${#config_dirs[@]} -eq 0 ]; then
         print_info "No config directories found (excluding fish/gnome)"
         return 0
     fi
-    
+
     print_info "Found config directories: ${config_dirs[*]}"
     echo ""
-    
+
     local selected_apps=()
     local index=1
-    
+
     # Show available config apps
     for app in "${config_dirs[@]}"; do
         local package_info="${CONFIG_APPS[$app]:-}"
         local app_name="${app}"
         local installed=""
-        
+
         if [ -n "$package_info" ]; then
             local package="${package_info%%:*}"
             if command_exists "$package" || command_exists "$app" || dpkg -l | grep -q "^ii.*$package "; then
                 installed=" [INSTALLED]"
             fi
         fi
-        
+
         echo -e "  ${CYAN}[$index]${NC} $app_name$installed"
         ((index++))
     done
-    
+
     echo -e "  ${CYAN}[a]${NC} Select all"
     echo -e "  ${CYAN}[s]${NC} Skip this section"
     echo ""
-    
+
     read -p "Select apps to install and configure (comma-separated numbers, 'a' for all, 's' to skip): " selection
-    
+
     if [ "$selection" = "s" ] || [ -z "$selection" ]; then
         return 1
     fi
-    
+
     if [ "$selection" = "a" ]; then
         selected_apps=("${config_dirs[@]}")
     else
@@ -2190,22 +2190,22 @@ setup_config_apps() {
             fi
         done
     fi
-    
+
     # Install and configure selected apps
     local failed=0
     for app in "${selected_apps[@]}"; do
         local package_info="${CONFIG_APPS[$app]:-}"
-        
+
         if [ -z "$package_info" ]; then
             print_warning "$app: No package mapping found, skipping installation"
             # Still try to create symlink if config exists
             create_config_symlink "$app" || ((failed++))
             continue
         fi
-        
+
         local package="${package_info%%:*}"
         local symlink_target="${package_info##*:}"
-        
+
         # Special handling for wezterm
         if [ "$app" = "wezterm" ]; then
             install_wezterm || print_warning "Failed to install wezterm, but will still try to create symlink"
@@ -2216,11 +2216,11 @@ setup_config_apps() {
                 print_warning "Failed to install $package, but will still try to create symlink"
             fi
         fi
-        
+
         # Create symlink
         create_config_symlink "$app" || ((failed++))
     done
-    
+
     return $failed
 }
 
@@ -2230,19 +2230,19 @@ install_wezterm() {
         print_success "wezterm already installed (skipped)"
         return 0
     fi
-    
+
     if command_exists wezterm; then
         print_success "wezterm already installed"
         save_progress "config-apps" "wezterm" "completed"
         return 0
     fi
-    
+
     print_status "Installing wezterm..."
-    
+
     # Wezterm installation via GitHub releases
     local temp_dir=$(mktemp -d)
     cd "$temp_dir" || return 1
-    
+
     # Detect architecture
     local arch=""
     case "$(uname -m)" in
@@ -2250,10 +2250,10 @@ install_wezterm() {
         aarch64|arm64) arch="aarch64" ;;
         *) print_error "Unsupported architecture for wezterm"; cd - >/dev/null; rm -rf "$temp_dir"; return 1 ;;
     esac
-    
+
     # Get latest release URL
     local latest_url=$(curl -s https://api.github.com/repos/wez/wezterm/releases/latest | grep "browser_download_url.*Ubuntu${arch}.deb" | head -1 | cut -d'"' -f4)
-    
+
     if [ -z "$latest_url" ]; then
         print_warning "Could not determine wezterm download URL"
         print_info "You can install manually from: https://wezfurlong.org/wezterm/install/linux.html"
@@ -2261,7 +2261,7 @@ install_wezterm() {
         rm -rf "$temp_dir"
         return 1
     fi
-    
+
     # Download and install
     if wget -q "$latest_url" -O wezterm.deb 2>/dev/null; then
         if sudo dpkg -i wezterm.deb >/dev/null 2>&1 || sudo apt-get install -f -y >/dev/null 2>&1; then
@@ -2272,7 +2272,7 @@ install_wezterm() {
             return 0
         fi
     fi
-    
+
     # Fallback: try using cargo if available
     if command_exists cargo; then
         print_info "Trying alternative installation via cargo..."
@@ -2284,7 +2284,7 @@ install_wezterm() {
             return 0
         fi
     fi
-    
+
     print_warning "Failed to install wezterm automatically"
     print_info "You can install manually from: https://wezfurlong.org/wezterm/install/linux.html"
     cd - >/dev/null
@@ -2296,33 +2296,33 @@ create_config_symlink() {
     local app="$1"
     local source_dir="$DOTFILES_DIR/configs/$app"
     local symlink_target=""
-    
+
     if [ -n "${CONFIG_APPS[$app]:-}" ]; then
         local package_info="${CONFIG_APPS[$app]}"
         symlink_target="${package_info##*:}"
     else
         symlink_target="$HOME/.config/$app"
     fi
-    
+
     if [ -z "$symlink_target" ]; then
         print_warning "Could not determine symlink target for $app"
         return 1
     fi
-    
+
     if [ ! -d "$source_dir" ]; then
         print_warning "Source directory not found: $source_dir"
         return 1
     fi
-    
+
     print_status "Creating symlink for $app config..."
-    
+
     # Expand ~ in symlink_target
     symlink_target="${symlink_target/#\~/$HOME}"
-    
+
     # Create parent directory if needed
     local parent_dir=$(dirname "$symlink_target")
     mkdir -p "$parent_dir"
-    
+
     # Backup existing config if it exists
     if [ -e "$symlink_target" ] || [ -L "$symlink_target" ]; then
         if [ -L "$symlink_target" ]; then
@@ -2336,7 +2336,7 @@ create_config_symlink() {
         print_warning "Backing up existing $app config..."
         mv "$symlink_target" "${symlink_target}.backup.$(date +%s)" 2>/dev/null || true
     fi
-    
+
     # Create symlink
     if ln -sf "$source_dir" "$symlink_target"; then
         print_success "Created symlink: $symlink_target -> $source_dir"
@@ -2349,26 +2349,26 @@ create_config_symlink() {
 
 setup_gnome_aesthetics() {
     print_header "GNOME Aesthetic Setup"
-    
+
     if [ ! -d "$DOTFILES_DIR/configs/gnome" ]; then
         print_info "GNOME configs directory not found, skipping"
         return 0
     fi
-    
+
     print_info "This will set up a beautiful GNOME desktop with:"
     echo "  • Transparent and blurred panels"
     echo "  • Custom GTK theming"
     echo "  • Aesthetic lock screen"
     echo "  • Beautiful animations and effects"
     echo ""
-    
+
     read -p "Set up GNOME aesthetics? (y/n): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_info "Skipping GNOME aesthetic setup"
         return 0
     fi
-    
+
     # Ensure GNOME tools are installed
     if ! command_exists gnome-extensions; then
         print_status "Installing gnome-shell-extensions..."
@@ -2377,7 +2377,7 @@ setup_gnome_aesthetics() {
             return 1
         }
     fi
-    
+
     if ! command_exists gsettings; then
         print_status "Installing dconf-cli..."
         install_package "dconf-cli" "dconf-cli" || {
@@ -2385,9 +2385,9 @@ setup_gnome_aesthetics() {
             return 1
         }
     fi
-    
+
     local setup_script="$DOTFILES_DIR/configs/gnome/setup-aesthetic-gnome.sh"
-    
+
     if [ -f "$setup_script" ]; then
         print_status "Running GNOME aesthetic setup..."
         if bash "$setup_script"; then
@@ -2403,12 +2403,12 @@ setup_gnome_aesthetics() {
 
 setup_fish_shell() {
     print_header "Fish Shell Setup"
-    
+
     if ! command_exists fish; then
         print_warning "Fish shell not installed"
         return 1
     fi
-    
+
     read -p "Set fish as default shell? (y/n): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -2422,14 +2422,14 @@ install_nerd_fonts() {
         print_info "Skipping Nerd Fonts installation (--skip-fonts)"
         return 0
     fi
-    
+
     print_header "Nerd Fonts Installation"
     print_info "Installing popular Nerd Fonts in the background..."
     print_info "This may take a few minutes (fonts are large downloads)"
-    
+
     local fonts_dir="$HOME/.local/share/fonts"
     mkdir -p "$fonts_dir"
-    
+
     # List of popular Nerd Fonts to install
     local fonts=(
         "FiraCode"
@@ -2440,15 +2440,15 @@ install_nerd_fonts() {
         "Meslo"
         "SourceCodePro"
     )
-    
+
     # Function to install a single font in background
     install_font_background() {
         local font_name="$1"
         local font_url="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/${font_name}.zip"
         local temp_dir=$(mktemp -d)
-        
+
         cd "$temp_dir" || return 1
-        
+
         # Download font
         if wget -q "$font_url" -O "${font_name}.zip" 2>/dev/null; then
             # Extract fonts (unzip without progress, quiet mode)
@@ -2464,33 +2464,33 @@ install_nerd_fonts() {
             return 1
         fi
     }
-    
+
     # Install fonts in parallel (background jobs)
     local installed=0
     local failed=0
-    
+
     for font in "${fonts[@]}"; do
         # Check if font already installed
         if find "$fonts_dir" -name "*${font}*" -type f | grep -q "${font}"; then
             print_success "$font Nerd Font already installed (skipped)"
             continue
         fi
-        
+
         print_status "Installing $font Nerd Font..."
         # Run in background without throttling
         install_font_background "$font" &
     done
-    
+
     # Wait for all background jobs to complete
     wait
-    
+
     # Refresh font cache
     print_status "Refreshing font cache..."
     fc-cache -f "$fonts_dir" >/dev/null 2>&1 || true
-    
+
     # Count installed fonts
     local font_count=$(find "$fonts_dir" -name "*Nerd*" -type f 2>/dev/null | wc -l)
-    
+
     if [ "$font_count" -gt 0 ]; then
         print_success "✓ Nerd Fonts installation completed!"
         print_info "  Installed $font_count font files"
@@ -2509,15 +2509,15 @@ main() {
     # Initialize tracking variables
     TOTAL_SUCCESS=0
     TOTAL_FAILED=0
-    
+
     # Parse command line arguments first
     parse_args "$@"
-    
+
     # If no arguments provided, show interactive menu
     if [ $# -eq 0 ]; then
         show_main_menu
     fi
-    
+
     clear
     if [ "$DRY_RUN" = true ]; then
         echo -e "${BOLD}${YELLOW}"
@@ -2536,22 +2536,22 @@ main() {
         echo "╚════════════════════════════════════════════════════════════╝"
         echo -e "${NC}"
     fi
-    
+
     # Check if running on Ubuntu/Debian
     if ! command_exists apt-get; then
         print_error "This script is designed for Ubuntu/Debian systems"
         exit 1
     fi
-    
+
     # Check for sudo
     if ! command_exists sudo; then
         print_error "sudo is required but not installed"
         exit 1
     fi
-    
+
     # Initialize data directory structure
     init_data_directory
-    
+
     # Check for resume
     if [ -f "$PROGRESS_FILE" ]; then
         print_info "Previous progress found: $PROGRESS_FILE"
@@ -2564,14 +2564,14 @@ main() {
             print_info "Resuming previous installation. Already completed items will be skipped."
         fi
     fi
-    
+
     # System update (always run, unless dry run)
     if [ "$DRY_RUN" != true ]; then
         update_system
     else
         print_dry_run "Would run: sudo apt update && sudo apt upgrade -y"
     fi
-    
+
     # Check if running specific section dry run
     local run_section=""
     if [ -n "$DRY_RUN_SECTION" ]; then
@@ -2587,7 +2587,7 @@ main() {
                 ;;
         esac
     fi
-    
+
     # Essential packages (always install)
     if [ -z "$run_section" ] || [ "$run_section" = "essential" ]; then
         print_header "Essential Packages"
@@ -2596,12 +2596,12 @@ main() {
             install_package "$package" "$package" || true
         done
     fi
-    
+
     # Dotfiles setup (always run, but respect dry run)
     if [ -z "$run_section" ] || [ "$run_section" = "config" ]; then
         setup_dotfiles
     fi
-    
+
     # Install Python dependencies if requirements.txt exists
     if [ -f "$DOTFILES_DIR/setup/requirements.txt" ]; then
         print_header "Python Dependencies"
@@ -2612,128 +2612,128 @@ main() {
             print_warning "Some Python dependencies failed to install. You can install manually with: pip3 install -r setup/requirements.txt"
         fi
     fi
-    
+
     # Interactive selections
     echo ""
     print_info "You can now select which categories to install"
     echo ""
-    
+
     # Programming languages & runtimes
     if [ -z "$run_section" ] || [ "$run_section" = "languages" ]; then
         print_info "Press Enter to continue or Ctrl+C to exit at any time"
         echo ""
         select_packages "languages" "Programming Languages & Runtimes" LANGUAGES || true
     fi
-    
+
     # Code editors & IDEs
     if [ -z "$run_section" ] || [ "$run_section" = "editors" ]; then
         select_packages "editors" "Code Editors & IDEs" EDITORS || true
     fi
-    
+
     # Package managers
     if [ -z "$run_section" ] || [ "$run_section" = "package-managers" ]; then
         select_packages "package-managers" "Package Managers" PACKAGE_MANAGERS || true
     fi
-    
+
     # Git tools
     if [ -z "$run_section" ] || [ "$run_section" = "git" ]; then
         select_packages "git-tools" "Git Tools (GitHub CLI, lazygit, lazydocker)" GIT_TOOLS || true
     fi
-    
+
     # CLI utilities
     if [ -z "$run_section" ] || [ "$run_section" = "cli" ]; then
         select_packages "cli" "Modern CLI Utilities" CLI_UTILITIES || true
     fi
-    
+
     # Communication apps
     if [ -z "$run_section" ] || [ "$run_section" = "communication" ]; then
         select_packages "communication" "Communication & Social Apps" COMMUNICATION_APPS || true
     fi
-    
+
     # Media apps
     if [ -z "$run_section" ] || [ "$run_section" = "media" ]; then
         select_packages "media" "Media & Graphics Apps" MEDIA_APPS || true
     fi
-    
+
     # Browsers
     if [ -z "$run_section" ] || [ "$run_section" = "browsers" ]; then
         select_packages "browsers" "Web Browsers" BROWSERS || true
     fi
-    
+
     # DevOps tools
     if [ -z "$run_section" ] || [ "$run_section" = "devops" ]; then
         select_packages "devops" "DevOps & Container Tools" DEVOPS_TOOLS || true
     fi
-    
+
     # System utilities
     if [ -z "$run_section" ] || [ "$run_section" = "system" ]; then
         select_packages "system" "System Utilities" SYSTEM_UTILS || true
     fi
-    
+
     # Hardware & GPU tools (NVIDIA, OpenRGB)
     if [ -z "$run_section" ] || [ "$run_section" = "hardware" ]; then
         select_packages "hardware" "Hardware & GPU Tools (NVIDIA, OpenRGB)" HARDWARE_TOOLS || true
     fi
-    
+
     # Snap packages (includes editors like Cursor, VS Code, WhatsApp)
     if [ -z "$run_section" ] || [ "$run_section" = "snaps" ]; then
         select_snap_packages "snaps" "Snap Packages (includes Cursor, VS Code, WhatsApp, etc.)" SNAP_PACKAGES || true
     fi
-    
+
     # Automation tools
     if [ -z "$run_section" ] || [ "$run_section" = "automation" ]; then
         select_packages "automation" "Automation & Testing Tools (xdotool, ydotool)" AUTOMATION_TOOLS || true
     fi
-    
+
     # Media playback
     if [ -z "$run_section" ] || [ "$run_section" = "media-playback" ]; then
         select_packages "media-playback" "Media Playback (for alarm script)" MEDIA_PLAYBACK || true
     fi
-    
+
     # GNOME tools (if GNOME desktop)
     if [ -z "$run_section" ] || [ "$run_section" = "gnome" ]; then
         if [ -n "$XDG_CURRENT_DESKTOP" ] && [[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]]; then
             select_packages "gnome" "GNOME Tools" GNOME_TOOLS || true
         fi
     fi
-    
+
     # Curl-installed tools (bun, starship, nvm, pnpm, turso, vercel, netlify)
     if [ -z "$run_section" ] || [ "$run_section" = "tools" ]; then
         select_curl_tools "tools" "Essential Tools (bun, starship, nvm, pnpm, turso, vercel, netlify)" CURL_TOOLS || true
     fi
-    
+
     # npm CLI tools (gemini-cli, etc.)
     if [ -z "$run_section" ] || [ "$run_section" = "npm-tools" ]; then
         select_npm_tools "npm-tools" "NPM CLI Tools (gemini-cli, etc.)" NPM_CLI_TOOLS || true
     fi
-    
+
     # Android Development Tools (optional)
     if [ -z "$run_section" ] || [ "$run_section" = "android" ]; then
         select_snap_packages "android" "Android Development Tools" ANDROID_TOOLS || true
     fi
-    
+
     # Config-based applications (nvim, wezterm, kitty, etc.)
     if [ -z "$run_section" ] || [ "$run_section" = "config-apps" ]; then
         setup_config_apps || true
     fi
-    
+
     # GNOME Aesthetic Setup (if GNOME desktop)
     if [ -z "$run_section" ] || [ "$run_section" = "gnome" ]; then
         if [ -n "$XDG_CURRENT_DESKTOP" ] && [[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]]; then
             setup_gnome_aesthetics || true
         fi
     fi
-    
+
     # Setup fish shell
     if [ -z "$run_section" ] || [ "$run_section" = "fish" ]; then
         setup_fish_shell
     fi
-    
+
     # Install Nerd Fonts (background, no throttling)
     if [ -z "$run_section" ] || [ "$run_section" = "fonts" ]; then
         install_nerd_fonts
     fi
-    
+
     # Summary
     if [ "$DRY_RUN" = true ]; then
         echo ""
@@ -2745,7 +2745,7 @@ main() {
     print_header "Setup Complete!"
     print_success "Installation finished"
     echo ""
-    
+
     # Show failed installations if any
     if [ -f "$PROGRESS_FILE" ] && command_exists jq; then
         local failed=$(jq -r '.[] | to_entries[] | select(.value == "failed") | .key' "$PROGRESS_FILE" 2>/dev/null | wc -l)
@@ -2753,7 +2753,7 @@ main() {
             print_warning "$failed installation(s) failed. You can rerun this script to retry."
         fi
     fi
-    
+
     print_info "Next steps:"
     echo "  1. Restart your terminal or run: source ~/.bashrc"
     echo "  2. If you set fish as default, restart your terminal"
@@ -2761,7 +2761,7 @@ main() {
     echo ""
     print_info "Progress saved to: $PROGRESS_FILE"
     print_info "You can rerun './setup.sh' to resume or install additional packages"
-    
+
     # Cleanup progress file on successful completion (optional)
     read -p "Remove progress file? (y/n): " -n 1 -r
     echo

@@ -19,7 +19,7 @@
   - [ ] Snap installer
   - [ ] OpenRGB installer
   - [ ] NVIDIA tools installer
-  
+
 - [ ] Extract feature modules
   - [ ] Fish shell setup module
   - [ ] Nerd Fonts installation module
