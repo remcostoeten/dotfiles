@@ -106,7 +106,7 @@ export async function setupDotfiles(): Promise<DotfilesSetupResult> {
  */
 async function setupFishConfig(): Promise<DotfilesSetupResult> {
   const result: DotfilesSetupResult = { success: true, steps: [] };
-  
+
   const cfgFile = `${DOTFILES_DIR}/cfg`;
   const fishConfig = `${process.env.HOME}/.config/fish/config.fish`;
 
@@ -167,7 +167,7 @@ async function setupFishConfig(): Promise<DotfilesSetupResult> {
  */
 async function setupFishFunctions(): Promise<DotfilesSetupResult> {
   const result: DotfilesSetupResult = { success: true, steps: [] };
-  
+
   const functionsDir = `${DOTFILES_DIR}/configs/fish/functions`;
   const fishFunctionsDir = `${process.env.HOME}/.config/fish/functions`;
 
@@ -189,7 +189,7 @@ async function setupFishFunctions(): Promise<DotfilesSetupResult> {
     let count = 0;
     for (const funcFile of functionFiles) {
       if (!funcFile) continue;
-      
+
       const funcName = funcFile.split("/").pop() || "";
       const targetPath = `${fishFunctionsDir}/${funcName}`;
 
@@ -234,7 +234,7 @@ async function setupFishFunctions(): Promise<DotfilesSetupResult> {
  */
 async function setupScriptsSymlinks(): Promise<DotfilesSetupResult> {
   const result: DotfilesSetupResult = { success: true, steps: [] };
-  
+
   const scriptsDir = `${DOTFILES_DIR}/scripts`;
   const binDir = `${DOTFILES_DIR}/bin`;
 
@@ -256,7 +256,7 @@ async function setupScriptsSymlinks(): Promise<DotfilesSetupResult> {
     let count = 0;
     for (const scriptFile of scriptFiles) {
       if (!scriptFile) continue;
-      
+
       const scriptName = scriptFile.split("/").pop() || "";
       const targetPath = `${binDir}/${scriptName}`;
 
@@ -301,7 +301,7 @@ async function setupScriptsSymlinks(): Promise<DotfilesSetupResult> {
  */
 async function addToPath(): Promise<DotfilesSetupResult> {
   const result: DotfilesSetupResult = { success: true, steps: [] };
-  
+
   const bashrc = `${process.env.HOME}/.bashrc`;
 
   try {
@@ -365,7 +365,7 @@ async function addToPath(): Promise<DotfilesSetupResult> {
  */
 async function setupGitConfig(): Promise<DotfilesSetupResult> {
   const result: DotfilesSetupResult = { success: true, steps: [] };
-  
+
   const gitConfigSource = `${DOTFILES_DIR}/configs/git/.gitconfig`;
   const gitConfigTarget = `${process.env.HOME}/.gitconfig`;
 
@@ -420,7 +420,7 @@ async function setupGitConfig(): Promise<DotfilesSetupResult> {
  */
 async function initGitSubmodules(): Promise<DotfilesSetupResult> {
   const result: DotfilesSetupResult = { success: true, steps: [] };
-  
+
   const gitmodulesPath = `${DOTFILES_DIR}/.gitmodules`;
 
   if (!existsSync(gitmodulesPath)) {
@@ -434,7 +434,7 @@ async function initGitSubmodules(): Promise<DotfilesSetupResult> {
 
   try {
     const submoduleResult = await executeCommand(`cd "${DOTFILES_DIR}" && git submodule update --init --recursive`);
-    
+
     if (submoduleResult.success) {
       result.steps.push({
         name: "Git submodules",
@@ -466,7 +466,7 @@ async function initGitSubmodules(): Promise<DotfilesSetupResult> {
  */
 async function createCommonDirectories(): Promise<DotfilesSetupResult> {
   const result: DotfilesSetupResult = { success: true, steps: [] };
-  
+
   const dirs = [
     `${process.env.HOME}/programs`,
     `${process.env.HOME}/tmp`,
@@ -520,7 +520,7 @@ async function createCommonDirectories(): Promise<DotfilesSetupResult> {
  */
 async function createDotfilesCLIConfig(): Promise<DotfilesSetupResult> {
   const result: DotfilesSetupResult = { success: true, steps: [] };
-  
+
   const configPath = `${DOTFILES_DIR}/.dotfiles-cli.json`;
 
   if (existsSync(configPath)) {
@@ -569,9 +569,9 @@ async function createDotfilesCLIConfig(): Promise<DotfilesSetupResult> {
  */
 async function setupConfigApps(): Promise<DotfilesSetupResult> {
   const result: DotfilesSetupResult = { success: true, steps: [] };
-  
+
   const configsDir = `${DOTFILES_DIR}/configs`;
-  
+
   if (!existsSync(configsDir)) {
     result.steps.push({
       name: "Config apps",
@@ -594,16 +594,16 @@ async function setupConfigApps(): Promise<DotfilesSetupResult> {
   };
 
   let count = 0;
-  
+
   // Find all config directories
   const listResult = await executeCommand(`ls -d "${configsDir}"/*/ 2>/dev/null || true`);
   const configDirs = listResult.output.split("\n").filter((d) => d.trim());
 
   for (const configDir of configDirs) {
     if (!configDir) continue;
-    
+
     const appName = configDir.split("/").filter(Boolean).pop() || "";
-    
+
     // Skip fish, git, cursor, gnome (handled separately)
     if (["fish", "git", "gnome"].includes(appName)) {
       continue;
@@ -652,7 +652,7 @@ async function setupConfigApps(): Promise<DotfilesSetupResult> {
  */
 async function setupGnomeAesthetics(): Promise<DotfilesSetupResult> {
   const result: DotfilesSetupResult = { success: true, steps: [] };
-  
+
   const gnomeSetupScript = `${DOTFILES_DIR}/configs/gnome/setup-aesthetic-gnome.sh`;
 
   if (!existsSync(gnomeSetupScript)) {

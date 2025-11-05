@@ -27,7 +27,7 @@ scripts                    # Interactive selection
 ~/.config/dotfiles/
 ├── scripts/
 │   ├── scripts                    # Main logic script (499 lines)
-│   ├── scripts.README.md          # Full documentation  
+│   ├── scripts.README.md          # Full documentation
 │   └── SCRIPTS_SUMMARY.md         # This file
 ├── bin/
 │   ├── scripts                    # Wrapper executable
@@ -41,14 +41,14 @@ scripts                    # Interactive selection
 
 ## 🔧 Key Features Working
 
-✅ **Clean fzf Interface** - No more ANSI escape codes, proper rendering  
-✅ **Script Type Detection** - Automatically categorizes [exec], [wrap], [link], [scrpt]  
-✅ **Smart Descriptions** - Extracts descriptions from script comments  
-✅ **Preview Panel** - Shows script content in fzf right panel  
-✅ **Fallback Navigation** - Arrow keys when fzf not available  
-✅ **Dotfiles Integration** - Works via `dotfiles --scripts` or `--s`  
-✅ **Self-Exclusion** - Doesn't list itself to avoid recursion  
-✅ **Beautiful UI** - Colorized output with Unicode symbols  
+✅ **Clean fzf Interface** - No more ANSI escape codes, proper rendering
+✅ **Script Type Detection** - Automatically categorizes [exec], [wrap], [link], [scrpt]
+✅ **Smart Descriptions** - Extracts descriptions from script comments
+✅ **Preview Panel** - Shows script content in fzf right panel
+✅ **Fallback Navigation** - Arrow keys when fzf not available
+✅ **Dotfiles Integration** - Works via `dotfiles --scripts` or `--s`
+✅ **Self-Exclusion** - Doesn't list itself to avoid recursion
+✅ **Beautiful UI** - Colorized output with Unicode symbols
 
 ## 🎨 Interface Examples
 
@@ -58,7 +58,7 @@ scripts                    # Interactive selection
 Select script: █
 
 cat [exec] - Cat wrapper using bat --plain
-click [wrap] - Auto-clicker with interactive mode  
+click [wrap] - Auto-clicker with interactive mode
 copy [link] - File and clipboard utility
 emoji [link] - Emoji picker and search
 env-manager [wrap] - Management utility
@@ -108,6 +108,6 @@ dotfiles --s         # Alternative access method
 
 ---
 
-**Version:** 2.0.0 (renamed from scrits)  
-**Status:** ✅ Production Ready  
+**Version:** 2.0.0 (renamed from scrits)
+**Status:** ✅ Production Ready
 **Last Updated:** 2025-10-10

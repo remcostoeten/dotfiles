@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -20,7 +21,8 @@
             max-width: 1400px;
             margin: 0 auto;
             position: relative;
-            padding-bottom: 80px; /* Space for mobile nav */
+            padding-bottom: 80px;
+            /* Space for mobile nav */
         }
 
         /* Sidebar Navigation */
@@ -36,15 +38,19 @@
             opacity: 0;
             animation: fadeIn 0.5s ease 0.3s forwards;
         }
+
         @keyframes fadeIn {
-            to { opacity: 1; }
+            to {
+                opacity: 1;
+            }
         }
+
         .sidebar-item {
             width: 44px;
             height: 44px;
             background: #111;
             border: 1px solid #2a2a2a;
-            border-radius: 10px;
+            border-radius: 2px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -53,25 +59,30 @@
             position: relative;
             color: #888;
         }
+
         .sidebar-item:hover {
             background: #1a1a1a;
             border-color: #4ec9b0;
             color: #4ec9b0;
             transform: translateX(4px);
         }
+
         .sidebar-item.active {
             background: #1e3a2e;
             border-color: #4ec9b0;
             color: #4ec9b0;
         }
+
         .sidebar-item:focus {
             outline: 2px solid #4ec9b0;
             outline-offset: 2px;
         }
+
         .sidebar-item svg {
             width: 20px;
             height: 20px;
         }
+
         .sidebar-tooltip {
             position: absolute;
             left: calc(100% + 12px);
@@ -80,7 +91,7 @@
             background: #0d0d0d;
             border: 1px solid #2a2a2a;
             padding: 0.4rem 0.7rem;
-            border-radius: 6px;
+            border-radius: 2px;
             font-size: 0.85rem;
             white-space: nowrap;
             opacity: 0;
@@ -88,9 +99,11 @@
             transition: opacity 0.2s ease;
             color: #e0e0e0;
         }
+
         .sidebar-item:hover .sidebar-tooltip {
             opacity: 1;
         }
+
         .sidebar-version {
             margin-top: 1rem;
             padding-top: 1rem;
@@ -99,8 +112,11 @@
             color: #666;
             text-align: center;
         }
+
         @media (max-width: 1200px) {
-            .sidebar { display: none; }
+            .sidebar {
+                display: none;
+            }
         }
 
         /* Mobile Bottom Navigation */
@@ -116,6 +132,7 @@
             overflow-x: auto;
             padding: 0.5rem;
         }
+
         .mobile-nav-inner {
             display: flex;
             gap: 0.5rem;
@@ -123,24 +140,30 @@
             min-width: max-content;
             padding: 0 0.5rem;
         }
+
         .mobile-nav-item {
             padding: 0.6rem 1rem;
             background: #111;
             border: 1px solid #2a2a2a;
-            border-radius: 6px;
+            border-radius: 2px;
             font-size: 0.85rem;
             color: #888;
             cursor: pointer;
             transition: all 0.2s ease;
             white-space: nowrap;
         }
-        .mobile-nav-item:hover, .mobile-nav-item.active {
+
+        .mobile-nav-item:hover,
+        .mobile-nav-item.active {
             background: #1e3a2e;
             border-color: #4ec9b0;
             color: #4ec9b0;
         }
+
         @media (max-width: 1200px) {
-            .mobile-nav { display: block; }
+            .mobile-nav {
+                display: block;
+            }
         }
 
         /* Top bar */
@@ -152,26 +175,30 @@
             padding: 1rem 1.25rem;
             background: #0d0d0d;
             border: 1px solid #1f1f1f;
-            border-radius: 10px;
+            border-radius: 2px;
             margin-bottom: 2rem;
             position: sticky;
             top: 0;
             z-index: 20;
             backdrop-filter: blur(6px);
         }
+
         .brand {
             color: #f0f0f0;
             font-size: 1.1rem;
             letter-spacing: 0.5px;
         }
+
         .brand strong {
             font-weight: 600;
         }
+
         .actions {
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
+
         .icon-btn {
             display: inline-flex;
             align-items: center;
@@ -186,39 +213,56 @@
             transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
             text-decoration: none;
         }
-        .icon-btn:hover { background: #191919; border-color: #2a2a2a; color: #e0e0e0; }
+
+        .icon-btn:hover {
+            background: #191919;
+            border-color: #2a2a2a;
+            color: #e0e0e0;
+        }
 
         /* Search panel */
         .search-panel {
             display: none;
             background: #0d0d0d;
             border: 1px solid #1e1e1e;
-            border-radius: 10px;
+            border-radius: 2px;
             padding: 1rem;
             margin-bottom: 2rem;
         }
-        .search-panel.active { display: block; }
-        .search-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+
+        .search-panel.active {
+            display: block;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
         .search-input {
             flex: 1;
             background: #0b0b0b;
             border: 1px solid #242424;
-            border-radius: 8px;
+            border-radius: 2px;
             color: #ddd;
             padding: 0.6rem 0.8rem;
             outline: none;
         }
+
         .search-filters {
             display: flex;
             flex-wrap: wrap;
             gap: 0.5rem;
             margin-bottom: 0.75rem;
         }
+
         .filter-chip {
             padding: 0.3rem 0.7rem;
             background: #141414;
             border: 1px solid #2a2a2a;
-            border-radius: 16px;
+            border-radius: 2px;
             font-size: 0.85rem;
             color: #aaa;
             cursor: pointer;
@@ -226,27 +270,35 @@
             display: inline-block;
             user-select: none;
         }
-        .filter-chip:hover { background: #1a1a1a; border-color: #333; }
+
+        .filter-chip:hover {
+            background: #1a1a1a;
+            border-color: #333;
+        }
+
         .filter-chip:focus {
             outline: 2px solid #4ec9b0;
             outline-offset: 2px;
         }
+
         .filter-chip.active {
             background: #1e3a2e;
             border-color: #4ec9b0;
             color: #4ec9b0;
         }
+
         .search-suggestions {
             display: flex;
             flex-wrap: wrap;
             gap: 0.4rem;
             margin-bottom: 0.75rem;
         }
+
         .suggestion-chip {
             padding: 0.25rem 0.6rem;
             background: #111;
             border: 1px solid #222;
-            border-radius: 12px;
+            border-radius: 2px;
             font-size: 0.8rem;
             color: #888;
             cursor: pointer;
@@ -254,26 +306,77 @@
             display: inline-block;
             user-select: none;
         }
-        .suggestion-chip:hover { background: #1a1a1a; color: #aaa; }
+
+        .suggestion-chip:hover {
+            background: #1a1a1a;
+            color: #aaa;
+        }
+
         .suggestion-chip:focus {
             outline: 2px solid #4ec9b0;
             outline-offset: 2px;
             background: #1a1a1a;
             color: #aaa;
         }
-        .search-meta { color: #888; font-size: 0.9rem; margin-bottom: 0.5rem; }
-        .search-results { display: grid; gap: 0.5rem; max-height: 400px; overflow-y: auto; }
-        .result-item { padding: 0.6rem 0.7rem; background: #111; border: 1px solid #222; border-radius: 8px; cursor: pointer; transition: border-color 0.2s; }
-        .result-item:hover { border-color: #333; }
+
+        .search-meta {
+            color: #888;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .search-results {
+            display: grid;
+            gap: 0.5rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .result-item {
+            padding: 0.6rem 0.7rem;
+            background: #111;
+            border: 1px solid #222;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .result-item:hover {
+            border-color: #333;
+        }
+
         .result-item:focus {
             outline: 2px solid #4ec9b0;
             outline-offset: 2px;
             border-color: #4ec9b0;
         }
-        .result-title { color: #dcdcdc; font-weight: 500; margin-bottom: 0.2rem; font-size: 0.9rem; }
-        .result-type { display: inline-block; padding: 0.1rem 0.4rem; background: #1a1a1a; border-radius: 4px; font-size: 0.75rem; color: #666; margin-right: 0.5rem; }
-        .result-snippet { color: #9a9a9a; font-size: 0.85rem; }
-        .highlight { background: rgba(78, 201, 176, 0.15); outline: 1px solid #2b6f60; }
+
+        .result-title {
+            color: #dcdcdc;
+            font-weight: 500;
+            margin-bottom: 0.2rem;
+            font-size: 0.9rem;
+        }
+
+        .result-type {
+            display: inline-block;
+            padding: 0.1rem 0.4rem;
+            background: #1a1a1a;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #666;
+            margin-right: 0.5rem;
+        }
+
+        .result-snippet {
+            color: #9a9a9a;
+            font-size: 0.85rem;
+        }
+
+        .highlight {
+            background: rgba(78, 201, 176, 0.15);
+            outline: 1px solid #2b6f60;
+        }
 
         /* File Viewer Modal */
         .file-modal {
@@ -288,15 +391,20 @@
             overflow: auto;
             padding: 2rem;
         }
-        .file-modal.active { display: block; }
+
+        .file-modal.active {
+            display: block;
+        }
+
         .file-modal-content {
             max-width: 1200px;
             margin: 0 auto;
             background: #0d0d0d;
             border: 1px solid #2a2a2a;
-            border-radius: 10px;
+            border-radius: 2px;
             padding: 1.5rem;
         }
+
         .file-modal-header {
             display: flex;
             align-items: center;
@@ -305,10 +413,12 @@
             padding-bottom: 1rem;
             border-bottom: 1px solid #2a2a2a;
         }
+
         .file-modal-title {
             color: #4ec9b0;
             font-size: 1.1rem;
         }
+
         .file-modal-close {
             background: #1a1a1a;
             border: 1px solid #2a2a2a;
@@ -318,19 +428,22 @@
             cursor: pointer;
             transition: all 0.2s;
         }
+
         .file-modal-close:hover {
             background: #222;
             color: #4ec9b0;
             border-color: #4ec9b0;
         }
+
         .file-modal-body {
             background: #0a0a0a;
             border: 1px solid #1f1f1f;
-            border-radius: 8px;
+            border-radius: 2px;
             padding: 1rem;
             overflow: auto;
             max-height: 70vh;
         }
+
         .file-modal-body pre {
             margin: 0;
             color: #d4d4d4;
@@ -346,37 +459,70 @@
             gap: 0.5rem;
             align-items: center;
         }
+
         .demo-btn {
             padding: 0.6rem 1.2rem;
             background: #1e3a2e;
             border: 1px solid #4ec9b0;
             color: #4ec9b0;
-            border-radius: 6px;
+            border-radius: 2px;
             cursor: pointer;
             transition: all 0.2s;
             font-family: inherit;
             font-size: 0.9rem;
         }
+
         .demo-btn:hover {
             background: #2a5040;
-            box-shadow: 0 0 10px rgba(78, 201, 176, 0.3);
+            box-shadow: none;
+            /* remove glow */
         }
+
         .demo-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
+
         .demo-status {
             color: #888;
             font-size: 0.85rem;
         }
 
         /* Tree view */
-        .tree { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 8px; padding: 1rem; max-height: 600px; overflow: auto; }
-        .tree ul { list-style: none; padding-left: 1rem; }
-        .tree li { margin: 0.15rem 0; color: #bdbdbd; font-size: 0.95rem; }
-        .tree .folder { color: #e0e0e0; cursor: pointer; user-select: none; }
-        .tree .folder:hover { color: #4ec9b0; }
-        .tree .file { color: #a6a6a6; }
+        .tree {
+            background: #0d0d0d;
+            border: 1px solid #1f1f1f;
+            border-radius: 2px;
+            padding: 1rem;
+            max-height: 600px;
+            overflow: auto;
+        }
+
+        .tree ul {
+            list-style: none;
+            padding-left: 1rem;
+        }
+
+        .tree li {
+            margin: 0.15rem 0;
+            color: #bdbdbd;
+            font-size: 0.95rem;
+        }
+
+        .tree .folder {
+            color: #e0e0e0;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .tree .folder:hover {
+            color: #4ec9b0;
+        }
+
+        .tree .file {
+            color: #a6a6a6;
+        }
+
         .tree .file-link {
             color: #a6a6a6;
             text-decoration: none;
@@ -384,11 +530,18 @@
             transition: color 0.2s;
             display: inline-block;
         }
+
         .tree .file-link:hover {
             color: #4ec9b0;
             text-decoration: underline;
         }
-        .tree .toggle { margin-right: 0.4rem; color: #888; user-select: none; }
+
+        .tree .toggle {
+            margin-right: 0.4rem;
+            color: #888;
+            user-select: none;
+        }
+
         .tree .loading-file {
             color: #888;
             font-style: italic;
@@ -403,7 +556,7 @@
         .step {
             background: #111;
             border: 1px solid #2a2a2a;
-            border-radius: 8px;
+            border-radius: 2px;
             padding: 1.5rem;
             position: relative;
             transition: all 0.3s ease;
@@ -427,7 +580,7 @@
             color: #4ec9b0;
             min-width: 32px;
             height: 32px;
-            border-radius: 6px;
+            border-radius: 2px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -446,7 +599,7 @@
         .step-status {
             margin-left: auto;
             padding: 0.3rem 0.8rem;
-            border-radius: 20px;
+            border-radius: 2px;
             font-size: 0.9rem;
             background: #1a1a1a;
             color: #888;
@@ -458,7 +611,8 @@
             background: rgba(78, 201, 176, 0.15);
             color: #4ec9b0;
             border-color: #4ec9b0;
-            box-shadow: 0 0 15px rgba(78, 201, 176, 0.3);
+            box-shadow: none;
+            /* remove glow */
         }
 
         .step-content {
@@ -499,7 +653,7 @@
         .package-category {
             background: #1a1a1a;
             border: 1px solid #333;
-            border-radius: 6px;
+            border-radius: 2px;
             padding: 1rem;
         }
 
@@ -508,14 +662,17 @@
             margin-bottom: 0.5rem;
             font-size: 1rem;
         }
+
         .package-category h4 a {
             color: #e0e0e0;
             text-decoration: none;
             transition: color 0.2s ease;
         }
+
         .package-category h4 a:hover {
             color: #4ec9b0;
         }
+
         .package-category h4 a:focus {
             outline: 2px solid #4ec9b0;
             outline-offset: 2px;
@@ -523,10 +680,11 @@
         }
 
         /* Code highlighting for backticks */
-        code, .code-inline {
+        code,
+        .code-inline {
             background: #1a1a1a;
             border: 1px solid #2a2a2a;
-            border-radius: 4px;
+            border-radius: 2px;
             padding: 0.15rem 0.4rem;
             font-family: 'JetBrains Mono', 'Fira Code', monospace;
             font-size: 0.9em;
@@ -537,37 +695,45 @@
         .terminal-demo {
             background: #0a0a0a;
             border: 1px solid #1f1f1f;
-            border-radius: 8px;
+            border-radius: 2px;
             padding: 1rem;
             font-family: 'JetBrains Mono', 'Fira Code', monospace;
             font-size: 0.9rem;
             overflow-x: auto;
             margin-top: 1rem;
         }
+
         .terminal-line {
             margin: 0.3rem 0;
             white-space: pre-wrap;
             word-break: break-all;
         }
+
         .terminal-prompt {
             color: #4ec9b0;
         }
+
         .terminal-command {
             color: #e0e0e0;
         }
+
         .terminal-output {
             color: #888;
         }
+
         .terminal-comment {
             color: #666;
             font-style: italic;
         }
+
         .terminal-success {
             color: #4ec9b0;
         }
+
         .terminal-error {
             color: #f44747;
         }
+
         .terminal-cursor {
             display: inline-block;
             width: 8px;
@@ -576,9 +742,18 @@
             animation: blink 1s infinite;
             margin-left: 2px;
         }
+
         @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
+
+            0%,
+            50% {
+                opacity: 1;
+            }
+
+            51%,
+            100% {
+                opacity: 0;
+            }
         }
 
         .package-list {
@@ -620,7 +795,7 @@
         .feature {
             background: #222;
             padding: 1rem;
-            border-radius: 6px;
+            border-radius: 2px;
             text-align: center;
         }
 
@@ -660,15 +835,167 @@
             margin: -0.5rem 0;
         }
 
-        .success { color: #4ec9b0; }
-        .warning { color: #dcdcaa; }
-        .error { color: #f44747; }
+        .success {
+            color: #4ec9b0;
+        }
+
+        .warning {
+            color: #dcdcaa;
+        }
+
+        .error {
+            color: #f44747;
+        }
+
+        /* Tabbed Code Viewer */
+        .code-tabs {
+            background: #0d0d0d;
+            border: 1px solid #1f1f1f;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .code-tabs-header {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            background: #0a0a0a;
+            border-bottom: 1px solid #1f1f1f;
+            overflow-x: auto;
+            gap: 0;
+        }
+
+        .code-tab {
+            padding: 0.75rem 1.25rem;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: #888;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            flex: 0 0 auto;
+            min-width: 0;
+        }
+
+        .code-tab:hover {
+            background: #111;
+            color: #aaa;
+        }
+
+        .code-tab.active {
+            color: #4ec9b0;
+            border-bottom-color: #4ec9b0;
+            background: #0d0d0d;
+        }
+
+        .code-tab-content {
+            display: none;
+            height: 600px;
+            width: 100%;
+        }
+
+        .code-tab-content.active {
+            display: block;
+        }
+
+        /* Arguments Documentation */
+        .args-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .arg-item {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 2px;
+            padding: 1rem;
+        }
+
+        .arg-name {
+            color: #4ec9b0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.95rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .arg-desc {
+            color: #aaa;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .arg-alias {
+            color: #666;
+            font-size: 0.85rem;
+            margin-top: 0.3rem;
+        }
 
         @media (max-width: 768px) {
-            body { padding: 1rem; }
-            .brand { font-size: 1rem; }
-            .step-content { margin-left: 1rem; }
-            .package-grid { grid-template-columns: 1fr; }
+            body {
+                padding: 1rem;
+            }
+
+            .brand {
+                font-size: 1rem;
+            }
+
+            .step-content {
+                margin-left: 1rem;
+            }
+
+            .package-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .code-tab-content {
+                height: 400px;
+            }
+        }
+
+        .vertical-separator {
+            position:
+                relative;
+        }
+
+        .vertical-separator:after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1px;
+            height: 50%;
+            transform: translateY(50%);
+            background-color: #888;
+        }
+
+        .greeting {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-top: 2rem;
+            gap: 0.5rem;
+        }
+
+        .greeting-text {
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .greeting-link {
+            font-size: 0.8rem;
+            color: #888;
+            text-decoration: none;
+        }
+
+        .greeting-link:hover {
+            color: #4ec9b0;
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
@@ -677,6 +1004,18 @@
     <script>
         // Minimal helper to mount Monaco editors with fetched GitHub raw sources
         window.addEventListener('DOMContentLoaded', () => {
+            // --- Optional GitHub token support (from localStorage) ---
+            const getGhAuthHeaders = () => {
+                try {
+                    const token = localStorage.getItem('gh_token');
+                    if (token && typeof token === 'string' && token.trim()) {
+                        return {
+                            'Authorization': `token ${token.trim()}`
+                        };
+                    }
+                } catch (_) { }
+                return {};
+            };
             // --- Enhanced Semantic Search ---
             const panel = document.getElementById('search-panel');
             const toggleBtn = document.getElementById('toggle-search');
@@ -687,7 +1026,9 @@
             const prevBtn = document.getElementById('prev-result');
             const filtersEl = document.getElementById('search-filters');
             const suggestionsEl = document.getElementById('search-suggestions');
-
+            const versionText = document.getElementById('version-text');
+            if (versionText) {
+            }
             let results = [];
             let activeIndex = -1;
             let highlightEl = null;
@@ -1018,7 +1359,7 @@
             const ghOrgRepo = 'remcostoeten/dotfiles';
             const ghBranch = 'feature/opentui'; // Use current branch
             const rawBase = `https://raw.githubusercontent.com/${ghOrgRepo}/${ghBranch}/`;
-            const rawBaseFallback = `https://raw.githubusercontent.com/${ghOrgRepo}/main/`;
+            const rawBaseFallback = `https://raw.githubusercontent.com/${ghOrgRepo}/master/`;
 
             // Configure Monaco loader
             // The loader is deferred, so it may not be ready immediately; poll until available
@@ -1029,6 +1370,7 @@
                 }
                 window.require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
                 window.require(['vs/editor/editor.main'], async () => {
+                    const editors = {};
                     for (const file of filesToShow) {
                         const container = document.getElementById(file.id);
                         if (!container) continue;
@@ -1075,23 +1417,55 @@
                                 }
                             });
 
-                            // Expose for debugging
+                            // Store editor for tab switching
+                            editors[file.id] = editor;
                             container.__editor = editor;
                         } catch (e) {
                             console.error('Failed to load file:', file.path, e);
                             container.innerHTML = `
-                                <div style="padding: 1rem; color: #888; text-align: center;">
-                                    <p style="margin-bottom: 0.5rem;">Failed to load file</p>
-                                    <p style="font-size: 0.85rem; color: #666;">${file.path}</p>
-                                    <a href="https://github.com/${ghOrgRepo}/blob/${ghBranch}/${file.path}"
-                                       target="_blank" rel="noopener noreferrer"
-                                       style="color: #4ec9b0; display: inline-block; margin-top: 0.75rem; text-decoration: none; border: 1px solid #2a2a2a; padding: 0.5rem 1rem; border-radius: 6px;">
-                                        View on GitHub →
-                                    </a>
-                                </div>
-                            `;
+                                    <div style="padding: 1rem; color: #888; text-align: center;">
+                                        <p style="margin-bottom: 0.5rem;">Failed to load file</p>
+                                        <p style="font-size: 0.85rem; color: #666;">${file.path}</p>
+                                        <a href="https://github.com/${ghOrgRepo}/blob/${ghBranch}/${file.path}"
+                                        target="_blank" rel="noopener noreferrer"
+                                        style="color: #4ec9b0; display: inline-block; margin-top: 0.75rem; text-decoration: none; border: 1px solid #2a2a2a; padding: 0.5rem 1rem; border-radius: 6px;">
+                                            View on GitHub →
+                                        </a>
+                                    </div>
+                                `;
                         }
                     }
+
+                    // Tab switching functionality
+                    document.querySelectorAll('.code-tab').forEach(tab => {
+                        tab.addEventListener('click', () => {
+                            const tabName = tab.dataset.tab;
+                            const tabIdMap = {
+                                'packages': 'code-packages',
+                                'executor': 'code-executor',
+                                'install-manager': 'code-install-manager',
+                                'system-config': 'code-system-config',
+                                'verification': 'code-verification'
+                            };
+                            const contentId = tabIdMap[tabName];
+
+                            // Update active tab
+                            document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+                            tab.classList.add('active');
+
+                            // Update active content
+                            document.querySelectorAll('.code-tab-content').forEach(c => c.classList.remove('active'));
+                            const content = document.getElementById(contentId);
+                            if (content) {
+                                content.classList.add('active');
+                                // Resize editor when switching tabs
+                                const editor = editors[contentId];
+                                if (editor) {
+                                    setTimeout(() => editor.layout(), 100);
+                                }
+                            }
+                        });
+                    });
                 });
             };
             initMonaco();
@@ -1108,7 +1482,7 @@
                 fileModalBody.innerHTML = '<pre>Loading file contents...</pre>';
 
                 try {
-                    const rawBase = 'https://raw.githubusercontent.com/remcostoeten/dotfiles/main/';
+                    const rawBase = 'https://raw.githubusercontent.com/remcostoeten/dotfiles/master/';
                     const response = await fetch(rawBase + filePath);
 
                     if (!response.ok) {
@@ -1122,16 +1496,16 @@
                     fileModalBody.appendChild(pre);
                 } catch (e) {
                     fileModalBody.innerHTML = `
-                        <pre style="color: #f44747;">
-Failed to load file: ${e.message}
+                            <pre style="color: #f44747;">
+    Failed to load file: ${e.message}
 
-<a href="https://github.com/remcostoeten/dotfiles/blob/main/${filePath}"
-   target="_blank" rel="noopener noreferrer"
-   style="color: #4ec9b0; text-decoration: underline;">
-   View on GitHub →
-</a>
-                        </pre>
-                    `;
+    <a href="https://github.com/remcostoeten/dotfiles/blob/master/${filePath}"
+    target="_blank" rel="noopener noreferrer"
+    style="color: #4ec9b0; text-decoration: underline;">
+    View on GitHub →
+    </a>
+                            </pre>
+                        `;
                 }
             };
 
@@ -1228,7 +1602,8 @@ Failed to load file: ${e.message}
                     try {
                         const response = await fetch(urls[attempt], {
                             headers: {
-                                'Accept': 'application/vnd.github.v3+json'
+                                'Accept': 'application/vnd.github.v3+json',
+                                ...getGhAuthHeaders()
                             }
                         });
 
@@ -1265,18 +1640,18 @@ Failed to load file: ${e.message}
                     .catch((err) => {
                         console.error('GitHub tree fetch error:', err);
                         treeEl.innerHTML = `<div style="color: #888; padding: 1rem;">
-                            <p style="color: #aaa; margin-bottom: 0.75rem;">Unable to load tree from GitHub API.</p>
-                            <p style="font-size: 0.85rem; color: #666;">${err.message || 'Please visit the repository directly'}</p>
-                            <p style="margin-top: 1rem;">
-                                <a href="https://github.com/remcostoeten/dotfiles" target="_blank" rel="noopener noreferrer"
-                                   style="color: #4ec9b0; text-decoration: none; border: 1px solid #2a2a2a; padding: 0.5rem 1rem; border-radius: 6px; display: inline-block;">
-                                    📂 View on GitHub
-                                </a>
-                            </p>
-                            <p style="font-size: 0.8rem; color: #555; margin-top: 1rem;">
-                                Tip: The tree might be hidden due to API rate limits. Try again in a few minutes or visit the repo directly.
-                            </p>
-                        </div>`;
+                                <p style="color: #aaa; margin-bottom: 0.75rem;">Unable to load tree from GitHub API.</p>
+                                <p style="font-size: 0.85rem; color: #666;">${err.message || 'Please visit the repository directly'}</p>
+                                <p style="margin-top: 1rem;">
+                                    <a href="https://github.com/remcostoeten/dotfiles" target="_blank" rel="noopener noreferrer"
+                                    style="color: #4ec9b0; text-decoration: none; border: 1px solid #2a2a2a; padding: 0.5rem 1rem; border-radius: 6px; display: inline-block;">
+                                        📂 View on GitHub
+                                    </a>
+                                </p>
+                                <p style="font-size: 0.8rem; color: #555; margin-top: 1rem;">
+                                    Tip: The tree might be hidden due to API rate limits. Try again in a few minutes or visit the repo directly.
+                                </p>
+                            </div>`;
                     });
             }
 
@@ -1288,108 +1663,304 @@ Failed to load file: ${e.message}
 
             if (terminalDemo && runDemoBtn) {
                 const lines = [
-                    { type: 'prompt', text: 'remco@ubuntu:~$ ', delay: 200 },
-                    { type: 'command', text: 'cd ~/.config/dotfiles/opentui-setup', delay: 800 },
+                    { type: 'prompt', text: 'remco@ubuntu:~/dotfiles$ ', delay: 100 },
+                    { type: 'command', text: 'cd opentui-setup && bun run setup', delay: 400 },
+                    { type: 'output', text: '', delay: 500 },
+                    { type: 'output', text: '▶ Starting dotfiles setup...', delay: 200 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: 'Pre-flight checks...', delay: 200 },
+                    { type: 'output', text: '  Checking sudo access...', delay: 100 },
+                    { type: 'success', text: '  ✓ Sudo access verified', delay: 120 },
+                    { type: 'output', text: '  Checking network connection...', delay: 100 },
+                    { type: 'success', text: '  ✓ Network connection active', delay: 120 },
+                    { type: 'output', text: '  Checking package manager...', delay: 100 },
+                    { type: 'success', text: '  ✓ Package manager ready (apt)', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Updating system packages...', delay: 200 },
+                    { type: 'output', text: '  Executing: sudo apt update', delay: 150 },
+                    { type: 'output', text: '  Hit:1 http://archive.ubuntu.com/ubuntu jammy InRelease', delay: 80 },
+                    { type: 'output', text: '  Get:2 http://security.ubuntu.com/ubuntu jammy-security InRelease', delay: 80 },
+                    { type: 'output', text: '  Fetched 2,847 kB in 3s (948 kB/s)', delay: 150 },
+                    { type: 'output', text: '  Executing: sudo apt upgrade -y', delay: 150 },
+                    { type: 'output', text: '  Reading package lists... Done', delay: 100 },
+                    { type: 'success', text: '  ✓ System packages up-to-date', delay: 200 },
+                    { type: 'output', text: '', delay: 200 },
+                    { type: 'output', text: '▶ Installing Essential Packages', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing Git...', delay: 100 },
+                    { type: 'output', text: '    Checking if already installed...', delay: 80 },
+                    { type: 'output', text: '    Executing: sudo apt install -y git', delay: 100 },
+                    { type: 'output', text: '    Reading package lists... Done', delay: 60 },
+                    { type: 'success', text: '  ✓ Git [apt] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing cURL...', delay: 80 },
+                    { type: 'output', text: '    Executing: sudo apt install -y curl', delay: 100 },
+                    { type: 'success', text: '  ✓ cURL [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing wget...', delay: 80 },
+                    { type: 'success', text: '  ✓ wget [apt] installed', delay: 80 },
+                    { type: 'output', text: '  ▶ Installing Build Essential...', delay: 80 },
+                    { type: 'success', text: '  ✓ build-essential [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing CA Certificates...', delay: 80 },
+                    { type: 'success', text: '  ✓ ca-certificates [apt] installed', delay: 80 },
+                    { type: 'output', text: '  ▶ Installing GnuPG...', delay: 80 },
+                    { type: 'success', text: '  ✓ gnupg [apt] installed', delay: 80 },
+                    { type: 'output', text: '  ▶ Installing Software Properties Common...', delay: 80 },
+                    { type: 'success', text: '  ✓ software-properties-common [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing Fish Shell...', delay: 80 },
+                    { type: 'success', text: '  ✓ Fish Shell [apt] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Programming Languages', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing Python 3...', delay: 100 },
+                    { type: 'success', text: '  ✓ Python 3 [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing Python pip...', delay: 80 },
+                    { type: 'success', text: '  ✓ Python pip [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing Python venv...', delay: 80 },
+                    { type: 'success', text: '  ✓ Python venv [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing Node.js...', delay: 80 },
+                    { type: 'success', text: '  ✓ Node.js [apt] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Code Editors', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing Neovim...', delay: 100 },
+                    { type: 'success', text: '  ✓ Neovim [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing Vim...', delay: 80 },
+                    { type: 'success', text: '  ✓ Vim [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing Visual Studio Code...', delay: 80 },
+                    { type: 'output', text: '    Checking if snapd is installed...', delay: 80 },
+                    { type: 'output', text: '    Executing: sudo snap install --classic code', delay: 100 },
+                    { type: 'output', text: '    Downloading code from snap store...', delay: 150 },
+                    { type: 'success', text: '  ✓ Visual Studio Code [snap --classic] installed', delay: 150 },
+                    { type: 'output', text: '  ▶ Installing Windsurf Editor...', delay: 80 },
+                    { type: 'output', text: '    Executing: sudo snap install --classic windsurf', delay: 100 },
+                    { type: 'success', text: '  ✓ Windsurf Editor [snap --classic] installed', delay: 150 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Terminal Emulators', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing Kitty Terminal...', delay: 100 },
+                    { type: 'success', text: '  ✓ Kitty Terminal [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing Alacritty...', delay: 80 },
+                    { type: 'success', text: '  ✓ Alacritty [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing WezTerm...', delay: 80 },
+                    { type: 'output', text: '    Checking GitHub CLI...', delay: 80 },
+                    { type: 'output', text: '    Cloning repository: wez/wezterm', delay: 100 },
+                    { type: 'output', text: '    Building from source...', delay: 150 },
+                    { type: 'success', text: '  ✓ WezTerm [github: wez/wezterm] installed', delay: 150 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Package Managers', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing npm (Node Package Manager)...', delay: 100 },
+                    { type: 'success', text: '  ✓ npm [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing pnpm...', delay: 80 },
+                    { type: 'output', text: '    Downloading install script...', delay: 100 },
+                    { type: 'output', text: '    Executing: curl -fsSL https://get.pnpm.io/install.sh | sh', delay: 100 },
+                    { type: 'success', text: '  ✓ pnpm [curl] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing Bun...', delay: 80 },
+                    { type: 'output', text: '    Executing: curl -fsSL https://bun.sh/install | bash', delay: 100 },
+                    { type: 'success', text: '  ✓ Bun [curl] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Git Tools', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing GitHub CLI...', delay: 100 },
+                    { type: 'success', text: '  ✓ GitHub CLI [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing lazygit...', delay: 80 },
+                    { type: 'output', text: '    Cloning repository: jesseduffield/lazygit', delay: 100 },
+                    { type: 'output', text: '    Building from source...', delay: 150 },
+                    { type: 'success', text: '  ✓ lazygit [github: jesseduffield/lazygit] installed', delay: 150 },
+                    { type: 'output', text: '  ▶ Installing lazydocker...', delay: 80 },
+                    { type: 'output', text: '    Cloning repository: jesseduffield/lazydocker', delay: 100 },
+                    { type: 'success', text: '  ✓ lazydocker [github: jesseduffield/lazydocker] installed', delay: 150 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing CLI Utilities', delay: 250 },
+                    { type: 'output', text: '  Installing 16 packages...', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing ripgrep...', delay: 50 },
+                    { type: 'success', text: '  ✓ ripgrep [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing fd...', delay: 50 },
+                    { type: 'success', text: '  ✓ fd [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing fzf...', delay: 50 },
+                    { type: 'success', text: '  ✓ fzf [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing zoxide...', delay: 50 },
+                    { type: 'success', text: '  ✓ zoxide [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing eza...', delay: 50 },
+                    { type: 'success', text: '  ✓ eza [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing bat...', delay: 50 },
+                    { type: 'success', text: '  ✓ bat [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing htop...', delay: 50 },
+                    { type: 'success', text: '  ✓ htop [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing tree...', delay: 50 },
+                    { type: 'success', text: '  ✓ tree [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing jq...', delay: 50 },
+                    { type: 'success', text: '  ✓ jq [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing unzip...', delay: 50 },
+                    { type: 'success', text: '  ✓ unzip [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing zip...', delay: 50 },
+                    { type: 'success', text: '  ✓ zip [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing xclip...', delay: 50 },
+                    { type: 'success', text: '  ✓ xclip [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing wl-clipboard...', delay: 50 },
+                    { type: 'success', text: '  ✓ wl-clipboard [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing bc...', delay: 50 },
+                    { type: 'success', text: '  ✓ bc [apt] installed', delay: 60 },
+                    { type: 'output', text: '  ▶ Installing libnotify-bin...', delay: 50 },
+                    { type: 'success', text: '  ✓ libnotify-bin [apt] installed', delay: 80 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Web Browsers', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing Firefox...', delay: 100 },
+                    { type: 'success', text: '  ✓ Firefox [apt] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing Zen Browser...', delay: 80 },
+                    { type: 'success', text: '  ✓ Zen Browser [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing Microsoft Edge...', delay: 80 },
+                    { type: 'success', text: '  ✓ Microsoft Edge [apt] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing Brave Browser...', delay: 80 },
+                    { type: 'success', text: '  ✓ Brave Browser [apt] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Communication Apps', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing WhatsApp...', delay: 100 },
+                    { type: 'output', text: '    Executing: sudo snap install whatsapp-for-linux', delay: 100 },
+                    { type: 'success', text: '  ✓ WhatsApp [snap] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing Signal...', delay: 80 },
+                    { type: 'success', text: '  ✓ Signal [snap] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing Simplenote...', delay: 80 },
+                    { type: 'success', text: '  ✓ Simplenote [snap] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Media & Graphics', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing VLC Media Player...', delay: 100 },
+                    { type: 'success', text: '  ✓ VLC Media Player [apt] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing OBS Studio...', delay: 80 },
+                    { type: 'success', text: '  ✓ OBS Studio [apt] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing FFmpeg...', delay: 80 },
+                    { type: 'success', text: '  ✓ FFmpeg [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing Spotify...', delay: 80 },
+                    { type: 'output', text: '    Executing: sudo snap install spotify', delay: 100 },
+                    { type: 'success', text: '  ✓ Spotify [snap] installed', delay: 150 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing DevOps Tools', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing Docker...', delay: 100 },
+                    { type: 'output', text: '    Installing docker.io...', delay: 100 },
+                    { type: 'success', text: '  ✓ Docker [apt] installed', delay: 150 },
+                    { type: 'output', text: '  ▶ Installing Docker Compose...', delay: 80 },
+                    { type: 'success', text: '  ✓ Docker Compose [apt] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing System Utilities', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing btop...', delay: 100 },
+                    { type: 'success', text: '  ✓ btop [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing neofetch...', delay: 80 },
+                    { type: 'success', text: '  ✓ neofetch [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing Timeshift...', delay: 80 },
+                    { type: 'success', text: '  ✓ Timeshift [apt] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Hardware Tools', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing OpenRGB...', delay: 100 },
+                    { type: 'success', text: '  ✓ OpenRGB [apt] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing NVIDIA Driver...', delay: 80 },
+                    { type: 'output', text: '    Installing nvidia-driver-535...', delay: 100 },
+                    { type: 'success', text: '  ✓ NVIDIA Driver [apt] installed', delay: 150 },
+                    { type: 'output', text: '  ▶ Installing NVIDIA Settings...', delay: 80 },
+                    { type: 'success', text: '  ✓ NVIDIA Settings [apt] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing NVIDIA Utils...', delay: 80 },
+                    { type: 'success', text: '  ✓ NVIDIA Utils [apt] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Automation Tools', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing xdotool...', delay: 100 },
+                    { type: 'success', text: '  ✓ xdotool [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing ydotool...', delay: 80 },
+                    { type: 'success', text: '  ✓ ydotool [apt] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing GNOME Tools', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing GNOME Shell Extensions...', delay: 100 },
+                    { type: 'success', text: '  ✓ GNOME Shell Extensions [apt] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing dconf CLI...', delay: 80 },
+                    { type: 'success', text: '  ✓ dconf CLI [apt] installed', delay: 100 },
+                    { type: 'output', text: '  ▶ Installing U Launcher...', delay: 80 },
+                    { type: 'success', text: '  ✓ U Launcher [apt] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Tools (via curl)', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing Starship...', delay: 100 },
+                    { type: 'output', text: '    Executing: curl -fsSL https://starship.rs/install.sh | sh', delay: 100 },
+                    { type: 'success', text: '  ✓ Starship [curl] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing nvm...', delay: 80 },
+                    { type: 'output', text: '    Executing: curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | sh', delay: 100 },
+                    { type: 'success', text: '  ✓ nvm [curl] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing Rust (via rustup)...', delay: 80 },
+                    { type: 'output', text: '    Executing: curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh', delay: 100 },
+                    { type: 'success', text: '  ✓ Rust (via rustup) [curl] installed', delay: 150 },
+                    { type: 'output', text: '  ▶ Installing Turso...', delay: 80 },
+                    { type: 'output', text: '    Executing: curl -fsSL https://get.tur.so/install.sh | sh', delay: 100 },
+                    { type: 'success', text: '  ✓ Turso [curl] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing uvx...', delay: 80 },
+                    { type: 'output', text: '    Executing: curl -fsSL https://astral.sh/uv/install.sh | sh', delay: 100 },
+                    { type: 'success', text: '  ✓ uvx [curl] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing Vercel CLI...', delay: 80 },
+                    { type: 'output', text: '    Executing: curl -fsSL https://vercel.com/cli.sh | sh', delay: 100 },
+                    { type: 'success', text: '  ✓ Vercel CLI [curl] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing Netlify CLI...', delay: 80 },
+                    { type: 'output', text: '    Executing: curl -fsSL https://cli.netlify.com/install.sh | sh', delay: 100 },
+                    { type: 'success', text: '  ✓ Netlify CLI [curl] installed', delay: 120 },
+                    { type: 'output', text: '  ▶ Installing Claude Desktop...', delay: 80 },
+                    { type: 'output', text: '    Executing: curl -fsSL https://claude.ai/install.sh | sh', delay: 100 },
+                    { type: 'success', text: '  ✓ Claude Desktop [curl] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing NPM CLI Tools', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing Gemini CLI...', delay: 100 },
+                    { type: 'output', text: '    Executing: npm install -g gemini-cli', delay: 100 },
+                    { type: 'output', text: '    Downloading package...', delay: 100 },
+                    { type: 'success', text: '  ✓ Gemini CLI [npm -g] installed', delay: 120 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Android Development', delay: 250 },
+                    { type: 'output', text: '  ▶ Installing Android Studio...', delay: 100 },
+                    { type: 'output', text: '    Executing: sudo snap install --classic android-studio', delay: 100 },
+                    { type: 'output', text: '    Downloading from snap store (this may take a while)...', delay: 300 },
+                    { type: 'success', text: '  ✓ Android Studio [snap --classic] installed', delay: 200 },
+                    { type: 'output', text: '', delay: 200 },
+                    { type: 'output', text: '▶ Creating configuration symlinks...', delay: 300 },
+                    { type: 'output', text: '  Linking Fish shell config...', delay: 100 },
+                    { type: 'success', text: '  ✓ ~/.config/fish/config.fish → dotfiles/configs/fish/config.fish', delay: 150 },
+                    { type: 'output', text: '  Linking Git configuration...', delay: 100 },
+                    { type: 'success', text: '  ✓ ~/.gitconfig → dotfiles/configs/git/.gitconfig', delay: 150 },
+                    { type: 'output', text: '  Linking Neovim configuration...', delay: 100 },
+                    { type: 'success', text: '  ✓ ~/.config/nvim → dotfiles/configs/nvim', delay: 150 },
+                    { type: 'output', text: '  Linking Kitty terminal config...', delay: 100 },
+                    { type: 'success', text: '  ✓ ~/.config/kitty → dotfiles/configs/kitty', delay: 150 },
+                    { type: 'output', text: '  Linking WezTerm config...', delay: 100 },
+                    { type: 'success', text: '  ✓ ~/.config/wezterm → dotfiles/configs/wezterm', delay: 150 },
+                    { type: 'output', text: '', delay: 200 },
+                    { type: 'output', text: '▶ Making scripts executable...', delay: 200 },
+                    { type: 'output', text: '  Setting permissions for bin/ scripts...', delay: 100 },
+                    { type: 'success', text: '  ✓ 30+ scripts made executable', delay: 150 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Installing Nerd Fonts...', delay: 200 },
+                    { type: 'output', text: '  Downloading latest release...', delay: 150 },
+                    { type: 'output', text: '  Extracting fonts...', delay: 150 },
+                    { type: 'success', text: '  ✓ Nerd Fonts installed to ~/.local/share/fonts', delay: 200 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: '▶ Configuring system settings...', delay: 200 },
+                    { type: 'output', text: '  Setting Brave as default browser...', delay: 100 },
+                    { type: 'success', text: '  ✓ Default browser configured', delay: 120 },
+                    { type: 'output', text: '  Applying GNOME settings...', delay: 100 },
+                    { type: 'success', text: '  ✓ GNOME preferences applied', delay: 120 },
+                    { type: 'output', text: '  Setting up Docker post-install...', delay: 100 },
+                    { type: 'success', text: '  ✓ Docker group configured', delay: 120 },
+                    { type: 'output', text: '', delay: 200 },
+                    { type: 'output', text: '▶ Running verification checks...', delay: 200 },
+                    { type: 'output', text: '  Verifying Fish shell installation...', delay: 100 },
+                    { type: 'success', text: '  ✓ Fish shell verified', delay: 100 },
+                    { type: 'output', text: '  Verifying Git tools...', delay: 100 },
+                    { type: 'success', text: '  ✓ Git tools verified', delay: 100 },
+                    { type: 'output', text: '  Verifying Docker installation...', delay: 100 },
+                    { type: 'success', text: '  ✓ Docker verified', delay: 100 },
+                    { type: 'output', text: '  Verifying configuration symlinks...', delay: 100 },
+                    { type: 'success', text: '  ✓ All symlinks verified', delay: 100 },
+                    { type: 'output', text: '', delay: 300 },
+                    { type: 'success', text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', delay: 50 },
                     { type: 'output', text: '', delay: 100 },
-                    { type: 'prompt', text: 'remco@ubuntu:~/.config/dotfiles/opentui-setup$ ', delay: 300 },
-                    { type: 'command', text: 'bun run interactive', delay: 800 },
-                    { type: 'output', text: '', delay: 400 },
-                    { type: 'success', text: '╔══════════════════════════════════════════════════════════════╗', delay: 100 },
-                    { type: 'success', text: '║                                                              ║', delay: 50 },
-                    { type: 'success', text: '║    🚀 OpenTUI Setup - Interactive Installation Tool        ║', delay: 100 },
-                    { type: 'success', text: '║                                                              ║', delay: 50 },
-                    { type: 'success', text: '║    Complete dotfiles and development environment setup     ║', delay: 100 },
-                    { type: 'success', text: '║    with beautiful terminal interface                        ║', delay: 100 },
-                    { type: 'success', text: '║                                                              ║', delay: 50 },
-                    { type: 'success', text: '╚══════════════════════════════════════════════════════════════╝', delay: 100 },
-                    { type: 'output', text: '', delay: 300 },
-                    { type: 'output', text: '┌─ Main Menu:', delay: 200 },
-                    { type: 'output', text: '│', delay: 50 },
-                    { type: 'output', text: '│ 1. 📦 Package Management - Install/remove individual packages', delay: 150 },
-                    { type: 'output', text: '│ 2. 🔧 System Configuration - Configure GNOME, sudo, wallpaper', delay: 150 },
-                    { type: 'output', text: '│ 3. 🚀 Full Setup - Install all selected packages', delay: 150 },
-                    { type: 'output', text: '│ 4. 📋 Select Categories - Choose which categories to install', delay: 150 },
-                    { type: 'output', text: '│ 5. 🔍 Check Installation - Verify what\'s currently installed', delay: 150 },
-                    { type: 'output', text: '│ 6. ⚙️  Settings - Configure setup options', delay: 150 },
-                    { type: 'output', text: '│ 7. ❌ Exit - Quit the setup tool', delay: 150 },
-                    { type: 'output', text: '│', delay: 50 },
-                    { type: 'output', text: '└─ Enter your choice (1-7): 3', delay: 800 },
-                    { type: 'output', text: '', delay: 400 },
-                    { type: 'output', text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', delay: 100 },
+                    { type: 'success', text: '✓ Setup completed successfully!', delay: 300 },
+                    { type: 'output', text: '', delay: 150 },
+                    { type: 'output', text: 'Summary:', delay: 200 },
+                    { type: 'output', text: '   • 18 categories processed', delay: 100 },
+                    { type: 'output', text: '   • 100+ packages installed', delay: 100 },
+                    { type: 'output', text: '   • 5+ configuration files linked', delay: 100 },
+                    { type: 'output', text: '   • 30+ scripts made executable', delay: 100 },
+                    { type: 'output', text: '   • Nerd Fonts installed', delay: 100 },
                     { type: 'output', text: '', delay: 200 },
-                    { type: 'output', text: '🔍 Running pre-flight checks...', delay: 400 },
-                    { type: 'success', text: '  ✓ Sudo access verified', delay: 300 },
-                    { type: 'success', text: '  ✓ Network connection active', delay: 300 },
-                    { type: 'success', text: '  ✓ Dotfiles directory found at ~/.config/dotfiles', delay: 300 },
-                    { type: 'output', text: '', delay: 300 },
-                    { type: 'output', text: '📦 Installing packages from 18 categories...', delay: 400 },
+                    { type: 'output', text: 'Next steps:', delay: 200 },
+                    { type: 'output', text: '   1. Restart your terminal to load Fish shell', delay: 100 },
+                    { type: 'output', text: '   2. Run: dotfiles --help to see available commands', delay: 100 },
+                    { type: 'output', text: '   3. Enjoy your new development environment!', delay: 100 },
                     { type: 'output', text: '', delay: 200 },
-                    { type: 'output', text: '[1/18] Essential', delay: 300 },
-                    { type: 'success', text: '  ✓ git (already installed)', delay: 200 },
-                    { type: 'success', text: '  ✓ curl (already installed)', delay: 200 },
-                    { type: 'success', text: '  ✓ wget (already installed)', delay: 200 },
-                    { type: 'success', text: '  ✓ build-essential (installed)', delay: 400 },
-                    { type: 'output', text: '', delay: 200 },
-                    { type: 'output', text: '[2/18] Languages', delay: 300 },
-                    { type: 'success', text: '  ✓ nodejs (v20.10.0 installed)', delay: 300 },
-                    { type: 'success', text: '  ✓ bun (v1.0.23 installed)', delay: 300 },
-                    { type: 'success', text: '  ✓ python3 (already installed)', delay: 200 },
-                    { type: 'output', text: '', delay: 200 },
-                    { type: 'output', text: '[3/18] CLI Tools', delay: 300 },
-                    { type: 'success', text: '  ✓ fzf (installed)', delay: 300 },
-                    { type: 'success', text: '  ✓ ripgrep (installed)', delay: 300 },
-                    { type: 'success', text: '  ✓ fd-find (installed)', delay: 300 },
-                    { type: 'success', text: '  ✓ zoxide (installed)', delay: 300 },
-                    { type: 'success', text: '  ✓ bat (installed)', delay: 300 },
-                    { type: 'output', text: '', delay: 200 },
-                    { type: 'output', text: '[4/18] Editors', delay: 300 },
-                    { type: 'success', text: '  ✓ neovim (v0.9.5 installed)', delay: 400 },
-                    { type: 'output', text: '  Installing LazyVim...', delay: 600 },
-                    { type: 'success', text: '  ✓ LazyVim configured', delay: 400 },
-                    { type: 'output', text: '', delay: 200 },
-                    { type: 'output', text: '... [5-17/18] (abbreviated for demo)', delay: 300 },
-                    { type: 'output', text: '', delay: 300 },
-                    { type: 'output', text: '[18/18] DevOps', delay: 300 },
-                    { type: 'success', text: '  ✓ docker (v24.0.7 installed)', delay: 300 },
-                    { type: 'success', text: '  ✓ docker-compose (v2.23.0 installed)', delay: 300 },
-                    { type: 'success', text: '  ✓ gh (GitHub CLI v2.40.1 installed)', delay: 300 },
-                    { type: 'output', text: '', delay: 400 },
-                    { type: 'success', text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', delay: 100 },
-                    { type: 'output', text: '', delay: 200 },
-                    { type: 'output', text: '🔗 Creating configuration symlinks...', delay: 400 },
-                    { type: 'success', text: '  ✓ Fish shell config (cfg → ~/.config/fish/config.fish)', delay: 300 },
-                    { type: 'success', text: '  ✓ Neovim config (~/.config/nvim)', delay: 300 },
-                    { type: 'success', text: '  ✓ Kitty config (~/.config/kitty)', delay: 300 },
-                    { type: 'success', text: '  ✓ Git config (~/.gitconfig)', delay: 300 },
-                    { type: 'success', text: '  ✓ WezTerm config (~/.config/wezterm)', delay: 300 },
-                    { type: 'output', text: '', delay: 300 },
-                    { type: 'output', text: '🎨 Configuring system...', delay: 400 },
-                    { type: 'success', text: '  ✓ Downloaded Nerd Fonts (JetBrainsMono)', delay: 400 },
-                    { type: 'success', text: '  ✓ Brave set as default browser', delay: 300 },
-                    { type: 'success', text: '  ✓ GNOME desktop aesthetics applied', delay: 300 },
-                    { type: 'success', text: '  ✓ All scripts made executable (30 scripts)', delay: 300 },
-                    { type: 'output', text: '', delay: 300 },
-                    { type: 'output', text: '🔍 Running verification checks...', delay: 400 },
-                    { type: 'success', text: '  ✓ Fish shell: ~/.config/fish/config.fish exists', delay: 250 },
-                    { type: 'success', text: '  ✓ Fish aliases: 361 lines loaded', delay: 250 },
-                    { type: 'success', text: '  ✓ Docker: daemon is running', delay: 250 },
-                    { type: 'success', text: '  ✓ Scripts: 30 executables in PATH', delay: 250 },
-                    { type: 'output', text: '', delay: 400 },
-                    { type: 'success', text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', delay: 100 },
-                    { type: 'output', text: '', delay: 200 },
-                    { type: 'success', text: '✨ Setup completed successfully!', delay: 500 },
-                    { type: 'output', text: '', delay: 200 },
-                    { type: 'output', text: '📋 Summary:', delay: 300 },
-                    { type: 'output', text: '   • 98 packages installed', delay: 200 },
-                    { type: 'output', text: '   • 5 config symlinks created', delay: 200 },
-                    { type: 'output', text: '   • 30 scripts available', delay: 200 },
-                    { type: 'output', text: '', delay: 300 },
-                    { type: 'output', text: '🚀 Next steps:', delay: 300 },
-                    { type: 'output', text: '   1. Restart your terminal or run: exec fish', delay: 200 },
-                    { type: 'output', text: '   2. Try running: dotfiles --help', delay: 200 },
-                    { type: 'output', text: '   3. Explore scripts: scripts', delay: 200 },
-                    { type: 'output', text: '', delay: 400 },
-                    { type: 'prompt', text: 'remco@ubuntu:~/.config/dotfiles/opentui-setup$ ', delay: 500 }
+                    { type: 'prompt', text: 'remco@ubuntu:~/dotfiles$ ', delay: 300 }
                 ];
 
                 let currentLine = 0;
@@ -1469,7 +2040,7 @@ Failed to load file: ${e.message}
             // --- Sidebar & Mobile Navigation ---
             const sidebarItems = document.querySelectorAll('.sidebar-item');
             const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
-            const sections = ['intro', 'directories', 'architecture', 'scripts', 'tree', 'workflow', 'source', 'catalog'];
+            const sections = ['intro', 'directories', 'architecture', 'scripts', 'tree', 'workflow', 'source', 'arguments', 'catalog'];
 
             const scrollToSection = (sectionId) => {
                 const section = document.getElementById(sectionId);
@@ -1518,6 +2089,11 @@ Failed to load file: ${e.message}
                         }
                     }
                 });
+
+                // Default to first section if none found (e.g., at page top)
+                if (!currentSection) {
+                    currentSection = sections[0];
+                }
 
                 sidebarItems.forEach(item => {
                     if (item.dataset.section === currentSection) {
@@ -1588,7 +2164,7 @@ Failed to load file: ${e.message}
 
                         // Fallback to main branch
                         if (!versionRes.ok) {
-                            versionRes = await fetch('https://raw.githubusercontent.com/remcostoeten/dotfiles/main/VERSION');
+                            versionRes = await fetch('https://raw.githubusercontent.com/remcostoeten/dotfiles/master/VERSION');
                         }
 
                         if (versionRes.ok) {
@@ -1604,7 +2180,7 @@ Failed to load file: ${e.message}
 
                     try {
                         // Try package.json from opentui-setup
-                        const pkgRes = await fetch('https://raw.githubusercontent.com/remcostoeten/dotfiles/main/opentui-setup/package.json');
+                        const pkgRes = await fetch('https://raw.githubusercontent.com/remcostoeten/dotfiles/master/opentui-setup/package.json');
                         if (pkgRes.ok) {
                             const pkg = await pkgRes.json();
                             if (pkg.version) {
@@ -1617,8 +2193,13 @@ Failed to load file: ${e.message}
                     }
 
                     try {
-                        // Fetch latest release tag from GitHub API
-                        const tagsRes = await fetch('https://api.github.com/repos/remcostoeten/dotfiles/tags?per_page=1');
+                        // Fetch latest release tag from GitHub API (attach token if present)
+                        const tagsRes = await fetch('https://api.github.com/repos/remcostoeten/dotfiles/tags?per_page=1', {
+                            headers: {
+                                'Accept': 'application/vnd.github.v3+json',
+                                ...getGhAuthHeaders()
+                            }
+                        });
                         if (tagsRes.ok) {
                             const tags = await tagsRes.json();
                             if (tags.length > 0 && tags[0].name) {
@@ -1633,25 +2214,36 @@ Failed to load file: ${e.message}
                     versionEl.textContent = 'latest';
                 };
                 fetchVersion();
+                versionText.textContent = versionEl.textContent;
             }
         });
     </script>
 </head>
+
 <body>
     <div class="topbar" role="navigation" aria-label="Top bar">
         <div class="brand"><strong>Remco Stoeten</strong> · Dotfiles</div>
         <div class="actions">
-            <a class="icon-btn" href="https://github.com/remcostoeten/dotfiles" target="_blank" rel="noopener noreferrer" title="View source on GitHub" aria-label="GitHub">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.98 5.24.98 11.5c0 4.85 3.15 8.96 7.51 10.41.55.1.75-.24.75-.53 0-.26-.01-1.14-.02-2.07-3.06.67-3.71-1.3-3.71-1.3-.5-1.27-1.22-1.6-1.22-1.6-.99-.67.07-.66.07-.66 1.1.08 1.67 1.14 1.67 1.14.97 1.66 2.55 1.18 3.17.9.1-.71.38-1.18.69-1.45-2.44-.28-5.01-1.22-5.01-5.42 0-1.2.43-2.18 1.14-2.95-.11-.28-.49-1.4.11-2.91 0 0 .93-.3 3.05 1.13a10.5 10.5 0 0 1 5.56 0c2.12-1.44 3.05-1.13 3.05-1.13.6 1.51.22 2.63.11 2.91.71.77 1.14 1.75 1.14 2.95 0 4.21-2.58 5.14-5.03 5.41.39.33.73.97.73 1.96 0 1.41-.01 2.54-.01 2.88 0 .29.2.64.76.53A10.99 10.99 0 0 0 23.02 11.5C23.02 5.24 18.27.5 12 .5Z"/></svg>
+            <a class="icon-btn" href="https://github.com/remcostoeten/dotfiles" target="_blank"
+                rel="noopener noreferrer" title="View source on GitHub" aria-label="GitHub">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path
+                        d="M12 .5C5.73.5.98 5.24.98 11.5c0 4.85 3.15 8.96 7.51 10.41.55.1.75-.24.75-.53 0-.26-.01-1.14-.02-2.07-3.06.67-3.71-1.3-3.71-1.3-.5-1.27-1.22-1.6-1.22-1.6-.99-.67.07-.66.07-.66 1.1.08 1.67 1.14 1.67 1.14.97 1.66 2.55 1.18 3.17.9.1-.71.38-1.18.69-1.45-2.44-.28-5.01-1.22-5.01-5.42 0-1.2.43-2.18 1.14-2.95-.11-.28-.49-1.4.11-2.91 0 0 .93-.3 3.05 1.13a10.5 10.5 0 0 1 5.56 0c2.12-1.44 3.05-1.13 3.05-1.13.6 1.51.22 2.63.11 2.91.71.77 1.14 1.75 1.14 2.95 0 4.21-2.58 5.14-5.03 5.41.39.33.73.97.73 1.96 0 1.41-.01 2.54-.01 2.88 0 .29.2.64.76.53A10.99 10.99 0 0 0 23.02 11.5C23.02 5.24 18.27.5 12 .5Z" />
+                </svg>
             </a>
             <button class="icon-btn" id="toggle-search" title="Search" aria-label="Search">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path
+                        d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z" />
+                </svg>
             </button>
         </div>
     </div>
     <div class="search-panel" id="search-panel" aria-label="Semantic search panel">
         <div class="search-row">
-            <input class="search-input" id="search-input" type="search" placeholder="Search steps, packages, features... (Ctrl+K)" autocomplete="off" aria-label="Search input" />
+            <input class="search-input" id="search-input" type="search"
+                placeholder="Search steps, packages, features... (Ctrl+K)" autocomplete="off"
+                aria-label="Search input" />
             <button class="icon-btn" id="prev-result" title="Previous result" aria-label="Previous result">↑</button>
             <button class="icon-btn" id="next-result" title="Next result" aria-label="Next result">↓</button>
         </div>
@@ -1671,35 +2263,65 @@ Failed to load file: ${e.message}
     <!-- Sidebar Navigation -->
     <nav class="sidebar" aria-label="Page navigation">
         <button class="sidebar-item" data-section="intro" aria-label="Overview" tabindex="0">
-            <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="2"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="12" r="2" />
+                <path
+                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+            </svg>
             <span class="sidebar-tooltip">Overview</span>
         </button>
         <button class="sidebar-item" data-section="directories" aria-label="Structure" tabindex="0">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z" />
+            </svg>
             <span class="sidebar-tooltip">Structure</span>
         </button>
         <button class="sidebar-item" data-section="architecture" aria-label="Architecture" tabindex="0">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z" />
+            </svg>
             <span class="sidebar-tooltip">Architecture</span>
         </button>
         <button class="sidebar-item" data-section="scripts" aria-label="Scripts" tabindex="0">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
+            </svg>
             <span class="sidebar-tooltip">Scripts</span>
         </button>
         <button class="sidebar-item" data-section="tree" aria-label="Files" tabindex="0">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-1 12H5V8h14v10z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-1 12H5V8h14v10z" />
+            </svg>
             <span class="sidebar-tooltip">Files</span>
         </button>
         <button class="sidebar-item" data-section="workflow" aria-label="Workflow" tabindex="0">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+            </svg>
             <span class="sidebar-tooltip">Workflow</span>
         </button>
         <button class="sidebar-item" data-section="source" aria-label="Source" tabindex="0">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
+            </svg>
             <span class="sidebar-tooltip">Source</span>
         </button>
+        <button class="sidebar-item" data-section="arguments" aria-label="Arguments" tabindex="0">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+            </svg>
+            <span class="sidebar-tooltip">Arguments</span>
+        </button>
         <button class="sidebar-item" data-section="catalog" aria-label="Catalog" tabindex="0">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z" />
+            </svg>
             <span class="sidebar-tooltip">Catalog</span>
         </button>
         <div class="sidebar-version" id="sidebar-version">v...</div>
@@ -1716,7 +2338,8 @@ Failed to load file: ${e.message}
             <div class="sub-step">
                 <div class="sub-step-title">Development Environment Configuration</div>
                 <div class="sub-step-desc">
-                    Personal development environment configuration and automation. Shell configurations, editor setups, custom utilities, and system preferences.
+                    Personal development environment configuration and automation. Shell configurations, editor setups,
+                    custom utilities, and system preferences.
                     Reproducible across machines with automated installation via OpenTUI-based setup tool.
                 </div>
             </div>
@@ -1741,7 +2364,8 @@ Failed to load file: ${e.message}
         <div class="step-content">
             <div class="package-grid">
                 <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/main/bin" target="_blank" rel="noopener noreferrer">bin/</a></h4>
+                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/master/bin" target="_blank"
+                            rel="noopener noreferrer">bin/</a></h4>
                     <ul class="package-list">
                         <li>Executable wrappers on system PATH</li>
                         <li>Docker manager, wallpaper setter, VM controller</li>
@@ -1750,7 +2374,8 @@ Failed to load file: ${e.message}
                     </ul>
                 </div>
                 <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/main/scripts" target="_blank" rel="noopener noreferrer">scripts/</a></h4>
+                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/master/scripts" target="_blank"
+                            rel="noopener noreferrer">scripts/</a></h4>
                     <ul class="package-list">
                         <li>Implementation logic for bin wrappers</li>
                         <li>TypeScript, Python, Fish, Bash implementations</li>
@@ -1759,7 +2384,8 @@ Failed to load file: ${e.message}
                     </ul>
                 </div>
                 <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/main/configs" target="_blank" rel="noopener noreferrer">configs/</a></h4>
+                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/master/configs" target="_blank"
+                            rel="noopener noreferrer">configs/</a></h4>
                     <ul class="package-list">
                         <li>Fish shell (361 lines of aliases + functions)</li>
                         <li>Neovim LazyVim configuration</li>
@@ -1769,7 +2395,8 @@ Failed to load file: ${e.message}
                     </ul>
                 </div>
                 <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/main/opentui-setup" target="_blank" rel="noopener noreferrer">opentui-setup/</a></h4>
+                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/master/opentui-setup" target="_blank"
+                            rel="noopener noreferrer">opentui-setup/</a></h4>
                     <ul class="package-list">
                         <li>TypeScript installation system using OpenTUI</li>
                         <li>Interactive TUI and headless CLI modes</li>
@@ -1779,7 +2406,8 @@ Failed to load file: ${e.message}
                     </ul>
                 </div>
                 <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/main/shell-setup" target="_blank" rel="noopener noreferrer">shell-setup/</a></h4>
+                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/master/shell-setup" target="_blank"
+                            rel="noopener noreferrer">shell-setup/</a></h4>
                     <ul class="package-list">
                         <li>Legacy shell-based installer (pre-OpenTUI)</li>
                         <li>Modular package groups and installers</li>
@@ -1788,7 +2416,8 @@ Failed to load file: ${e.message}
                     </ul>
                 </div>
                 <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/main/env-private" target="_blank" rel="noopener noreferrer">env-private/</a></h4>
+                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/master/env-private" target="_blank"
+                            rel="noopener noreferrer">env-private/</a></h4>
                     <ul class="package-list">
                         <li>Machine-specific secrets and environment variables</li>
                         <li>API keys, tokens, private configuration</li>
@@ -1951,8 +2580,10 @@ Failed to load file: ${e.message}
             <div class="sub-step">
                 <div class="sub-step-title">Architecture Overview</div>
                 <div class="sub-step-desc">
-                    Scripts are organized in two directories: `bin/` contains executable wrappers on your PATH, while `scripts/` holds the actual implementation logic.
-                    Many bin scripts are intelligent wrappers that call their counterparts in scripts/, allowing for modular updates without breaking PATH references.
+                    Scripts are organized in two directories: `bin/` contains executable wrappers on your PATH, while
+                    `scripts/` holds the actual implementation logic.
+                    Many bin scripts are intelligent wrappers that call their counterparts in scripts/, allowing for
+                    modular updates without breaking PATH references.
                 </div>
             </div>
 
@@ -2098,24 +2729,13 @@ Failed to load file: ${e.message}
                 </div>
 
                 <div class="package-category">
-                    <h4>📊 Version Manager (`version`)</h4>
+                    <h4>📄 License Generator (`license`)</h4>
                     <ul class="package-list">
-                        <li><strong>Types:</strong> Bash + TypeScript</li>
-                        <li><strong>Features:</strong> Semantic versioning automation</li>
-                        <li>Bump major, minor, or patch versions</li>
-                        <li>Updates VERSION file and git tags</li>
-                        <li>Supports conventional commits</li>
-                    </ul>
-                </div>
-
-                <div class="package-category">
-                    <h4>🔍 Neovim Launcher (`nvim`)</h4>
-                    <ul class="package-list">
-                        <li><strong>Type:</strong> Wrapper script</li>
-                        <li><strong>Features:</strong> Enhanced Neovim launcher</li>
-                        <li>Ensures correct config loading</li>
-                        <li>Adds custom environment variables</li>
-                        <li>LazyVim integration</li>
+                        <li><strong>Type:</strong> Bash script</li>
+                        <li><strong>Features:</strong> Quick license generation</li>
+                        <li>Supports common license types (MIT, Apache, GPL)</li>
+                        <li>Interactive license selection</li>
+                        <li>Auto-fills project and author details</li>
                     </ul>
                 </div>
 
@@ -2174,13 +2794,13 @@ Failed to load file: ${e.message}
                 </div>
 
                 <div class="package-category">
-                    <h4>🎨 Background Remover (`bgr`)</h4>
+                    <h4>⚙️ Background Process Runner (`bgr`)</h4>
                     <ul class="package-list">
-                        <li><strong>Type:</strong> Python/utility script</li>
-                        <li><strong>Features:</strong> Remove image backgrounds</li>
-                        <li>AI-powered background removal</li>
-                        <li>Batch processing support</li>
-                        <li>Multiple output formats</li>
+                        <li><strong>Type:</strong> Utility script</li>
+                        <li><strong>Features:</strong> Run processes in background</li>
+                        <li>Process management and monitoring</li>
+                        <li>Background task execution</li>
+                        <li>Log output capture</li>
                     </ul>
                 </div>
             </div>
@@ -2190,7 +2810,7 @@ Failed to load file: ${e.message}
                 <div class="sub-step-desc">
                     <strong>Wrapper Pattern:</strong> `bin/script-name` → `scripts/script-name` (implementation)<br>
                     <strong>Direct Executable:</strong> Standalone scripts in `bin/` with full logic<br>
-                    <strong>TypeScript Projects:</strong> Complex tools (docker, version) built with Bun/Node<br>
+                    <strong>TypeScript Projects:</strong> Complex tools (docker) built with Bun/Node<br>
                     <strong>Symlinks:</strong> Some scripts link to common implementations<br><br>
                     All scripts are made executable automatically during setup via `scripts-executable.ts`.
                 </div>
@@ -2208,10 +2828,12 @@ Failed to load file: ${e.message}
         <div class="step-content">
             <div class="sub-step">
                 <div class="sub-step-desc">
-                    Browse the complete repository structure. Click folders to expand, click files to view contents in a modal.
+                    Browse the complete repository structure. Click folders to expand, click files to view contents in a
+                    modal.
                 </div>
             </div>
-            <div id="repo-tree" class="tree" role="tree" aria-label="Repository tree">Loading repository structure...</div>
+            <div id="repo-tree" class="tree" role="tree" aria-label="Repository tree">Loading repository structure...
+            </div>
         </div>
     </div>
 
@@ -2226,17 +2848,22 @@ Failed to load file: ${e.message}
             <div class="step-content">
                 <div class="sub-step">
                     <div class="sub-step-title">Bootstrap (`install.sh`)</div>
-                    <div class="sub-step-desc">For a fresh system: installs Git & Bun, clones dotfiles, and installs dependencies.</div>
+                    <div class="sub-step-desc">For a fresh system: installs Git & Bun, clones dotfiles, and installs
+                        dependencies.</div>
                 </div>
                 <div class="sub-step">
                     <div class="sub-step-title">Setup Interfaces</div>
                     <div class="sub-step-desc">Multiple ways to run the setup:</div>
                 </div>
                 <div class="command-box">
-                    <span class="command">bun run interactive</span> <span class="warning"># Fully interactive TUI</span><br>
-                    <span class="command">bun run cli</span> <span class="warning"># Non-interactive (headless) setup</span><br>
-                    <span class="command">bun run manager</span> <span class="warning"># Install/remove individual packages</span><br>
-                    <span class="command">bun run setup</span> <span class="warning"># Main TUI application (React-based)</span>
+                    <span class="command">bun run interactive</span> <span class="warning"># Fully interactive
+                        TUI</span><br>
+                    <span class="command">bun run cli</span> <span class="warning"># Non-interactive (headless)
+                        setup</span><br>
+                    <span class="command">bun run manager</span> <span class="warning"># Install/remove individual
+                        packages</span><br>
+                    <span class="command">bun run setup</span> <span class="warning"># Main TUI application
+                        (React-based)</span>
                 </div>
                 <div class="sub-step" style="margin-top: 1.5rem;">
                     <div class="sub-step-title">Interactive Demo</div>
@@ -2267,7 +2894,8 @@ Failed to load file: ${e.message}
                 </div>
                 <div class="sub-step">
                     <div class="sub-step-title">System Update</div>
-                    <div class="sub-step-desc">Runs `apt update` and `apt upgrade` to ensure the system is up-to-date.</div>
+                    <div class="sub-step-desc">Runs `apt update` and `apt upgrade` to ensure the system is up-to-date.
+                    </div>
                 </div>
             </div>
         </div>
@@ -2284,11 +2912,13 @@ Failed to load file: ${e.message}
             <div class="step-content">
                 <div class="sub-step">
                     <div class="sub-step-title">Category-based Selection</div>
-                    <div class="sub-step-desc">Packages are grouped into 18 categories for easy selection (e.g., Essential, Languages, CLI Tools).</div>
+                    <div class="sub-step-desc">Packages are grouped into 18 categories for easy selection (e.g.,
+                        Essential, Languages, CLI Tools).</div>
                 </div>
                 <div class="sub-step">
                     <div class="sub-step-title">Advanced Installation Manager</div>
-                    <div class="sub-step-desc">Uses a robust installer with auto-retry, dependency checking, and rollback on failure.</div>
+                    <div class="sub-step-desc">Uses a robust installer with auto-retry, dependency checking, and
+                        rollback on failure.</div>
                 </div>
                 <div class="package-grid">
                     <div class="package-category">
@@ -2322,11 +2952,13 @@ Failed to load file: ${e.message}
             <div class="step-content">
                 <div class="sub-step">
                     <div class="sub-step-title">Dotfiles Symlinking (`dotfiles-config.ts`)</div>
-                    <div class="sub-step-desc">Applies configurations by creating symlinks for Fish, Kitty, Git, Neovim, and WezTerm.</div>
+                    <div class="sub-step-desc">Applies configurations by creating symlinks for Fish, Kitty, Git, Neovim,
+                        and WezTerm.</div>
                 </div>
                 <div class="sub-step">
                     <div class="sub-step-title">Make Scripts Executable (`scripts-executable.ts`)</div>
-                    <div class="sub-step-desc">Ensures all scripts in `~/.../dotfiles/bin` and `~/.../dotfiles/scripts` are executable.</div>
+                    <div class="sub-step-desc">Ensures all scripts in `~/.../dotfiles/bin` and `~/.../dotfiles/scripts`
+                        are executable.</div>
                 </div>
                 <div class="sub-step">
                     <div class="sub-step-title">Install Nerd Fonts (`nerd-fonts.ts`)</div>
@@ -2334,9 +2966,10 @@ Failed to load file: ${e.message}
                 </div>
                 <div class="sub-step">
                     <div class="sub-step-title">System Configuration (`system-config.ts`)</div>
-                    <div class="sub-step-desc">Sets Brave as default browser, applies wallpaper, configures GNOME, sets up passwordless sudo, and runs Docker post-install steps.</div>
+                    <div class="sub-step-desc">Sets Brave as default browser, applies wallpaper, configures GNOME, sets
+                        up passwordless sudo, and runs Docker post-install steps.</div>
                 </div>
-                 <div class="sub-step">
+                <div class="sub-step">
                     <div class="sub-step-title">GitHub Extensions (`gh-extensions.ts`)</div>
                     <div class="sub-step-desc">Installs useful `gh` extensions like `gh-select` and `gh-copilot`.</div>
                 </div>
@@ -2355,7 +2988,8 @@ Failed to load file: ${e.message}
             <div class="step-content">
                 <div class="sub-step">
                     <div class="sub-step-title">Comprehensive System Checks (`verification.ts`)</div>
-                    <div class="sub-step-desc">Runs a series of checks to verify that all components (Fish, aliases, Docker, GNOME settings, etc.) are installed and configured correctly.</div>
+                    <div class="sub-step-desc">Runs a series of checks to verify that all components (Fish, aliases,
+                        Docker, GNOME settings, etc.) are installed and configured correctly.</div>
                 </div>
                 <div class="sub-step">
                     <div class="sub-step-title">Verification Report</div>
@@ -2377,30 +3011,116 @@ Failed to load file: ${e.message}
                 <div class="sub-step-title">Repository</div>
                 <div class="sub-step-desc">
                     Browse the full source at
-                    <a href="https://github.com/remcostoeten/dotfiles" target="_blank" rel="noopener noreferrer">remcostoeten/dotfiles</a>.
+                    <a href="https://github.com/remcostoeten/dotfiles" target="_blank"
+                        rel="noopener noreferrer">remcostoeten/dotfiles</a>.
                 </div>
             </div>
-            <div class="package-grid">
-                <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/blob/main/opentui-setup/src/packages.ts" target="_blank" rel="noopener noreferrer">opentui-setup/src/packages.ts</a></h4>
-                    <div id="code-packages" style="height: 280px; width: 100%; border: 1px solid #333; border-radius: 6px;"></div>
+            <div class="code-tabs">
+                <div class="code-tabs-header">
+                    <button class="code-tab active" data-tab="packages">packages.ts</button>
+                    <button class="code-tab" data-tab="executor">executor.ts</button>
+                    <button class="code-tab" data-tab="install-manager">install-manager.ts</button>
+                    <button class="code-tab" data-tab="system-config">system-config.ts</button>
+                    <button class="code-tab" data-tab="verification">verification.ts</button>
                 </div>
-                <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/blob/main/opentui-setup/src/executor.ts" target="_blank" rel="noopener noreferrer">opentui-setup/src/executor.ts</a></h4>
-                    <div id="code-executor" style="height: 280px; width: 100%; border: 1px solid #333; border-radius: 6px;"></div>
+                <div class="code-tab-content active" id="code-packages"></div>
+                <div class="code-tab-content" id="code-executor"></div>
+                <div class="code-tab-content" id="code-install-manager"></div>
+                <div class="code-tab-content" id="code-system-config"></div>
+                <div class="code-tab-content" id="code-verification"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Command Line Arguments -->
+    <div class="step" id="arguments" style="margin-top: 2rem;">
+        <div class="step-header">
+            <div class="step-number">args</div>
+            <div class="step-title">Command Line Arguments</div>
+            <div class="step-status">Options</div>
+        </div>
+        <div class="step-content">
+            <div class="sub-step">
+                <div class="sub-step-title">Usage</div>
+                <div class="sub-step-desc">
+                    The setup script supports various command-line arguments for fine-grained control over the
+                    installation process.
                 </div>
-                <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/blob/main/opentui-setup/src/install-manager.ts" target="_blank" rel="noopener noreferrer">opentui-setup/src/install-manager.ts</a></h4>
-                    <div id="code-install-manager" style="height: 280px; width: 100%; border: 1px solid #333; border-radius: 6px;"></div>
+            </div>
+            <div class="args-grid">
+                <div class="arg-item">
+                    <div class="arg-name">--dry-run</div>
+                    <div class="arg-desc">Preview all installations without making changes. Useful for testing or seeing
+                        what would be installed.</div>
                 </div>
-                <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/blob/main/opentui-setup/src/system-config.ts" target="_blank" rel="noopener noreferrer">opentui-setup/src/system-config.ts</a></h4>
-                    <div id="code-system-config" style="height: 280px; width: 100%; border: 1px solid #333; border-radius: 6px;"></div>
+                <div class="arg-item">
+                    <div class="arg-name">--dry-run-section &lt;NAME&gt;</div>
+                    <div class="arg-desc">Preview a specific section only (e.g., "essential", "editors", "cli-utils").
+                    </div>
                 </div>
-                <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/blob/main/opentui-setup/src/verification.ts" target="_blank" rel="noopener noreferrer">opentui-setup/src/verification.ts</a></h4>
-                    <div id="code-verification" style="height: 280px; width: 100%; border: 1px solid #333; border-radius: 6px;"></div>
+                <div class="arg-item">
+                    <div class="arg-name">--dry-run-interactive</div>
+                    <div class="arg-desc">Interactive dry-run mode. Select sections to preview interactively.</div>
+                    <div class="arg-alias">Alias: --dry-run-i</div>
                 </div>
+                <div class="arg-item">
+                    <div class="arg-name">--skip-system-update</div>
+                    <div class="arg-desc">Skip the apt update/upgrade step. Use when system is already up-to-date.</div>
+                </div>
+                <div class="arg-item">
+                    <div class="arg-name">--skip-fonts</div>
+                    <div class="arg-desc">Skip Nerd Fonts installation. Useful if fonts are already installed or not
+                        needed.</div>
+                </div>
+                <div class="arg-item">
+                    <div class="arg-name">--verbose, -v</div>
+                    <div class="arg-desc">Show detailed installation output. Useful for debugging installation issues.
+                    </div>
+                </div>
+                <div class="arg-item">
+                    <div class="arg-name">--quiet, -q</div>
+                    <div class="arg-desc">Minimal output, errors only. Reduces verbosity for cleaner terminal output.
+                    </div>
+                </div>
+                <div class="arg-item">
+                    <div class="arg-name">--install &lt;NAME&gt;</div>
+                    <div class="arg-desc">Install a specific section non-interactively. Pass the category ID (e.g.,
+                        "essential", "editors").</div>
+                </div>
+                <div class="arg-item">
+                    <div class="arg-name">--install-interactive</div>
+                    <div class="arg-desc">Select sections to install interactively. Opens category selection menu.</div>
+                    <div class="arg-alias">Alias: --install-i</div>
+                </div>
+                <div class="arg-item">
+                    <div class="arg-name">--skip &lt;NAME&gt;</div>
+                    <div class="arg-desc">Skip a specific section during installation. Pass the category ID to skip.
+                    </div>
+                </div>
+                <div class="arg-item">
+                    <div class="arg-name">--skip-interactive</div>
+                    <div class="arg-desc">Select sections to skip interactively. Opens category selection menu.</div>
+                    <div class="arg-alias">Alias: --skip-i</div>
+                </div>
+                <div class="arg-item">
+                    <div class="arg-name">--list</div>
+                    <div class="arg-desc">List all available packages by category. Exits after displaying the list.
+                    </div>
+                </div>
+                <div class="arg-item">
+                    <div class="arg-name">--all, --yes, -y</div>
+                    <div class="arg-desc">Non-interactive mode. Installs all categories without prompts. Useful for
+                        automation.</div>
+                </div>
+            </div>
+            <div class="command-box" style="margin-top: 1.5rem;">
+                <div style="color: #888; margin-bottom: 0.5rem;">Examples:</div>
+                <div class="command" style="font-size: 0.9rem; margin-bottom: 0.3rem;">bun run setup --dry-run</div>
+                <div class="command" style="font-size: 0.9rem; margin-bottom: 0.3rem;">bun run setup --all --skip-fonts
+                </div>
+                <div class="command" style="font-size: 0.9rem; margin-bottom: 0.3rem;">bun run setup --install essential
+                    --verbose</div>
+                <div class="command" style="font-size: 0.9rem;">bun run setup --dry-run-section cli-utils</div>
             </div>
         </div>
     </div>
@@ -2416,8 +3136,12 @@ Failed to load file: ${e.message}
             <div class="sub-step">
                 <div class="sub-step-title">Master lists in source</div>
                 <div class="sub-step-desc">
-                    • Package catalog: <a href="https://github.com/remcostoeten/dotfiles/blob/main/opentui-setup/src/packages.ts" target="_blank" rel="noopener noreferrer">opentui-setup/src/packages.ts</a><br>
-                    • Shell package groups: <a href="https://github.com/remcostoeten/dotfiles/tree/main/shell-setup/packages" target="_blank" rel="noopener noreferrer">shell-setup/packages</a>
+                    • Package catalog: <a
+                        href="https://github.com/remcostoeten/dotfiles/blob/master/opentui-setup/src/packages.ts"
+                        target="_blank" rel="noopener noreferrer">opentui-setup/src/packages.ts</a><br>
+                    • Shell package groups: <a
+                        href="https://github.com/remcostoeten/dotfiles/tree/master/shell-setup/packages" target="_blank"
+                        rel="noopener noreferrer">shell-setup/packages</a>
                 </div>
             </div>
             <div class="package-grid">
@@ -2446,19 +3170,28 @@ Failed to load file: ${e.message}
                     </ul>
                 </div>
                 <div class="package-category">
-                    <h4>Highlights: Editors & Terminals</h4>
+                    <h4>Highlights: Editors & IDEs</h4>
                     <ul class="package-list">
-                        <li>Neovim, WezTerm, Kitty</li>
-                        <li>Fish shell + config</li>
-                        <li>Nerd Fonts</li>
+                        <li>Neovim + LazyVim, WezTerm, Kitty</li>
+                        <li>Zed Editor, Cursor AI Editor</li>
+                        <li>Visual Studio Code</li>
+                        <li>Fish shell + config, Nerd Fonts</li>
                     </ul>
                 </div>
                 <div class="package-category">
-                    <h4>Highlights: Desktop & System</h4>
+                    <h4>Highlights: Browsers & Media</h4>
                     <ul class="package-list">
-                        <li>Brave Browser (default)</li>
+                        <li>Brave Browser (default), Microsoft Edge</li>
+                        <li>VLC Media Player, OBS Studio</li>
                         <li>GNOME settings & wallpaper</li>
-                        <li>Passwordless sudo (optional), Docker post-install</li>
+                    </ul>
+                </div>
+                <div class="package-category">
+                    <h4>Highlights: Productivity & Tools</h4>
+                    <ul class="package-list">
+                        <li>SimpleNote, Docker Desktop</li>
+                        <li>Passwordless sudo (optional)</li>
+                        <li>Docker post-install configuration</li>
                     </ul>
                 </div>
             </div>
@@ -2486,7 +3219,8 @@ Failed to load file: ${e.message}
             </div>
             <div class="feature">
                 <div class="feature-title">Progress Tracking</div>
-                <div class="feature-desc">Saves installation status to ~/.dotfiles/setup/progress.json to allow resuming</div>
+                <div class="feature-desc">Saves installation status to ~/.dotfiles/setup/progress.json to allow resuming
+                </div>
             </div>
         </div>
     </div>
@@ -2499,45 +3233,56 @@ Failed to load file: ${e.message}
         </div>
         <div class="step-content">
             <div class="package-grid">
-                <div class="package-category"><h4>APT</h4></div>
-                <div class="package-category"><h4>Snap</h4></div>
-                <div class="package-category"><h4>CURL</h4></div>
-                <div class="package-category"><h4>NPM</h4></div>
-                <div class="package-category"><h4>GitHub</h4></div>
+                <div class="package-category">
+                    <h4>APT</h4>
+                </div>
+                <div class="package-category">
+                    <h4>Snap</h4>
+                </div>
+                <div class="package-category">
+                    <h4>CURL</h4>
+                </div>
+                <div class="package-category">
+                    <h4>NPM</h4>
+                </div>
+                <div class="package-category">
+                    <h4>GitHub</h4>
+                </div>
             </div>
         </div>
     </div>
 
     <div class="command-box" style="text-align: center; margin-top: 2rem;">
-        <div style="color: #888; margin-bottom: 0.5rem;">Quick start:</div>
-        <div class="command" style="font-size: 1.2rem;">cd ~/.config/dotfiles/opentui-setup && bun run interactive</div>
-    </div>
-
-    <!-- File Viewer Modal -->
-    <div class="file-modal" id="file-modal">
-        <div class="file-modal-content">
-            <div class="file-modal-header">
-                <div class="file-modal-title" id="file-modal-title">Loading...</div>
-                <button class="file-modal-close" id="file-modal-close">Close</button>
-            </div>
-            <div class="file-modal-body" id="file-modal-body">
-                <pre>Loading file contents...</pre>
-            </div>
+        <div style="color: #888; margin-bottom: 0.5rem;">Try it out yourself by running:</div>
+        <div class="command" style="font-size: 1.2rem;">cd ~/.config/dotfiles/opentui-setup && bun run setup --dry-run
         </div>
-    </div>
+        <div class="command" style="font-size: 0.4rem;">No worries, this wil perform a demo to show how your machine
+            handles the setup and what would be installed. if you're ready to run it for real. Run `bun run setup` or
+            `bun run interactive` to start the setup.</div>
+        <div class="greeting">
 
-    <!-- Mobile Bottom Navigation -->
-    <nav class="mobile-nav" aria-label="Mobile navigation">
-        <div class="mobile-nav-inner">
-            <div class="mobile-nav-item" data-section="intro">Overview</div>
-            <div class="mobile-nav-item" data-section="directories">Structure</div>
-            <div class="mobile-nav-item" data-section="architecture">Architecture</div>
-            <div class="mobile-nav-item" data-section="scripts">Scripts</div>
-            <div class="mobile-nav-item" data-section="tree">Files</div>
-            <div class="mobile-nav-item" data-section="workflow">Workflow</div>
-            <div class="mobile-nav-item" data-section="source">Source</div>
-            <div class="mobile-nav-item" data-section="catalog">Catalog</div>
-        </div>
-    </nav>
+            <div class="greeting-text">xxx,<br>Remco Stoeten<br /></div>
+            <div style='display: flex; gap: 0.5rem;'><a class="greeting-link" href="https://github.com/remcostoeten"
+                    target="_blank" rel="noopener noreferrer">GitHub</a><span class='vertical-separator'></span><a
+                    class="greeting-link" style="font-size: 0.8rem;" href="https://remcostoeten.nl" target="_blank"
+                    rel="noopener noreferrer">https://remcostoeten.nl</a>
+                <span class='vertical-separator'></span>
+            </div>
+
+            <!-- Mobile Bottom Navigation -->
+            <nav class="mobile-nav" aria-label="Mobile navigation">
+                <div class="mobile-nav-inner">
+                    <div class="mobile-nav-item" data-section="intro">Overview</div>
+                    <div class="mobile-nav-item" data-section="directories">Structure</div>
+                    <div class="mobile-nav-item" data-section="architecture">Architecture</div>
+                    <div class="mobile-nav-item" data-section="scripts">Scripts</div>
+                    <div class="mobile-nav-item" data-section="tree">Files</div>
+                    <div class="mobile-nav-item" data-section="workflow">Workflow</div>
+                    <div class="mobile-nav-item" data-section="source">Source</div>
+                    <div class="mobile-nav-item" data-section="arguments">Args</div>
+                    <div class="mobile-nav-item" data-section="catalog">Catalog</div>
+                </div>
+            </nav>
 </body>
+
 </html>

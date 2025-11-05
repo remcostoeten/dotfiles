@@ -173,7 +173,7 @@ export async function verifyScriptsExecutable(verbose: boolean = false): Promise
     if (existsSync(binDir)) {
       const binCheck = await executeCommand(`find "${binDir}" -type f -executable | wc -l`);
       const binCount = parseInt(binCheck.output.trim()) || 0;
-      
+
       result.steps.push({
         name: "Bin scripts verification",
         success: binCount > 0,
@@ -185,7 +185,7 @@ export async function verifyScriptsExecutable(verbose: boolean = false): Promise
     if (existsSync(scriptsDir)) {
       const scriptsCheck = await executeCommand(`find "${scriptsDir}" -type f -executable | wc -l`);
       const scriptsCount = parseInt(scriptsCheck.output.trim()) || 0;
-      
+
       result.steps.push({
         name: "Scripts verification",
         success: scriptsCount > 0,

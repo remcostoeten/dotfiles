@@ -18,9 +18,10 @@
     "build:live": "bun build src/setup-live.tsx --outdir dist --target bun"
   },
   "dependencies": {
-    "@opentui/react": "0.1.32",
-    "@opentui/core": "0.1.32",
-    "react": "18.2.0"
+    "@opentui/core": "^0.1.34",
+    "@opentui/react": "^0.1.34",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.26",

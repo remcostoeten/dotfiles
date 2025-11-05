@@ -44,7 +44,7 @@ dotfiles --s        # Same as scripts (short form)
 - **Preview** - Shows script content in right panel
 
 ### Fallback Mode (No fzf)
-- **Arrow Keys** or **j/k** - Navigate up/down  
+- **Arrow Keys** or **j/k** - Navigate up/down
 - **Enter** - Select and execute script
 - **q** or **Ctrl+C** - Quit
 
@@ -62,7 +62,7 @@ dotfiles --s        # Same as scripts (short form)
 NAME                 TYPE     DESCRIPTION
 ──────────────────────────────────────────────────────────────────
 click                [wrap]   Auto-clicker with interactive mode
-postgres             [wrap]   PostgreSQL database management  
+postgres             [wrap]   PostgreSQL database management
 emoji                [link]   Emoji picker and search
 copy                 [link]   File and clipboard utility
 ...
@@ -82,7 +82,7 @@ The tool automatically extracts descriptions by looking for:
    - `# utility`, `# tool`, `# script`, `# manager`
 
 3. **Fallback patterns** based on script names:
-   - `*-manager` → "Management utility"  
+   - `*-manager` → "Management utility"
    - `postgres` → "PostgreSQL database management"
    - `click` → "Auto-clicker with interactive mode"
    - `env*` → "Environment management"
@@ -170,5 +170,5 @@ $ dotfiles --s
 
 ---
 
-**Version:** 1.0.0  
+**Version:** 1.0.0
 **Last Updated:** 2025-10-10

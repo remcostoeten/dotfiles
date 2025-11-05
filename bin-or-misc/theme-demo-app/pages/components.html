@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Components - Theme Demo App</title>
+    <link rel="stylesheet" href="../styles/tailwind-theme.css">
+    <link rel="stylesheet" href="../styles/app.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="topbar">
+        <div class="container nav-content">
+            <div class="brand-section">
+                <div class="logo">⚡</div>
+                <div>
+                    <h1 class="brand-title">Theme Demo</h1>
+                    <p class="brand-subtitle">Dotfiles Theme Showcase</p>
+                </div>
+            </div>
+            <div class="nav-links">
+                <a href="../index.html" class="nav-link">Dashboard</a>
+                <a href="components.html" class="nav-link active">Components</a>
+                <a href="forms.html" class="nav-link">Forms</a>
+                <a href="settings.html" class="nav-link">Settings</a>
+            </div>
+            <button class="btn theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                <span id="theme-icon">🌙</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container" style="max-width: 1200px;">
+            <h1 style="color: var(--color-foreground-bright); font-size: 2rem; margin-bottom: 0.5rem;">Component Showcase</h1>
+            <p style="color: var(--color-foreground-muted); margin-bottom: 3rem;">
+                All available components from the Dotfiles Theme
+            </p>
+
+            <!-- Buttons -->
+            <section class="card" style="margin-bottom: 2rem;">
+                <h2 class="card-title" style="margin-bottom: 1.5rem;">Buttons</h2>
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;">
+                    <button class="btn">Default Button</button>
+                    <button class="btn btn-accent">Primary (Accent)</button>
+                    <button class="btn btn-neutral">Neutral Button</button>
+                    <button class="btn" disabled>Disabled Button</button>
+                </div>
+
+                <h3 style="color: var(--color-foreground-bright); margin-bottom: 1rem; font-size: 1.1rem;">Button Sizes</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
+                    <button class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Small</button>
+                    <button class="btn">Medium (Default)</button>
+                    <button class="btn" style="padding: 0.8rem 1.5rem; font-size: 1.05rem;">Large</button>
+                </div>
+            </section>
+
+            <!-- Cards -->
+            <section class="card" style="margin-bottom: 2rem;">
+                <h2 class="card-title" style="margin-bottom: 1.5rem;">Cards</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+                    <div class="card">
+                        <h3 style="color: var(--color-foreground-bright); margin-bottom: 0.5rem;">Basic Card</h3>
+                        <p style="color: var(--color-foreground-muted); margin-bottom: 1rem;">
+                            A simple card with hover effects
+                        </p>
+                        <button class="btn btn-accent w-full">Action</button>
+                    </div>
+
+                    <div class="card" style="border-color: var(--color-border-accent);">
+                        <h3 style="color: var(--color-accent); margin-bottom: 0.5rem;">Accent Card</h3>
+                        <p style="color: var(--color-foreground-muted); margin-bottom: 1rem;">
+                            Card with accent border
+                        </p>
+                        <button class="btn w-full">Action</button>
+                    </div>
+
+                    <div class="card" style="background: var(--color-accent-bg);">
+                        <h3 style="color: var(--color-accent); margin-bottom: 0.5rem;">Colored Card</h3>
+                        <p style="color: var(--color-foreground); margin-bottom: 1rem;">
+                            Card with accent background
+                        </p>
+                        <button class="btn btn-accent w-full">Action</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Badges & Chips -->
+            <section class="card" style="margin-bottom: 2rem;">
+                <h2 class="card-title" style="margin-bottom: 1.5rem;">Badges & Chips</h2>
+
+                <h3 style="color: var(--color-foreground-bright); margin-bottom: 1rem; font-size: 1.1rem;">Status Badges</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 2rem;">
+                    <span class="badge success">Success</span>
+                    <span class="badge warning">Warning</span>
+                    <span class="activity-badge error">Error</span>
+                    <span class="activity-badge info">Info</span>
+                    <span class="activity-badge success">Active</span>
+                </div>
+
+                <h3 style="color: var(--color-foreground-bright); margin-bottom: 1rem; font-size: 1.1rem;">Filter Chips</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    <button class="filter-chip active">All Items</button>
+                    <button class="filter-chip">Active</button>
+                    <button class="filter-chip">Completed</button>
+                    <button class="filter-chip">Archived</button>
+                    <button class="filter-chip">Draft</button>
+                </div>
+            </section>
+
+            <!-- Sidebar Items -->
+            <section class="card" style="margin-bottom: 2rem;">
+                <h2 class="card-title" style="margin-bottom: 1.5rem;">Sidebar Navigation Items</h2>
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <button class="sidebar-item active" title="Home">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="12" cy="12" r="2"/>
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                        </svg>
+                    </button>
+                    <button class="sidebar-item" title="Folder">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                        </svg>
+                    </button>
+                    <button class="sidebar-item" title="Settings">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                        </svg>
+                    </button>
+                    <button class="sidebar-item" title="Code">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
+                        </svg>
+                    </button>
+                    <button class="sidebar-item" title="Search">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        </svg>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Avatars -->
+            <section class="card" style="margin-bottom: 2rem;">
+                <h2 class="card-title" style="margin-bottom: 1.5rem;">Avatars</h2>
+                <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                    <div class="avatar">JD</div>
+                    <div class="avatar" style="background: #ff9800;">SK</div>
+                    <div class="avatar" style="background: #9c27b0;">MJ</div>
+                    <div class="avatar" style="background: #2196f3;">AL</div>
+                    <div class="avatar" style="background: #f44336;">TR</div>
+
+                    <div style="width: 2px; height: 32px; background: var(--color-border-primary);"></div>
+
+                    <div class="avatar-group">
+                        <div class="avatar">A</div>
+                        <div class="avatar" style="background: #ff9800;">B</div>
+                        <div class="avatar" style="background: #9c27b0;">C</div>
+                        <div class="avatar" style="background: #2196f3;">+5</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Progress Bars -->
+            <section class="card" style="margin-bottom: 2rem;">
+                <h2 class="card-title" style="margin-bottom: 1.5rem;">Progress Bars</h2>
+                <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span style="color: var(--color-foreground);">Default Progress</span>
+                            <span style="color: var(--color-foreground-muted);">75%</span>
+                        </div>
+                        <div class="progress-container" style="height: 8px;">
+                            <div class="progress-bar" style="width: 75%;"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span style="color: var(--color-foreground);">Warning Progress</span>
+                            <span style="color: var(--color-foreground-muted);">45%</span>
+                        </div>
+                        <div class="progress-container" style="height: 8px;">
+                            <div class="progress-bar" style="width: 45%; background: #ff9800;"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span style="color: var(--color-foreground);">Success Progress</span>
+                            <span style="color: var(--color-foreground-muted);">90%</span>
+                        </div>
+                        <div class="progress-container" style="height: 8px;">
+                            <div class="progress-bar" style="width: 90%; background: #4caf50;"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Icons & Emoji -->
+            <section class="card">
+                <h2 class="card-title" style="margin-bottom: 1.5rem;">Icons & Emoji</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 1rem;">
+                    <div style="text-align: center; font-size: 2rem;">⚡</div>
+                    <div style="text-align: center; font-size: 2rem;">🚀</div>
+                    <div style="text-align: center; font-size: 2rem;">💡</div>
+                    <div style="text-align: center; font-size: 2rem;">🎨</div>
+                    <div style="text-align: center; font-size: 2rem;">📊</div>
+                    <div style="text-align: center; font-size: 2rem;">💰</div>
+                    <div style="text-align: center; font-size: 2rem;">📈</div>
+                    <div style="text-align: center; font-size: 2rem;">⚙️</div>
+                    <div style="text-align: center; font-size: 2rem;">🔔</div>
+                    <div style="text-align: center; font-size: 2rem;">👥</div>
+                    <div style="text-align: center; font-size: 2rem;">📁</div>
+                    <div style="text-align: center; font-size: 2rem;">🔧</div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="../styles/theme.js"></script>
+    <script>
+        // Filter chips interaction
+        document.querySelectorAll('.filter-chip').forEach(chip => {
+            chip.addEventListener('click', function() {
+                this.parentElement.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

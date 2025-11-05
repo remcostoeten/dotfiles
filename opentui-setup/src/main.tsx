@@ -201,7 +201,7 @@ function App() {
     // Dotfiles setup (FIRST - this is critical!)
     if (!config.dryRun) {
       setLogs((prev) => [...prev, "\n▶ Setting up dotfiles and Fish shell..."]);
-      
+
       try {
         // 1. Shell setup (install Fish if needed)
         setLogs((prev) => [...prev, "▶ Setting up shell environment..."]);
@@ -218,7 +218,7 @@ function App() {
         // 2. Dotfiles & Fish setup
         setLogs((prev) => [...prev, "▶ Setting up dotfiles and Fish shell..."]);
         const { setupDotfiles } = await import("./dotfiles-setup");
-        const dotfilesResult = await setupDotfiles(config.verbose);
+        const dotfilesResult = await setupDotfiles();
         dotfilesResult.steps.forEach((step) => {
           const icon = step.success ? "✓" : "✗";
           setLogs((prev) => [...prev, `  ${icon} ${step.name}: ${step.message}`]);
@@ -365,7 +365,7 @@ function App() {
           // Simulate installation
           await new Promise((resolve) => setTimeout(resolve, 500));
           setLogs((prev) => [...prev, `  ✓ [DRY RUN] Would install ${pkg.displayName}`]);
-          
+
           setCats((prev) =>
             prev.map((cat) =>
               cat.id === category.id
@@ -401,7 +401,7 @@ function App() {
           // Actually install with advanced features (retry, dependency checking, rollback)
           try {
             const { installPackageAdvanced } = await import("./install-manager");
-            
+
             const result = await installPackageAdvanced(pkg, {
               maxRetries: 3,
               retryDelay: 2000,
@@ -413,7 +413,7 @@ function App() {
               const attemptsMsg = result.attempts > 1 ? ` (succeeded on attempt ${result.attempts})` : "";
               setLogs((prev) => [...prev, `  ✓ ${pkg.displayName} installed successfully${attemptsMsg}`]);
               setCurrentOutput("Installation completed");
-              
+
               setCats((prev) =>
                 prev.map((cat) =>
                   cat.id === category.id
@@ -431,13 +431,13 @@ function App() {
             } else {
               const retryMsg = result.attempts > 1 ? ` (failed after ${result.attempts} attempts)` : "";
               const rollbackMsg = result.rolledBack ? " - rolled back changes" : "";
-              
+
               setLogs((prev) => [...prev, `  ✗ Failed to install ${pkg.displayName}${retryMsg}${rollbackMsg}`]);
               if (result.error) {
                 setLogs((prev) => [...prev, `    Error: ${result.error}`]);
               }
               setCurrentOutput(result.error || "Installation failed");
-              
+
               setCats((prev) =>
                 prev.map((cat) =>
                   cat.id === category.id
@@ -457,7 +457,7 @@ function App() {
             const errorMsg = error instanceof Error ? error.message : String(error);
             setLogs((prev) => [...prev, `  ✗ Error installing ${pkg.displayName}: ${errorMsg}`]);
             setCurrentOutput(errorMsg);
-            
+
             setCats((prev) =>
               prev.map((cat) =>
                 cat.id === category.id
@@ -500,11 +500,11 @@ function App() {
     // Nerd Fonts installation
     if (!config.dryRun && !config.skipFonts) {
       setLogs((prev) => [...prev, "\n▶ Installing Nerd Fonts..."]);
-      
+
       try {
         const { installNerdFonts } = await import("./nerd-fonts");
         const fontsResult = await installNerdFonts();
-        
+
         if (fontsResult.success) {
           setLogs((prev) => [...prev, `✓ ${fontsResult.message}`]);
         } else {
@@ -519,11 +519,11 @@ function App() {
     // Set Fish as default shell
     if (!config.dryRun) {
       setLogs((prev) => [...prev, "\n▶ Setting Fish as default shell..."]);
-      
+
       try {
         const { setFishAsDefault } = await import("./nerd-fonts");
         const fishResult = await setFishAsDefault();
-        
+
         if (fishResult.success) {
           setLogs((prev) => [...prev, `✓ ${fishResult.message}`]);
         } else {
@@ -538,11 +538,11 @@ function App() {
     // Final verification
     if (!config.dryRun) {
       setLogs((prev) => [...prev, "\n▶ Running final verification..."]);
-      
+
       try {
         const { generateVerificationReport } = await import("./verification");
         const report = await generateVerificationReport(config.verbose);
-        
+
         // Add verification report to logs
         const reportLines = report.split("\n");
         reportLines.forEach((line) => {

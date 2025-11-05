@@ -95,15 +95,15 @@ export async function verifyGhExtensions(verbose: boolean = false): Promise<GhEx
     if (listResult.success) {
       const extensions = listResult.output.split('\n').filter(line => line.trim());
       steps.push({ name: "Extensions list", success: true, message: `${extensions.length} extensions installed` });
-      
+
       // Check for specific extensions
       const expectedExtensions = ["gh-select", "gh-copilot", "gh-dash", "gh-sponsors"];
       for (const ext of expectedExtensions) {
         const hasExtension = extensions.some(line => line.includes(ext));
-        steps.push({ 
-          name: `Check ${ext}`, 
-          success: hasExtension, 
-          message: hasExtension ? `${ext} is installed` : `${ext} is not installed` 
+        steps.push({
+          name: `Check ${ext}`,
+          success: hasExtension,
+          message: hasExtension ? `${ext} is installed` : `${ext} is not installed`
         });
       }
     } else {

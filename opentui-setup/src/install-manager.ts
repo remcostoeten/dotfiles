@@ -5,7 +5,7 @@
  * - Rollback on failure
  */
 
-import { installPackage, commandExists, isPackageInstalled } from "./executor";
+import { installPackage, commandExists, isAptPackageInstalled, isCommandAvailable, isPackageInstalled } from "./executor";
 import { updatePackageProgress } from "./progress";
 import type { Package } from "./types";
 import { logErrorSilently } from "./noop";
@@ -38,46 +38,46 @@ interface DependencyCheck {
 const PACKAGE_DEPENDENCIES: Record<string, DependencyCheck[]> = {
   // Snap packages need snapd
   "code": [
-    { name: "snapd", check: async () => commandExists("snap"), installCommand: "sudo apt-get install -y snapd", required: true }
+    { name: "snapd", check: async () => isCommandAvailable("snap"), installCommand: "sudo apt-get install -y snapd", required: true }
   ],
   "discord": [
-    { name: "snapd", check: async () => commandExists("snap"), installCommand: "sudo apt-get install -y snapd", required: true }
+    { name: "snapd", check: async () => isCommandAvailable("snap"), installCommand: "sudo apt-get install -y snapd", required: true }
   ],
   "android-studio": [
-    { name: "snapd", check: async () => commandExists("snap"), installCommand: "sudo apt-get install -y snapd", required: true }
+    { name: "snapd", check: async () => isCommandAvailable("snap"), installCommand: "sudo apt-get install -y snapd", required: true }
   ],
-  
+
   // NPM packages need npm or pnpm
   "gemini-cli": [
-    { 
-      name: "npm or pnpm", 
-      check: async () => (await commandExists("npm")) || (await commandExists("pnpm")),
+    {
+      name: "npm or pnpm",
+      check: async () => (await isCommandAvailable("npm")) || (await isCommandAvailable("pnpm")),
       installCommand: "sudo apt-get install -y npm",
-      required: true 
+      required: true
     }
   ],
-  
+
   // Cargo packages need cargo
   "ripgrep": [
-    { name: "cargo", check: async () => commandExists("cargo"), required: false }
+    { name: "cargo", check: async () => isCommandAvailable("cargo"), required: false }
   ],
-  
+
   // GitHub releases need wget and tar
   "lazygit": [
-    { name: "wget", check: async () => commandExists("wget"), installCommand: "sudo apt-get install -y wget", required: true },
-    { name: "tar", check: async () => commandExists("tar"), installCommand: "sudo apt-get install -y tar", required: true }
+    { name: "wget", check: async () => isCommandAvailable("wget"), installCommand: "sudo apt-get install -y wget", required: true },
+    { name: "tar", check: async () => isCommandAvailable("tar"), installCommand: "sudo apt-get install -y tar", required: true }
   ],
   "lazydocker": [
-    { name: "wget", check: async () => commandExists("wget"), installCommand: "sudo apt-get install -y wget", required: true },
-    { name: "tar", check: async () => commandExists("tar"), installCommand: "sudo apt-get install -y tar", required: true }
+    { name: "wget", check: async () => isCommandAvailable("wget"), installCommand: "sudo apt-get install -y wget", required: true },
+    { name: "tar", check: async () => isCommandAvailable("tar"), installCommand: "sudo apt-get install -y tar", required: true }
   ],
   "wezterm": [
-    { name: "wget", check: async () => commandExists("wget"), installCommand: "sudo apt-get install -y wget", required: true }
+    { name: "wget", check: async () => isCommandAvailable("wget"), installCommand: "sudo apt-get install -y wget", required: true }
   ],
-  
+
   // Docker needs specific setup
   "docker.io": [
-    { name: "systemd", check: async () => commandExists("systemctl"), required: true }
+    { name: "systemd", check: async () => isCommandAvailable("systemctl"), required: true }
   ],
 };
 
@@ -94,22 +94,22 @@ async function checkDependencies(
 
   for (const dep of dependencies) {
     const exists = await dep.check();
-    
+
     if (!exists) {
       if (dep.required) {
         if (verbose) {
           console.log(`Missing required dependency: ${dep.name}`);
         }
-        
+
         // Try to install the dependency
         if (dep.installCommand) {
           if (verbose) {
             console.log(`Installing dependency: ${dep.name}`);
           }
-          
+
           const { executeCommand } = await import("./executor");
           const result = await executeCommand(dep.installCommand);
-          
+
           if (result.success) {
             installed.push(dep.name);
           } else {
@@ -146,7 +146,7 @@ async function installWithRetry(
         console.log(`Attempt ${attempt}/${maxRetries} for ${pkg.displayName}`);
       }
 
-      const result = await installPackage(pkg, options.verbose);
+      const result = await installPackage(pkg.name, options.verbose);
 
       if (result.success) {
         return {
@@ -161,7 +161,7 @@ async function installWithRetry(
       // Don't retry if it's a dependency issue
       if (result.error?.includes("not installed") || result.error?.includes("not found")) {
         break;
-      
+
 }
 
       // Wait before retry (exponential backoff)
@@ -253,7 +253,7 @@ export async function installPackageAdvanced(
   }
 
   const depCheck = await checkDependencies(pkg, verbose);
-  
+
   if (!depCheck.success) {
     return {
       success: false,

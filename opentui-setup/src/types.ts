@@ -8,7 +8,7 @@ export interface Package {
   id: string;
   name: string;
   displayName: string;
-  method: "apt" | "snap" | "github" | "curl" | "npm";
+  method: "apt" | "snap" | "github" | "curl" | "npm" | "cargo";
   extra?: string;
   flags?: string;
   status: "pending" | "running" | "completed" | "failed";
@@ -28,3 +28,14 @@ export interface AppConfig {
   skipFonts: boolean;
   skipSystemUpdate: boolean;
 }
+
+export interface ProgressData {
+  current: number;
+  total: number;
+  currentPackage: string;
+  packages: Record<string, PackageStatus>;
+  snaps: Record<string, PackageStatus>;
+  tools: Record<string, PackageStatus>;
+}
+
+export type PackageStatus = "pending" | "running" | "completed" | "failed";

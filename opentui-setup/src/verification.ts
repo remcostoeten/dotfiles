@@ -150,7 +150,7 @@ async function verifyDotfilesConfig(verbose: boolean = false): Promise<{ name: s
   try {
     const DOTFILES_DIR = `${process.env.HOME}/.config/dotfiles`;
     const configCheck = await executeCommand(`test -d "${DOTFILES_DIR}"`);
-    
+
     if (!configCheck.success) {
       return {
         name: "Dotfiles Config",
@@ -243,7 +243,7 @@ async function verifyConfigApps(verbose: boolean = false): Promise<{ name: strin
       totalCount++;
       const configPath = `${process.env.HOME}/.config/${app}`;
       const checkResult = await executeCommand(`test -L "${configPath}"`);
-      
+
       if (checkResult.success) {
         workingCount++;
       }
@@ -537,7 +537,7 @@ async function verifySudoNoPassword(verbose: boolean = false): Promise<{ name: s
     const user = process.env.USER || "user";
     const sudoersLine = `${user} ALL=(ALL) NOPASSWD: ALL`;
     const checkResult = await executeCommand(`sudo -n true 2>/dev/null`, verbose);
-    
+
     if (checkResult.success) {
       return {
         name: "Sudo NOPASSWD",
@@ -571,11 +571,11 @@ async function verifyGnomeDesktop(verbose: boolean = false): Promise<{ name: str
     // Check desktop icons are hidden
     const iconsResult = await executeCommand("gsettings get org.gnome.desktop.background show-desktop-icons", verbose);
     const iconsHidden = iconsResult.success && iconsResult.output.includes("false");
-    
+
     // Check hot corners are enabled
     const hotCornerResult = await executeCommand("gsettings get org.gnome.desktop.interface enable-hot-corners", verbose);
     const hotCornersEnabled = hotCornerResult.success && hotCornerResult.output.includes("true");
-    
+
     // Check animations are disabled
     const animationsResult = await executeCommand("gsettings get org.gnome.desktop.interface enable-animations", verbose);
     const animationsDisabled = animationsResult.success && animationsResult.output.includes("false");
@@ -653,7 +653,7 @@ async function verifyBlurMyShell(verbose: boolean = false): Promise<{ name: stri
  */
 export async function generateVerificationReport(verbose: boolean = false): Promise<string> {
   const verification = await verifySystem(verbose);
-  
+
   let report = "╔════════════════════════════════════════════════════════════╗\n";
   report += "║                    SYSTEM VERIFICATION REPORT               ║\n";
   report += "╚════════════════════════════════════════════════════════════╝\n\n";
@@ -670,9 +670,9 @@ export async function generateVerificationReport(verbose: boolean = false): Prom
 
   const successCount = verification.checks.filter(c => c.success).length;
   const totalCount = verification.checks.length;
-  
+
   report += "╔════════════════════════════════════════════════════════════╗\n";
-  report += `║ SUMMARY: ${successCount}/${totalCount} checks passed                    ║\n";
+  report += `║ SUMMARY: ${successCount}/${totalCount} checks passed                    ║\n`;
   report += "╚════════════════════════════════════════════════════════════╝\n";
 
   return report;
