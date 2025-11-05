@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# VM Manager wrapper -> calls single script at scripts/vm
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(dirname "$SCRIPT_DIR")"
+
+exec "$DOTFILES_DIR/scripts/vm" "$@"

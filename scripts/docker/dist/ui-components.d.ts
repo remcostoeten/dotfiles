@@ -1,6 +1,8 @@
 import type { TContainer, TContainerStats, TViewState } from './types.js';
 /**
- * Prints the Docker whale ASCII art header
+ * Prints the Docker whale ASCII art header with pastel colors.
+ * ASCII art positioning stays fixed, only tagline is centered
+ * relative to the ASCII width.
  */
 export declare function printHeader(): void;
 /**

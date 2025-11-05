@@ -12,7 +12,7 @@ type TMenuItem = {
     text: string;
     value: string;
 };
-type TViewState = 'main' | 'containers' | 'details' | 'logs';
+type TViewState = 'main' | 'containers' | 'details' | 'logs' | 'quick-actions' | 'create-postgres';
 type TResult<T, E = string> = {
     ok: true;
     value: T;

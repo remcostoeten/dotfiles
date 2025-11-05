@@ -141,7 +141,7 @@ async function setGnomeDefaultTerminal(terminal: any, verbose: boolean = false):
   try {
     // Use gsettings to set default terminal
     const result = await executeCommand(`gsettings set org.gnome.desktop.default-applications.terminal exec '${terminal.executable}'`);
-    
+
     if (result.success && terminal.profile) {
       // Set terminal profile if needed
       await executeCommand(`gsettings set org.gnome.desktop.default-applications.terminal exec-arg '-x'`);
@@ -195,7 +195,7 @@ async function setGenericDefaultTerminal(terminal: any, verbose: boolean = false
     const result = await executeCommand(`
       sudo update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator "$(which ${terminal.executable})" 100
     `);
-    
+
     if (result.success) {
       // Set as default
       await executeCommand(`
@@ -225,7 +225,7 @@ export async function configureTerminalSettings(verbose: boolean = false): Promi
     const kittyCheck = await executeCommand("command -v kitty");
     if (kittyCheck.success) {
       const kittyConfig = `${process.env.HOME}/.config/kitty/kitty.conf`;
-      
+
       // Create kitty config if it doesn't exist
       const configCheck = await executeCommand(`test -f "${kittyConfig}"`);
       if (!configCheck.success) {
@@ -282,7 +282,7 @@ export async function setupTerminal(verbose: boolean = false): Promise<TerminalS
   result.steps.push(...settings.steps);
   if (!settings.success) result.success = false;
 
-  result.message = result.success 
+  result.message = result.success
     ? "Terminal setup completed"
     : "Terminal setup completed with some issues";
 

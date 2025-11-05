@@ -44,29 +44,29 @@ print_error() {
 # Check if running on supported system
 check_system() {
     print_status "Checking system compatibility..."
-    
+
     if ! command -v apt-get >/dev/null 2>&1; then
         print_error "This script requires apt-get (Ubuntu/Debian)"
         exit 1
     fi
-    
+
     if ! command -v sudo >/dev/null 2>&1; then
         print_error "sudo is required but not installed"
         exit 1
     fi
-    
+
     print_success "System compatibility verified"
 }
 
 # Install Git if not present
 install_git() {
     print_status "Installing Git..."
-    
+
     if command -v git >/dev/null 2>&1; then
         print_success "Git is already installed"
         return 0
     fi
-    
+
     if sudo apt-get update && sudo apt-get install -y git; then
         print_success "Git installed successfully"
     else
@@ -78,7 +78,7 @@ install_git() {
 # Clone dotfiles repository
 clone_dotfiles() {
     print_status "Cloning dotfiles repository..."
-    
+
     if [ -d "$DOTFILES_DIR" ]; then
         print_warning "Dotfiles directory already exists"
         read -p "Do you want to remove and re-clone? (y/n): " -n 1 -r
@@ -90,10 +90,10 @@ clone_dotfiles() {
             return 0
         fi
     fi
-    
+
     # Create parent directory if needed
     mkdir -p "$(dirname "$DOTFILES_DIR")"
-    
+
     if git clone https://github.com/remcostoeten/dotfiles.git "$DOTFILES_DIR"; then
         print_success "Dotfiles repository cloned"
     else
@@ -105,12 +105,12 @@ clone_dotfiles() {
 # Install Fish shell
 install_fish() {
     print_status "Installing Fish shell..."
-    
+
     if command -v fish >/dev/null 2>&1; then
         print_success "Fish shell is already installed"
         return 0
     fi
-    
+
     if sudo apt-get install -y fish; then
         print_success "Fish shell installed successfully"
     else
@@ -122,25 +122,25 @@ install_fish() {
 # Install Bun runtime
 install_bun() {
     print_status "Installing Bun runtime..."
-    
+
     if command -v bun >/dev/null 2>&1; then
         print_success "Bun is already installed"
         return 0
     fi
-    
+
     # Install Bun using official installer
     if curl -fsSL https://bun.sh/install | bash; then
         # Add Bun to PATH for current session
         export BUN_INSTALL="$HOME/.bun"
         export PATH="$BUN_INSTALL/bin:$PATH"
-        
+
         # Add to .bashrc if not already there
         if ! grep -q 'bun/install' "$HOME/.bashrc" 2>/dev/null; then
             echo '# Bun' >> "$HOME/.bashrc"
             echo 'export BUN_INSTALL="$HOME/.bun"' >> "$HOME/.bashrc"
             echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> "$HOME/.bashrc"
         fi
-        
+
         print_success "Bun installed successfully"
     else
         print_error "Failed to install Bun"
@@ -151,12 +151,12 @@ install_bun() {
 # Install Node.js if Bun installation fails (fallback)
 install_nodejs() {
     print_status "Installing Node.js (fallback)..."
-    
+
     if command -v node >/dev/null 2>&1; then
         print_success "Node.js is already installed"
         return 0
     fi
-    
+
     # Install Node.js via NodeSource
     if curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && sudo apt-get install -y nodejs; then
         print_success "Node.js installed successfully"
@@ -169,14 +169,14 @@ install_nodejs() {
 # Install npm/pnpm if needed
 install_package_managers() {
     print_status "Checking package managers..."
-    
+
     # npm comes with Node.js
     if command -v npm >/dev/null 2>&1; then
         print_success "npm is available"
     else
         print_warning "npm not found"
     fi
-    
+
     # Install pnpm if requested
     if command -v pnpm >/dev/null 2>&1; then
         print_success "pnpm is already installed"
@@ -193,9 +193,9 @@ install_package_managers() {
 # Install dependencies for OpenTUI setup
 install_dependencies() {
     print_status "Installing OpenTUI dependencies..."
-    
+
     cd "$OPENTUI_DIR"
-    
+
     if command -v bun >/dev/null 2>&1; then
         if bun install; then
             print_success "Dependencies installed with Bun"
@@ -219,9 +219,9 @@ install_dependencies() {
 # Verify all critical components are working
 verify_setup() {
     print_status "Verifying setup..."
-    
+
     local errors=0
-    
+
     # Check Git
     if ! command -v git >/dev/null 2>&1; then
         print_error "Git is not available"
@@ -229,7 +229,7 @@ verify_setup() {
     else
         print_success "Git is working"
     fi
-    
+
     # Check Bun/Node
     if command -v bun >/dev/null 2>&1; then
         print_success "Bun is working"
@@ -239,7 +239,7 @@ verify_setup() {
         print_error "Neither Bun nor Node.js is available"
         ((errors++))
     fi
-    
+
     # Check dotfiles directory
     if [ -d "$DOTFILES_DIR" ]; then
         print_success "Dotfiles directory exists"
@@ -247,7 +247,7 @@ verify_setup() {
         print_error "Dotfiles directory not found"
         ((errors++))
     fi
-    
+
     # Check OpenTUI setup directory
     if [ -d "$OPENTUI_DIR" ]; then
         print_success "OpenTUI setup directory exists"
@@ -255,7 +255,7 @@ verify_setup() {
         print_error "OpenTUI setup directory not found"
         ((errors++))
     fi
-    
+
     # Check if dependencies are installed
     if [ -f "$OPENTUI_DIR/package.json" ] && [ -d "$OPENTUI_DIR/node_modules" ]; then
         print_success "Dependencies are installed"
@@ -263,7 +263,7 @@ verify_setup() {
         print_error "Dependencies not properly installed"
         ((errors++))
     fi
-    
+
     if [ $errors -eq 0 ]; then
         print_success "All components verified successfully"
         return 0
@@ -276,10 +276,10 @@ verify_setup() {
 # Create launcher script
 create_launcher() {
     print_status "Creating launcher script..."
-    
+
     local launcher_dir="$HOME/.local/bin"
     mkdir -p "$launcher_dir"
-    
+
     cat > "$launcher_dir/opentui-setup" << 'EOF'
 #!/bin/bash
 # OpenTUI Setup Launcher
@@ -295,15 +295,15 @@ else
     exit 1
 fi
 EOF
-    
+
     chmod +x "$launcher_dir/opentui-setup"
-    
+
     # Add ~/.local/bin to PATH if not already there
     if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
         echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
         export PATH="$HOME/.local/bin:$PATH"
     fi
-    
+
     print_success "Launcher script created: opentui-setup"
 }
 
@@ -335,11 +335,11 @@ show_next_steps() {
 # Main execution
 main() {
     print_header
-    
+
     # Parse arguments
     SKIP_GIT=false
     SKIP_BUN=false
-    
+
     for arg in "$@"; do
         case $arg in
             --skip-git)
@@ -358,22 +358,22 @@ main() {
                 ;;
         esac
     done
-    
+
     check_system
-    
+
     if [ "$SKIP_GIT" = false ]; then
         install_git
     fi
-    
+
     clone_dotfiles
-    
+
     if [ "$SKIP_BUN" = false ]; then
         install_bun || install_nodejs
     fi
-    
+
     install_package_managers
     install_dependencies
-    
+
     if verify_setup; then
         create_launcher
         show_next_steps

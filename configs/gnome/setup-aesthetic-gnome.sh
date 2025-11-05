@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-
 set -e
-
 BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -48,33 +46,33 @@ log_step() {
 confirm() {
     local prompt="$1"
     local default="${2:-n}"
-    
+
     if [ "$default" = "y" ]; then
         prompt="$prompt [Y/n] "
     else
         prompt="$prompt [y/N] "
     fi
-    
+
     read -p "$(echo -e ${YELLOW}${prompt}${NC})" response
     response=${response:-$default}
-    
+
     [[ "$response" =~ ^[Yy]$ ]]
 }
 
 check_dependencies() {
     log_step "Checking dependencies"
-    
+
     local missing_deps=()
-    
+
     # Check for gnome-shell-extensions package (provides gnome-extensions command)
     if ! command -v gnome-extensions &> /dev/null; then
         missing_deps+=("gnome-shell-extensions")
     fi
-    
+
     if ! command -v gsettings &> /dev/null; then
         missing_deps+=("dconf-cli")  # More accurate package name
     fi
-    
+
     if [ ${#missing_deps[@]} -gt 0 ]; then
         log_error "Missing dependencies: ${missing_deps[*]}"
         if confirm "Install missing dependencies?"; then
@@ -85,17 +83,17 @@ check_dependencies() {
             exit 1
         fi
     fi
-    
+
     log_success "All dependencies satisfied"
 }
 
 install_fonts() {
     log_step "Installing recommended fonts"
-    
+
     if confirm "Install Inter font for beautiful UI?"; then
         log_info "Installing Inter font..."
         mkdir -p ~/.local/share/fonts
-        
+
         if command -v wget &> /dev/null; then
             cd /tmp
             wget -q "https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip" -O inter.zip
@@ -112,7 +110,7 @@ install_fonts() {
 
 main() {
     banner
-    
+
     log_info "This script will transform your GNOME desktop with:"
     echo "  • Transparent and blurred top panel"
     echo "  • Beautiful window effects and animations"
@@ -120,44 +118,44 @@ main() {
     echo "  • Aesthetic lock screen styling"
     echo "  • Enhanced visual effects throughout"
     echo ""
-    
+
     if ! confirm "Continue with setup?" "y"; then
         log_warning "Setup cancelled"
         exit 0
     fi
-    
+
     check_dependencies
-    
+
     install_fonts
-    
+
     log_step "Applying GNOME aesthetic configuration"
     if [ -f "$SCRIPT_DIR/apply-gnome-aesthetics.sh" ]; then
         bash "$SCRIPT_DIR/apply-gnome-aesthetics.sh"
     else
         log_error "apply-gnome-aesthetics.sh not found"
     fi
-    
+
     log_step "Applying GTK custom styling"
     if [ -f "$SCRIPT_DIR/apply-gtk-styling.sh" ]; then
         bash "$SCRIPT_DIR/apply-gtk-styling.sh"
     else
         log_error "apply-gtk-styling.sh not found"
     fi
-    
+
     log_step "Configuring lock screen"
     if [ -f "$SCRIPT_DIR/lock-screen/configure-lock-screen.sh" ]; then
         bash "$SCRIPT_DIR/lock-screen/configure-lock-screen.sh"
     else
         log_error "configure-lock-screen.sh not found"
     fi
-    
+
     if confirm "Install additional aesthetic extensions?"; then
         log_step "Installing GNOME extensions"
         if [ -f "$SCRIPT_DIR/install-extensions.sh" ]; then
             bash "$SCRIPT_DIR/install-extensions.sh" || log_warning "Some extensions may have failed to install"
         fi
     fi
-    
+
     echo ""
     log_success "╔═══════════════════════════════════════════════════════╗"
     log_success "║  ✨ GNOME Aesthetic Setup Complete! ✨                ║"
@@ -174,7 +172,7 @@ main() {
     echo "  • GTK CSS: Edit ~/.config/gtk-3.0/gtk.css or ~/.config/gtk-4.0/gtk.css"
     echo "  • Blur settings: Configured in blur-my-shell extension"
     echo ""
-    
+
     if confirm "Restart GNOME Shell now?"; then
         if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
             log_warning "On Wayland, you need to log out and log back in"

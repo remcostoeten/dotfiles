@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -e
-
 ENV_FILE="$HOME/.config/dotfiles/env-private/env"
-
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -30,12 +28,12 @@ function view_env {
   echo -e "${CYAN}${BOLD}│${NC}  ${MAGENTA}⚙  Environment Variables${NC}   ${CYAN}${BOLD}│${NC}"
   echo -e "${CYAN}${BOLD}╰───────────────────────────╯${NC}"
   echo ""
-  
+
   local count=0
   while IFS= read -r line; do
     # Skip empty lines and comments
     [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-    
+
     # Extract key and value - handle both quoted and unquoted values
     if [[ "$line" =~ ^export[[:space:]]+([^=]+)=(.*)$ ]]; then
       local key="${BASH_REMATCH[1]}"
@@ -47,7 +45,7 @@ function view_env {
       count=$((count + 1))
     fi
   done < "$ENV_FILE"
-  
+
   echo ""
   if [ $count -eq 0 ]; then
     echo -e "  ${DIM}No environment variables set${NC}"
@@ -88,7 +86,7 @@ function remove_env {
     echo -e "${RED}Usage:${NC} env remove ${GREEN}<KEY>${NC}"
     exit 1
   fi
-  
+
   # Check if key exists
   if grep -q "^export $KEY=" "$ENV_FILE"; then
     sed -i.bak "/^export $KEY=/d" "$ENV_FILE"

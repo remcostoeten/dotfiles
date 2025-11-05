@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import { TerminalManager } from './terminal-manager.js';
 import { COLORS, printError } from './ui-utils.js';
 

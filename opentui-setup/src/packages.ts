@@ -269,7 +269,7 @@ export const getSelectedPackages = (): Package[] => {
 export const selectEssentialCategories = (): void => {
   const essentialCategoryIds = [
     "essential",
-    "languages", 
+    "languages",
     "editors",
     "terminal-emulators",
     "package-managers",

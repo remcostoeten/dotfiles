@@ -78,11 +78,11 @@ export const continueOnError = async <T, R>(
   context?: string
 ): Promise<Array<{ success: boolean; result?: R; error?: unknown; item: T }>> => {
   const results = [];
-  
+
   for (const item of items) {
     const result = await safeExecute(() => fn(item), context);
     results.push({ ...result, item });
   }
-  
+
   return results;
 };

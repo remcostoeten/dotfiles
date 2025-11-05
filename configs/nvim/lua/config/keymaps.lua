@@ -1,3 +1,8 @@
--- Keymaps are automatically loaded on the VeryLazy event
--- Default keymaps that are always set: https://github.com/LazyVim/LazyVim/blob/main/lua/lazyvim/config/keymaps.lua
--- Add any additional keymaps here
+-- Word wrap
+vim.opt.wrap = true
+vim.opt.linebreak = true
+vim.opt.breakindent = true
+-- Shift+X as backspace
+vim.keymap.set("i", "<S-X>", "<BS>", { desc = "Backspace in insert" })
+vim.keymap.set("n", "<S-X>", "X", { desc = "Backspace in normal" })
+vim.keymap.set("v", "<S-X>", "<BS>", { desc = "Delete selection" })

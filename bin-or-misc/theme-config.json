@@ -1,0 +1,180 @@
+{
+  "name": "Dotfiles Theme",
+  "version": "1.0.0",
+  "description": "A beautiful dark/light theme configuration based on the dotfiles landing page",
+  "themes": {
+    "dark": {
+      "colors": {
+        "background": {
+          "DEFAULT": "#0a0a0a",
+          "secondary": "#0d0d0d",
+          "tertiary": "#111111",
+          "elevated": "#141414",
+          "hover": "#1a1a1a",
+          "active": "#191919"
+        },
+        "accent": {
+          "DEFAULT": "#4ec9b0",
+          "dark": "#3ba890",
+          "darker": "#2b7f6f",
+          "bg": "#1e3a2e",
+          "bgHover": "#2a5040",
+          "subtle": "rgba(78, 201, 176, 0.15)",
+          "glow": "rgba(78, 201, 176, 0.3)"
+        },
+        "foreground": {
+          "DEFAULT": "#d4d4d4",
+          "bright": "#e0e0e0",
+          "brighter": "#f0f0f0",
+          "muted": "#bdbdbd",
+          "subtle": "#a6a6a6",
+          "faint": "#9a9a9a",
+          "disabled": "#888888",
+          "ghost": "#666666"
+        },
+        "border": {
+          "DEFAULT": "#2a2a2a",
+          "primary": "#2a2a2a",
+          "secondary": "#1f1f1f",
+          "tertiary": "#242424",
+          "subtle": "#222222",
+          "hover": "#333333",
+          "accent": "#4ec9b0"
+        },
+        "card": {
+          "bg": "#111111",
+          "border": "#2a2a2a",
+          "hover": "#1a1a1a"
+        },
+        "sidebar": {
+          "item": "#111111",
+          "itemHover": "#1a1a1a",
+          "itemActiveBg": "#1e3a2e",
+          "itemIcon": "#888888",
+          "itemIconHover": "#4ec9b0",
+          "itemIconActive": "#4ec9b0"
+        },
+        "input": {
+          "bg": "#0b0b0b",
+          "border": "#242424",
+          "borderFocus": "#4ec9b0",
+          "text": "#dddddd"
+        },
+        "button": {
+          "bg": "#141414",
+          "border": "#242424",
+          "text": "#bdbdbd",
+          "hoverBg": "#191919",
+          "hoverBorder": "#2a2a2a",
+          "hoverText": "#e0e0e0"
+        }
+      },
+      "shadows": {
+        "sm": "0 1px 2px rgba(0, 0, 0, 0.1)",
+        "md": "0 4px 8px rgba(0, 0, 0, 0.15)",
+        "lg": "0 8px 16px rgba(0, 0, 0, 0.2)",
+        "xl": "0 10px 30px rgba(0, 0, 0, 0.3)",
+        "accent": "0 0 10px rgba(78, 201, 176, 0.3)",
+        "accentMd": "0 0 15px rgba(78, 201, 176, 0.4)",
+        "accentLg": "0 0 20px rgba(78, 201, 176, 0.5)"
+      }
+    },
+    "light": {
+      "colors": {
+        "background": {
+          "DEFAULT": "#ffffff",
+          "secondary": "#f8f9fa",
+          "tertiary": "#f1f3f5",
+          "elevated": "#e9ecef",
+          "hover": "#e1e4e8",
+          "active": "#dee2e6"
+        },
+        "accent": {
+          "DEFAULT": "#2d9d8c",
+          "dark": "#257f71",
+          "darker": "#1d6158",
+          "bg": "#e6f7f4",
+          "bgHover": "#d1f0eb",
+          "subtle": "rgba(45, 157, 140, 0.1)",
+          "glow": "rgba(45, 157, 140, 0.25)"
+        },
+        "foreground": {
+          "DEFAULT": "#1a1a1a",
+          "bright": "#000000",
+          "brighter": "#000000",
+          "muted": "#4a4a4a",
+          "subtle": "#6b6b6b",
+          "faint": "#8a8a8a",
+          "disabled": "#aaaaaa",
+          "ghost": "#cccccc"
+        },
+        "border": {
+          "DEFAULT": "#dee2e6",
+          "primary": "#dee2e6",
+          "secondary": "#e9ecef",
+          "tertiary": "#dfe3e7",
+          "subtle": "#e5e8ec",
+          "hover": "#c8cdd2",
+          "accent": "#2d9d8c"
+        },
+        "card": {
+          "bg": "#ffffff",
+          "border": "#dee2e6",
+          "hover": "#f8f9fa"
+        },
+        "sidebar": {
+          "item": "#f8f9fa",
+          "itemHover": "#e9ecef",
+          "itemActiveBg": "#e6f7f4",
+          "itemIcon": "#6b6b6b",
+          "itemIconHover": "#2d9d8c",
+          "itemIconActive": "#2d9d8c"
+        },
+        "input": {
+          "bg": "#ffffff",
+          "border": "#dee2e6",
+          "borderFocus": "#2d9d8c",
+          "text": "#1a1a1a"
+        },
+        "button": {
+          "bg": "#f1f3f5",
+          "border": "#dee2e6",
+          "text": "#4a4a4a",
+          "hoverBg": "#e9ecef",
+          "hoverBorder": "#c8cdd2",
+          "hoverText": "#1a1a1a"
+        }
+      },
+      "shadows": {
+        "sm": "0 1px 2px rgba(0, 0, 0, 0.05)",
+        "md": "0 4px 8px rgba(0, 0, 0, 0.08)",
+        "lg": "0 8px 16px rgba(0, 0, 0, 0.1)",
+        "xl": "0 10px 30px rgba(0, 0, 0, 0.12)",
+        "accent": "0 0 10px rgba(45, 157, 140, 0.2)",
+        "accentMd": "0 0 15px rgba(45, 157, 140, 0.25)",
+        "accentLg": "0 0 20px rgba(45, 157, 140, 0.3)"
+      }
+    }
+  },
+  "radius": {
+    "sm": "6px",
+    "md": "8px",
+    "lg": "10px",
+    "xl": "12px",
+    "2xl": "16px",
+    "full": "9999px"
+  },
+  "transitions": {
+    "fast": "0.1s ease",
+    "base": "0.2s ease",
+    "slow": "0.3s ease"
+  },
+  "spacing": {
+    "xs": "0.25rem",
+    "sm": "0.5rem",
+    "md": "1rem",
+    "lg": "1.5rem",
+    "xl": "2rem",
+    "2xl": "3rem"
+  }
+}

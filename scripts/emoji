@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-
 # Emoji Picker Script
 # Interactive emoji selector with categories and smart search
-
 # Color definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -128,7 +126,7 @@ emoji_data = {
     "🎁": ["wrapped gift", "present", "birthday", "party", "surprise", "box"],
     "🎀": ["ribbon", "decoration", "present", "gift", "bow", "pretty"],
     "🎂": ["birthday cake", "cake", "party", "celebration", "birthday", "dessert", "candles"],
-    
+
     # Smiles & Positive Emotions
     "😀": ["grinning face", "smile", "smiley", "happy", "joy", "cheerful", "grin", "happiness"],
     "😃": ["grinning face with big eyes", "smile", "smiley", "happy", "joy", "excited", "grin", "happiness"],
@@ -158,7 +156,7 @@ emoji_data = {
     "😝": ["squinting face with tongue", "smiley", "playful", "silly", "tease", "yuck", "bleh"],
     "🤑": ["money mouth face", "smiley", "rich", "money", "dollar", "greedy", "cash"],
     "😎": ["smiling face with sunglasses", "smiley", "cool", "sunglasses", "swagger", "confident", "awesome", "rad", "chill"],
-    
+
     # Sad & Negative Emotions
     "😢": ["crying face", "sad", "tear", "cry", "crying", "upset", "unhappy", "tears"],
     "😭": ["loudly crying face", "sob", "cry", "crying", "sad", "bawling", "tears", "sobbing", "bawl"],
@@ -180,7 +178,7 @@ emoji_data = {
     "☹️": ["frowning face", "sad", "unhappy", "upset", "frown"],
     "😕": ["confused face", "confused", "uncertain", "puzzled", "unsure", "confusion"],
     "🥹": ["face holding back tears", "touched", "emotional", "grateful", "moved", "tears", "crying"],
-    
+
     # Flowers & Plants
     "🌸": ["cherry blossom", "flower", "spring", "pink", "nature", "sakura", "bloom"],
     "🌺": ["hibiscus", "flower", "tropical", "nature", "bloom", "exotic"],
@@ -201,7 +199,7 @@ emoji_data = {
     "🌳": ["deciduous tree", "tree", "nature", "forest", "green"],
     "🌲": ["evergreen tree", "tree", "pine", "christmas", "forest"],
     "🌱": ["seedling", "plant", "sprout", "new", "growth", "young"],
-    
+
     # Hearts & Love
     "❤️": ["red heart", "love", "heart", "romance", "like", "valentine"],
     "🧡": ["orange heart", "love", "heart", "like", "orange", "affection"],
@@ -225,7 +223,7 @@ emoji_data = {
     "💟": ["heart decoration", "love", "purple", "cute", "decorative"],
     "♥️": ["heart suit", "love", "cards", "poker", "valentine"],
     "💌": ["love letter", "letter", "love", "mail", "message", "romantic"],
-    
+
     # Food & Drinks
     "🍎": ["red apple", "fruit", "apple", "healthy", "food"],
     "🍐": ["pear", "fruit", "food", "healthy"],
@@ -260,7 +258,7 @@ emoji_data = {
     "🥛": ["glass of milk", "milk", "drink", "dairy", "white"],
     "🧃": ["beverage box", "juice", "drink", "juice box"],
     "🥤": ["cup with straw", "drink", "soda", "beverage"],
-    
+
     # Animals
     "🐶": ["dog face", "dog", "puppy", "pet", "cute", "woof"],
     "🐱": ["cat face", "cat", "kitten", "pet", "cute", "meow"],
@@ -312,7 +310,7 @@ emoji_data = {
     "🦘": ["kangaroo", "animal", "australia", "jump", "pouch"],
     "🐎": ["horse", "animal", "fast", "stallion", "ride"],
     "🦄": ["unicorn", "fantasy", "magic", "rainbow", "mythical"],
-    
+
     # Travel & Transportation
     "🚗": ["automobile", "car", "vehicle", "drive", "transport"],
     "🚕": ["taxi", "car", "cab", "ride", "transport"],
@@ -341,7 +339,7 @@ emoji_data = {
     "⛴️": ["ferry", "boat", "transport", "water", "passenger"],
     "🚢": ["ship", "boat", "cruise", "ocean", "large"],
     "⚓": ["anchor", "ship", "boat", "harbor", "nautical"],
-    
+
     # Nature & Weather
     "☀️": ["sun", "sunny", "bright", "day", "hot", "weather"],
     "🌤️": ["sun behind small cloud", "partly cloudy", "weather"],
@@ -382,7 +380,7 @@ emoji_data = {
     "🪐": ["ringed planet", "saturn", "planet", "space", "rings"],
     "🌌": ["milky way", "galaxy", "space", "stars", "cosmos"],
     "🌠": ["shooting star", "star", "meteor", "wish", "night"],
-    
+
     # Tech & Objects
     "💻": ["laptop", "computer", "coding", "work", "tech", "programming"],
     "🖥️": ["desktop computer", "computer", "pc", "work", "tech"],
@@ -427,7 +425,7 @@ emoji_data = {
     "🗡️": ["dagger", "knife", "weapon", "blade", "sword"],
     "⚔️": ["crossed swords", "swords", "fight", "battle", "weapon"],
     "🛡️": ["shield", "protection", "defense", "guard", "protect"],
-    
+
     # Symbols & Signs
     "✅": ["check mark button", "correct", "done", "yes", "approved", "complete"],
     "❌": ["cross mark", "wrong", "no", "error", "delete", "incorrect"],
@@ -483,7 +481,7 @@ emoji_data = {
     "↘️": ["down right arrow", "diagonal", "arrow", "southeast", "direction"],
     "↙️": ["down left arrow", "diagonal", "arrow", "southwest", "direction"],
     "↖️": ["up left arrow", "diagonal", "arrow", "northwest", "direction"],
-    
+
     # Sports & Activities
     "⚽": ["soccer ball", "soccer", "football", "sport", "ball", "game"],
     "🏀": ["basketball", "sport", "ball", "game", "court", "hoops"],
@@ -503,7 +501,7 @@ emoji_data = {
     "🥈": ["2nd place medal", "silver", "second", "medal", "runner up"],
     "🥉": ["3rd place medal", "bronze", "third", "medal"],
     "🏅": ["sports medal", "medal", "award", "achievement", "win"],
-    
+
     # Hands & Gestures
     "👋": ["waving hand", "hello", "hi", "bye", "wave", "greet"],
     "🤚": ["raised back of hand", "hand", "stop", "halt"],
@@ -540,7 +538,7 @@ emoji_data = {
     "💅": ["nail polish", "nails", "manicure", "beauty", "polish"],
     "🤳": ["selfie", "photo", "camera", "phone", "picture"],
     "💪": ["flexed biceps", "strong", "muscle", "power", "strength", "flex"],
-    
+
     # People & Professions
     "👶": ["baby", "child", "infant", "young", "newborn"],
     "👧": ["girl", "child", "young", "female", "kid"],
@@ -581,7 +579,7 @@ emoji_data = {
     "🧚": ["fairy", "magic", "mystical", "wings", "sprite"],
     "🧚‍♂️": ["man fairy", "fairy", "magic", "mystical", "wings"],
     "👼": ["baby angel", "angel", "innocent", "cherub", "heaven"],
-    
+
     # Miscellaneous
     "🎯": ["bullseye", "target", "goal", "aim", "focus", "direct hit"],
     "🎓": ["graduation cap", "graduate", "education", "school", "degree", "diploma"],
@@ -643,7 +641,7 @@ for emoji in emojis_str.split():
     emoji = emoji.strip()
     if not emoji:
         continue
-    
+
     # Try to get metadata from dictionary
     if emoji in emoji_data:
         metadata = emoji_data[emoji]
@@ -659,7 +657,7 @@ for emoji in emojis_str.split():
         except:
             name = emoji
             keywords = " ".join(cat_keys)
-    
+
     print(f"{emoji}\t{name}\t{keywords}")
 PYTHON_EOF
 }
@@ -668,13 +666,13 @@ PYTHON_EOF
 show_emoji_picker() {
     local emojis="$1"
     local category="${2:-all}"
-    
+
     if ! command -v fzf &> /dev/null; then
         echo -e "${RED}✗${NC} fzf is not installed. Please install it first:"
         echo -e "${YELLOW}Install with:${NC} sudo apt install fzf"
         return 1
     fi
-    
+
     local selected
     selected=$(generate_emoji_list "$emojis" "$category" | \
         fzf --height=50% \
@@ -689,7 +687,7 @@ show_emoji_picker() {
             --color='info:#83a598,prompt:#bdae93,spinner:#fabd2f,pointer:#83a598,marker:#fe8019,header:#665c54' \
             --margin=1 \
             --padding=1 | cut -f1)
-    
+
     if [ -n "$selected" ]; then
         copy_to_clipboard "$selected"
         return 0

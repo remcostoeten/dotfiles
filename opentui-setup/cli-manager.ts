@@ -28,8 +28,8 @@ async function listAllPackages() {
 
 async function findPackage(search: string) {
   for (const category of categories) {
-    const pkg = category.packages.find(p => 
-      p.id === search.toLowerCase() || 
+    const pkg = category.packages.find(p =>
+      p.id === search.toLowerCase() ||
       p.displayName.toLowerCase().includes(search.toLowerCase()) ||
       p.name.toLowerCase().includes(search.toLowerCase())
     );
@@ -58,7 +58,7 @@ async function checkInstalled(pkg: any) {
 
 async function installPackage(pkg: any) {
   const { name, method, extra, flags } = pkg;
-  
+
   switch (method) {
     case "apt":
       return await executeCommand(`sudo apt install -y ${name}`, verbose);
@@ -85,7 +85,7 @@ async function installPackage(pkg: any) {
 
 async function removePackage(pkg: any) {
   const { name, method } = pkg;
-  
+
   switch (method) {
     case "apt":
       return await executeCommand(`sudo apt remove -y ${name}`, verbose);
@@ -97,10 +97,10 @@ async function removePackage(pkg: any) {
       return await executeCommand(`rm -rf ${name}`, verbose);
     case "curl":
       // For curl tools, this is more complex - just warn user
-      return { 
-        success: false, 
-        output: "", 
-        error: `Cannot automatically remove ${name} - installed via curl. Manual removal may be required.` 
+      return {
+        success: false,
+        output: "",
+        error: `Cannot automatically remove ${name} - installed via curl. Manual removal may be required.`
       };
     default:
       return { success: false, output: "", error: `Unsupported method: ${method}` };
@@ -109,27 +109,27 @@ async function removePackage(pkg: any) {
 
 async function main() {
   const found = await findPackage(searchTerm);
-  
+
   if (!found) {
     console.log(`❌ Package "${searchTerm}" not found.`);
     console.log("\nAvailable packages:");
     listAllPackages();
     process.exit(1);
   }
-  
+
   const { pkg, category } = found;
   console.log(`Found: ${pkg.displayName} (${pkg.id}) from ${category.name}`);
-  
+
   if (action === "install") {
     const installed = await checkInstalled(pkg);
     if (installed.success) {
       console.log(`✅ ${pkg.displayName} is already installed`);
       process.exit(0);
     }
-    
+
     console.log(`📦 Installing ${pkg.displayName}...`);
     const result = await installPackage(pkg);
-    
+
     if (result.success) {
       console.log(`✅ ${pkg.displayName} installed successfully`);
     } else {
@@ -142,10 +142,10 @@ async function main() {
       console.log(`ℹ️ ${pkg.displayName} is not installed`);
       process.exit(0);
     }
-    
+
     console.log(`🗑️ Removing ${pkg.displayName}...`);
     const result = await removePackage(pkg);
-    
+
     if (result.success) {
       console.log(`✅ ${pkg.displayName} removed successfully`);
     } else {

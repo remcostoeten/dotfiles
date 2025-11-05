@@ -5,7 +5,7 @@ export const COLORS = {
     DIM: '\x1b[2m',
     RED: '\x1b[31m',
     GREEN: '\x1b[32m',
-    YELLOW: '\x1b[33m',
+    YELLOW: '\x1b[38;2;178;242;187m', // Using pastel green for softer look
     BLUE: '\x1b[34m',
     MAGENTA: '\x1b[35m',
     CYAN: '\x1b[36m',
@@ -15,7 +15,17 @@ export const COLORS = {
     BG_YELLOW: '\x1b[43m',
     BG_BLUE: '\x1b[44m',
     BG_MAGENTA: '\x1b[45m',
-    BG_CYAN: '\x1b[46m'
+    BG_CYAN: '\x1b[46m',
+    HEX: (hex) => `\x1b[38;5;${hex}m`,
+    BG_HEX: (hex) => `\x1b[48;5;${hex}m`,
+    // Pastel colors matching cfg fish colors (RGB true color)
+    RGB: (r, g, b) => `\x1b[38;2;${r};${g};${b}m`,
+    PASTEL_PINK: '\x1b[38;2;250;162;193m', // faa2c1
+    PASTEL_MAGENTA: '\x1b[38;2;245;194;231m', // f5c2e7
+    PASTEL_PURPLE: '\x1b[38;2;212;187;248m', // d4bbf8
+    PASTEL_BLUE: '\x1b[38;2;165;216;255m', // a5d8ff
+    PASTEL_CYAN: '\x1b[38;2;137;220;235m', // 89dceb
+    PASTEL_GREEN: '\x1b[38;2;178;242;187m', // b2f2bb
 };
 /**
  * Clears the terminal screen

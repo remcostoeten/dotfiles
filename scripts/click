@@ -1,9 +1,7 @@
 #!/bin/bash
-
 # ============================================================================
 # Auto-Clicker Script with Interactive Mode, History, and Enhanced UI
 # ============================================================================
-
 # ============================================================================
 # Configuration & Globals
 # ============================================================================
@@ -32,6 +30,16 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
 
+# Pastel colors matching cfg/docker scripts
+PASTEL_PINK='\033[38;2;250;162;193m'
+PASTEL_MAGENTA='\033[38;2;212;187;248m'
+PASTEL_PURPLE='\033[38;2;165;216;255m'
+PASTEL_BLUE='\033[38;2;178;242;187m'
+PASTEL_CYAN='\033[38;2;255;236;153m'
+PASTEL_GREEN='\033[38;2;255;216;168m'
+PASTEL_ORANGE='\033[38;2;255;135;135m'
+PASTEL_RED='\033[38;2;137;220;235m'
+
 # Emoji/Symbols
 CHECK="✓"
 CROSS="✗"
@@ -45,12 +53,89 @@ RIGHT="▶"
 # Utility Functions
 # ============================================================================
 
+function get_version() {
+    local version_file="$(dirname "$0")/../VERSION"
+    if [ -f "$version_file" ]; then
+        cat "$version_file" | tr -d '\n'
+    else
+        echo "unknown"
+    fi
+}
+
+function remove_ansi() {
+    echo -e "$1" | sed 's/\x1b\[[0-9;]*m//g'
+}
+
+function create_gradient_text() {
+    local text="$1"
+    local colors=("$PASTEL_PINK" "$PASTEL_MAGENTA" "$PASTEL_PURPLE" "$PASTEL_BLUE" "$PASTEL_CYAN" "$PASTEL_GREEN")
+    local result=""
+    local text_len=${#text}
+
+    if [ $text_len -eq 0 ]; then
+        echo "$text"
+        return
+    fi
+
+    for ((i=0; i<text_len; i++)); do
+        local position=$((i * 100 / (text_len - 1)))
+        local color_index=$((position * (${#colors[@]} - 1) / 100))
+        result+="${colors[$color_index]}${text:$i:1}"
+    done
+    printf '%b' "${result}${NC}"
+}
+
+function show_banner() {
+    local version=$(get_version)
+    local tagline="By Remco Stoeten v$version"
+    local gradient_tagline=$(create_gradient_text "$tagline")
+
+    # Click/pointer themed ASCII art with gradient colors
+    local ascii_lines=(
+        "    ${PASTEL_PINK}██╗    ██╗██╗███╗   ██╗██████╗  ██████╗ ██╗   ██╗███████╗███████╗${NC}"
+        "    ${PASTEL_MAGENTA}██║    ██║██║████╗  ██║██╔══██╗██╔═══██╗██║   ██║██╔════╝██╔════╝${NC}"
+        "    ${PASTEL_PURPLE}██║ █╗ ██║██║██╔██╗ ██║██████╔╝██║   ██║██║   ██║█████╗  ███████╗${NC}"
+        "    ${PASTEL_BLUE}██║███╗██║██║██║╚██╗██║██╔══██╗██║   ██║██║   ██║██╔══╝  ╚════██║${NC}"
+        "    ${PASTEL_CYAN}╚███╔███╔╝██║██║ ╚████║██║  ██║╚██████╔╝╚██████╔╝███████╗███████║${NC}"
+        "    ${PASTEL_GREEN} ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚══════╝╚══════╝${NC}"
+        "    ${PASTEL_PINK}██╗███╗   ██╗███████╗████████╗██╗ ██████╗ ███╗   ██╗███████╗███████╗${NC}"
+        "    ${PASTEL_MAGENTA}██║████╗  ██║██╔════╝╚══██╔══╝██║██╔═══██╗████╗  ██║██╔════╝██╔════╝${NC}"
+        "    ${PASTEL_PURPLE}██║██╔██╗ ██║███████╗   ██║   ██║██║   ██║██╔██╗ ██║█████╗  ███████╗${NC}"
+        "    ${PASTEL_BLUE}██║██║╚██╗██║╚════██║   ██║   ██║██║   ██║██║╚██╗██║██╔══╝  ╚════██║${NC}"
+        "    ${PASTEL_CYAN}██║██║ ╚████║███████║   ██║   ██║╚██████╔╝██║ ╚████║███████╗███████║${NC}"
+        "    ${PASTEL_GREEN}╚═╝╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝╚══════╝${NC}"
+        "    ${PASTEL_PINK}╔════════════════════════════════════════════════════════════╗${NC}"
+        "    ${PASTEL_MAGENTA}║                      CLICK MANAGER                        ║${NC}"
+        "    ${PASTEL_PURPLE}╚════════════════════════════════════════════════════════════╝${NC}"
+    )
+
+    # Calculate padding for centered tagline
+    local max_width=0
+    for line in "${ascii_lines[@]}"; do
+        local clean_line=$(remove_ansi "$line")
+        local line_length=${#clean_line}
+        if [ $line_length -gt $max_width ]; then
+            max_width=$line_length
+        fi
+    done
+
+    local tagline_length=${#tagline}
+    local left_pad=$(((max_width - tagline_length) / 2))
+
+    # Print ASCII art and tagline
+    for line in "${ascii_lines[@]}"; do
+        echo -e "$line"
+    done
+    echo "$(printf ' %.0s' $(seq 1 $((left_pad + 1))))$gradient_tagline"
+    echo ""
+}
+
 function print_box() {
     local msg="$1"
     local color="${2:-$CYAN}"
     local width=60
     local padding=$(( (width - ${#msg} - 2) / 2 ))
-    
+
     echo -e "${color}╔$(printf '═%.0s' $(seq 1 $width))╗${NC}"
     printf "${color}║${NC}%*s${BOLD}${WHITE}%s${NC}%*s${color}║${NC}\n" \
         $padding "" "$msg" $((width - padding - ${#msg}))
@@ -65,7 +150,7 @@ function log_action() {
     local msg="$1"
     local level="${2:-info}"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
+
     case $level in
         info)
             echo -e "${CYAN}${POINT}${NC} ${WHITE}$msg${NC}"
@@ -135,16 +220,16 @@ function save_to_history() {
     local dur="$2"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local entry="${timestamp}|${clicks}|${dur}"
-    
+
     mkdir -p "$HISTORY_DIR"
-    
+
     if [ -f "$HISTORY_FILE" ]; then
         grep -v "|${clicks}|${dur}$" "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" 2>/dev/null || true
         mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE" 2>/dev/null || true
     fi
-    
+
     echo "$entry" >> "$HISTORY_FILE"
-    
+
     if [ -f "$HISTORY_FILE" ]; then
         tail -n $MAX_HISTORY "$HISTORY_FILE" > "${HISTORY_FILE}.tmp"
         mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
@@ -156,41 +241,41 @@ function show_history() {
         log_action "No history found" "warning"
         return 1
     fi
-    
+
     print_box "Click History (Last $MAX_HISTORY Sessions)"
     echo ""
-    
+
     local idx=0
     while IFS='|' read -r timestamp clicks dur; do
         echo -e "  ${CYAN}${idx}.${NC} ${BOLD}${WHITE}$clicks${NC} clicks/sec for ${BOLD}${WHITE}${dur}s${NC} ${DIM}($timestamp)${NC}"
         ((idx++))
     done < <(tac "$HISTORY_FILE")
-    
+
     echo ""
 }
 
 function load_from_history() {
     local idx="$1"
-    
+
     if [ ! -f "$HISTORY_FILE" ] || [ ! -s "$HISTORY_FILE" ]; then
         log_action "No history found" "error"
         return 1
     fi
-    
+
     local total_lines=$(wc -l < "$HISTORY_FILE")
     local line_num=$((total_lines - idx))
-    
+
     if [ $line_num -lt 1 ] || [ $line_num -gt $total_lines ]; then
         log_action "Invalid history index: $idx (valid: 0-$((total_lines-1)))" "error"
         return 1
     fi
-    
+
     local entry=$(sed -n "${line_num}p" "$HISTORY_FILE")
     IFS='|' read -r timestamp clicks dur <<< "$entry"
-    
+
     clicks_per_second="$clicks"
     duration="$dur"
-    
+
     log_action "Loaded from history: $clicks clicks/sec for ${dur}s" "success"
 }
 
@@ -242,17 +327,18 @@ function validate_number() {
 
 function interactive_menu() {
     clear
+    show_banner
     print_box "${STAR} Auto-Clicker Interactive Setup ${STAR}"
     echo ""
-    
+
     echo -e "${CYAN}${ARROW}${NC} ${BOLD}Options:${NC}"
     echo -e "  ${GREEN}1.${NC} Enter custom configuration"
     echo -e "  ${GREEN}2.${NC} Choose from previous sessions"
     echo -e "  ${GREEN}3.${NC} Exit"
     echo ""
-    
+
     read -p "$(echo -e "${CYAN}${POINT}${NC} Select option [1-3]: ")" choice
-    
+
     case $choice in
         1)
             interactive_custom_config
@@ -276,7 +362,7 @@ function interactive_custom_config() {
     clear
     print_box "Custom Configuration"
     echo ""
-    
+
     while true; do
         read -p "$(echo -e "${CYAN}${CLOCK}${NC} Clicks per second (e.g., 0.4, 1, 10): ")" clicks_input
         if validate_number "$clicks_input" "Clicks per second" 0.1 true; then
@@ -284,9 +370,9 @@ function interactive_custom_config() {
             break
         fi
     done
-    
+
     echo ""
-    
+
     while true; do
         read -p "$(echo -e "${CYAN}${CLOCK}${NC} Duration (seconds): ")" duration_input
         if validate_number "$duration_input" "Duration" 1; then
@@ -294,12 +380,12 @@ function interactive_custom_config() {
             break
         fi
     done
-    
+
     echo ""
-    
+
     while true; do
         read -p "$(echo -e "${CYAN}${CLOCK}${NC} Start delay (seconds) [default: 0]: ")" delay_input
-        
+
         if [ -z "$delay_input" ]; then
             start_delay=0
             break
@@ -308,7 +394,7 @@ function interactive_custom_config() {
             break
         fi
     done
-    
+
     echo ""
     print_line
     echo -e "${GREEN}${CHECK}${NC} ${BOLD}Configuration complete!${NC}"
@@ -317,31 +403,31 @@ function interactive_custom_config() {
     echo -e "  ${POINT} Start delay: ${BOLD}${WHITE}${start_delay}${NC}s"
     print_line
     echo ""
-    
-    read -p "$(echo -e "${CYAN}${ARROW}${NC} Press Enter to start...")" 
+
+    read -p "$(echo -e "${CYAN}${ARROW}${NC} Press Enter to start...")"
 }
 
 function interactive_history_select() {
     clear
-    
+
     if ! show_history; then
         sleep 2
         interactive_menu
         return
     fi
-    
+
     read -p "$(echo -e "${CYAN}${ARROW}${NC} Enter session number (or 'b' to go back): ")" hist_choice
-    
+
     if [ "$hist_choice" = "b" ] || [ "$hist_choice" = "B" ]; then
         interactive_menu
         return
     fi
-    
+
     if validate_number "$hist_choice" "Session number" 0; then
         if load_from_history "$hist_choice"; then
             start_delay=0
             echo ""
-            read -p "$(echo -e "${CYAN}${ARROW}${NC} Press Enter to start...")" 
+            read -p "$(echo -e "${CYAN}${ARROW}${NC} Press Enter to start...")"
         else
             sleep 2
             interactive_history_select
@@ -358,6 +444,7 @@ function interactive_history_select() {
 
 function show_help() {
     clear
+    show_banner
     print_box "${STAR} Auto-Clicker Help Menu ${STAR}"
     echo ""
     echo -e "${BOLD}${CYAN}USAGE:${NC}"
@@ -493,16 +580,16 @@ function start_clicking() {
     if [ "$CLICK_TOOL" = "xdotool" ] && [ -z "$DISPLAY" ]; then
         export DISPLAY=:0
     fi
-    
+
     if [ "$start_delay" -gt 0 ]; then
         for ((i=start_delay; i>0; i--)); do
             log_action "Starting in ${i}..." "warning"
             sleep 1
         done
     fi
-    
+
     log_action "Starting now!" "start"
-    
+
     print_box "Auto-Clicker Active"
     echo -e "  ${POINT} ${BOLD}${WHITE}${clicks_per_second}${NC} clicks/sec"
     echo -e "  ${POINT} ${BOLD}${WHITE}${duration}${NC} seconds"
@@ -510,12 +597,12 @@ function start_clicking() {
     print_line
     echo -e "${DIM}Press ${RED}Ctrl+C${DIM} to stop${NC}"
     echo ""
-    
+
     notify-send -u normal "Auto-Clicker Started ${RIGHT}" "Running for ${duration}s at ${clicks_per_second} clicks/sec"
-    
+
     end=$((SECONDS + duration))
     halfway_notified=false
-    
+
     while [ $SECONDS -lt $end ]; do
         if [ "$CLICK_TOOL" = "ydotool" ]; then
             ydotool click 0x110000 >/dev/null 2>&1  # Left click
@@ -523,15 +610,15 @@ function start_clicking() {
             xdotool click 1
         fi
         sleep "$interval"
-        
+
         remaining_time=$((end - SECONDS))
         progress=$(( ( (duration - remaining_time) * 100) / duration ))
-        
+
         if [ "$progress" -ge 50 ] && [ "$halfway_notified" = false ]; then
             log_action "50% complete - Halfway through!" "warning"
             halfway_notified=true
         fi
-        
+
         if [ "$remaining_time" -le 10 ] && [ "$remaining_time" -gt 0 ]; then
             echo -e "${YELLOW}${CLOCK}${NC} ${remaining_time} seconds remaining..."
             if [ "$remaining_time" -le 5 ]; then
@@ -539,10 +626,10 @@ function start_clicking() {
             fi
         fi
     done
-    
+
     echo ""
     log_action "Auto-clicker finished! Completed ${total_clicks} clicks in ${duration} seconds." "success"
-    
+
     save_to_history "$clicks_per_second" "$duration"
 }
 

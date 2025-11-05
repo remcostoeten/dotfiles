@@ -1,0 +1,5 @@
+# Optional dependencies for enhanced license generator functionality
+# Install with: pip install -r requirements.txt
+
+rich>=13.0.0          # For beautiful terminal output and colored prompts
+pyperclip>=1.8.0      # For clipboard functionality

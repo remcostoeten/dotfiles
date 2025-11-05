@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Theme Example - Dotfiles Theme</title>
+    <style>
+        /* Import the theme */
+        @import url('./tailwind-theme.css');
+
+        /* Reset */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+            background: var(--color-background);
+            color: var(--color-foreground);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        /* Layout */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+
+        .grid-3 {
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        }
+
+        .flex {
+            display: flex;
+        }
+
+        .flex-col {
+            flex-direction: column;
+        }
+
+        .items-center {
+            align-items: center;
+        }
+
+        .justify-between {
+            justify-content: space-between;
+        }
+
+        .gap-2 {
+            gap: 0.5rem;
+        }
+
+        .gap-4 {
+            gap: 1rem;
+        }
+
+        .mb-4 {
+            margin-bottom: 1rem;
+        }
+
+        .mb-8 {
+            margin-bottom: 2rem;
+        }
+
+        .p-4 {
+            padding: 1rem;
+        }
+
+        .w-full {
+            width: 100%;
+        }
+
+        /* Typography */
+        h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--color-foreground-bright);
+            margin-bottom: 0.5rem;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--color-foreground-bright);
+            margin-bottom: 1rem;
+        }
+
+        h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--color-foreground-bright);
+            margin-bottom: 0.5rem;
+        }
+
+        p {
+            color: var(--color-foreground-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--color-background-tertiary);
+            padding: 0.2rem 0.4rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            color: var(--color-accent);
+        }
+
+        /* Header */
+        header {
+            background: var(--color-background-secondary);
+            border-bottom: 1px solid var(--color-border-primary);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Theme toggle specific styles */
+        .theme-toggle {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        /* Section */
+        section {
+            margin-bottom: 3rem;
+        }
+
+        /* Status badge */
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            background: var(--color-accent-bg);
+            color: var(--color-accent);
+            border: 1px solid var(--color-border-accent);
+            border-radius: var(--radius-full);
+            font-size: 0.85rem;
+        }
+
+        /* Feature list */
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            padding: 0.5rem 0;
+            color: var(--color-foreground-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .feature-list li::before {
+            content: "→";
+            color: var(--color-accent);
+            font-weight: bold;
+        }
+
+        /* Demo section */
+        .demo-section {
+            background: var(--color-background-secondary);
+            border: 1px solid var(--color-border-primary);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Color swatch */
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+        }
+
+        .color-swatch {
+            aspect-ratio: 1;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: flex-end;
+            padding: 0.75rem;
+            border: 1px solid var(--color-border-primary);
+            transition: var(--transition-transform);
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.05);
+        }
+
+        .color-label {
+            font-size: 0.75rem;
+            background: var(--color-background);
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius-sm);
+            color: var(--color-foreground-muted);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-content flex items-center justify-between">
+            <div>
+                <h1>Dotfiles Theme</h1>
+                <p style="margin: 0; color: var(--color-foreground-muted);">
+                    A beautiful dark/light theme configuration
+                </p>
+            </div>
+            <button class="btn theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                <span id="theme-icon">🌙</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Status -->
+        <section>
+            <span class="status-badge">✨ Active Theme: <span id="current-theme">Dark</span></span>
+        </section>
+
+        <!-- Introduction -->
+        <section>
+            <h2>Welcome</h2>
+            <p>
+                This is a demonstration of the <span class="code">dotfiles-theme</span> CSS configuration.
+                Toggle between dark and light themes using the button in the header.
+            </p>
+        </section>
+
+        <!-- Buttons Demo -->
+        <section class="demo-section">
+            <h2>Buttons</h2>
+            <div class="flex gap-2" style="flex-wrap: wrap;">
+                <button class="btn">Default Button</button>
+                <button class="btn btn-accent">Accent Button</button>
+                <button class="btn" disabled>Disabled Button</button>
+            </div>
+        </section>
+
+        <!-- Cards Demo -->
+        <section>
+            <h2>Cards</h2>
+            <div class="grid grid-3">
+                <div class="card">
+                    <h3>Card Title 1</h3>
+                    <p>This is a standard card component with hover effects.</p>
+                    <button class="btn btn-accent" style="margin-top: 1rem;">Learn More</button>
+                </div>
+                <div class="card">
+                    <h3>Card Title 2</h3>
+                    <p>Cards automatically adapt to the current theme.</p>
+                    <button class="btn btn-accent" style="margin-top: 1rem;">Learn More</button>
+                </div>
+                <div class="card">
+                    <h3>Card Title 3</h3>
+                    <p>Smooth transitions between light and dark themes.</p>
+                    <button class="btn btn-accent" style="margin-top: 1rem;">Learn More</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Form Demo -->
+        <section>
+            <h2>Form Elements</h2>
+            <div class="grid grid-2">
+                <div class="card">
+                    <h3>Input Fields</h3>
+                    <div class="mb-4">
+                        <label style="display: block; margin-bottom: 0.5rem; color: var(--color-foreground-muted);">
+                            Email
+                        </label>
+                        <input type="email" class="input w-full" placeholder="your@email.com" />
+                    </div>
+                    <div class="mb-4">
+                        <label style="display: block; margin-bottom: 0.5rem; color: var(--color-foreground-muted);">
+                            Password
+                        </label>
+                        <input type="password" class="input w-full" placeholder="••••••••" />
+                    </div>
+                    <button class="btn btn-accent w-full">Sign In</button>
+                </div>
+
+                <div class="card">
+                    <h3>Filter Chips</h3>
+                    <div class="flex gap-2" style="flex-wrap: wrap; margin-bottom: 1rem;">
+                        <button class="filter-chip active">All</button>
+                        <button class="filter-chip">Active</button>
+                        <button class="filter-chip">Completed</button>
+                        <button class="filter-chip">Archived</button>
+                    </div>
+                    <h3 style="margin-top: 1.5rem;">Sidebar Items</h3>
+                    <div class="flex gap-2">
+                        <button class="sidebar-item active">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="12" r="2"/>
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                            </svg>
+                        </button>
+                        <button class="sidebar-item">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                            </svg>
+                        </button>
+                        <button class="sidebar-item">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Color Palette -->
+        <section>
+            <h2>Color Palette</h2>
+            <div class="color-grid">
+                <div class="color-swatch" style="background: var(--color-background);">
+                    <span class="color-label">Background</span>
+                </div>
+                <div class="color-swatch" style="background: var(--color-background-secondary);">
+                    <span class="color-label">Secondary</span>
+                </div>
+                <div class="color-swatch" style="background: var(--color-background-tertiary);">
+                    <span class="color-label">Tertiary</span>
+                </div>
+                <div class="color-swatch" style="background: var(--color-accent);">
+                    <span class="color-label">Accent</span>
+                </div>
+                <div class="color-swatch" style="background: var(--color-accent-bg);">
+                    <span class="color-label">Accent BG</span>
+                </div>
+                <div class="color-swatch" style="background: var(--color-card-bg); border-color: var(--color-border-accent);">
+                    <span class="color-label">Card</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features -->
+        <section>
+            <h2>Theme Features</h2>
+            <div class="grid grid-2">
+                <div class="card">
+                    <h3>Dark Theme</h3>
+                    <ul class="feature-list">
+                        <li>Deep black backgrounds</li>
+                        <li>Vibrant green accents</li>
+                        <li>Subtle border colors</li>
+                        <li>Smooth hover states</li>
+                        <li>Perfect for coding</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Light Theme</h3>
+                    <ul class="feature-list">
+                        <li>Clean white surfaces</li>
+                        <li>Teal green accents</li>
+                        <li>Soft shadows</li>
+                        <li>High contrast text</li>
+                        <li>Easy on the eyes</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Code Example -->
+        <section class="card">
+            <h2>Quick Start</h2>
+            <p>Add the theme to your project:</p>
+            <pre style="background: var(--color-background); padding: 1rem; border-radius: var(--radius-md); overflow-x: auto; color: var(--color-foreground-muted); margin: 1rem 0;"><code>// Import the theme
+@import "./tailwind-theme.css";
+
+// Set theme attribute
+&lt;html data-theme="dark"&gt;
+
+// Use variables
+.my-element {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  border: 1px solid var(--color-border-primary);
+}
+
+// Or use utility classes
+&lt;div class="bg-background text-foreground"&gt;
+  &lt;button class="btn btn-accent"&gt;Click me&lt;/button&gt;
+&lt;/div&gt;</code></pre>
+        </section>
+    </div>
+
+    <script>
+        // Theme toggle functionality
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+
+            // Update UI
+            document.getElementById('theme-icon').textContent = newTheme === 'dark' ? '🌙' : '☀️';
+            document.getElementById('current-theme').textContent =
+                newTheme.charAt(0).toUpperCase() + newTheme.slice(1);
+        }
+
+        // Load saved theme on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme');
+            const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const theme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+
+            document.documentElement.setAttribute('data-theme', theme);
+            document.getElementById('theme-icon').textContent = theme === 'dark' ? '🌙' : '☀️';
+            document.getElementById('current-theme').textContent =
+                theme.charAt(0).toUpperCase() + theme.slice(1);
+        });
+
+        // Add interactive chip functionality
+        document.querySelectorAll('.filter-chip').forEach(chip => {
+            chip.addEventListener('click', function() {
+                // Remove active from all chips in this group
+                const parent = this.parentElement;
+                parent.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+                // Add active to clicked chip
+                this.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

@@ -4,7 +4,7 @@ export declare const COLORS: {
     readonly DIM: "\u001B[2m";
     readonly RED: "\u001B[31m";
     readonly GREEN: "\u001B[32m";
-    readonly YELLOW: "\u001B[33m";
+    readonly YELLOW: "\u001B[38;2;178;242;187m";
     readonly BLUE: "\u001B[34m";
     readonly MAGENTA: "\u001B[35m";
     readonly CYAN: "\u001B[36m";
@@ -15,6 +15,15 @@ export declare const COLORS: {
     readonly BG_BLUE: "\u001B[44m";
     readonly BG_MAGENTA: "\u001B[45m";
     readonly BG_CYAN: "\u001B[46m";
+    readonly HEX: (hex: string) => string;
+    readonly BG_HEX: (hex: string) => string;
+    readonly RGB: (r: number, g: number, b: number) => string;
+    readonly PASTEL_PINK: "\u001B[38;2;250;162;193m";
+    readonly PASTEL_MAGENTA: "\u001B[38;2;245;194;231m";
+    readonly PASTEL_PURPLE: "\u001B[38;2;212;187;248m";
+    readonly PASTEL_BLUE: "\u001B[38;2;165;216;255m";
+    readonly PASTEL_CYAN: "\u001B[38;2;137;220;235m";
+    readonly PASTEL_GREEN: "\u001B[38;2;178;242;187m";
 };
 /**
  * Clears the terminal screen

@@ -64,7 +64,7 @@ local wezterm = require 'wezterm'
 -- Get all windows
 for _, gui_window in ipairs(wezterm.gui.gui_windows()) do
     local overrides = gui_window:get_config_overrides() or {}
-    
+
     if "$THEME_KEY" == "modern_gradient" then
         local modern_gradient = require('themes.modern-gradient')
         overrides.colors = modern_gradient
@@ -81,7 +81,7 @@ for _, gui_window in ipairs(wezterm.gui.gui_windows()) do
         overrides.colors = pumpkin.colors
         overrides.color_scheme = nil
     end
-    
+
     gui_window:set_config_overrides(overrides)
     gui_window:toast_notification('Theme Changed', '$THEME_NAME', nil, 2000)
 end

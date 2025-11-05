@@ -1,0 +1,48 @@
+{
+  "types": {
+    "feat": {
+      "section": "✨ Features",
+      "hidden": false
+    },
+    "fix": {
+      "section": "🐛 Bug Fixes",
+      "hidden": false
+    },
+    "docs": {
+      "section": "📚 Documentation",
+      "hidden": false
+    },
+    "style": {
+      "section": "💎 Style",
+      "hidden": false
+    },
+    "refactor": {
+      "section": "♻️ Refactoring",
+      "hidden": false
+    },
+    "perf": {
+      "section": "⚡ Performance",
+      "hidden": false
+    },
+    "test": {
+      "section": "✅ Tests",
+      "hidden": false
+    },
+    "build": {
+      "section": "🔨 Build",
+      "hidden": false
+    },
+    "ci": {
+      "section": "👷 CI",
+      "hidden": false
+    },
+    "chore": {
+      "section": "🔧 Chores",
+      "hidden": false
+    },
+    "revert": {
+      "section": "⏪ Reverts",
+      "hidden": false
+    }
+  }
+}

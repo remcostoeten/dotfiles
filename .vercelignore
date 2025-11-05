@@ -1,0 +1,9 @@
+# Deploy only when index.html changes
+*
+!index.html
+!.vercel/
+
+# Include Vercel configuration files
+!vercel.json
+
+# But ignore everything else except index.html

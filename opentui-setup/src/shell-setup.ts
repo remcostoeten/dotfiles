@@ -47,7 +47,7 @@ export async function installFishShell(verbose: boolean = false): Promise<ShellS
     }
 
     const installResult = await executeCommand("sudo apt-get update && sudo apt-get install -y fish");
-    
+
     if (installResult.success) {
       result.steps.push({
         name: "Fish installation",
@@ -144,7 +144,7 @@ export async function setFishAsDefaultShell(verbose: boolean = false): Promise<S
     }
 
     const chshResult = await executeCommand(`chsh -s ${fishPath}`);
-    
+
     if (chshResult.success) {
       result.steps.push({
         name: "Fish default shell",
@@ -198,14 +198,14 @@ if command -v fish >/dev/null 2>&1; then
 fi`;
 
     const bashrcContent = await executeCommand(`cat "${bashrc}" 2>/dev/null || echo ""`);
-    
+
     if (!bashrcContent.output.includes("Fish shell integration")) {
       if (verbose) {
         console.log("Adding Fish integration to .bashrc");
       }
 
       const appendResult = await executeCommand(`echo '${fishEntry}' >> "${bashrc}"`);
-      
+
       if (appendResult.success) {
         result.steps.push({
           name: "Shell environment",
@@ -265,7 +265,7 @@ export async function setupShell(verbose: boolean = false): Promise<ShellSetupRe
   result.steps.push(...defaultShell.steps);
   if (!defaultShell.success) result.success = false;
 
-  result.message = result.success 
+  result.message = result.success
     ? "Shell setup completed (restart terminal to apply changes)"
     : "Shell setup completed with some issues";
 

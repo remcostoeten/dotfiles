@@ -9,7 +9,7 @@
 
 ## Pane Management
 - `Ctrl+Shift+d` - Split horizontally
-- `Ctrl+Shift+D` - Split vertically  
+- `Ctrl+Shift+D` - Split vertically
 - `Ctrl+Shift+h/j/k/l` - Navigate between panes (vim-style)
 - `Ctrl+Shift+Arrow` - Resize current pane
 

@@ -5,7 +5,7 @@ declare -a MEDIA_APPS=(
     "gimp:GIMP"
     "inkscape:Inkscape"
     "vlc:VLC Media Player"
-    "obs-studio:OBS Studio" 
+    "obs-studio:OBS Studio"
 )
 
 # Media playback (for alarm script)

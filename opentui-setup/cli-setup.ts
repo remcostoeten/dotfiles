@@ -55,10 +55,10 @@ for (const category of categories) {
     continue; // Skip categories not in essential packages
   }
   console.log(`\n▶ Installing ${category.name}...`);
-  
+
   for (const pkg of category.packages) {
     const { name, displayName, method, extra, flags } = pkg;
-    
+
     // Check if already installed
     let checkResult;
     switch (method) {
@@ -81,21 +81,21 @@ for (const category of categories) {
       default:
         checkResult = { success: false };
     }
-    
+
     if (checkResult.success) {
       console.log(`  ✓ ${displayName} already installed (skipped)`);
       continue;
     }
-    
+
     if (dryRun) {
       console.log(`  ✓ [DRY RUN] Would install ${displayName}`);
       continue;
     }
 
     console.log(`  ▶ Installing ${displayName}...`);
-    
+
     let result;
-    
+
     switch (method) {
       case "apt":
         result = await executeCommand(`sudo apt install -y ${name}`, verbose);
@@ -116,7 +116,7 @@ for (const category of categories) {
       default:
         result = { success: false, output: "", error: `Unsupported method: ${method}` };
     }
-    
+
     if (result.success) {
       console.log(`  ✓ ${displayName} installed`);
     } else {
@@ -147,7 +147,7 @@ if (dryRun) {
   } else {
     console.log(`    ✗ ${fontsResult.message}`);
   }
-  
+
   // Scripts executable
   console.log("  ▶ Making scripts executable...");
   const execResult = await makeScriptsExecutable(verbose);

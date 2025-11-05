@@ -41,7 +41,7 @@ CUSTOM_GDM_CSS="$HOME/.config/dotfiles/configs/gnome/lock-screen/gdm3.css"
 
 if [ -d "$GDM_CSS_DIR" ]; then
     log_info "Creating custom GDM CSS..."
-    
+
     cat > "$CUSTOM_GDM_CSS" << 'EOF'
 /* Custom GDM/Lock Screen Styling - Hyprland-inspired aesthetic */
 
@@ -133,7 +133,7 @@ if [ -d "$GDM_CSS_DIR" ]; then
   margin: 4px;
 }
 EOF
-    
+
     log_success "Custom GDM CSS created at: $CUSTOM_GDM_CSS"
     log_warning "To apply GDM styling, you need to run (requires sudo):"
     log_info "  sudo cp $CUSTOM_GDM_CSS $GDM_CSS_DIR/gnome-shell.css"
@@ -150,4 +150,3 @@ gsettings set org.gnome.desktop.screensaver picture-options 'zoom'
 log_success "✨ Lock screen configuration complete!"
 log_info "For the GDM changes to take effect, run:"
 echo -e "${YELLOW}sudo cp $CUSTOM_GDM_CSS $GDM_CSS_DIR/gnome-shell.css && sudo systemctl restart gdm${NC}"
-

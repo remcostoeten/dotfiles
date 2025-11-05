@@ -95,17 +95,17 @@ let dryRunMode = false;
 
 async function checkInstallation() {
   console.log(`${colors.yellow}🔍 Checking current installation status...${colors.reset}\n`);
-  
+
   let totalPackages = 0;
   let installedPackages = 0;
-  
+
   for (const category of categories) {
     console.log(`${colors.cyan}${category.name}:${colors.reset}`);
-    
+
     for (const pkg of category.packages) {
       totalPackages++;
       const { name, method } = pkg;
-      
+
       let checkResult;
       switch (method) {
         case "apt":
@@ -126,32 +126,32 @@ async function checkInstallation() {
         default:
           checkResult = { success: false };
       }
-      
+
       const status = checkResult.success ? `${colors.green}✓${colors.reset}` : `${colors.red}✗${colors.reset}`;
       const displayName = selectedCategories.has(category.id) ? `${colors.white}${pkg.displayName}${colors.reset}` : `${colors.dim}${pkg.displayName}${colors.reset}`;
-      
+
       console.log(`  ${status} ${displayName}`);
       if (checkResult.success) installedPackages++;
     }
     console.log();
   }
-  
+
   const percentage = Math.round((installedPackages / totalPackages) * 100);
   console.log(`${colors.yellow}📊 Summary: ${installedPackages}/${totalPackages} packages installed (${percentage}%)${colors.reset}`);
-  
+
   return { totalPackages, installedPackages, percentage };
 }
 
 async function listAllPackages() {
   console.log(`${colors.cyan}${colors.bright}
 📋 Available Packages:${colors.reset}\n`);
-  
+
   for (const category of categories) {
     const isSelected = selectedCategories.has(category.id);
     const categoryStatus = isSelected ? `${colors.green}[SELECTED]${colors.reset}` : `${colors.dim}[available]${colors.reset}`;
-    
+
     console.log(`${colors.yellow}${category.name} ${categoryStatus}:${colors.reset}`);
-    
+
     category.packages.forEach(pkg => {
       const methodColor = {
         apt: colors.green,
@@ -160,7 +160,7 @@ async function listAllPackages() {
         github: colors.cyan,
         curl: colors.yellow
       }[pkg.method] || colors.white;
-      
+
       console.log(`  • ${colors.white}${pkg.displayName}${colors.reset} (${methodColor}${pkg.method}${colors.reset}) - ${colors.dim}${pkg.id}${colors.reset}`);
     });
     console.log();
@@ -170,7 +170,7 @@ async function listAllPackages() {
 async function installPackage() {
   console.log(`${colors.green}📦 Install Package${colors.reset}\n`);
   console.log(`${colors.cyan}Enter package name to install:${colors.reset} `);
-  
+
   const packageName = await new Promise<string>((resolve) => {
     process.stdin.once('data', (data) => {
       resolve(data.toString().trim());
@@ -185,10 +185,10 @@ async function installPackage() {
   // Find package
   let foundPackage = null;
   let foundCategory = null;
-  
+
   for (const category of categories) {
-    const pkg = category.packages.find(p => 
-      p.id === packageName.toLowerCase() || 
+    const pkg = category.packages.find(p =>
+      p.id === packageName.toLowerCase() ||
       p.displayName.toLowerCase().includes(packageName.toLowerCase()) ||
       p.name.toLowerCase().includes(packageName.toLowerCase())
     );
@@ -205,7 +205,7 @@ async function installPackage() {
   }
 
   console.log(`${colors.cyan}Found: ${foundPackage.displayName} from ${foundCategory.name}${colors.reset}`);
-  
+
   if (dryRunMode) {
     console.log(`${colors.yellow}[DRY RUN] Would install ${foundPackage.displayName}${colors.reset}`);
     return;
@@ -233,7 +233,7 @@ async function installPackage() {
     default:
       checkResult = { success: false };
   }
-  
+
   if (checkResult.success) {
     console.log(`${colors.green}✓ ${foundPackage.displayName} is already installed${colors.reset}`);
     return;
@@ -241,10 +241,10 @@ async function installPackage() {
 
   // Install package
   console.log(`${colors.yellow}📦 Installing ${foundPackage.displayName}...${colors.reset}`);
-  
+
   let result;
   const { extra, flags } = foundPackage;
-  
+
   switch (method) {
     case "apt":
       result = await executeCommand(`sudo apt install -y ${name}`, verboseMode);
@@ -265,7 +265,7 @@ async function installPackage() {
     default:
       result = { success: false, output: "", error: `Unsupported method: ${method}` };
   }
-  
+
   if (result.success) {
     console.log(`${colors.green}✅ ${foundPackage.displayName} installed successfully!${colors.reset}`);
   } else {
@@ -275,7 +275,7 @@ async function installPackage() {
 
 async function configureGnome() {
   console.log(`${colors.blue}🔧 Configuring GNOME Desktop...${colors.reset}`);
-  
+
   if (dryRunMode) {
     console.log(`${colors.yellow}[DRY RUN] Would configure GNOME desktop settings${colors.reset}`);
     return;
@@ -287,7 +287,7 @@ async function configureGnome() {
     const color = step.success ? colors.green : colors.red;
     console.log(`  ${color}${icon} ${step.name}: ${step.message}${colors.reset}`);
   });
-  
+
   if (result.success) {
     console.log(`${colors.green}✅ GNOME desktop configured successfully!${colors.reset}`);
   } else {
@@ -297,16 +297,16 @@ async function configureGnome() {
 
 async function selectCategories() {
   console.log(`${colors.magenta}📋 Select Categories to Install${colors.reset}\n`);
-  
+
   for (const category of categories) {
     const isSelected = selectedCategories.has(category.id);
     const status = isSelected ? `${colors.green}[SELECTED]${colors.reset}` : `${colors.dim}[not selected]${colors.reset}`;
     console.log(`${colors.cyan}${category.id}. ${category.name} ${status}${colors.reset}`);
     console.log(`${colors.dim}   ${category.description}${colors.reset}\n`);
   }
-  
+
   console.log(`${colors.yellow}Enter category numbers to toggle (comma-separated), or 'all'/'none':${colors.reset} `);
-  
+
   const input = await new Promise<string>((resolve) => {
     process.stdin.once('data', (data) => {
       resolve(data.toString().trim());
@@ -334,13 +334,13 @@ async function selectCategories() {
       }
     });
   }
-  
+
   console.log(`${colors.cyan}📊 Currently selected: ${selectedCategories.size} categories${colors.reset}`);
 }
 
 async function fullSetup() {
   console.log(`${colors.green}🚀 Starting Full Setup...${colors.reset}\n`);
-  
+
   if (selectedCategories.size === 0) {
     console.log(`${colors.yellow}⚠ No categories selected. Select categories first or use 'all'.${colors.reset}`);
     return;
@@ -383,9 +383,9 @@ async function fullSetup() {
   // Install packages
   for (const category of categories) {
     if (!selectedCategories.has(category.id)) continue;
-    
+
     console.log(`\n${colors.cyan}▶ Installing ${category.name}...${colors.reset}`);
-    
+
     for (const pkg of category.packages) {
       if (dryRunMode) {
         console.log(`  ${colors.yellow}[DRY RUN] Would install ${pkg.displayName}${colors.reset}`);
@@ -414,17 +414,17 @@ async function fullSetup() {
         default:
           checkResult = { success: false };
       }
-      
+
       if (checkResult.success) {
         console.log(`  ${colors.green}✓ ${pkg.displayName} already installed${colors.reset}`);
         continue;
       }
 
       console.log(`  ${colors.dim}Installing ${pkg.displayName}...${colors.reset}`);
-      
+
       let result;
       const { extra, flags } = pkg;
-      
+
       switch (method) {
         case "apt":
           result = await executeCommand(`sudo apt install -y ${name}`, verboseMode);
@@ -445,7 +445,7 @@ async function fullSetup() {
         default:
           result = { success: false, output: "", error: `Unsupported method: ${method}` };
       }
-      
+
       if (result.success) {
         console.log(`  ${colors.green}✓ ${pkg.displayName} installed${colors.reset}`);
       } else {
@@ -457,7 +457,7 @@ async function fullSetup() {
   // System configurations
   if (!dryRunMode) {
     console.log(`\n${colors.cyan}▶ Configuring system...${colors.reset}`);
-    
+
     // Install Nerd Fonts
     console.log(`${colors.dim}Installing Nerd Fonts...${colors.reset}`);
     const fontsResult = await installNerdFonts();
@@ -466,7 +466,7 @@ async function fullSetup() {
     } else {
       console.log(`${colors.red}✗ ${fontsResult.message}${colors.reset}`);
     }
-    
+
     // Scripts executable
     console.log(`${colors.dim}Making scripts executable...${colors.reset}`);
     const execResult = await makeScriptsExecutable(verboseMode);
@@ -551,7 +551,7 @@ async function showSettings() {
   console.log(`${colors.cyan}Verbose Mode:${colors.reset} ${verboseMode ? `${colors.green}ON${colors.reset}` : `${colors.red}OFF${colors.reset}`}`);
   console.log(`${colors.cyan}Dry Run Mode:${colors.reset} ${dryRunMode ? `${colors.green}ON${colors.reset}` : `${colors.red}OFF${colors.reset}`}`);
   console.log(`${colors.cyan}Selected Categories:${colors.reset} ${selectedCategories.size} of ${categories.length}\n`);
-  
+
   console.log(`${colors.yellow}Toggle options:${colors.reset}`);
   console.log(`${colors.cyan}1.${colors.reset} Toggle verbose mode`);
   console.log(`${colors.cyan}2.${colors.reset} Toggle dry run mode`);
@@ -580,7 +580,7 @@ async function showSettings() {
 
 async function main() {
   console.log(`${colors.yellow}🚀 Starting Interactive OpenTUI Setup...${colors.reset}`);
-  
+
   if (!process.stdin.isTTY) {
     console.log(`${colors.red}❌ This tool requires an interactive terminal.${colors.reset}`);
     process.exit(1);
@@ -590,7 +590,7 @@ async function main() {
     clearScreen();
     printHeader();
     printMainMenu();
-    
+
     const choice = await new Promise<string>((resolve) => {
       process.stdin.once('data', (data) => {
         resolve(data.toString().trim());
@@ -599,7 +599,7 @@ async function main() {
 
     clearScreen();
     printHeader();
-    
+
     switch (choice) {
       case '1': // Package Management
         await packageManagementMenu();
@@ -625,7 +625,7 @@ async function main() {
       default:
         console.log(`${colors.red}❌ Invalid choice. Please enter 1-7.${colors.reset}`);
     }
-    
+
     console.log(`\n${colors.yellow}Press Enter to continue...${colors.reset}`);
     await new Promise<void>((resolve) => {
       process.stdin.once('data', () => resolve());
@@ -638,7 +638,7 @@ async function packageManagementMenu() {
     clearScreen();
     printHeader();
     printPackageMenu();
-    
+
     const choice = await new Promise<string>((resolve) => {
       process.stdin.once('data', (data) => {
         resolve(data.toString().trim());
@@ -647,7 +647,7 @@ async function packageManagementMenu() {
 
     clearScreen();
     printHeader();
-    
+
     switch (choice) {
       case '1':
         await installPackage();
@@ -666,7 +666,7 @@ async function packageManagementMenu() {
       default:
         console.log(`${colors.red}❌ Invalid choice. Please enter 1-5.${colors.reset}`);
     }
-    
+
     console.log(`\n${colors.yellow}Press Enter to continue...${colors.reset}`);
     await new Promise<void>((resolve) => {
       process.stdin.once('data', () => resolve());
@@ -679,7 +679,7 @@ async function systemConfigurationMenu() {
     clearScreen();
     printHeader();
     printSystemMenu();
-    
+
     const choice = await new Promise<string>((resolve) => {
       process.stdin.once('data', (data) => {
         resolve(data.toString().trim());
@@ -688,7 +688,7 @@ async function systemConfigurationMenu() {
 
     clearScreen();
     printHeader();
-    
+
     switch (choice) {
       case '1':
         await configureGnome();
@@ -710,7 +710,7 @@ async function systemConfigurationMenu() {
       default:
         console.log(`${colors.red}❌ Invalid choice. Please enter 1-6.${colors.reset}`);
     }
-    
+
     console.log(`\n${colors.yellow}Press Enter to continue...${colors.reset}`);
     await new Promise<void>((resolve) => {
       process.stdin.once('data', () => resolve());

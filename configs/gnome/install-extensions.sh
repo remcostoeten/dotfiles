@@ -40,7 +40,7 @@ check_internet() {
 install_extension() {
     local extension_id=$1
     log_info "Installing extension ID: $extension_id"
-    
+
     # Modern approach: Use built-in gnome-extensions CLI (GNOME 3.38+)
     if command -v gnome-extensions &> /dev/null; then
         # Enable extension if already installed
@@ -49,7 +49,7 @@ install_extension() {
             gnome-extensions enable "$extension_id" || true
             return 0
         fi
-        
+
         # Try to install via gnome-extensions (requires extension to be downloaded)
         # For manual installation, we'll provide instructions
         log_warning "Extension installer not available. Please install manually:"
@@ -86,4 +86,3 @@ done
 log_success "✨ Extension installation complete!"
 log_info "Please log out and log back in, or restart GNOME Shell (Alt+F2, type 'r')"
 log_info "Then run apply-gnome-aesthetics.sh to configure them."
-

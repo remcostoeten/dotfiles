@@ -1,8 +1,14 @@
 {
+  "layout": "categories",
   "banner": "classic",
   "includeAliases": true,
   "includeFunctions": true,
   "groupAliases": true,
   "preferBinOverScripts": true,
-  "fzfHeight": "85%"
+  "fzfHeight": "85%",
+  "showDescriptions": true,
+  "enableCategories": true,
+  "recentItems": [
+    "alias-group::c::clear"
+  ]
 }

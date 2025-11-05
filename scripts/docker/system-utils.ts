@@ -3,7 +3,6 @@ import { promisify } from 'util';
 import { platform } from 'os';
 import type { TResult } from './types.js';
 import { COLORS } from './ui-utils.js';
-
 const execAsync = promisify(exec);
 
 type TNotificationType = 'success' | 'error' | 'warning' | 'info';
@@ -13,7 +12,7 @@ type TNotificationType = 'success' | 'error' | 'warning' | 'info';
  */
 export async function copyToClipboard(text: string): Promise<TResult<void, string>> {
     const system = platform().toLowerCase();
-    
+
     try {
         switch (system) {
             case 'linux': {
@@ -132,10 +131,10 @@ export function createProgressUpdater(
 
         dots = (dots + 1) % 4;
         const line = `${operation}${'.'.repeat(dots)}${' '.repeat(3 - dots)}`;
-        
+
         // Clear line and write progress
         process.stdout.write(`\r${COLORS.CYAN}${line}${COLORS.RESET}`);
-        
+
         if (onUpdate) {
             onUpdate(dots / 3);
         }

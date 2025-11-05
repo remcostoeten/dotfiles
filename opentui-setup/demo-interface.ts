@@ -18,7 +18,7 @@ const colors = {
 
 function showDemo() {
   console.clear();
-  
+
   console.log(`${colors.cyan}${colors.bright}
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║

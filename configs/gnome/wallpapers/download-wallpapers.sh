@@ -27,7 +27,7 @@ cd "$WALLPAPER_DIR"
 for i in "${!WALLPAPERS[@]}"; do
     url="${WALLPAPERS[$i]}"
     filename="aesthetic-wallpaper-$((i+1)).jpg"
-    
+
     if [ ! -f "$filename" ]; then
         echo "⬇️  Downloading wallpaper $((i+1))/${#WALLPAPERS[@]}..."
         wget -q "$url" -O "$filename"
@@ -45,4 +45,3 @@ echo "  gsettings set org.gnome.desktop.background picture-uri \"file://$WALLPAP
 echo "  gsettings set org.gnome.desktop.screensaver picture-uri \"file://$WALLPAPER_DIR/aesthetic-wallpaper-1.jpg\""
 echo ""
 echo "Or use GNOME Settings → Appearance → Background"
-

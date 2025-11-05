@@ -64,10 +64,10 @@ local wezterm = require 'wezterm'
 -- Get all windows
 for _, gui_window in ipairs(wezterm.gui.gui_windows()) do
     local overrides = gui_window:get_config_overrides() or {}
-    
+
     overrides.window_background_opacity = $OPACITY_VALUE
     overrides.text_background_opacity = math.min($OPACITY_VALUE + 0.1, 1.0)
-    
+
     gui_window:set_config_overrides(overrides)
     gui_window:toast_notification('Opacity Changed', '$OPACITY_NAME', nil, 1500)
 end

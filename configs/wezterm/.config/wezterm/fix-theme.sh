@@ -15,7 +15,7 @@ case "$1" in
         FRAME_BG="#0F0D15"
         FRAME_ACCENT="#FF6B9D"
         ;;
-    "cyber"|"2")  
+    "cyber"|"2")
         echo "🌃 Switching to Cyberdream theme..."
         THEME_NAME="cyberdream"
         THEME_REQUIRE="require('themes.cyberdream')"
@@ -49,7 +49,7 @@ case "$1" in
         echo ""
         echo "This script will:"
         echo "  - Remove hardcoded purple background gradient"
-        echo "  - Remove conflicting window frame colors" 
+        echo "  - Remove conflicting window frame colors"
         echo "  - Set the theme properly"
         echo "  - Restart WezTerm"
         exit 1
@@ -142,7 +142,7 @@ config.audible_bell = 'Disabled'
 config.visual_bell = {
   fade_in_function = 'EaseIn',
   fade_in_duration_ms = 0,
-  fade_out_function = 'EaseOut', 
+  fade_out_function = 'EaseOut',
   fade_out_duration_ms = 0,
 }
 
@@ -192,6 +192,6 @@ echo "🎉 Done! Your WezTerm should now show the $THEME_NAME theme properly."
 echo ""
 echo "If you want to switch themes again, run:"
 echo "  ./fix-theme.sh modern   # for Modern Gradient"
-echo "  ./fix-theme.sh cyber    # for Cyberdream"  
+echo "  ./fix-theme.sh cyber    # for Cyberdream"
 echo "  ./fix-theme.sh cat      # for Catppuccin"
 echo "  ./fix-theme.sh pumpkin  # for Pumpkin Spice"

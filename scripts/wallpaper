@@ -1,0 +1,776 @@
+#!/bin/bash
+
+# Wallpaper Management Script
+# Interactive wallpaper setter with filesystem and web support
+
+VERSION="1.1.0"
+WALLPAPERS_DIR="$HOME/Pictures/wallpapers"
+MONITOR_RESOLUTION="2560x1440"
+CYCLE_CONFIG_DIR="$HOME/.config/wallpaper-cycler"
+CYCLE_CONFIG_FILE="$CYCLE_CONFIG_DIR/config"
+CYCLE_PID_FILE="$CYCLE_CONFIG_DIR/cycler.pid"
+CYCLE_LOG_FILE="$CYCLE_CONFIG_DIR/cycler.log"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+GRAY='\033[0;37m'
+NC='\033[0m' # No Color
+
+# Print functions with colors
+print_header() {
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${WHITE}$1${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}✓${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}✗${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠${NC} $1"
+}
+
+print_info() {
+    echo -e "${BLUE}ℹ${NC} $1"
+}
+
+# Ensure wallpapers directory exists
+ensure_wallpapers_dir() {
+    if [[ ! -d "$WALLPAPERS_DIR" ]]; then
+        mkdir -p "$WALLPAPERS_DIR"
+        print_info "Created wallpapers directory: $WALLPAPERS_DIR"
+    fi
+}
+
+# Set wallpaper using gsettings
+set_wallpaper() {
+    local image_path="$1"
+
+    # Convert to file:// URI format
+    local uri="file://$(realpath "$image_path")"
+
+    # Set both light and dark mode wallpapers
+    if gsettings set org.gnome.desktop.background picture-uri "$uri" 2>/dev/null && \
+       gsettings set org.gnome.desktop.background picture-uri-dark "$uri" 2>/dev/null; then
+        print_success "Wallpaper set successfully!"
+        print_info "Using image: $image_path"
+        return 0
+    else
+        print_error "Failed to set wallpaper. Make sure you're running GNOME."
+        return 1
+    fi
+}
+
+# Resize image to monitor resolution (experimental)
+resize_image() {
+    local input_path="$1"
+    local output_path="$2"
+
+    if ! command -v convert >/dev/null 2>&1; then
+        print_warning "ImageMagick not found. Skipping resize."
+        return 1
+    fi
+
+    print_info "Resizing image to ${MONITOR_RESOLUTION} (experimental)..."
+
+    if convert "$input_path" -resize "${MONITOR_RESOLUTION}^" -gravity center -extent "$MONITOR_RESOLUTION" "$output_path" 2>/dev/null; then
+        print_success "Image resized successfully!"
+        return 0
+    else
+        print_error "Failed to resize image."
+        return 1
+    fi
+}
+
+# Download image from URL
+download_wallpaper() {
+    local url="$1"
+    local resize_flag="$2"
+
+    # Extract filename from URL
+    local filename=$(basename "$url")
+    if [[ -z "$filename" || "$filename" == "/" ]]; then
+        filename="wallpaper_$(date +%s).jpg"
+    fi
+
+    local output_path="$WALLPAPERS_DIR/$filename"
+
+    # Download the image
+    print_info "Downloading wallpaper from: $url"
+
+    if command -v wget >/dev/null 2>&1; then
+        wget -q --show-progress -O "$output_path" "$url"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -L --progress-bar -o "$output_path" "$url"
+    else
+        print_error "Neither wget nor curl found. Cannot download image."
+        return 1
+    fi
+
+    if [[ $? -eq 0 ]]; then
+        print_success "Download completed: $output_path"
+
+        # Handle resize if requested
+        if [[ "$resize_flag" == "true" ]]; then
+            local resized_path="$WALLPAPERS_DIR/resized_$filename"
+            if resize_image "$output_path" "$resized_path"; then
+                output_path="$resized_path"
+            fi
+        fi
+
+        # Set the wallpaper
+        set_wallpaper "$output_path"
+    else
+        print_error "Failed to download image."
+        return 1
+    fi
+}
+
+# Handle filesystem wallpaper selection
+handle_filesystem_wallpaper() {
+    local resize_flag="$1"
+
+    echo -e "\n${BLUE}Enter the path to your wallpaper:${NC}"
+    echo -e "${GRAY}Example: /home/username/Pictures/wallpaper.jpg${NC}"
+    read -e -p "$(echo -e ${YELLOW}"> "${NC})" image_path
+
+    if [[ -z "$image_path" ]]; then
+        print_error "No path provided."
+        return 1
+    fi
+
+    # Expand ~ to home directory
+    image_path="${image_path/#\~/$HOME}"
+
+    if [[ ! -f "$image_path" ]]; then
+        print_error "File not found: $image_path"
+        return 1
+    fi
+
+    # Check if it's an image file
+    if [[ ! "$image_path" =~ \.(jpg|jpeg|png|gif|bmp|webp|tiff)$ ]]; then
+        print_warning "File doesn't appear to be an image. Continuing anyway..."
+    fi
+
+    local final_path="$image_path"
+
+    # Ask if user wants to move file to wallpapers directory
+    if [[ "$image_path" != "$WALLPAPERS_DIR"* ]]; then
+        echo -e "\n${YELLOW}Move this file to your wallpapers directory?${NC}"
+        read -p "$(echo -e ${GRAY}"(y/N): "${NC})" -n 1 -r response
+        echo
+
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            local filename=$(basename "$image_path")
+            final_path="$WALLPAPERS_DIR/$filename"
+
+            # Handle filename conflicts
+            local counter=1
+            while [[ -f "$final_path" ]]; do
+                local name_without_ext="${filename%.*}"
+                local extension="${filename##*.}"
+                final_path="$WALLPAPERS_DIR/${name_without_ext}_${counter}.${extension}"
+                ((counter++))
+            done
+
+            cp "$image_path" "$final_path"
+            print_success "File copied to: $final_path"
+        fi
+    fi
+
+    # Handle resize if requested
+    if [[ "$resize_flag" == "true" ]]; then
+        local filename=$(basename "$final_path")
+        local resized_path="$WALLPAPERS_DIR/resized_$filename"
+        if resize_image "$final_path" "$resized_path"; then
+            final_path="$resized_path"
+        fi
+    fi
+
+    # Set the wallpaper
+    set_wallpaper "$final_path"
+}
+
+# Check if terminal image preview is available
+check_preview_tools() {
+    if command -v chafa >/dev/null 2>&1; then
+        echo "chafa"
+    elif command -v catimg >/dev/null 2>&1; then
+        echo "catimg"
+    elif command -v viu >/dev/null 2>&1; then
+        echo "viu"
+    else
+        echo "none"
+    fi
+}
+
+# Preview image in terminal or fallback viewer
+preview_image() {
+    local image_path="$1"
+    local preview_tool=$(check_preview_tools)
+
+    case "$preview_tool" in
+        "chafa")
+            chafa --size=60x30 --symbols=block+half+quarter --color-space=drgb "$image_path" 2>/dev/null
+            ;;
+        "catimg")
+            catimg -r 2 "$image_path" 2>/dev/null
+            ;;
+        "viu")
+            viu -w 60 -h 30 "$image_path" 2>/dev/null
+            ;;
+        *)
+            # Fallback to external image viewer
+            if command -v xdg-open >/dev/null 2>&1; then
+                xdg-open "$image_path" 2>/dev/null &
+                print_info "Opening image in default viewer..."
+            elif command -v eog >/dev/null 2>&1; then
+                eog "$image_path" 2>/dev/null &
+                print_info "Opening image in Eye of GNOME..."
+            elif command -v feh >/dev/null 2>&1; then
+                feh --scale-down --auto-zoom "$image_path" 2>/dev/null &
+                print_info "Opening image in feh..."
+            else
+                print_warning "No image viewer found. Install chafa for terminal preview or xdg-open for external viewer."
+            fi
+            ;;
+    esac
+}
+
+# Delete wallpaper with confirmation
+delete_wallpaper() {
+    local wallpaper_path="$1"
+    local filename=$(basename "$wallpaper_path")
+
+    echo -e "\n${RED}Are you sure you want to delete \"${filename}\"?${NC}"
+    read -p "$(echo -e "${YELLOW}(y/N): ${NC}")" -n 1 -r response
+    echo
+
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        if rm "$wallpaper_path" 2>/dev/null; then
+            print_success "Deleted: $filename"
+            return 0
+        else
+            print_error "Failed to delete: $filename"
+            return 1
+        fi
+    else
+        print_info "Deletion cancelled."
+        return 1
+    fi
+}
+
+# Interactive wallpaper browser with preview and delete
+interactive_wallpaper_browser() {
+    ensure_wallpapers_dir
+
+    # Get all wallpapers
+    local wallpapers=()
+    for file in "$WALLPAPERS_DIR"/*.{jpg,jpeg,png,gif,bmp,webp,tiff,JPG,JPEG,PNG,GIF,BMP,WEBP,TIFF}; do
+        if [[ -f "$file" ]]; then
+            wallpapers+=("$file")
+        fi
+    done
+
+    if [[ ${#wallpapers[@]} -eq 0 ]]; then
+        print_warning "No wallpapers found in $WALLPAPERS_DIR"
+        return
+    fi
+
+    local current_index=0
+    local preview_tool=$(check_preview_tools)
+
+    print_header "Interactive Wallpaper Browser"
+
+    while true; do
+        # Clear screen for better viewing
+        clear
+
+        print_header "Interactive Wallpaper Browser"
+
+        local current_wallpaper="${wallpapers[$current_index]}"
+        local filename=$(basename "$current_wallpaper")
+        local size=$(du -h "$current_wallpaper" | cut -f1)
+        local resolution="Unknown"
+
+        # Try to get image resolution
+        if command -v identify >/dev/null 2>&1; then
+            resolution=$(identify -format "%wx%h" "$current_wallpaper" 2>/dev/null || echo "Unknown")
+        fi
+
+        # Display current wallpaper info
+        echo -e "${WHITE}Wallpaper ${current_index}/${#wallpapers[@]}: ${filename}${NC}"
+        echo -e "${GRAY}Size: ${size} | Resolution: ${resolution}${NC}"
+        echo
+
+        # Show preview
+        if [[ "$preview_tool" != "none" ]]; then
+            echo -e "${CYAN}Preview:${NC}"
+            echo -e "${CYAN}───────────────────────────────────────────────────────${NC}"
+            preview_image "$current_wallpaper"
+            echo
+        else
+            print_info "Preview: No terminal preview tool available"
+            echo -e "${CYAN}───────────────────────────────────────────────────────${NC}"
+            echo
+        fi
+
+        # Show controls
+        echo -e "${WHITE}Controls:${NC}"
+        echo -e "${GREEN}←/→${NC} or ${GREEN}h/l${NC} : Navigate wallpapers"
+        echo -e "${GREEN}Enter${NC} : Set as wallpaper"
+        echo -e "${GREEN}p${NC} : Preview in external viewer"
+        echo -e "${GREEN}d${NC} : Delete wallpaper"
+        echo -e "${GREEN}q${NC} : Quit"
+        echo
+
+        # Read user input
+        read -n 1 -s key
+        echo
+
+        case "$key" in
+            $'\x1b')  # Escape sequence (arrow keys)
+                read -n 2 -s rest
+                case "$rest" in
+                    '[C'|'[D')  # Right/Left arrow
+                        if [[ "$rest" == "[C" ]]; then
+                            ((current_index++))
+                        else
+                            ((current_index--))
+                        fi
+                        # Wrap around
+                        if [[ $current_index -ge ${#wallpapers[@]} ]]; then
+                            current_index=0
+                        elif [[ $current_index -lt 0 ]]; then
+                            current_index=$((${#wallpapers[@]} - 1))
+                        fi
+                        ;;
+                esac
+                ;;
+            'l')
+                ((current_index++))
+                if [[ $current_index -ge ${#wallpapers[@]} ]]; then
+                    current_index=0
+                fi
+                ;;
+            'h')
+                ((current_index--))
+                if [[ $current_index -lt 0 ]]; then
+                    current_index=$((${#wallpapers[@]} - 1))
+                fi
+                ;;
+            '')  # Enter key
+                if set_wallpaper "$current_wallpaper"; then
+                    print_success "Wallpaper set to: $filename"
+                    read -p "$(echo -e "${GRAY}Press Enter to continue...${NC}")"
+                fi
+                ;;
+            'p'|'P')
+                preview_image "$current_wallpaper"
+                read -p "$(echo -e "${GRAY}Press Enter to continue...${NC}")"
+                ;;
+            'd'|'D')
+                if delete_wallpaper "$current_wallpaper"; then
+                    # Remove from array and adjust index
+                    unset wallpapers[$current_index]
+                    wallpapers=("${wallpapers[@]}")
+
+                    if [[ ${#wallpapers[@]} -eq 0 ]]; then
+                        print_info "No more wallpapers. Exiting browser."
+                        break
+                    elif [[ $current_index -ge ${#wallpapers[@]} ]]; then
+                        current_index=$((${#wallpapers[@]} - 1))
+                    fi
+                else
+                    read -p "$(echo -e "${GRAY}Press Enter to continue...${NC}")"
+                fi
+                ;;
+            'q'|'Q')
+                break
+                ;;
+        esac
+    done
+}
+
+# List all wallpapers in the wallpapers directory
+list_wallpapers() {
+    ensure_wallpapers_dir
+
+    echo -e "\n${CYAN}Available wallpapers in $WALLPAPERS_DIR:${NC}"
+    echo -e "${CYAN}───────────────────────────────────────────────────────${NC}"
+
+    local count=0
+    for file in "$WALLPAPERS_DIR"/*.{jpg,jpeg,png,gif,bmp,webp,tiff,JPG,JPEG,PNG,GIF,BMP,WEBP,TIFF}; do
+        if [[ -f "$file" ]]; then
+            local filename=$(basename "$file")
+            local size=$(du -h "$file" | cut -f1)
+            echo -e "${WHITE}•${NC} ${filename} ${GRAY}(${size})${NC}"
+            ((count++))
+        fi
+    done
+
+    if [[ $count -eq 0 ]]; then
+        print_warning "No wallpapers found in $WALLPAPERS_DIR"
+    else
+        print_info "Total wallpapers: $count"
+    fi
+
+    # Offer interactive mode
+    if [[ $count -gt 0 ]]; then
+        echo
+        read -p "$(echo -e "${YELLOW}Enter interactive preview mode? (y/N): ${NC}")" -n 1 -r response
+        echo
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            interactive_wallpaper_browser
+        fi
+    fi
+}
+
+# Open wallpapers directory
+open_wallpapers_dir() {
+    ensure_wallpapers_dir
+
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$WALLPAPERS_DIR"
+        print_success "Opened wallpapers directory in file manager"
+    elif command -v nautilus >/dev/null 2>&1; then
+        nautilus "$WALLPAPERS_DIR" &
+        print_success "Opened wallpapers directory in Nautilus"
+    else
+        print_error "No suitable file manager found. Please open manually:"
+        echo "$WALLPAPERS_DIR"
+        return 1
+    fi
+}
+
+# Show help
+show_help() {
+    print_header "Wallpaper Manager v$VERSION"
+
+    echo -e "${WHITE}USAGE:${NC}"
+    echo -e "  wallpaper [OPTIONS]"
+    echo
+    echo -e "${WHITE}BASIC OPTIONS:${NC}"
+    echo -e "  ${GREEN}--help${NC}          Show this help message"
+    echo -e "  ${GREEN}--version${NC}       Show version information"
+    echo -e "  ${GREEN}--list${NC}          List wallpapers (offers interactive preview mode)"
+    echo -e "  ${GREEN}--open${NC}          Open wallpapers directory in file manager"
+    echo -e "  ${GREEN}--resize${NC}        Resize wallpaper to ${MONITOR_RESOLUTION} (experimental)"
+    echo
+    echo -e "${WHITE}CYCLING OPTIONS:${NC}"
+    echo -e "  ${GREEN}--cycle-enable${NC} [minutes]  Enable wallpaper cycling (default: 30 minutes)"
+    echo -e "  ${GREEN}--cycle-disable${NC}          Disable wallpaper cycling"
+    echo -e "  ${GREEN}--cycle-status${NC}           Show cycling status and configuration"
+    echo
+    echo -e "${WHITE}INTERACTIVE MODE:${NC}"
+    echo -e "  Run ${GREEN}wallpaper${NC} without arguments to enter interactive mode"
+    echo -e "  Choose between filesystem or web wallpaper sources"
+    echo
+    echo -e "${WHITE}INTERACTIVE BROWSER (${GREEN}--list${NC}${WHITE} option):${NC}"
+    echo -e "  Navigate wallpapers with ${GREEN}arrow keys${NC} or ${GREEN}h/l${NC}"
+    echo -e "  ${GREEN}Enter${NC} : Set as wallpaper"
+    echo -e "  ${GREEN}p${NC} : Preview in external viewer"
+    echo -e "  ${GREEN}d${NC} : Delete wallpaper (with confirmation)"
+    echo -e "  ${GREEN}q${NC} : Quit browser"
+    echo -e "  Requires ${GREEN}chafa${NC}, ${GREEN}catimg${NC}, or ${GREEN}viu${NC} for terminal preview"
+    echo
+    echo -e "${WHITE}DIRECTORIES:${NC}"
+    echo -e "  Wallpapers directory: ${BLUE}$WALLPAPERS_DIR${NC}"
+    echo -e "  Config directory:    ${BLUE}$CYCLE_CONFIG_DIR${NC}"
+    echo -e "  Monitor resolution:   ${BLUE}$MONITOR_RESOLUTION${NC}"
+}
+
+# Show version
+show_version() {
+    echo -e "${CYAN}Wallpaper Manager${NC} ${WHITE}v$VERSION${NC}"
+    echo -e "${GRAY}Interactive wallpaper management for GNOME desktop${NC}"
+}
+
+# Interactive mode
+interactive_mode() {
+    local resize_flag="$1"
+
+    ensure_wallpapers_dir
+
+    print_header "Wallpaper Manager v$VERSION"
+
+    echo -e "${WHITE}Choose wallpaper source:${NC}"
+    echo -e "${GREEN}1${NC}) From filesystem"
+    echo -e "${GREEN}2${NC}) From web (URL)"
+    echo
+
+    while true; do
+        read -p "$(echo -e ${YELLOW}"Enter your choice (1-2): "${NC})" choice
+
+        case $choice in
+            1)
+                handle_filesystem_wallpaper "$resize_flag"
+                break
+                ;;
+            2)
+                echo -e "\n${BLUE}Enter wallpaper URL:${NC}"
+                read -p "$(echo -e ${YELLOW}"> "${NC})" url
+
+                if [[ -n "$url" ]]; then
+                    download_wallpaper "$url" "$resize_flag"
+                else
+                    print_error "No URL provided."
+                fi
+                break
+                ;;
+            *)
+                print_error "Invalid choice. Please enter 1 or 2."
+                ;;
+        esac
+    done
+}
+
+# Wallpaper cycling functions
+ensure_cycle_config() {
+    if [[ ! -d "$CYCLE_CONFIG_DIR" ]]; then
+        mkdir -p "$CYCLE_CONFIG_DIR"
+    fi
+
+    if [[ ! -f "$CYCLE_CONFIG_FILE" ]]; then
+        cat > "$CYCLE_CONFIG_FILE" << EOF
+# Wallpaper Cycler Configuration
+enabled=false
+interval=30
+current_index=0
+EOF
+    fi
+}
+
+read_cycle_config() {
+    ensure_cycle_config
+    source "$CYCLE_CONFIG_FILE"
+}
+
+write_cycle_config() {
+    local config_enabled="$enabled"
+    local config_interval="$interval"
+    local config_current_index="$current_index"
+
+    ensure_cycle_config
+    cat > "$CYCLE_CONFIG_FILE" << EOF
+# Wallpaper Cycler Configuration
+enabled=$config_enabled
+interval=$config_interval
+current_index=$config_current_index
+EOF
+}
+
+get_wallpaper_list() {
+    ensure_wallpapers_dir
+    local wallpapers=()
+
+    for file in "$WALLPAPERS_DIR"/*.{jpg,jpeg,png,gif,bmp,webp,tiff,JPG,JPEG,PNG,GIF,BMP,WEBP,TIFF}; do
+        if [[ -f "$file" ]]; then
+            wallpapers+=("$file")
+        fi
+    done
+
+    echo "${wallpapers[@]}"
+}
+
+cycle_wallpaper() {
+    local wallpapers=($(get_wallpaper_list))
+
+    if [[ ${#wallpapers[@]} -eq 0 ]]; then
+        echo "$(date): No wallpapers found for cycling" >> "$CYCLE_LOG_FILE"
+        return 1
+    fi
+
+    read_cycle_config
+
+    # Set current wallpaper
+    local current_wallpaper="${wallpapers[$current_index]}"
+    set_wallpaper "$current_wallpaper"
+
+    # Log the change
+    echo "$(date): Set wallpaper to $(basename "$current_wallpaper")" >> "$CYCLE_LOG_FILE"
+
+    # Update index for next cycle
+    ((current_index++))
+    if [[ $current_index -ge ${#wallpapers[@]} ]]; then
+        current_index=0
+    fi
+
+    # Save updated config
+    local temp_enabled="$enabled"
+    local temp_interval="$interval"
+    enabled="$temp_enabled"
+    interval="$temp_interval"
+    write_cycle_config
+}
+
+start_cycler() {
+    local interval_param="$1"
+
+    # Stop any existing cycler
+    stop_cycler
+
+    # Set configuration
+    enabled=true
+    interval="$interval_param"
+    current_index=0
+    write_cycle_config
+
+    print_success "Starting wallpaper cycler with ${interval_param}-minute intervals"
+
+    # Start background cycling process
+    (
+        while true; do
+            sleep $((interval_param * 60))
+            if [[ -f "$CYCLE_PID_FILE" ]]; then
+                cycle_wallpaper
+            else
+                break
+            fi
+        done
+    ) &
+
+    # Save PID
+    echo $! > "$CYCLE_PID_FILE"
+    print_success "Wallpaper cycler started (PID: $!)"
+
+    # Set first wallpaper immediately
+    cycle_wallpaper
+}
+
+stop_cycler() {
+    if [[ -f "$CYCLE_PID_FILE" ]]; then
+        local pid=$(cat "$CYCLE_PID_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid"
+            print_success "Stopped wallpaper cycler (PID: $pid)"
+        fi
+        rm -f "$CYCLE_PID_FILE"
+    fi
+
+    read_cycle_config
+    enabled=false
+    write_cycle_config
+}
+
+get_cycle_status() {
+    read_cycle_config
+
+    print_header "Wallpaper Cycler Status"
+
+    if [[ "$enabled" == "true" ]]; then
+        if [[ -f "$CYCLE_PID_FILE" ]]; then
+            local pid=$(cat "$CYCLE_PID_FILE")
+            if kill -0 "$pid" 2>/dev/null; then
+                print_success "Cycler is RUNNING"
+                print_info "Interval: ${interval} minutes"
+                print_info "Process ID: $pid"
+            else
+                print_warning "Cycler is ENABLED but not running"
+                print_info "Interval: ${interval} minutes"
+                print_warning "Stale PID file found"
+            fi
+        else
+            print_warning "Cycler is ENABLED but not running"
+            print_info "Interval: ${interval} minutes"
+        fi
+    else
+        print_info "Cycler is DISABLED"
+    fi
+
+    local wallpapers=($(get_wallpaper_list))
+    print_info "Available wallpapers: ${#wallpapers[@]}"
+
+    if [[ ${#wallpapers[@]} -gt 0 ]]; then
+        print_info "Current index: $current_index"
+        if [[ $current_index -lt ${#wallpapers[@]} ]]; then
+            print_info "Next wallpaper: $(basename "${wallpapers[$current_index]}")"
+        fi
+    fi
+
+    if [[ -f "$CYCLE_LOG_FILE" ]]; then
+        echo
+        print_info "Recent log entries:"
+        tail -5 "$CYCLE_LOG_FILE" 2>/dev/null | while read line; do
+            echo -e "${GRAY}  $line${NC}"
+        done
+    fi
+}
+
+# Main execution
+main() {
+    local resize_flag="false"
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help)
+                show_help
+                exit 0
+                ;;
+            --version)
+                show_version
+                exit 0
+                ;;
+            --list)
+                list_wallpapers
+                exit 0
+                ;;
+            --open)
+                open_wallpapers_dir
+                exit 0
+                ;;
+            --resize)
+                resize_flag="true"
+                shift
+                ;;
+            --cycle-enable)
+                local interval="30"
+                if [[ -n "$2" && "$2" =~ ^[0-9]+$ ]]; then
+                    interval="$2"
+                    shift 2
+                else
+                    shift 1
+                fi
+                start_cycler "$interval"
+                exit 0
+                ;;
+            --cycle-disable)
+                stop_cycler
+                exit 0
+                ;;
+            --cycle-status)
+                get_cycle_status
+                exit 0
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                echo "Use --help for available options."
+                exit 1
+                ;;
+        esac
+    done
+
+    # Run interactive mode
+    interactive_mode "$resize_flag"
+}
+
+# Check if we're on GNOME
+if ! command -v gsettings >/dev/null 2>&1; then
+    print_error "This script requires GNOME desktop environment."
+    exit 1
+fi
+
+# Run main function with all arguments
+main "$@"

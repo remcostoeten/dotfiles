@@ -169,6 +169,17 @@ export async function commandExists(
 }
 
 /**
+ * Check if a command exists and return boolean
+ */
+export async function isCommandAvailable(
+  command: string,
+  verbose: boolean = false
+): Promise<boolean> {
+  const result = await commandExists(command, verbose);
+  return result.success;
+}
+
+/**
  * Check if a package is installed via apt
  */
 export async function isAptPackageInstalled(
@@ -176,6 +187,17 @@ export async function isAptPackageInstalled(
   verbose: boolean = false
 ): Promise<CommandResult> {
   return executeCommand(`dpkg -l | grep -q "^ii  ${packageName} "`, verbose);
+}
+
+/**
+ * Check if a package is installed and return boolean
+ */c
+export async function isPackageInstalled(
+  packageName: string,
+  verbose: boolean = false
+): Promise<boolean> {
+  const result = await isAptPackageInstalled(packageName, verbose);
+  return result.success;
 }
 
 /**

@@ -36,13 +36,13 @@ while true; do
                 "2" "Catppuccin 🌙" "Popular pastel theme" \
                 "3" "Pumpkin Spice 🎃" "Autumn orange theme" \
                 --height=300 --width=500)
-            
+
             if [[ -n "$THEME_CHOICE" ]]; then
                 "$THEME_SCRIPT" "$THEME_CHOICE"
                 zenity --info --text="Theme applied! Check your WezTerm window." --timeout=3
             fi
             ;;
-            
+
         "opacity")
             # Opacity selection
             OPACITY_CHOICE=$(zenity --list \
@@ -56,13 +56,13 @@ while true; do
                 "4" "60%" "Very transparent" \
                 "5" "50%" "Highly transparent" \
                 --height=300 --width=500)
-            
+
             if [[ -n "$OPACITY_CHOICE" ]]; then
                 "$OPACITY_SCRIPT" "$OPACITY_CHOICE"
                 zenity --info --text="Opacity applied! Check your WezTerm window." --timeout=3
             fi
             ;;
-            
+
         "restart")
             # Restart WezTerm
             if zenity --question --text="Restart WezTerm now?\n\nThis will close all WezTerm windows and restart the terminal."; then
@@ -70,11 +70,11 @@ while true; do
                 zenity --info --text="WezTerm restarted!" --timeout=2
             fi
             ;;
-            
+
         "exit")
             exit 0
             ;;
-            
+
         *)
             exit 0
             ;;

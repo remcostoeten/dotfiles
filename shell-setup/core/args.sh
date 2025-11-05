@@ -88,10 +88,10 @@ show_help() {
     echo "║              Interactive Environment Configuration                 ║"
     echo "╚════════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}\n"
-    
+
     echo -e "${BOLD}${CYAN}USAGE${NC}"
     echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}[OPTIONS]${NC}\n"
-    
+
     echo -e "${BOLD}${CYAN}OPTIONS${NC}"
     echo -e "  ${GREEN}--dry-run${NC}                         Preview all installations without making changes"
     echo -e "  ${GREEN}--dry-run-section${NC} ${YELLOW}<NAME>${NC}          Preview a specific section only"
@@ -107,7 +107,7 @@ show_help() {
     echo -e "  ${GREEN}--list${NC}                            List all available packages by category"
     echo -e "  ${GREEN}--source${NC}                          Open script source on GitHub"
     echo -e "  ${GREEN}-h, --help${NC}                        Display this help message\n"
-    
+
     echo -e "${BOLD}${CYAN}AVAILABLE SECTIONS${NC}"
     echo -e "  ${YELLOW}dev${NC}              Development tools (Python, Node.js, npm, neovim)"
     echo -e "  ${YELLOW}git${NC}              Git tools (GitHub CLI, lazygit, lazydocker)"
@@ -127,40 +127,40 @@ show_help() {
     echo -e "  ${YELLOW}config-apps${NC}      Config-based apps (nvim, wezterm, kitty, hyprland)"
     echo -e "  ${YELLOW}fish${NC}             Fish shell setup and configuration"
     echo -e "  ${YELLOW}fonts${NC}            Nerd Fonts installation\n"
-    
+
     echo -e "${BOLD}${CYAN}EXAMPLES${NC}"
     echo -e "  ${BLUE}#${NC} Run full interactive setup"
     echo -e "  ${BOLD}./setup.sh${NC}\n"
-    
+
     echo -e "  ${BLUE}#${NC} Preview all changes without installing"
     echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--dry-run${NC}\n"
-    
+
     echo -e "  ${BLUE}#${NC} Interactive dry-run (select sections to preview)"
     echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--dry-run-interactive${NC}\n"
-    
+
     echo -e "  ${BLUE}#${NC} Preview only development tools section"
     echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--dry-run-section${NC} ${YELLOW}dev${NC}\n"
-    
+
     echo -e "  ${BLUE}#${NC} Install only CLI utilities (non-interactive)"
     echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--install${NC} ${YELLOW}cli${NC}\n"
-    
+
     echo -e "  ${BLUE}#${NC} Skip system update and fonts"
     echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--skip-system-update --skip-fonts${NC}\n"
-    
+
     echo -e "  ${BLUE}#${NC} Verbose output for debugging"
     echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--verbose${NC}\n"
-    
+
     echo -e "  ${BLUE}#${NC} View script source on GitHub"
     echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--source${NC}\n"
-    
+
     echo -e "  ${BLUE}#${NC} List all available packages by category"
     echo -e "  ${BOLD}./setup.sh${NC} ${GREEN}--list${NC}\n"
-    
+
     echo -e "${BOLD}${CYAN}PACKAGE FORMAT${NC}"
     echo -e "  Packages are defined as: ${YELLOW}name|method|extra|display${NC}"
     echo -e "  Methods: ${GREEN}apt${NC}, ${GREEN}snap${NC}, ${GREEN}curl${NC}, ${GREEN}npm${NC}, ${GREEN}cargo${NC}, ${GREEN}github${NC}"
     echo -e "  Example: ${DIM}lazygit|github|jesseduffield/lazygit|lazygit${NC}\n"
-    
+
     echo -e "${BOLD}${CYAN}NOTES${NC}"
     echo -e "  ${BLUE}•${NC} The script will prompt for selections in interactive mode"
     echo -e "  ${BLUE}•${NC} Progress is saved and can be resumed if interrupted"

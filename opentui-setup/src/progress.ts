@@ -40,6 +40,9 @@ export async function loadProgress(): Promise<ProgressData> {
   try {
     if (!existsSync(PROGRESS_FILE)) {
       return {
+        current: 0,
+        total: 0,
+        currentPackage: "",
         packages: {},
         snaps: {},
         tools: {},
@@ -51,6 +54,9 @@ export async function loadProgress(): Promise<ProgressData> {
   } catch (err) {
     console.error("Failed to load progress:", err);
     return {
+      current: 0,
+      total: 0,
+      currentPackage: "",
       packages: {},
       snaps: {},
       tools: {},
@@ -74,7 +80,7 @@ export async function saveProgress(data: ProgressData): Promise<void> {
  * Update progress for a specific package
  */
 export async function updatePackageProgress(
-  category: keyof ProgressData,
+  category: "packages" | "snaps" | "tools",
   packageId: string,
   status: PackageStatus
 ): Promise<void> {
@@ -87,7 +93,7 @@ export async function updatePackageProgress(
  * Check if a package was completed
  */
 export async function isCompleted(
-  category: keyof ProgressData,
+  category: "packages" | "snaps" | "tools",
   packageId: string
 ): Promise<boolean> {
   const progress = await loadProgress();
@@ -104,7 +110,7 @@ export async function getProgressStats(): Promise<{
   pending: number;
 }> {
   const progress = await loadProgress();
-  
+
   const allStatuses = [
     ...Object.values(progress.packages),
     ...Object.values(progress.snaps),
@@ -124,6 +130,9 @@ export async function getProgressStats(): Promise<{
  */
 export async function clearProgress(): Promise<void> {
   const emptyProgress: ProgressData = {
+    current: 0,
+    total: 0,
+    currentPackage: "",
     packages: {},
     snaps: {},
     tools: {},
