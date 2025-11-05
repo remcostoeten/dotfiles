@@ -1,0 +1,11 @@
+{
+  "buildCommand": "echo 'Skipping build - static HTML only'",
+  "outputDirectory": ".",
+  "installCommand": "echo 'Skipping install - no dependencies'",
+  "rewrites": [
+    {
+      "source": "/",  
+      "destination": "/index.html"
+    }
+  ]
+}
