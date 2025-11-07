@@ -153,8 +153,13 @@ export async function cloneRepo(
  */
 export async function executeScript(
   url: string,
-  verbose: boolean = false
+  verbose: boolean = false,
+  extra: string = ""
 ): Promise<CommandResult> {
+  // Special handling for golang installation
+  if (url.includes("git.io/g-install")) {
+    return executeCommand(`curl -sSL ${url} | sh -s${extra}`, verbose);
+  }
   return executeCommand(`curl -fsSL ${url} | bash`, verbose);
 }
 

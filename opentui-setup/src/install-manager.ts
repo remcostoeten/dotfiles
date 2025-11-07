@@ -75,6 +75,11 @@ const PACKAGE_DEPENDENCIES: Record<string, DependencyCheck[]> = {
     { name: "wget", check: async () => isCommandAvailable("wget"), installCommand: "sudo apt-get install -y wget", required: true }
   ],
 
+  // Golang needs curl
+  "golang": [
+    { name: "curl", check: async () => isCommandAvailable("curl"), installCommand: "sudo apt-get install -y curl", required: true }
+  ],
+
   // Docker needs specific setup
   "docker.io": [
     { name: "systemd", check: async () => isCommandAvailable("systemctl"), required: true }
@@ -146,7 +151,49 @@ async function installWithRetry(
         console.log(`Attempt ${attempt}/${maxRetries} for ${pkg.displayName}`);
       }
 
-      const result = await installPackage(pkg.name, options.verbose);
+      // Handle different installation methods
+      let result: any;
+      const {
+        installSnap,
+        installNpmGlobal,
+        executeCommand,
+        executeScript
+      } = await import("./executor");
+
+      switch (pkg.method) {
+        case "apt":
+          result = await installPackage(pkg.name, options.verbose);
+          break;
+        case "snap":
+          result = await installSnap(pkg.name, pkg.flags || "", options.verbose);
+          break;
+        case "npm":
+          result = await installNpmGlobal(pkg.name, options.verbose);
+          break;
+        case "curl":
+          // Special handling for golang with echo statements
+          if (pkg.id === "golang") {
+            if (options.verbose) {
+              console.log("Installing golang....");
+            }
+            result = await executeScript(pkg.extra || "", options.verbose, "");
+          } else {
+            result = await executeScript(pkg.extra || "", options.verbose);
+          }
+          break;
+        case "github":
+          // Handle GitHub releases (for packages like lazygit, lazydocker, wezterm)
+          const installCmd = pkg.flags
+            ? `wget ${pkg.extra}/${pkg.flags}/$(wget -qO- ${pkg.extra}/releases/latest | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4 | sed 's/v//')/linux-amd64.tar.gz -O - | tar -xz -C /tmp && sudo mv /tmp/${pkg.name} /usr/local/bin/`
+            : `wget ${pkg.extra} -O /tmp/${pkg.name} && chmod +x /tmp/${pkg.name} && sudo mv /tmp/${pkg.name} /usr/local/bin/`;
+          result = await executeCommand(installCmd, options.verbose);
+          break;
+        case "cargo":
+          result = await executeCommand(`cargo install ${pkg.name}`, options.verbose);
+          break;
+        default:
+          result = { success: false, error: `Unknown installation method: ${pkg.method}` };
+      }
 
       if (result.success) {
         return {
@@ -161,8 +208,7 @@ async function installWithRetry(
       // Don't retry if it's a dependency issue
       if (result.error?.includes("not installed") || result.error?.includes("not found")) {
         break;
-
-}
+      }
 
       // Wait before retry (exponential backoff)
       if (attempt < maxRetries) {

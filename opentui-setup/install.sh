@@ -102,6 +102,34 @@ clone_dotfiles() {
     fi
 }
 
+# Install FUSE for AppImage support
+install_fuse() {
+    print_status "Installing FUSE for AppImage support..."
+
+    # Check if FUSE libraries are already installed
+    if ldconfig -p | grep -q libfuse; then
+        print_success "FUSE libraries are already installed"
+        return 0
+    fi
+
+    print_status "Updating package lists..."
+    if ! sudo apt-get update; then
+        print_error "Failed to update package lists"
+        return 1
+    fi
+
+    print_status "Installing FUSE and libfuse2..."
+    if sudo apt-get install -y fuse libfuse2; then
+        print_success "FUSE installed successfully"
+        print_status "You can now run AppImages without extraction"
+        return 0
+    else
+        print_error "Failed to install FUSE"
+        print_warning "You may need to run AppImages with --appimage-extract"
+        return 1
+    fi
+}
+
 # Install Fish shell
 install_fish() {
     print_status "Installing Fish shell..."
@@ -240,6 +268,13 @@ verify_setup() {
         ((errors++))
     fi
 
+    # Check FUSE
+    if ldconfig -p | grep -q libfuse; then
+        print_success "FUSE libraries are available"
+    else
+        print_warning "FUSE libraries not found (AppImages may need extraction)"
+    fi
+
     # Check dotfiles directory
     if [ -d "$DOTFILES_DIR" ]; then
         print_success "Dotfiles directory exists"
@@ -339,6 +374,7 @@ main() {
     # Parse arguments
     SKIP_GIT=false
     SKIP_BUN=false
+    SKIP_FUSE=false
 
     for arg in "$@"; do
         case $arg in
@@ -348,11 +384,15 @@ main() {
             --skip-bun)
                 SKIP_BUN=true
                 ;;
+            --skip-fuse)
+                SKIP_FUSE=true
+                ;;
             --help|-h)
                 echo "Usage: $0 [OPTIONS]"
                 echo "Options:"
                 echo "  --skip-git    Skip Git installation"
                 echo "  --skip-bun    Skip Bun installation"
+                echo "  --skip-fuse   Skip FUSE installation"
                 echo "  --help, -h    Show this help message"
                 exit 0
                 ;;
@@ -363,6 +403,10 @@ main() {
 
     if [ "$SKIP_GIT" = false ]; then
         install_git
+    fi
+
+    if [ "$SKIP_FUSE" = false ]; then
+        install_fuse
     fi
 
     clone_dotfiles

@@ -214,6 +214,7 @@ export const categories: Category[] = [
       createPackage("starship", "starship", "Starship", "curl", "https://starship.rs/install.sh"),
       createPackage("nvm", "nvm", "nvm", "curl", "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh"),
       createPackage("rust", "rust", "Rust (via rustup)", "curl", "https://sh.rustup.rs"),
+      createPackage("golang", "golang", "Golang (via g-install)", "curl", "https://git.io/g-install"),
       createPackage("turso", "turso", "Turso", "curl", "https://get.tur.so/install.sh"),
       createPackage("uvx", "uv", "uvx", "curl", "https://astral.sh/uv/install.sh"),
       createPackage("vercel", "vercel", "Vercel CLI", "curl", "https://vercel.com/cli.sh"),

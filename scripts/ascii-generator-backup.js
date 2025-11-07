@@ -7,29 +7,14 @@
  * across multiple languages (bash, fish, python, node.js).
  *
  * Usage:
- *   node ascii-generator.js [options]
- *   node ascii-generator.js --interactive
- *
- * Options:
- *   --help, -h              Show this help message
- *   --interactive, -i       Run in interactive mode
- *   --type=<type>           ASCII art type (docker, android, ports, generic)
- *   --lang=<language>       Target language (bash, fish, python, node)
- *   --name=<name>           Custom name to display under ASCII art
- *   --tagline=<text>        Custom tagline (default: "By Remco Stoeten v<version>")
- *   --output=<file>         Save output to file instead of stdout
- *
- * Examples:
- *   node ascii-generator.js --type=docker
- *   node ascii-generator.js --type=android --lang=fish --name="Android Manager"
- *   node ascii-generator.js --type=ports --output=header.sh
- *   node ascii-generator.js --type=generic --name="My App" --tagline="Custom Application"
- *   node ascii-generator.js --interactive
+ *   node ascii-generator.js --type=docker   # Generate Docker ASCII
+ *   node ascii-generator.js --type=android  # Generate Android ASCII
+ *   node ascii-generator.js --type=ports    # Generate Ports ASCII
+ *   node ascii-generator.js --type=custom --name="My App" --art="custom"
  */
 
 const fs = require('fs');
 const path = require('path');
-const readline = require('readline');
 
 const PASTEL_COLORS = {
   PINK: '\x1b[38;2;250;162;193m',
@@ -145,7 +130,7 @@ create_gradient_text() {
     local text="$1"
     local colors=("$PASTEL_PINK" "$PASTEL_MAGENTA" "$PASTEL_PURPLE" "$PASTEL_BLUE" "$PASTEL_CYAN" "$PASTEL_GREEN")
     local result=""
-    local text_len=\${#text}
+    local text_len=${#text}
 
     if [ $text_len -eq 0 ]; then
         echo "$text"
@@ -154,15 +139,15 @@ create_gradient_text() {
 
     for ((i=0; i<text_len; i++)); do
         local position=$((i * 100 / (text_len - 1)))
-        local color_index=$((position * (\${#colors[@]} - 1) / 100))
-        result+="\${colors[\$color_index]}\${text:\$i:1}"
+        local color_index=$((position * (${#colors[@]} - 1) / 100))
+        result+="${colors[$color_index]}${text:$i:1}"
     done
-    printf '%b' "\${result}\${NC}"
+    printf '%b' "${result}${NC}"
 }
 
 show_banner() {
     local version=$(get_version)
-    local tagline="\${tagline:-"$defaultTagline"}"
+    local tagline="${tagline:-"$defaultTagline"}"
     local gradient_tagline=$(create_gradient_text "$tagline")
 
     # ASCII art with gradient colors
@@ -170,33 +155,33 @@ show_banner() {
 
   asciiArt.forEach((line, index) => {
     const color = colors[index % colors.length];
-    script += `\n        "    ${color}${line}\${NC}"`;
+    script += `\n        "    ${color}${line}${NC}"`;
   });
 
   if (name) {
     script += `
-        "    $PASTEL_PINK╔══════════════════════════════════════════════════════════════╗\${NC}"
-        "    $PASTEL_MAGENTA║ ${name.padEnd(55)} ║\${NC}"
-        "    $PASTEL_PURPLE╚══════════════════════════════════════════════════════════════╝\${NC}"`;
+        "    ${PASTEL_COLORS.PINK}╔══════════════════════════════════════════════════════════════╗${NC}"
+        "    ${PASTEL_COLORS.MAGENTA}║ ${name.padEnd(55)} ║${NC}"
+        "    ${PASTEL_COLORS.PURPLE}╚══════════════════════════════════════════════════════════════╝${NC}"`;
   }
 
   script += `    )
 
     # Calculate padding for centered tagline
     local max_width=0
-    for line in "\${ascii_lines[@]}"; do
+    for line in "${ascii_lines[@]}"; do
         local clean_line=$(remove_ansi "$line")
-        local line_length=\${#clean_line}
+        local line_length=${#clean_line}
         if [ $line_length -gt $max_width ]; then
             max_width=$line_length
         fi
     done
 
-    local tagline_length=\${#tagline}
+    local tagline_length=${#tagline}
     local left_pad=$(((max_width - tagline_length) / 2))
 
     # Print ASCII art and tagline
-    for line in "\${ascii_lines[@]}"; do
+    for line in "${ascii_lines[@]}"; do
         echo -e "$line"
     done
     echo "$(printf ' %.0s' $(seq 1 $((left_pad + 1))))$gradient_tagline"
@@ -226,8 +211,6 @@ set -l PASTEL_PURPLE (set_color a5d8ff)
 set -l PASTEL_BLUE (set_color b2f2bb)
 set -l PASTEL_CYAN (set_color ffec99)
 set -l PASTEL_GREEN (set_color ffd8a8)
-set -l PASTEL_YELLOW (set_color ffd43b)
-set -l PASTEL_ORANGE (set_color ff8787)
 set -l normal (set_color normal)
 
 function get_version
@@ -241,7 +224,7 @@ end
 
 function show_banner
     set version (get_version)
-    set tagline "\${tagline:-"$defaultTagline"}"
+    set tagline "${tagline:-"$defaultTagline"}"
 
     # ASCII art with gradient colors
     `;
@@ -329,7 +312,7 @@ def create_gradient_text(text):
 
 def show_banner():
     version = get_version()
-    tagline = "\${tagline or defaultTagline}"
+    tagline = "${tagline or defaultTagline}"
     gradient_tagline = create_gradient_text(tagline)
 
     # ASCII art with gradient colors
@@ -432,7 +415,7 @@ function createGradientText(text) {
 
 function showBanner() {
   const version = getVersion();
-  const tagline = "\${tagline || defaultTagline}";
+  const tagline = "${tagline || defaultTagline}";
   const gradientTagline = createGradientText(tagline);
 
   // ASCII art with gradient colors
@@ -472,229 +455,17 @@ showBanner();
   return script;
 }
 
-function showHelp() {
-  console.log('\n' + createGradientText('ASCII Art Generator') + ` - ${PASTEL_COLORS.CYAN}v${getVersion()}${PASTEL_COLORS.RESET}
-
-${PASTEL_COLORS.PINK}USAGE:${PASTEL_COLORS.RESET}
-  node ascii-generator.js [options]
-  node ascii-generator.js --interactive
-
-${PASTEL_COLORS.PINK}OPTIONS:${PASTEL_COLORS.RESET}
-  ${PASTEL_COLORS.MAGENTA}--help, -h${PASTEL_COLORS.RESET}              Show this help message
-  ${PASTEL_COLORS.MAGENTA}--interactive, -i${PASTEL_COLORS.RESET}       Run in interactive mode
-  ${PASTEL_COLORS.MAGENTA}--type=<type>${PASTEL_COLORS.RESET}           ASCII art type (docker, android, ports, generic)
-  ${PASTEL_COLORS.MAGENTA}--lang=<language>${PASTEL_COLORS.RESET}       Target language (bash, fish, python, node)
-  ${PASTEL_COLORS.MAGENTA}--name=<name>${PASTEL_COLORS.RESET}           Custom name to display under ASCII art
-  ${PASTEL_COLORS.MAGENTA}--tagline=<text>${PASTEL_COLORS.RESET}        Custom tagline
-  ${PASTEL_COLORS.MAGENTA}--output=<file>${PASTEL_COLORS.RESET}         Save output to file instead of stdout
-
-${PASTEL_COLORS.PINK}AVAILABLE TYPES:${PASTEL_COLORS.RESET}
-  ${PASTEL_COLORS.CYAN}• docker${PASTEL_COLORS.RESET}   Docker whale ASCII art
-  ${PASTEL_COLORS.CYAN}• android${PASTEL_COLORS.RESET}  Android robot ASCII art
-  ${PASTEL_COLORS.CYAN}• ports${PASTEL_COLORS.RESET}    "PORTS" text ASCII art
-  ${PASTEL_COLORS.CYAN}• generic${PASTEL_COLORS.RESET}  Generic box ASCII art
-
-${PASTEL_COLORS.PINK}SUPPORTED LANGUAGES:${PASTEL_COLORS.RESET}
-  ${PASTEL_COLORS.GREEN}• bash${PASTEL_COLORS.RESET}    Bash shell script
-  ${PASTEL_COLORS.GREEN}• fish${PASTEL_COLORS.RESET}    Fish shell script
-  ${PASTEL_COLORS.GREEN}• python${PASTEL_COLORS.RESET}  Python 3 script
-  ${PASTEL_COLORS.GREEN}• node${PASTEL_COLORS.RESET}    Node.js script
-
-${PASTEL_COLORS.PINK}EXAMPLES:${PASTEL_COLORS.RESET}
-  ${PASTEL_COLORS.YELLOW}# Generate Docker header for Bash${PASTEL_COLORS.RESET}
-  node ascii-generator.js --type=docker
-
-  ${PASTEL_COLORS.YELLOW}# Generate Android header for Fish with custom name${PASTEL_COLORS.RESET}
-  node ascii-generator.js --type=android --lang=fish --name="Android Manager"
-
-  ${PASTEL_COLORS.YELLOW}# Generate Ports header and save to file${PASTEL_COLORS.RESET}
-  node ascii-generator.js --type=ports --output=header.sh
-
-  ${PASTEL_COLORS.YELLOW}# Generate generic header with custom tagline${PASTEL_COLORS.RESET}
-  node ascii-generator.js --type=generic --name="My App" --tagline="Custom Application"
-
-  ${PASTEL_COLORS.YELLOW}# Run in interactive mode${PASTEL_COLORS.RESET}
-  node ascii-generator.js --interactive
-`);
-}
-
-// Interactive mode interface
-async function interactiveMode() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  const question = (prompt) => new Promise(resolve => {
-    rl.question(prompt, resolve);
-  });
-
-  const showWelcome = () => {
-    console.log('\n' + createGradientText('ASCII Art Generator - Interactive Mode'));
-    console.log(`${PASTEL_COLORS.CYAN}Let's create your perfect ASCII header!${PASTEL_COLORS.RESET}\n`);
-  };
-
-  const showTypes = () => {
-    console.log(`${PASTEL_COLORS.PINK}Available ASCII Art Types:${PASTEL_COLORS.RESET}`);
-    const types = Object.keys(ASCII_TEMPLATES);
-    types.forEach((type, index) => {
-      const preview = type.charAt(0).toUpperCase() + type.slice(1);
-      console.log(`  ${PASTEL_COLORS.GREEN}${index + 1}.${PASTEL_COLORS.RESET} ${PASTEL_COLORS.CYAN}${preview}${PASTEL_COLORS.RESET}`);
-    });
-    console.log('');
-  };
-
-  const showLanguages = () => {
-    console.log(`${PASTEL_COLORS.PINK}Supported Languages:${PASTEL_COLORS.RESET}`);
-    const languages = [
-      { name: 'bash', desc: 'Bash shell script' },
-      { name: 'fish', desc: 'Fish shell script' },
-      { name: 'python', desc: 'Python 3 script' },
-      { name: 'node', desc: 'Node.js script' }
-    ];
-    languages.forEach((lang, index) => {
-      console.log(`  ${PASTEL_COLORS.GREEN}${index + 1}.${PASTEL_COLORS.RESET} ${PASTEL_COLORS.CYAN}${lang.name.padEnd(7)}${PASTEL_COLORS.RESET} - ${lang.desc}`);
-    });
-    console.log('');
-  };
-
-  const getTypeChoice = async () => {
-    showTypes();
-    const promptText = `${PASTEL_COLORS.YELLOW}Choose ASCII art type (1-${Object.keys(ASCII_TEMPLATES).length}) [1]:${PASTEL_COLORS.RESET} `;
-    const choice = await question(promptText);
-    const types = Object.keys(ASCII_TEMPLATES);
-    const index = parseInt(choice) - 1;
-
-    if (isNaN(index) || index < 0 || index >= types.length) {
-      console.log(`${PASTEL_COLORS.GREEN}Using default: generic${PASTEL_COLORS.RESET}`);
-      return 'generic';
-    }
-
-    return types[index];
-  };
-
-  const getLanguageChoice = async () => {
-    showLanguages();
-    const promptText = `${PASTEL_COLORS.YELLOW}Choose target language (1-4) [1]:${PASTEL_COLORS.RESET} `;
-    const choice = await question(promptText);
-    const languages = ['bash', 'fish', 'python', 'node'];
-    const index = parseInt(choice) - 1;
-
-    if (isNaN(index) || index < 0 || index >= languages.length) {
-      console.log(`${PASTEL_COLORS.GREEN}Using default: bash${PASTEL_COLORS.RESET}`);
-      return 'bash';
-    }
-
-    return languages[index];
-  };
-
-  const getName = async () => {
-    const promptText = `${PASTEL_COLORS.YELLOW}Enter custom name (optional, press Enter to skip):${PASTEL_COLORS.RESET} `;
-    const name = await question(promptText);
-    return name.trim();
-  };
-
-  const getTagline = async () => {
-    const version = getVersion();
-    const defaultTagline = `By Remco Stoeten v${version}`;
-    const promptText = `${PASTEL_COLORS.YELLOW}Enter custom tagline [${defaultTagline}]:${PASTEL_COLORS.RESET} `;
-    const tagline = await question(promptText);
-    return tagline.trim() || null;
-  };
-
-  const getOutputFile = async () => {
-    const promptText = `${PASTEL_COLORS.YELLOW}Save to file (optional, press Enter to print to console):${PASTEL_COLORS.RESET} `;
-    const output = await question(promptText);
-    return output.trim() || null;
-  };
-
-  const generateAndShow = async (options) => {
-    const { type, lang, name, tagline, output } = options;
-
-    console.log(`\n${PASTEL_COLORS.PINK}Generating ASCII header...${PASTEL_COLORS.RESET}\n`);
-
-    let header;
-    switch (lang) {
-      case 'fish':
-        header = generateFishHeader({ type, name, tagline });
-        break;
-      case 'python':
-      case 'py':
-        header = generatePythonHeader({ type, name, tagline });
-        break;
-      case 'node':
-      case 'js':
-        header = generateNodeHeader({ type, name, tagline });
-        break;
-      case 'bash':
-      default:
-        header = generateBashHeader({ type, name, tagline });
-        break;
-    }
-
-    if (output) {
-      try {
-        fs.writeFileSync(output, header);
-        console.log(`${PASTEL_COLORS.GREEN}✓ ASCII header generated and saved to: ${PASTEL_COLORS.CYAN}${output}${PASTEL_COLORS.RESET}\n`);
-      } catch (error) {
-        console.error(`${PASTEL_COLORS.RED}Error writing to file '${output}': ${error.message}${PASTEL_COLORS.RESET}\n`);
-      }
-    } else {
-      console.log(`${PASTEL_COLORS.CYAN}--- Generated ASCII Header ---${PASTEL_COLORS.RESET}\n`);
-      console.log(header);
-    }
-  };
-
-  // Main interactive flow
-  showWelcome();
-
-  const type = await getTypeChoice();
-  const lang = await getLanguageChoice();
-  const name = await getName();
-  const tagline = await getTagline();
-  const output = await getOutputFile();
-
-  await generateAndShow({ type, lang, name, tagline, output });
-
-  rl.close();
-}
-
 // CLI interface
 function main() {
   const args = process.argv.slice(2);
   const options = {};
 
-  // Parse arguments
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-
-    if (arg === '--help' || arg === '-h') {
-      showHelp();
-      return;
-    }
-
-    if (arg === '--interactive' || arg === '-i') {
-      interactiveMode();
-      return;
-    }
-
     if (arg.startsWith('--')) {
       const [key, value] = arg.substring(2).split('=');
       options[key] = value || true;
     }
-  }
-
-  // Validate options
-  if (options.type && !Object.keys(ASCII_TEMPLATES).includes(options.type)) {
-    console.error(`${PASTEL_COLORS.RED}Error: Invalid type '${options.type}'${PASTEL_COLORS.RESET}`);
-    console.error(`${PASTEL_COLORS.YELLOW}Available types: ${Object.keys(ASCII_TEMPLATES).join(', ')}${PASTEL_COLORS.RESET}`);
-    process.exit(1);
-  }
-
-  if (options.lang && !['bash', 'fish', 'python', 'node', 'py', 'js'].includes(options.lang)) {
-    console.error(`${PASTEL_COLORS.RED}Error: Invalid language '${options.lang}'${PASTEL_COLORS.RESET}`);
-    console.error(`${PASTEL_COLORS.YELLOW}Available languages: bash, fish, python, node${PASTEL_COLORS.RESET}`);
-    process.exit(1);
   }
 
   const { type = 'generic', lang = 'bash', name = '', tagline = null, output = null } = options;
@@ -719,13 +490,8 @@ function main() {
   }
 
   if (output) {
-    try {
-      fs.writeFileSync(output, header);
-      console.log(`${PASTEL_COLORS.GREEN}✓ ASCII header generated and saved to: ${PASTEL_COLORS.CYAN}${output}${PASTEL_COLORS.RESET}`);
-    } catch (error) {
-      console.error(`${PASTEL_COLORS.RED}Error writing to file '${output}': ${error.message}${PASTEL_COLORS.RESET}`);
-      process.exit(1);
-    }
+    fs.writeFileSync(output, header);
+    console.log(`ASCII header generated and saved to: ${output}`);
   } else {
     console.log(header);
   }
