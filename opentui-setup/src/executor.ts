@@ -196,7 +196,7 @@ export async function isAptPackageInstalled(
 
 /**
  * Check if a package is installed and return boolean
- */c
+ */
 export async function isPackageInstalled(
   packageName: string,
   verbose: boolean = false
