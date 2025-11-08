@@ -1,30 +1,18 @@
 {
-  "name": "modern-setup",
+  "name": "environment-setup",
   "version": "1.0.0",
   "type": "module",
-  "description": "Modern interactive setup script using OpenTUI",
-  "main": "src/index.tsx",
+  "description": "Interactive setup tool to check and install development tools",
+  "main": "interactive-setup.ts",
   "scripts": {
-    "dev": "bun run src/index.tsx",
-    "start": "bun run src/main.tsx",
-    "setup": "bun run src/main.tsx",
-    "cli": "bun run cli-setup.ts",
-    "manager": "bun run cli-manager.ts",
+    "dev": "bun run interactive-setup.ts",
     "interactive": "bun run interactive-setup.ts",
-    "live": "bun run src/setup-live.tsx",
-    "demo": "bun run src/index.tsx",
-    "build": "bun build src/main.tsx --outdir dist --target bun",
-    "build:demo": "bun build src/index.tsx --outdir dist --target bun",
-    "build:live": "bun build src/setup-live.tsx --outdir dist --target bun"
+    "dry-run": "bun run interactive-setup.ts --dry-run",
+    "build": "bun build interactive-setup.ts --outdir dist --target bun --minify",
+    "clean": "rm -rf dist"
   },
-  "dependencies": {
-    "@opentui/core": "^0.1.34",
-    "@opentui/react": "^0.1.34",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/react": "^18.3.26",
     "bun-types": "^1.3.1",
     "typescript": "^5.9.3"
   }
