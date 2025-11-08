@@ -1,0 +1,250 @@
+#!/usr/bin/env sh
+# ============================================================================
+# CREATE — versatile mkdir + touch helper
+# Cross-shell compatible script for bash, zsh, and fish
+# ============================================================================
+
+# History directory
+HISTORY_DIR="$HOME/.dotfiles/create"
+HISTORY_FILE="$HISTORY_DIR/history.log"
+
+# Ensure history directory exists
+mkdir -p "$HISTORY_DIR" 2>/dev/null
+
+# Log creation to history
+_log_creation() {
+    item_type="$1"
+    path="$2"
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] $item_type: $path" >> "$HISTORY_FILE"
+}
+
+# Check if file extension should be excluded from chmod +x
+_should_exclude_chmod() {
+    path="$1"
+    case "$path" in
+        *.bash|*.sh|*.zsh|*.fish|*.rc|*.conf|*.config|*.json|*.yaml|*.yml|*.xml|*.html|*.css|*.js|*.ts|*.py|*.rb|*.pl|*.php|*.md|*.txt|*.log)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Show help menu
+_show_help() {
+    cat << 'EOF'
+CREATE — versatile mkdir + touch helper
+
+Usage:
+  create <path>             create file or folder
+  create --interactive      guided creation mode
+  create --history [n]      show last n entries (default 25)
+  create --history [n] asc  show oldest first
+  create --help             show this menu
+
+Examples:
+  create src/utils/file.ts
+  create components/button/
+  create --history 50 desc
+EOF
+}
+
+# Show history
+_show_history() {
+    count="${1:-25}"
+    order="${2:-desc}"
+    
+    if [ ! -f "$HISTORY_FILE" ]; then
+        echo "No history found."
+        return 0
+    fi
+    
+    if [ "$order" = "asc" ]; then
+        tail -n "$count" "$HISTORY_FILE" 2>/dev/null || head -n "$count" "$HISTORY_FILE"
+    else
+        # Try different methods to reverse file
+        if command -v tac >/dev/null 2>&1; then
+            tail -n "$count" "$HISTORY_FILE" | tac
+        elif command -v tail >/dev/null 2>&1 && tail -r "$HISTORY_FILE" >/dev/null 2>&1; then
+            tail -r "$HISTORY_FILE" | head -n "$count"
+        else
+            awk '{a[i++]=$0} END {for (j=i-1; j>=0;) print a[j--]}' "$HISTORY_FILE" | head -n "$count"
+        fi
+    fi
+}
+
+# Interactive mode
+_interactive_mode() {
+    printf "Do you want to create a file or folder? (f/file/d/dir/folder): "
+    read -r choice
+    
+    case "$choice" in
+        f|file|F|FILE)
+            item_type="file"
+            ;;
+        d|dir|folder|D|DIR|FOLDER)
+            item_type="folder"
+            ;;
+        *)
+            echo "Invalid choice. Exiting."
+            return 1
+            ;;
+    esac
+    
+    printf "Where do you want to create it? "
+    read -r path
+    
+    if [ -z "$path" ]; then
+        echo "Error: no path provided."
+        return 1
+    fi
+    
+    if [ "$item_type" = "folder" ]; then
+        # Ensure path ends with /
+        case "$path" in
+            */) ;;
+            *) path="$path/" ;;
+        esac
+    fi
+    
+    _create_item "$path"
+    
+    if [ "$item_type" = "file" ] && [ -f "$path" ]; then
+        printf "Would you like to open it in \$EDITOR? (y/n): "
+        read -r open_choice
+        case "$open_choice" in
+            y|Y|yes|YES)
+                if [ -n "$EDITOR" ]; then
+                    $EDITOR "$path"
+                else
+                    echo "EDITOR not set."
+                fi
+                ;;
+        esac
+    fi
+}
+
+# Create item (file or directory)
+_create_item() {
+    path="$1"
+    
+    if [ -z "$path" ]; then
+        echo "Error: no path provided."
+        _show_help
+        return 1
+    fi
+    
+    # Determine if it's a directory (ends with /) or file
+    is_dir=0
+    case "$path" in
+        */) 
+            is_dir=1
+            path="${path%/}"
+            ;;
+    esac
+    
+    # Get directory part
+    dir_part=$(dirname "$path" 2>/dev/null || echo ".")
+    
+    # Create parent directories if needed
+    if [ "$dir_part" != "." ] && [ "$dir_part" != "$path" ]; then
+        mkdir -p "$dir_part" 2>/dev/null || {
+            echo "Error: failed to create directory: $dir_part"
+            return 1
+        }
+    fi
+    
+    # Create the item
+    if [ $is_dir -eq 1 ]; then
+        mkdir -p "$path" 2>/dev/null || {
+            echo "Error: failed to create directory: $path"
+            return 1
+        }
+        echo "created folder: ./$path/"
+        _log_creation "folder" "$path"
+    else
+        touch "$path" 2>/dev/null || {
+            echo "Error: failed to create file: $path"
+            return 1
+        }
+        echo "created file: ./$path"
+        _log_creation "file" "$path"
+        
+        # Make executable if not excluded
+        if ! _should_exclude_chmod "$path"; then
+            chmod +x "$path" 2>/dev/null
+        fi
+    fi
+    
+    return 0
+}
+
+# Main function
+_create_main() {
+    case "${1:-}" in
+        --help|-h|--h|"")
+            if [ -z "${1:-}" ]; then
+                echo "please provide a folder or file"
+                echo
+            fi
+            _show_help
+            return 0
+            ;;
+        --interactive|-i|--i)
+            _interactive_mode
+            return $?
+            ;;
+        --history)
+            _show_history "${2:-25}" "${3:-desc}"
+            return 0
+            ;;
+        *)
+            # Create all provided paths
+            error_count=0
+            for path in "$@"; do
+                _create_item "$path" || error_count=$((error_count + 1))
+            done
+            return $error_count
+            ;;
+    esac
+}
+
+# Detect if script is being sourced or executed
+_is_sourced() {
+    if [ -n "${ZSH_VERSION:-}" ]; then
+        case "${ZSH_EVAL_CONTEXT:-}" in
+            *:file*) return 1 ;;
+            *) return 0 ;;
+        esac
+    elif [ -n "${BASH_VERSION:-}" ]; then
+        # In bash, if BASH_SOURCE array exists and differs from $0, we're being sourced
+        if [ -n "${BASH_SOURCE[0]:-}" ] && [ "${BASH_SOURCE[0]}" != "${0:-}" ]; then
+            return 0
+        fi
+        # Check if script name in $0 matches 'create'
+        case "${0##*/}" in
+            create|*/create|sh|bash) return 1 ;;
+            *) return 0 ;;
+        esac
+    else
+        # For other shells (sh, dash, etc), check $0
+        case "${0##*/}" in
+            create|*/create) return 1 ;;
+            *) return 0 ;;
+        esac
+    fi
+}
+
+# Define function when sourced, execute when run
+if _is_sourced 2>/dev/null; then
+    # Being sourced - define function
+    create() {
+        _create_main "$@"
+    }
+else
+    # Being executed - run main
+    _create_main "$@"
+    exit $?
+fi
