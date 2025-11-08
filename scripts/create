@@ -43,12 +43,81 @@ _log_creation() {
 # Check if file extension should be excluded from chmod +x
 _should_exclude_chmod() {
     path="$1"
+    # Always make files in scripts/ directory executable
     case "$path" in
-        *.bash|*.sh|*.zsh|*.fish|*.rc|*.conf|*.config|*.json|*.yaml|*.yml|*.xml|*.html|*.css|*.js|*.ts|*.py|*.rb|*.pl|*.php|*.md|*.txt|*.log)
+        scripts/*)
+            return 1
+            ;;
+    esac
+
+    # Exclude common non-executable file extensions
+    case "$path" in
+        # Config and data files
+        *.conf|*.config|*.json|*.yaml|*.yml|*.xml|*.toml|*.ini|*.cfg)
+            return 0
+            ;;
+        # Web files
+        *.html|*.htm|*.css|*.scss|*.sass|*.less)
+            return 0
+            ;;
+        # Documentation and text
+        *.md|*.txt|*.log|*.rtf|*.doc|*.docx|*.pdf)
+            return 0
+            ;;
+        # Media files
+        *.jpg|*.jpeg|*.png|*.gif|*.svg|*.ico|*.bmp|*.tiff)
+            return 0
+            ;;
+        *.mp3|*.mp4|*.avi|*.mov|*.wav|*.flac|*.ogg)
+            return 0
+            ;;
+        # Archives
+        *.zip|*.tar|*.gz|*.bz2|*.rar|*.7z)
+            return 0
+            ;;
+        # Source code that shouldn't be executable directly
+        *.js|*.ts|*.jsx|*.tsx|*.vue|*.svelte|*.go|*.rs|*.c|*.cpp|*.h|*.hpp|*.java|*.cs|*.swift|*.kt|*.dart|*.scala|*.hs|*.ml|*.clj|*.ex|*.exs)
             return 0
             ;;
         *)
+            # All other files (including scripts and extensionless files) get executable
             return 1
+            ;;
+    esac
+}
+
+# Check if file is a Unix script type
+_is_unix_script() {
+    path="$1"
+    case "$path" in
+        # Unix shell scripts
+        *.sh|*.bash|*.zsh|*.ksh|*.csh|*.tcsh|*.dash|*.ash|*.fish)
+            return 0
+            ;;
+        # Script files with extensions
+        *.py|*.awk|*.sed|*.pl|*.rb|*.php|*.tcl|*.lua|*.r|*.R)
+            return 0
+            ;;
+        # Build/run files
+        *.mk|*.make|*.build|*.run|*.command|*.ps1)
+            return 0
+            ;;
+        # Config files that are often executable
+        *.rc|*.profile|*.bashrc|*.zshrc|*.bash_profile|*.zprofile|*.bash_aliases|*.zsh_aliases)
+            return 0
+            ;;
+        # Files in scripts directory
+        scripts/*)
+            return 0
+            ;;
+        # Extensionless files (common for Unix scripts)
+        *.*)
+            # Has extension, don't match
+            return 1
+            ;;
+        *)
+            # No extension, could be executable
+            return 0
             ;;
     esac
 }
@@ -188,9 +257,22 @@ _create_item() {
             echo "Error: failed to create file: $path"
             return 1
         }
-        echo "created file: ./$path"
+
+        # Check if it's a Unix script and will be made executable
+        is_unix_script=0
+        if _is_unix_script "$path" && ! _should_exclude_chmod "$path"; then
+            is_unix_script=1
+        fi
+
+        if [ $is_unix_script -eq 1 ]; then
+            printf '%screated%s %sunix script%s: %s./%s%s\n' "$BOLD" "$RESET" "$CYAN" "$RESET" "$GRAY" "$path" "$RESET"
+            printf '%sand made it executable%s %s✓%s\n' "$DIM" "$RESET" "$BOLD" "$RESET"
+        else
+            echo "created file: ./$path"
+        fi
+
         _log_creation "file" "$path"
-        
+
         # Make executable if not excluded
         if ! _should_exclude_chmod "$path"; then
             chmod +x "$path" 2>/dev/null
