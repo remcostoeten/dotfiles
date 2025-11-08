@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# DOCSTRING: Versatile mkdir + touch helper - smart file/folder creation with history
 # ============================================================================
 # CREATE — versatile mkdir + touch helper
 # Cross-shell compatible script for bash, zsh, and fish
