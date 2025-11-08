@@ -8,6 +8,24 @@
 HISTORY_DIR="$HOME/.dotfiles/create"
 HISTORY_FILE="$HISTORY_DIR/history.log"
 
+# Color codes (only if terminal supports colors)
+if [ -z "${NO_COLOR:-}" ] && [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+    BOLD=$(tput bold 2>/dev/null || printf '\033[1m')
+    DIM=$(tput dim 2>/dev/null || printf '\033[2m')
+    RESET=$(tput sgr0 2>/dev/null || printf '\033[0m')
+    # Subtle grayscale tones
+    GRAY=$(tput setaf 8 2>/dev/null || printf '\033[90m')
+    BRIGHT=$(tput setaf 7 2>/dev/null || printf '\033[97m')
+    CYAN=$(tput setaf 6 2>/dev/null || printf '\033[36m')
+else
+    BOLD=""
+    DIM=""
+    RESET=""
+    GRAY=""
+    BRIGHT=""
+    CYAN=""
+fi
+
 # Ensure history directory exists
 mkdir -p "$HISTORY_DIR" 2>/dev/null
 
@@ -34,21 +52,19 @@ _should_exclude_chmod() {
 
 # Show help menu
 _show_help() {
-    cat << 'EOF'
-CREATE — versatile mkdir + touch helper
-
-Usage:
-  create <path>             create file or folder
-  create --interactive      guided creation mode
-  create --history [n]      show last n entries (default 25)
-  create --history [n] asc  show oldest first
-  create --help             show this menu
-
-Examples:
-  create src/utils/file.ts
-  create components/button/
-  create --history 50 desc
-EOF
+    printf '%s%sCREATE%s — versatile mkdir + touch helper%s\n' "$BOLD" "$CYAN" "$RESET" "$RESET"
+    printf '\n'
+    printf '%sUsage:%s\n' "$BOLD" "$RESET"
+    printf '  %screate%s %s<path>%s             %screate file or folder%s\n' "$BRIGHT" "$RESET" "$GRAY" "$RESET" "$DIM" "$RESET"
+    printf '  %screate%s %s--interactive%s      %sguided creation mode%s\n' "$BRIGHT" "$RESET" "$GRAY" "$RESET" "$DIM" "$RESET"
+    printf '  %screate%s %s--history%s %s[n]%s      %sshow last n entries (default 25)%s\n' "$BRIGHT" "$RESET" "$GRAY" "$RESET" "$GRAY" "$RESET" "$DIM" "$RESET"
+    printf '  %screate%s %s--history%s %s[n]%s %sasc%s  %sshow oldest first%s\n' "$BRIGHT" "$RESET" "$GRAY" "$RESET" "$GRAY" "$RESET" "$GRAY" "$RESET" "$DIM" "$RESET"
+    printf '  %screate%s %s--help%s             %sshow this menu%s\n' "$BRIGHT" "$RESET" "$GRAY" "$RESET" "$DIM" "$RESET"
+    printf '\n'
+    printf '%sExamples:%s\n' "$BOLD" "$RESET"
+    printf '  %screate%s %ssrc/utils/file.ts%s\n' "$BRIGHT" "$RESET" "$GRAY" "$RESET"
+    printf '  %screate%s %scomponents/button/%s\n' "$BRIGHT" "$RESET" "$GRAY" "$RESET"
+    printf '  %screate%s %s--history%s %s50 desc%s\n' "$BRIGHT" "$RESET" "$GRAY" "$RESET" "$GRAY" "$RESET"
 }
 
 # Show history
@@ -186,8 +202,8 @@ _create_main() {
     case "${1:-}" in
         --help|-h|--h|"")
             if [ -z "${1:-}" ]; then
-                echo "please provide a folder or file"
-                echo
+                printf '%splease provide a folder or file%s\n' "$GRAY" "$RESET"
+                printf '\n'
             fi
             _show_help
             return 0
