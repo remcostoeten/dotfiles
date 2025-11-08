@@ -57,7 +57,7 @@ export const categories: Category[] = [
       createPackage("neovim", "neovim", "Neovim", "apt"),
       createPackage("vim", "vim", "Vim", "apt"),
       { ...createPackage("code", "code", "Visual Studio Code", "snap"), flags: "--classic" },
-      { ...createPackage("windsurf", "windsurf", "Windsurf Editor", "snap"), flags: "--classic" },
+      createPackage("windsurf", "windsurf", "Windsurf Editor", "apt"),
     ],
   },
   {
@@ -122,7 +122,7 @@ export const categories: Category[] = [
     description: "Web browsers",
     selected: false,
     packages: [
-      createPackage("firefox", "firefox", "Firefox", "apt"),
+      createPackage("firefox", "firefox", "Firefox", "snap"),
       createPackage("zen-browser", "zen-browser", "Zen Browser", "apt"),
       createPackage("microsoft-edge-stable", "microsoft-edge-stable", "Microsoft Edge", "apt"),
       createPackage("brave-browser", "brave-browser", "Brave Browser", "apt"),
