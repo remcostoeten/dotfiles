@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+exec bun "$HOME/.config/dotfiles/scripts/todo.js" "$@"
+

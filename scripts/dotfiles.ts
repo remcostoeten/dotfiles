@@ -190,6 +190,7 @@ function categorizeItem(name: string, path: string): { type: TItemType; category
     if (name.includes('postgres') || name.includes('db') || name.includes('database')) return { type: 'script', category: 'database' };
     if (name.includes('git') || name.includes('commit') || name.includes('push')) return { type: 'script', category: 'git' };
     if (name.includes('bun') || name.includes('npm') || name.includes('node') || name.includes('dev')) return { type: 'script', category: 'dev' };
+    if (name.includes('todo') || name.includes('task')) return { type: 'bin', category: 'utility' };
     if (path.includes('bin')) return { type: 'bin', category: 'utility' };
     return { type: 'script', category: 'system' };
 }

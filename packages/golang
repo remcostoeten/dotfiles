@@ -1,8 +1,13 @@
 #!/usr/bin/env fish
 
-# Golang environment setup
-export GOPATH="$HOME/go"; export GOROOT="$HOME/.go"; export PATH="$GOPATH/bin:$PATH"; # g-install: do NOT edit, see https://github.com/stefanmaric/g
-alias go="$GOPATH/bin/g"; # g-install: do NOT edit, see https://github.com/stefanmaric/g
+# Golang environment setup (modified to prevent PATH duplication)
+set -gx GOPATH "$HOME/go"
+set -gx GOROOT "$HOME/.go"
+# Only add to PATH if not already present
+if test -d "$GOPATH/bin"; and not contains "$GOPATH/bin" $PATH
+    set -gx PATH "$GOPATH/bin" $PATH
+end
+alias go="$GOPATH/bin/g" # g-install: do NOT edit, see https://github.com/stefanmaric/g
 
 # Safety check for go command
 function go --description "Go command with safety check"

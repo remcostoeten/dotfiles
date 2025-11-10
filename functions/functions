@@ -1,0 +1,34 @@
+# Bridge file that sources the higher-order function registry
+# Source this file to load the functions registry system
+
+# Detect dotfiles path
+DOTFILES_PATH="${DOTFILES_PATH:-$HOME/.config/dotfiles}"
+FUNCTIONS_DIR="$DOTFILES_PATH/functions"
+
+# Source the higher-order function
+if [ -f "$FUNCTIONS_DIR/functions.higher-order" ]; then
+    . "$FUNCTIONS_DIR/functions.higher-order" 2>/dev/null || \
+    source "$FUNCTIONS_DIR/functions.higher-order" 2>/dev/null || true
+fi
+
+# Pre-register safe-source if it exists
+if [ -f "$FUNCTIONS_DIR/safe-source" ]; then
+    . "$FUNCTIONS_DIR/safe-source" 2>/dev/null || \
+    source "$FUNCTIONS_DIR/safe-source" 2>/dev/null || true
+fi
+
+# Pre-register get-script-data-dir if it exists
+if [ -f "$FUNCTIONS_DIR/get-script-data-dir" ]; then
+    . "$FUNCTIONS_DIR/get-script-data-dir" 2>/dev/null || \
+    source "$FUNCTIONS_DIR/get-script-data-dir" 2>/dev/null || true
+fi
+
+# Pre-register ensure-script-data-dir if it exists
+if [ -f "$FUNCTIONS_DIR/ensure-script-data-dir" ]; then
+    . "$FUNCTIONS_DIR/ensure-script-data-dir" 2>/dev/null || \
+    source "$FUNCTIONS_DIR/ensure-script-data-dir" 2>/dev/null || true
+fi
+
+# The functions registry is now available
+# Usage: functions (interactive menu) or functions <function-name> (direct execution)
+

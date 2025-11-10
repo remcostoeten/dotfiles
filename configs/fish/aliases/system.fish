@@ -33,6 +33,12 @@ alias pip 'pip3'
 # DOCSTRING: Quick access to dotfiles interactive menu
 alias df 'dotfiles'
 
+# DOCSTRING: Todo/task manager - interactive CLI todo manager
+alias todo '$HOME/.config/dotfiles/bin/todo'
+
+# DOCSTRING: Scripts selector - interactive script selector
+alias scripts '$HOME/.config/dotfiles/bin/scripts'
+
 # DOCSTRING: Dotfiles command - main interface
 function dotfiles
     # Check if interactive mode is requested

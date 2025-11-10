@@ -1,0 +1,152 @@
+# DOCSTRING: Higher-order function registry for interactive function discovery and execution
+
+functions() {
+    local cmd="${1:-}"
+    local DOTFILES_FUNCTIONS_DIR="${DOTFILES_PATH:-$HOME/.config/dotfiles}/functions"
+    
+    # If specific function name provided, execute it directly
+    if [ -n "$cmd" ] && [ "$cmd" != "help" ] && [ "$cmd" != ".help" ]; then
+        local func_file="$DOTFILES_FUNCTIONS_DIR/$cmd"
+        if [ -f "$func_file" ] && [ -r "$func_file" ]; then
+            # Source and execute the function
+            if [ -n "$FISH_VERSION" ]; then
+                fish -c "source '$func_file'; $cmd" "$@"
+            else
+                . "$func_file" 2>/dev/null
+                "$cmd" "$@"
+            fi
+            return $?
+        else
+            echo "Error: Function '$cmd' not found" >&2
+            return 1
+        fi
+    fi
+    
+    # Collect available functions
+    local functions_list=()
+    local functions_names=()
+    
+    for func_file in "$DOTFILES_FUNCTIONS_DIR"/*; do
+        [ -f "$func_file" ] || continue
+        func_name=$(basename "$func_file")
+        case "$func_name" in
+            functions.higher-order|functions) continue ;;
+            *)
+                functions_list+=("$func_file")
+                functions_names+=("$func_name")
+                ;;
+        esac
+    done
+    
+    if [ ${#functions_list[@]} -eq 0 ]; then
+        echo "No functions found in $DOTFILES_FUNCTIONS_DIR" >&2
+        return 1
+    fi
+    
+    # Check if TTY is available for interactive mode
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        # Not a TTY, just list functions
+        echo "Available functions:"
+        for func_name in "${functions_names[@]}"; do
+            echo "  $func_name"
+        done
+        return 0
+    fi
+    
+    # Interactive menu mode
+    local selected=0
+    local total=${#functions_list[@]}
+    
+    while true; do
+        clear 2>/dev/null || printf '\033[2J\033[H'
+        echo "╔════════════════════════════════════╗"
+        echo "║     FUNCTION REGISTRY MENU         ║"
+        echo "╚════════════════════════════════════╝"
+        echo ""
+        
+        local idx=0
+        for func_name in "${functions_names[@]}"; do
+            if [ $idx -eq $selected ]; then
+                printf "  ▶ %s\n" "$func_name"
+            else
+                printf "    %s\n" "$func_name"
+            fi
+            idx=$((idx + 1))
+        done
+        
+        echo ""
+        echo "↑↓/jk: Navigate | Enter: Execute | C: Copy | q: Quit"
+        
+        # Read input (simplified for portability)
+        if [ -n "$FISH_VERSION" ]; then
+            read -p "> " key
+        else
+            IFS= read -r -n 1 key 2>/dev/null || read -r key
+        fi
+        
+        case "$key" in
+            'j'|'J')
+                selected=$((selected + 1))
+                [ $selected -ge $total ] && selected=0
+                ;;
+            'k'|'K')
+                selected=$((selected - 1))
+                [ $selected -lt 0 ] && selected=$((total - 1))
+                ;;
+            $'\n'|'')  # Enter
+                func_name="${functions_names[$selected]}"
+                func_file="${functions_list[$selected]}"
+                
+                # Source and execute
+                if [ -n "$FISH_VERSION" ]; then
+                    fish -c "source '$func_file'; $func_name"
+                else
+                    . "$func_file" 2>/dev/null
+                    "$func_name"
+                fi
+                echo ""
+                echo "Press Enter to continue..."
+                read
+                ;;
+            'c'|'C')  # Copy to clipboard
+                func_file="${functions_list[$selected]}"
+                if command -v pbcopy >/dev/null 2>&1; then
+                    cat "$func_file" | pbcopy && echo "✓ Copied (pbcopy)"
+                elif command -v xclip >/dev/null 2>&1; then
+                    cat "$func_file" | xclip -selection clipboard && echo "✓ Copied (xclip)"
+                elif command -v wl-copy >/dev/null 2>&1; then
+                    cat "$func_file" | wl-copy && echo "✓ Copied (wl-copy)"
+                else
+                    echo "No clipboard tool found" >&2
+                fi
+                sleep 1
+                ;;
+            'q'|'Q'|$'\x03')  # Quit or Ctrl+C
+                clear 2>/dev/null || printf '\033[2J\033[H'
+                return 0
+                ;;
+            [1-9])
+                num=$(($key - 1))
+                if [ $num -lt $total ]; then
+                    selected=$num
+                    func_name="${functions_names[$selected]}"
+                    func_file="${functions_list[$selected]}"
+                    if [ -n "$FISH_VERSION" ]; then
+                        fish -c "source '$func_file'; $func_name"
+                    else
+                        . "$func_file" 2>/dev/null
+                        "$func_name"
+                    fi
+                    echo ""
+                    echo "Press Enter to continue..."
+                    read
+                fi
+                ;;
+        esac
+    done
+}
+
+# Alias for help
+functions.help() {
+    functions
+}

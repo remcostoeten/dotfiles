@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
 
-HISTORY_DIR="$HOME/.dotfiles/logs/xclip"
+FUNCTIONS_BRIDGE="$HOME/.config/dotfiles/functions/functions"
+if [ -f "$FUNCTIONS_BRIDGE" ]; then
+  . "$FUNCTIONS_BRIDGE" 2>/dev/null || source "$FUNCTIONS_BRIDGE" 2>/dev/null || true
+fi
+
+if command -v ensure-script-data-dir >/dev/null 2>&1; then
+  CLIP_DATA_DIR="$(ensure-script-data-dir "clip")"
+  HISTORY_DIR="$(ensure-script-data-dir "clip" "logs")"
+else
+  DOTFILES_DATA_DIR="${DOTFILES_DATA_DIR:-$HOME/.dotfiles}"
+  CLIP_DATA_DIR="$DOTFILES_DATA_DIR/clip"
+  HISTORY_DIR="$CLIP_DATA_DIR/logs"
+  mkdir -p "$HISTORY_DIR"
+fi
+
 HISTORY_FILE="$HISTORY_DIR/history.log"
 MAX_HISTORY=500
-
-mkdir -p "$HISTORY_DIR"
 
 function check_xclip_installed() {
   if ! command -v xclip &>/dev/null; then
@@ -162,9 +174,17 @@ function show_clipboard() {
     return
   fi
 
-  local output_file="$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
-  echo "$content" > "$output_file/clip"
-  echo -e "\033[1;32m✓ Clipboard content saved to $output_file/clip\033[0m"
+  local output_dir
+  if command -v ensure-script-data-dir >/dev/null 2>&1; then
+    output_dir="$(ensure-script-data-dir "clip" "tmp")"
+  else
+    output_dir="$CLIP_DATA_DIR/tmp"
+    mkdir -p "$output_dir"
+  fi
+
+  local output_file="$output_dir/clipboard.txt"
+  echo "$content" > "$output_file"
+  echo -e "\033[1;32m✓ Clipboard content saved to $output_file\033[0m"
   echo -e "\033[1;33mSize: ${#content} characters\033[0m"
 }
 

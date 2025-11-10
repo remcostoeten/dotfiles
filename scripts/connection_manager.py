@@ -19,7 +19,9 @@ try:
 except ImportError:
     CRYPTO_AVAILABLE = False
 
-CONNECTIONS_FILE = Path.home() / ".dotfiles" / "connections.json"
+DOTFILES_DATA_DIR = Path(os.environ.get("DOTFILES_DATA_DIR", Path.home() / ".dotfiles"))
+CONNECTIONS_FILE = DOTFILES_DATA_DIR / "connections" / "connections.json"
+CONNECTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
 SERVICE_NAME = "db_tool_connections"
 
 class Colors:

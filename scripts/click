@@ -5,7 +5,21 @@
 # ============================================================================
 # Configuration & Globals
 # ============================================================================
-HISTORY_DIR="$HOME/.dotfiles/logs/click"
+FUNCTIONS_BRIDGE="$HOME/.config/dotfiles/functions/functions"
+if [ -f "$FUNCTIONS_BRIDGE" ]; then
+    . "$FUNCTIONS_BRIDGE" 2>/dev/null || source "$FUNCTIONS_BRIDGE" 2>/dev/null || true
+fi
+
+if command -v ensure-script-data-dir >/dev/null 2>&1; then
+    CLICK_DATA_DIR="$(ensure-script-data-dir "click")"
+    HISTORY_DIR="$(ensure-script-data-dir "click" "logs")"
+else
+    DOTFILES_DATA_DIR="${DOTFILES_DATA_DIR:-$HOME/.dotfiles}"
+    CLICK_DATA_DIR="$DOTFILES_DATA_DIR/click"
+    HISTORY_DIR="$CLICK_DATA_DIR/logs"
+    mkdir -p "$HISTORY_DIR"
+fi
+
 HISTORY_FILE="$HISTORY_DIR/history.log"
 MAX_HISTORY=25
 

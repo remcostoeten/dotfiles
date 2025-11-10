@@ -1,0 +1,155 @@
+# DOCSTRING: Safely source a directory or single file with optional include/exclude filters
+# Compatible with Fish, Bash, and Zsh
+
+safe-source() {
+    local target="${1:-}"
+    local include_exts="sh,bash,zsh,fish"
+    local exclude_exts=""
+    local succeeded=0
+    local failed=0
+    
+    # Parse arguments
+    shift 2>/dev/null || true
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --include)
+                include_exts="${2:-sh,bash,zsh,fish}"
+                shift 2
+                ;;
+            --exclude)
+                exclude_exts="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    # Check if extension is in comma-separated list
+    ext_in_list() {
+        local ext="$1"
+        local list="$2"
+        if [ -z "$list" ]; then
+            return 1
+        fi
+        case ",$list," in
+            *",$ext,"*) return 0 ;;
+            *) return 1 ;;
+        esac
+    }
+    
+    # Get file extension (or empty for extensionless)
+    get_ext() {
+        local file="$1"
+        local basename_file=$(basename "$file")
+        case "$basename_file" in
+            *.*)
+                echo "${basename_file##*.}"
+                ;;
+            *)
+                echo ""
+                ;;
+        esac
+    }
+    
+    # Check if file should be processed
+    should_process() {
+        local file="$1"
+        local ext=$(get_ext "$file")
+        
+        # Check exclude first
+        if [ -n "$exclude_exts" ] && ext_in_list "$ext" "$exclude_exts"; then
+            return 1
+        fi
+        
+        # Extensionless files are included by default
+        if [ -z "$ext" ]; then
+            return 0
+        fi
+        
+        # Check include
+        if [ -z "$include_exts" ]; then
+            return 0
+        fi
+        
+        if ext_in_list "$ext" "$include_exts"; then
+            return 0
+        fi
+        
+        return 1
+    }
+    
+    # Source a single file
+    source_file() {
+        local file="$1"
+        
+        if [ ! -f "$file" ]; then
+            echo "Warning: File not found: $file" >&2
+            failed=$((failed + 1))
+            return 1
+        fi
+        
+        if [ ! -r "$file" ]; then
+            echo "Warning: File not readable: $file" >&2
+            failed=$((failed + 1))
+            return 1
+        fi
+        
+        # Try to source the file based on current shell
+        if [ -n "$FISH_VERSION" ]; then
+            # Fish shell
+            if command -v fish >/dev/null 2>&1; then
+                if fish -c "source '$file'" 2>/dev/null; then
+                    succeeded=$((succeeded + 1))
+                    return 0
+                fi
+            fi
+        elif [ -n "$ZSH_VERSION" ]; then
+            # Zsh
+            if (eval ". '$file'") 2>/dev/null; then
+                succeeded=$((succeeded + 1))
+                return 0
+            fi
+        else
+            # Bash/sh
+            if (eval ". '$file'") 2>/dev/null; then
+                succeeded=$((succeeded + 1))
+                return 0
+            fi
+        fi
+        
+        echo "Warning: Failed to source: $file" >&2
+        failed=$((failed + 1))
+        return 1
+    }
+    
+    # Main logic
+    if [ -z "$target" ]; then
+        echo "Usage: safe-source <directory|file> [--include ext1,ext2] [--exclude ext1,ext2]" >&2
+        return 1
+    fi
+    
+    if [ -f "$target" ]; then
+        if should_process "$target"; then
+            source_file "$target"
+        fi
+    elif [ -d "$target" ]; then
+        for file in "$target"/*; do
+            [ -f "$file" ] || continue
+            if should_process "$file"; then
+                source_file "$file"
+            fi
+        done
+    else
+        echo "Error: Not a file or directory: $target" >&2
+        return 1
+    fi
+    
+    # Print summary
+    if [ $succeeded -gt 0 ] || [ $failed -gt 0 ]; then
+        echo "safe-source: $succeeded succeeded, $failed failed" >&2
+    fi
+    
+    return 0
+}

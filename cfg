@@ -1,4 +1,11 @@
 #!/usr/bin/env fish
+
+# Guard against multiple sourcing
+if set -q __DOTFILES_CFG_LOADED
+    return 0
+end
+set -g __DOTFILES_CFG_LOADED 1
+
 # Helper function to add paths without duplicates
 function add_to_path
     for dir in $argv
@@ -8,6 +15,17 @@ function add_to_path
             end
         end
     end
+end
+
+# Function to deduplicate PATH
+function dedupe_path
+    set -l new_path
+    for dir in $PATH
+        if not contains "$dir" $new_path
+            set new_path $new_path "$dir"
+        end
+    end
+    set -gx PATH $new_path
 end
 
 # Add dotfiles bin to PATH and make executables available
@@ -115,7 +133,12 @@ if status is-interactive
             end
 
             if test $key = "PATH"
-                set -gx PATH (string split ":" $value)
+                # Import PATH from bash, but dedupe it
+                for p in (string split ":" $value)
+                    if test -d "$p"; and not contains "$p" $PATH
+                        set -gx PATH $PATH "$p"
+                    end
+                end
             else
                 set -gx $key "$value"
             end
@@ -317,19 +340,18 @@ end
 
     # Cargo
     if test -f $HOME/.cargo/env
-        # Extract PATH from cargo env and add to fish PATH
-        if grep -q "PATH=" $HOME/.cargo/env
-            set cargo_path (bash -c "source $HOME/.cargo/env && echo \$PATH")
-            set -gx PATH $cargo_path $PATH
-        end
+        # Add cargo bin to PATH if not already present
+        add_to_path $HOME/.cargo/bin
     end
 
     # Local bin env
-    if test -f $HOME/.local/bin/env
-        # Extract PATH from local bin env and add to fish PATH
-        if grep -q "PATH=" $HOME/.local/bin/env
-            set local_path (bash -c "source $HOME/.local/bin/env && echo \$PATH")
-            set -gx PATH $local_path $PATH
-        end
+    if test -d $HOME/.local/bin
+        add_to_path $HOME/.local/bin
     end
+    if test -d $HOME/bin
+        add_to_path $HOME/bin
+    end
+
+    # Final deduplication at the end of config
+    dedupe_path
 end

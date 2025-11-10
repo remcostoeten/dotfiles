@@ -1,0 +1,29 @@
+# DOCSTRING: Get script data directory path for storing config/logs/database files
+# Default storage root: $HOME/.dotfiles (override with DOTFILES_DATA_DIR)
+# Usage: get-script-data-dir <script-name>
+# Returns: Path to script-specific data directory
+
+get-script-data-dir() {
+    local script_name="${1:-}"
+    
+    if [ -z "$script_name" ]; then
+        echo "Error: Script name required" >&2
+        echo "Usage: get-script-data-dir <script-name>" >&2
+        return 1
+    fi
+    
+    # Remove any path components, keep only script name
+    script_name=$(basename "$script_name")
+    
+    # Get dotfiles root
+    local data_root="${DOTFILES_DATA_DIR:-$HOME/.dotfiles}"
+    
+    # Return script-specific data directory
+    echo "$data_root/$script_name"
+}
+
+# Export as global variable helper (for use in scripts)
+# Usage in scripts:
+#   SCRIPT_DATA_DIR=$(get-script-data-dir "my-script")
+#   CONFIG_FILE="$SCRIPT_DATA_DIR/config.json"
+

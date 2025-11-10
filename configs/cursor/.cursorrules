@@ -1,0 +1,337 @@
+# Dotfiles Architecture Rules for AI Assistants
+
+## Overview
+This dotfiles repository follows a modular architecture pattern with clear separation between executables, implementations, and reusable functions.
+
+---
+
+## Bin and Scripts Architecture
+
+### Pattern: Wrapper → Implementation
+
+**Directory Structure:**
+- `bin/` - Executable wrappers on system PATH (thin wrappers)
+- `scripts/` - Implementation logic (actual functionality)
+
+### Rules:
+
+1. **Creating New Scripts:**
+   - Implementation goes in `scripts/` directory (e.g., `scripts/my-tool.ts` or `scripts/my-tool.sh`)
+   - Executable wrapper goes in `bin/` directory (e.g., `bin/my-tool`)
+   - Wrapper should be minimal and call the script implementation
+
+2. **Wrapper Pattern:**
+   ```bash
+   # bin/my-tool example
+   #!/usr/bin/env bash
+   exec bun "$HOME/.config/dotfiles/scripts/my-tool.ts" "$@"
+   ```
+   
+   Or for shell scripts:
+   ```bash
+   #!/usr/bin/env bash
+   exec "$HOME/.config/dotfiles/scripts/my-tool.sh" "$@"
+   ```
+
+3. **Script Requirements:**
+   - All scripts in `scripts/` should have a DOCSTRING comment at the top:
+     ```typescript
+     // DOCSTRING: Brief description of what the script does
+     ```
+   - Scripts in `bin/` must be executable (`chmod +x`)
+   - TypeScript scripts use `#!/usr/bin/env bun` shebang
+   - Shell scripts use appropriate shebang (`#!/usr/bin/env bash`, `#!/usr/bin/env fish`, etc.)
+
+4. **Discovery:**
+   - The `dotfiles` menu (`scripts/dotfiles.ts`) automatically discovers executables in `bin/`
+   - Scripts are categorized automatically based on name/path patterns
+   - DOCSTRING comments are extracted and shown in the menu
+
+5. **Aliases:**
+   - Add aliases to `configs/fish/aliases/system.fish` or appropriate alias file
+   - Format: `alias mytool '$HOME/.config/dotfiles/bin/my-tool'`
+   - Include DOCSTRING comment: `# DOCSTRING: Description`
+
+---
+
+## Functions Architecture
+
+### Directory: `functions/`
+
+The functions directory contains reusable shell functions that can be sourced and used across the dotfiles system.
+
+### Structure:
+
+1. **`functions/safe-source`** - Safely source directories or files with filters
+2. **`functions/functions.higher-order`** - Higher-order function registry (interactive menu)
+3. **`functions/functions`** - Bridge file that loads the registry system
+
+### Creating New Functions:
+
+1. **Create Function File:**
+   - Create new file in `functions/` directory (extensionless)
+   - Example: `functions/my-function`
+   - Must include DOCSTRING at top:
+     ```bash
+     # DOCSTRING: Brief description of what the function does
+     ```
+
+2. **Function Requirements:**
+   - Must be shell-compatible (Fish, Bash, Zsh)
+   - Use POSIX-compliant syntax when possible
+   - Include error handling
+   - Make executable: `chmod +x functions/my-function`
+
+3. **Register Function:**
+   - Add sourcing to `functions/functions` bridge file:
+     ```bash
+     # Pre-register my-function if it exists
+     if [ -f "$FUNCTIONS_DIR/my-function" ]; then
+         . "$FUNCTIONS_DIR/my-function" 2>/dev/null || \
+         source "$FUNCTIONS_DIR/my-function" 2>/dev/null || true
+     fi
+     ```
+
+4. **Using Functions:**
+   - Functions are automatically discovered by `functions.higher-order`
+   - Access via: `functions` (interactive menu) or `functions my-function` (direct)
+   - Functions starting with `functions.higher-order` or `functions` are excluded from menu
+
+### Safe Source Usage:
+
+**ALWAYS use `safe-source` when sourcing files in functions or scripts:**
+
+```bash
+# Instead of: source "$file"
+# Use:
+safe-source "$file"
+
+# With filters:
+safe-source "$directory" --include "sh,fish" --exclude "test.sh"
+
+# Default includes: sh,bash,zsh,fish and extensionless files
+```
+
+**Why safe-source?**
+- Handles errors gracefully
+- Continues even if one file fails
+- Provides summary of succeeded/failed sources
+- Works across Fish, Bash, and Zsh
+- Supports include/exclude filters
+
+---
+
+## AI Assistant Guidelines
+
+### When Creating New Scripts:
+
+1. **Follow the wrapper pattern:**
+   - Create implementation in `scripts/`
+   - Create wrapper in `bin/`
+   - Add DOCSTRING to implementation
+   - Make both executable
+
+2. **When creating functions:**
+   - Create function file in `functions/`
+   - Register it in `functions/functions`
+   - Use `safe-source` for any sourcing operations
+   - Make function executable
+
+3. **When sourcing files:**
+   - **NEVER** use direct `source` or `.` commands
+   - **ALWAYS** use `safe-source` function
+   - Example: `safe-source "$DOTFILES_PATH/configs/fish/aliases"`
+
+4. **Documentation:**
+   - Add DOCSTRING comments to all scripts and functions
+   - Update relevant README files if creating major features
+   - Follow existing patterns in the codebase
+
+5. **Testing:**
+   - Ensure scripts work in Fish shell (primary shell)
+   - Test cross-shell compatibility when possible
+   - Verify executables are on PATH
+
+### Example: Creating a New Tool
+
+```bash
+# 1. Create implementation
+# File: scripts/my-tool.ts
+#!/usr/bin/env bun
+// DOCSTRING: My new tool description
+console.log("Hello from my-tool");
+
+# 2. Create wrapper
+# File: bin/my-tool
+#!/usr/bin/env bash
+exec bun "$HOME/.config/dotfiles/scripts/my-tool.ts" "$@"
+
+# 3. Make executable
+chmod +x bin/my-tool scripts/my-tool.ts
+
+# 4. Add alias (optional)
+# File: configs/fish/aliases/system.fish
+# DOCSTRING: My new tool
+alias mytool '$HOME/.config/dotfiles/bin/my-tool'
+```
+
+### Example: Creating a New Function
+
+```bash
+# 1. Create function
+# File: functions/my-function
+# DOCSTRING: My new function description
+my-function() {
+    echo "Hello from my-function"
+}
+
+# 2. Register in bridge file
+# File: functions/functions
+if [ -f "$FUNCTIONS_DIR/my-function" ]; then
+    . "$FUNCTIONS_DIR/my-function" 2>/dev/null || \
+    source "$FUNCTIONS_DIR/my-function" 2>/dev/null || true
+fi
+
+# 3. Make executable
+chmod +x functions/my-function
+
+# 4. Usage
+# functions my-function  # Direct execution
+# functions              # Interactive menu
+```
+
+---
+
+## Key Principles
+
+1. **Separation of Concerns:** bin/ = interface, scripts/ = implementation
+2. **Modularity:** Each script/function should be independently usable
+3. **Discoverability:** DOCSTRING comments enable auto-discovery
+4. **Safety:** Always use `safe-source` for sourcing operations
+5. **Cross-shell Compatibility:** Functions should work in Fish, Bash, and Zsh
+6. **Error Handling:** Graceful failures, continue on errors when appropriate
+
+---
+
+## File Locations Reference
+
+- **Executables:** `bin/`
+- **Implementations:** `scripts/`
+- **Functions:** `functions/`
+- **Fish Config:** `configs/fish/`
+- **Aliases:** `configs/fish/aliases/`
+- **Dotfiles Root:** `$HOME/.config/dotfiles` or `$DOTFILES_PATH`
+
+---
+
+## Data Storage Architecture
+
+### Storage Path Pattern
+
+**All configuration, logging, database, and settings files MUST be stored in:**
+
+```
+$HOME/.dotfiles/$SCRIPT_NAME/*.{json,log,md,txt}
+```
+
+Where `$SCRIPT_NAME` is the name of your script/tool (without path).
+
+### Global Variable
+
+**Use this global variable in all scripts:**
+
+```typescript
+// TypeScript/JavaScript
+const DOTFILES_DATA_DIR = process.env.HOME + '/.dotfiles';
+const SCRIPT_DATA_DIR = join(DOTFILES_DATA_DIR, 'SCRIPT_NAME');
+```
+
+```bash
+# Shell scripts - Option 1: Direct variable
+DOTFILES_DATA_DIR="${DOTFILES_DATA_DIR:-$HOME/.dotfiles}"
+SCRIPT_DATA_DIR="$DOTFILES_DATA_DIR/SCRIPT_NAME"
+
+# Shell scripts - Option 2: Use helper function (recommended)
+# First source: source $HOME/.config/dotfiles/functions/functions
+SCRIPT_DATA_DIR=$(ensure-script-data-dir "SCRIPT_NAME")
+```
+
+### Rules:
+
+1. **Create script-specific directory:**
+   - Each script gets its own directory: `$HOME/.config/dotfiles/$SCRIPT_NAME/`
+   - Example: `$HOME/.config/dotfiles/todo/`, `$HOME/.config/dotfiles/my-tool/`
+
+2. **File types allowed:**
+   - `.json` - Configuration, settings, database files
+   - `.log` - Logging files
+   - `.md` - Documentation files
+   - `.txt` - Text data files
+
+3. **Directory initialization:**
+   - Always create the directory if it doesn't exist
+   - Use `mkdir -p` or equivalent recursive directory creation
+
+4. **Example patterns:**
+   ```typescript
+   // TypeScript example
+   const DOTFILES_DATA_DIR = process.env.HOME + '/.dotfiles';
+   const MY_TOOL_DIR = join(DOTFILES_DATA_DIR, 'my-tool');
+   const CONFIG_FILE = join(MY_TOOL_DIR, 'config.json');
+   const LOG_FILE = join(MY_TOOL_DIR, 'app.log');
+   
+   // Ensure directory exists
+   if (!existsSync(MY_TOOL_DIR)) {
+       mkdirSync(MY_TOOL_DIR, { recursive: true });
+   }
+   ```
+
+   ```bash
+   # Shell example
+   DOTFILES_DATA_DIR="${DOTFILES_DATA_DIR:-$HOME/.dotfiles}"
+   MY_TOOL_DIR="$DOTFILES_DATA_DIR/my-tool"
+   CONFIG_FILE="$MY_TOOL_DIR/config.json"
+   LOG_FILE="$MY_TOOL_DIR/app.log"
+   
+   # Ensure directory exists
+   mkdir -p "$MY_TOOL_DIR"
+   ```
+
+5. **Never store data in:**
+   - `scripts/` directory (for code only)
+   - `bin/` directory (for executables only)
+   - Root of dotfiles (use script-specific subdirectories)
+
+### Examples from Codebase:
+
+- **Todo manager:** `$HOME/.dotfiles/todo/tasks.json`, `$HOME/.dotfiles/todo/config.json`
+- **Postgres tool:** `$HOME/.dotfiles/postgres/*.json`
+- **Secret manager:** `$HOME/.dotfiles/secrets/secrets.json`
+
+### Helper Functions:
+
+- `get-script-data-dir <script>` → returns path without creating
+- `ensure-script-data-dir <script> [subpath]` → creates directories and returns path
+- `script-data-file <script> <relative-path>` → combines helper with relative file
+
+**Always source the functions bridge before using helpers:**
+
+```bash
+source "$HOME/.config/dotfiles/functions/functions"
+LOG_DIR=$(ensure-script-data-dir "my-tool" "logs")
+STATE_FILE=$(script-data-file "my-tool" "state.json")
+```
+
+Set the environment variable `DOTFILES_DATA_DIR` if you need a custom storage root; it defaults to `$HOME/.dotfiles`.
+
+---
+
+## Important Notes
+
+- The `dotfiles` command (`scripts/dotfiles.ts`) automatically discovers tools in `bin/`
+- Functions are discovered by `functions.higher-order` from `functions/` directory
+- Always use `safe-source` instead of direct sourcing
+- DOCSTRING comments are required for discoverability
+- All executables must have execute permissions
+- **Always use the storage pattern:** `$HOME/.config/dotfiles/$SCRIPT_NAME/` for data files
+

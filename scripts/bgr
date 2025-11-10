@@ -1,8 +1,21 @@
 #!/bin/bash
 
-BG_DIR="${HOME}/.dotfiles/bg"
+FUNCTIONS_BRIDGE="$HOME/.config/dotfiles/functions/functions"
+if [ -f "$FUNCTIONS_BRIDGE" ]; then
+  . "$FUNCTIONS_BRIDGE" 2>/dev/null || source "$FUNCTIONS_BRIDGE" 2>/dev/null || true
+fi
+
+if command -v ensure-script-data-dir >/dev/null 2>&1; then
+  BG_DIR="$(ensure-script-data-dir "bgr")"
+  BG_LOG_DIR="$(ensure-script-data-dir "bgr" "logs")"
+else
+  DOTFILES_DATA_DIR="${DOTFILES_DATA_DIR:-$HOME/.dotfiles}"
+  BG_DIR="$DOTFILES_DATA_DIR/bgr"
+  BG_LOG_DIR="$BG_DIR/logs"
+  mkdir -p "$BG_LOG_DIR"
+fi
+
 BG_PIDS_FILE="${BG_DIR}/processes"
-BG_LOG_DIR="${BG_DIR}/logs"
 
 _init() {
   mkdir -p "$BG_LOG_DIR"
