@@ -195,8 +195,19 @@ function check_dependencies() {
 
     # Check for input simulation tools
     if command -v ydotool >/dev/null 2>&1; then
-        CLICK_TOOL="ydotool"
-        log_action "Using ydotool for Wayland compatibility" "success"
+        # Test if ydotool actually works - with timeout to prevent hanging
+        if timeout 2s ydotool click 1 >/dev/null 2>&1; then
+            CLICK_TOOL="ydotool"
+            log_action "Using ydotool for Wayland compatibility" "success"
+        else
+            log_action "ydotool found but not working (permissions/daemon issue)" "warning"
+            if command -v xdotool >/dev/null 2>&1; then
+                CLICK_TOOL="xdotool"
+                log_action "Falling back to xdotool for X11/Wayland" "info"
+            else
+                missing+=("working xdotool or ydotool (run 'click --setup' to fix)")
+            fi
+        fi
     elif command -v xdotool >/dev/null 2>&1; then
         CLICK_TOOL="xdotool"
         log_action "Using xdotool for X11/Wayland" "info"
@@ -605,9 +616,19 @@ function start_clicking() {
 
     while [ $SECONDS -lt $end ]; do
         if [ "$CLICK_TOOL" = "ydotool" ]; then
-            ydotool click 0x110000 >/dev/null 2>&1  # Left click
+            # Test ydotool availability and use correct syntax
+            if ! ydotool click 1 >/dev/null 2>&1; then
+                log_action "ydotool failed, switching to xdotool if available" "warning"
+                if command -v xdotool >/dev/null 2>&1; then
+                    CLICK_TOOL="xdotool"
+                    xdotool click 1
+                else
+                    log_action "Both ydotool and xdotool failed - cannot continue" "error"
+                    break
+                fi
+            fi
         else
-            xdotool click 1
+            xdotool click 1 >/dev/null 2>&1
         fi
         sleep "$interval"
 

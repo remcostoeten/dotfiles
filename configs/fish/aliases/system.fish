@@ -154,10 +154,10 @@ alias ls='exa'
 # DOCSTRING: Custom list command showing size and name with ricer styling
 function l
     # Check for help flag
-    if test "$argv[1]" = "--help" -o "$argv[1]" = "-h"
+    if set -q argv[1]; and string match -q -- "-h" "--help" $argv[1]
         set_color cyan
         echo "╔══════════════════════════════════════════════════════════════════════════════╗"
-        echo "║                         L - RICER DIRECTORY LISTER                         ║"
+        echo "║                         L - DIRECTORY LISTER                                 ║"
         echo "╚══════════════════════════════════════════════════════════════════════════════╝"
         set_color normal
         echo ""
@@ -171,8 +171,7 @@ function l
         echo ""
         set_color blue
         echo "Description:"
-        echo "  🎨 Ricer-style directory listing with colors and visual flair"
-        echo "  📊 Shows: size • type indicators • styled names"
+        echo "  🎨 Directory listing with colors and icons"
         echo "  🎯 Minimal output, maximum aesthetics"
         echo ""
         set_color purple
@@ -184,128 +183,25 @@ function l
         return 0
     end
 
-    set -l show_hidden false
-    set -l target_path "."
-    set -l use_grid false
-
-    # Parse arguments
+    set -l exa_args
+    set -l path_arg
     for arg in $argv
         switch $arg
             case -a --all
-                set show_hidden true
-            case -g --grid
-                set use_grid true
+                set -a exa_args --all
             case '-*'
-                set_color red
-                echo "❌ Unknown option: $arg" >&2
-                set_color yellow
-                echo "💡 Use 'l --help' for usage information." >&2
-                set_color normal
+                echo "Unknown option: $arg" >&2
                 return 1
             case '*'
-                if test -d $arg
-                    set target_path $arg
-                else
-                    set_color red
-                    echo "❌ Not a directory: $arg" >&2
-                    set_color normal
-                    return 1
-                end
+                set path_arg $arg
         end
     end
 
-    # Set custom LS_COLORS for better visual distinction
-    set -x LS_COLORS 'di=01;34:fi=00:ex=01;32:ln=01;36:*.md=01;33:*.json=01;35:*.js=01;31:*.ts=01;31:*.tsx=01;31:*.jsx=01;31:*.py=01;36:*.go=01;32:*.rs=01;33:*.php=01;35:*.css=01;36:*.scss=01;36:*.html=01;33:*.vue=01;32:*.svelte=01;32:*.yaml=01;35:*.yml=01;35:*.toml=01;35:*.xml=01;33:*.sql=01;36:*.sh=01;32:*.fish=01;32:*.zsh=01;32:*.bash=01;32:*.png=01;35:*.jpg=01;35:*.jpeg=01;35:*.gif=01;35:*.svg=01;35:*.ico=01;35'
-
-    # Build exa command with enhanced options (no header to avoid conflicts)
-    set -l exa_cmd exa -l --no-permissions --no-user --no-time --group-directories-first --binary --color=always --icons
-
-    if test $show_hidden = true
-        set exa_cmd $exa_cmd --all
+    if not set -q path_arg
+        set path_arg .
     end
 
-
-    # Run the command and post-process with colors and formatting
-    set -l exa_output (eval $exa_cmd $target_path)
-
-    # Add custom styling
-    if test -n "$exa_output"
-        # Print header with styling
-        set_color -o cyan
-        echo "╭─────────────────────────────────────────────────────────────────╮"
-        echo "│ 📂 "(set_color -o yellow)(basename $target_path)(set_color -o cyan)" - Directory Contents           │"
-        echo "╰─────────────────────────────────────────────────────────────────╯"
-        set_color normal
-        echo ""
-
-        # Print column headers
-        set_color -o cyan
-        printf "%-10s %s\n" "Size" "Name"
-        set_color -o white
-        echo "─────────────────────────────────────────────────────────────────"
-        set_color normal
-        echo ""
-
-          # Get clean exa output without color codes for parsing
-    set -l clean_output (eval $exa_cmd $target_path | string replace -r '\x1b\[[0-9;]*m' '')
-
-    # Process each line
-    for line in $clean_output
-        # Skip empty lines
-        if test -z "$line"
-            continue
-        end
-
-        # Parse the line format: "size name"
-        set size_part (echo $line | awk '{print $1}')
-        set name_part (echo $line | cut -d' ' -f2- | string trim)
-
-        # Clean size_part from any remaining color codes
-        set size_part (echo $size_part | string replace -r '\x1b\[[0-9;]*m' '')
-
-        # Check if it's a directory
-        if string match -q "*/" $name_part
-            # Print directory entry
-            printf "%-10s " $size_part
-            set_color -o blue
-            echo $name_part
-            set_color normal
-        else
-            # Regular file with size coloring
-            printf "%-10s " $size_part
-
-            # Determine color based on size pattern
-            if string match -q "*B" $size_part
-                set_color -o green
-            else if string match -q "*K" $size_part
-                set_color -o yellow
-            else if string match -q "*M" $size_part
-                set_color -o orange
-            else
-                set_color -o red
-            end
-
-            echo $name_part
-            set_color normal
-        end
-    end
-
-        # Add footer with file count
-        set -l total_count (eval $exa_cmd $target_path 2>/dev/null | wc -l)
-        if test $total_count -gt 0
-            echo ""
-            set_color -o magenta
-            echo "└─ 📊 "$total_count" items"
-            set_color normal
-        end
-    else
-        set_color red
-        echo "❌ Directory empty or not accessible"
-        set_color normal
-    end
-
-    # Reset LS_COLORS
-    set -e LS_COLORS
+    exa -l --icons --color=always --group-directories-first $exa_args $path_arg
 end
 
 # DOCSTRING: Colorized tree output with better colors and comprehensive ignore patterns

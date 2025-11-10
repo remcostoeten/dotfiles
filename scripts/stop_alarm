@@ -1,0 +1,23 @@
+#!/usr/bin/env fish
+
+# Quick alarm stop utility
+# This script can be called to stop any running alarm
+
+if test -f /tmp/alarm_active
+    rm -f /tmp/alarm_active
+end
+
+if test -f /tmp/alarm_sound_pid
+    set -l pid (cat /tmp/alarm_sound_pid)
+    if kill -0 $pid 2>/dev/null
+        kill $pid 2>/dev/null
+    end
+    rm -f /tmp/alarm_sound_pid
+end
+
+# Send confirmation notification
+if command -v notify-send >/dev/null
+    notify-send --urgency=low --app-name="Alarm" --icon="dialog-information" "Alarm Stopped" "The alarm has been manually stopped."
+end
+
+echo "Alarm stopped."
