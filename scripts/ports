@@ -865,12 +865,15 @@ function parseArguments(args) {
   if (portArgs.length === 0) return getDefaultPorts();
 
   const ports = new Set();
+  let hasDirectPortArgs = false;
   for (const arg of portArgs) {
     let parsed = null;
 
     if (arg.startsWith('--') && arg.endsWith('+')) {
       globalOptions.force = true;
       parsed = parsePlusRangePort(arg);
+    } else if (arg.includes(',')) {
+      parsed = parseCommaSeparatedPorts(arg);
     } else if (arg.includes('-')) {
       const parts = arg.split('-');
       parsed = parsePortRange(parts[0], parts[1]);
@@ -882,6 +885,7 @@ function parseArguments(args) {
     }
 
     if (parsed) {
+      hasDirectPortArgs = true;
       for (const port of parsed) {
         ports.add(port);
       }
@@ -890,6 +894,10 @@ function parseArguments(args) {
     } else {
       console.warn(chalk.yellow(`⚠️  Invalid port '${arg}'. Skipping.`));
     }
+  }
+
+  if (hasDirectPortArgs && ports.size > 0) {
+    globalOptions.force = true;
   }
 
   return Array.from(ports);
