@@ -1,0 +1,8 @@
+#!/bin/bash
+# Display management wrapper script
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+DOTFILES_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Execute the display TypeScript script
+exec bun "$DOTFILES_ROOT/scripts/display.ts" "$@"

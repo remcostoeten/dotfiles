@@ -27,30 +27,48 @@ warning() { yellow "[WARNING]" && printf " %s" "$@"; }
 info() { blue "[INFO]" && printf " %s" "$@"; }
 
 # Display text with color formatting
+function copy_to_clipboard_backend() {
+    local content="$1"
+
+    if command -v xclip >/dev/null 2>&1; then
+        printf "%s" "$content" | xclip -selection clipboard
+    elif command -v wl-copy >/dev/null 2>&1; then
+        printf "%s" "$content" | wl-copy
+    else
+        echo "ERROR: Neither xclip nor wl-copy found. Please install one of them."
+        return 1
+    fi
+}
+
 function copy_to_clipboard() {
     local content="$1"
     local title="${2:-Content}"
 
-    # Copy to clipboard using xclip or wl-copy
-    if command -v xclip >/dev/null 2>&1; then
-        echo -n "$content" | xclip -selection clipboard
-    elif command -v wl-copy >/dev/null 2>&1; then
-        echo -n "$content" | wl-copy
-    else
-        echo "ERROR: Neither xclip nor wl-copy found. Please install one of them."
+    if ! copy_to_clipboard_backend "$content"; then
         exit 1
     fi
 
     # Display the copied content
     echo
-    printf "%s\n" "$(bold "$(cyan "=== $title ===")")
+    printf "%s\n" "$(bold "$(cyan "=== $title ===")")"
     echo
     printf "%s\n" "$content"
     echo
-    printf "%s\n" "$(bold "$(cyan "=== End of $title ===")")
+    printf "%s\n" "$(bold "$(cyan "=== End of $title ===")")"
     echo
     printf "%s\n" "$(success "Content copied to clipboard!")"
     echo
+}
+
+function copy_to_clipboard_silent() {
+    local content="$1"
+
+    if ! copy_to_clipboard_backend "$content"; then
+        printf "%s Clipboard utilities not found (xclip or wl-copy required)\n" "$(error)"
+        return 1
+    fi
+
+    return 0
 }
 
 # Handle file display
@@ -383,6 +401,42 @@ function handle_tree() {
     return 0
 }
 
+# Handle command output capture
+function handle_output() {
+    if [[ $# -eq 0 ]]; then
+        printf "%s Provide a command to run\n" "$(error "No command provided.")"
+        return 1
+    fi
+
+    local tmpfile
+    tmpfile=$(mktemp -t copy-output.XXXXXX)
+    if [[ -z "$tmpfile" ]]; then
+        printf "%s Failed to create temporary file\n" "$(error)"
+        return 1
+    fi
+
+    trap '[[ -n "${tmpfile:-}" && -f "${tmpfile:-}" ]] && rm -f "${tmpfile:-}"' RETURN
+
+    local exit_code=0
+    if ! "$@" > >(tee "$tmpfile") 2> >(tee -a "$tmpfile" >&2); then
+        exit_code=$?
+    fi
+
+    local command_output
+    command_output=$(<"$tmpfile")
+
+    if ! copy_to_clipboard_silent "$command_output"; then
+        return 1
+    fi
+
+    if [[ $exit_code -ne 0 ]]; then
+        printf "%s Command exited with status %s (output copied)\n" "$(warning)" "$(bold "$exit_code")" >&2
+        return $exit_code
+    fi
+
+    return 0
+}
+
 # Handle help display
 function handle_help() {
     printf "%s\n" "$(bold "$(cyan "Copy Utility - Interactive display utility for development workflows")") "
@@ -396,6 +450,7 @@ function handle_help() {
     printf "    %s [path]             Display current directory or specified path\n" "$(cyan "pwd")"
     printf "    %s                 Display git remote URL\n" "$(cyan "remote")"
     printf "    %s [options] [path]   Display directory tree (excludes generated folders)\n" "$(cyan "tree")"
+    printf "    %s <command...>       Run command, mirror output, and copy it\n" "$(cyan "output")"
     printf "    %s       Show this help message\n" "$(cyan "help, --help, -h")"
     echo
     printf "%s\n" "$(bold "EXAMPLES:")"
@@ -405,6 +460,7 @@ function handle_help() {
     printf "    %s            # Display git remote URL\n" "$(green "copy remote")"
     printf "    %s               # Display directory tree\n" "$(green "copy tree")"
     printf "    %s            # Tree limited to 2 levels\n" "$(green "copy tree -l 2")"
+    printf "    %s    # Copy the output of a command\n" "$(green "copy output bun run build")"
     printf "    %s                   # Interactive mode with menu\n" "$(green "copy")"
     echo
     printf "%s\n" "$(bold "INTERACTIVE MODE:")"
@@ -425,10 +481,11 @@ function interactive_mode() {
         printf "3) %s\n" "$(cyan "Specific directory path")"
         printf "4) %s\n" "$(cyan "Git remote URL")"
         printf "5) %s\n" "$(cyan "Directory tree")"
-        printf "6) %s\n" "$(cyan "Quit")"
+        printf "6) %s\n" "$(cyan "Command output")"
+        printf "7) %s\n" "$(cyan "Quit")"
         echo
 
-        printf "%s " "$(bold "Choice (1-6):")"
+        printf "%s " "$(bold "Choice (1-7):")"
         read -r choice
         echo
 
@@ -530,11 +587,20 @@ function interactive_mode() {
                 handle_tree "${tree_interactive_args[@]}" && break
                 ;;
             6)
+                printf "%s " "$(blue "Enter command to run:")"
+                read -r command_line
+                if [[ -n "$command_line" ]]; then
+                    handle_output bash -lc "$command_line" && break
+                else
+                    printf "%s No command provided\n" "$(warning)"
+                fi
+                ;;
+            7)
                 printf "%s Goodbye! 👋\n" "$(info)"
                 exit 0
                 ;;
             *)
-                printf "%s Invalid choice. Please select 1-6.\n" "$(warning)"
+                printf "%s Invalid choice. Please select 1-7.\n" "$(warning)"
                 ;;
         esac
         echo
@@ -568,6 +634,9 @@ main() {
             ;;
         tree)
             handle_tree "$@"
+            ;;
+        output)
+            handle_output "$@"
             ;;
         --version|-v)
             echo "$SCRIPT_NAME version $VERSION"

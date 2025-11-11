@@ -1,9 +1,53 @@
 [
   {
-    "id": "1762802151322",
-    "description": "Create claude error wrapper for dotfiles1",
-    "createdAt": 1762802151322,
-    "updatedAt": 1762802151322,
+    "id": "1762813462763",
+    "description": "create claude spellcheck",
+    "createdAt": 1762813462763,
+    "updatedAt": 1762813462763,
+    "status": "pending",
+    "reminderOffsets": [],
+    "notificationsSent": {
+      "reminders": []
+    }
+  },
+  {
+    "id": "1762813482567",
+    "description": "create claude create prompt from clipboard",
+    "createdAt": 1762813482567,
+    "updatedAt": 1762813482567,
+    "status": "pending",
+    "reminderOffsets": [],
+    "notificationsSent": {
+      "reminders": []
+    }
+  },
+  {
+    "id": "1762813505456",
+    "description": "create claude error wrapper for dotfiles",
+    "createdAt": 1762813505456,
+    "updatedAt": 1762813505456,
+    "status": "pending",
+    "reminderOffsets": [],
+    "notificationsSent": {
+      "reminders": []
+    }
+  },
+  {
+    "id": "1762890276931",
+    "description": "vscode theme create",
+    "createdAt": 1762890276931,
+    "updatedAt": 1762890276931,
+    "status": "pending",
+    "reminderOffsets": [],
+    "notificationsSent": {
+      "reminders": []
+    }
+  },
+  {
+    "id": "1762890295094",
+    "description": "cv typo fixes / cleanup",
+    "createdAt": 1762890295094,
+    "updatedAt": 1762890295094,
     "status": "pending",
     "reminderOffsets": [],
     "notificationsSent": {

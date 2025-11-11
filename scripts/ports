@@ -225,25 +225,25 @@ const colors = {
 };
 
 const chalk = {
-  red: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.red}${text}${colors.reset}` : text; },
-  green: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.green}${text}${colors.reset}` : text; },
-  yellow: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.yellow}${text}${colors.reset}` : text; },
-  blue: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.blue}${text}${colors.reset}` : text; },
-  magenta: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.magenta}${text}${colors.reset}` : text; },
-  cyan: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.cyan}${text}${colors.reset}` : text; },
-  white: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.white}${text}${colors.reset}` : text; },
-  gray: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.gray}${text}${colors.reset}` : text; },
-  bold: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.bright}${text}${colors.reset}` : text; },
-  dim: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.dim}${text}${colors.reset}` : text; },
+  red: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.red}${text}${colors.reset}` : text; },
+  green: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.green}${text}${colors.reset}` : text; },
+  yellow: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.yellow}${text}${colors.reset}` : text; },
+  blue: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.blue}${text}${colors.reset}` : text; },
+  magenta: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.magenta}${text}${colors.reset}` : text; },
+  cyan: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.cyan}${text}${colors.reset}` : text; },
+  white: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.white}${text}${colors.reset}` : text; },
+  gray: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.gray}${text}${colors.reset}` : text; },
+  bold: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.bright}${text}${colors.reset}` : text; },
+  dim: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.dim}${text}${colors.reset}` : text; },
   // Pastel colors
-  pastelPink: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelPink}${text}${colors.reset}` : text; },
-  pastelMagenta: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelMagenta}${text}${colors.reset}` : text; },
-  pastelPurple: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelPurple}${text}${colors.reset}` : text; },
-  pastelBlue: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelBlue}${text}${colors.reset}` : text; },
-  pastelCyan: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelCyan}${text}${colors.reset}` : text; },
-  pastelGreen: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelGreen}${text}${colors.reset}` : text; },
-  pastelOrange: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelOrange}${text}${colors.reset}` : text; },
-  pastelRed: function(text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelRed}${text}${colors.reset}` : text; },
+  pastelPink: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelPink}${text}${colors.reset}` : text; },
+  pastelMagenta: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelMagenta}${text}${colors.reset}` : text; },
+  pastelPurple: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelPurple}${text}${colors.reset}` : text; },
+  pastelBlue: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelBlue}${text}${colors.reset}` : text; },
+  pastelCyan: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelCyan}${text}${colors.reset}` : text; },
+  pastelGreen: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelGreen}${text}${colors.reset}` : text; },
+  pastelOrange: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelOrange}${text}${colors.reset}` : text; },
+  pastelRed: function (text) { return APP_CONFIG.flags.ENABLE_COLORS ? `${colors.pastelRed}${text}${colors.reset}` : text; },
 };
 
 let globalOptions = {
@@ -273,19 +273,19 @@ function Spinner(text) {
   this.interval = null;
 }
 
-Spinner.prototype.start = function() {
+Spinner.prototype.start = function () {
   if (this.isSpinning || globalOptions.json || !APP_CONFIG.flags.ENABLE_SPINNERS) return;
   this.isSpinning = true;
   process.stdout.write('\x1b[?25l');
 
   const self = this;
-  this.interval = setInterval(function() {
+  this.interval = setInterval(function () {
     process.stdout.write(`\r${colors.cyan}${spinnerFrames[spinnerIndex]} ${self.text}${colors.reset}`);
     spinnerIndex = (spinnerIndex + 1) % spinnerFrames.length;
   }, APP_CONFIG.limits.SPINNER_INTERVAL_MS);
 };
 
-Spinner.prototype.stop = function() {
+Spinner.prototype.stop = function () {
   if (!this.isSpinning) return;
   this.isSpinning = false;
 
@@ -298,21 +298,21 @@ Spinner.prototype.stop = function() {
   process.stdout.write('\x1b[?25h');
 };
 
-Spinner.prototype.succeed = function(message) {
+Spinner.prototype.succeed = function (message) {
   this.stop();
   if (!globalOptions.json) {
     console.log(`${colors.green}✓ ${message}${colors.reset}`);
   }
 };
 
-Spinner.prototype.fail = function(message) {
+Spinner.prototype.fail = function (message) {
   this.stop();
   if (!globalOptions.json) {
     console.log(`${colors.red}✗ ${message}${colors.reset}`);
   }
 };
 
-Spinner.prototype.updateText = function(newText) {
+Spinner.prototype.updateText = function (newText) {
   this.text = newText;
 };
 
@@ -450,7 +450,7 @@ function showHistory(limit) {
 
     console.log(chalk.cyan('\n📜 Kill History:\n'));
 
-    const tableData = display.map(function(entry, index) {
+    const tableData = display.map(function (entry, index) {
       const date = new Date(entry.timestamp);
       return [
         (index + 1).toString(),
@@ -525,8 +525,8 @@ function listProfiles() {
 
     if (fs.existsSync(APP_CONFIG.paths.PROFILES_DIR)) {
       const customProfiles = fs.readdirSync(APP_CONFIG.paths.PROFILES_DIR)
-        .filter(function(file) { return file.endsWith('.json'); })
-        .map(function(file) { return file.replace('.json', ''); });
+        .filter(function (file) { return file.endsWith('.json'); })
+        .map(function (file) { return file.replace('.json', ''); });
 
       if (customProfiles.length > 0) {
         console.log(chalk.bold('\nCustom Profiles:'));
@@ -564,8 +564,8 @@ async function watchMode(ports) {
   async function check() {
     const allProcesses = await scanPortsParallel(ports);
 
-    const currentPids = new Set(allProcesses.map(function(p) { return p.pid; }));
-    const newProcesses = allProcesses.filter(function(p) { return !seenProcesses.has(p.pid); });
+    const currentPids = new Set(allProcesses.map(function (p) { return p.pid; }));
+    const newProcesses = allProcesses.filter(function (p) { return !seenProcesses.has(p.pid); });
 
     if (newProcesses.length > 0) {
       console.log(chalk.yellow(`\n[${new Date().toLocaleTimeString()}] Detected ${newProcesses.length} new process(es):`));
@@ -597,7 +597,7 @@ async function watchMode(ports) {
 
   const interval = setInterval(check, APP_CONFIG.limits.WATCH_INTERVAL_MS);
 
-  process.on('SIGINT', function() {
+  process.on('SIGINT', function () {
     clearInterval(interval);
     console.log(chalk.yellow('\n\n⚠️  Watch mode stopped.'));
     process.exit(0);
@@ -837,7 +837,7 @@ function parseArguments(args) {
   const portsIndex = args.indexOf('ports');
   if (portsIndex !== -1 && portsIndex < args.length - 1) {
     globalOptions.force = true;
-    const portSpecs = args.slice(portsIndex + 1).filter(function(arg) {
+    const portSpecs = args.slice(portsIndex + 1).filter(function (arg) {
       return !arg.startsWith('-');
     });
 
@@ -857,7 +857,7 @@ function parseArguments(args) {
     return Array.from(ports);
   }
 
-  const portArgs = args.filter(function(arg) {
+  const portArgs = args.filter(function (arg) {
     if (arg.startsWith('--') && arg.endsWith('+')) return true;
     return !arg.startsWith('--') && !arg.startsWith('-');
   });
@@ -986,7 +986,7 @@ function parseWindowsNetstat(stdout, port) {
 
   if (processes.size === 0) return null;
 
-  return Array.from(processes).map(function(pid) {
+  return Array.from(processes).map(function (pid) {
     return { pid: pid, name: 'unknown', port: port };
   });
 }
@@ -1053,33 +1053,33 @@ async function killProcess(pid, useSudo) {
 }
 
 function createTable(headers, rows) {
-  const colWidths = headers.map(function(header, i) {
-    const cellLengths = rows.map(function(row) {
+  const colWidths = headers.map(function (header, i) {
+    const cellLengths = rows.map(function (row) {
       return String(row[i] || '').length;
     });
     const maxWidth = Math.max(header.length, ...cellLengths);
     return Math.max(maxWidth, APP_CONFIG.limits.MIN_TABLE_COLUMN_WIDTH);
   });
 
-  const topBorder = '┌' + colWidths.map(function(w) {
+  const topBorder = '┌' + colWidths.map(function (w) {
     return '─'.repeat(w + 2);
   }).join('┬') + '┐';
 
-  const headerRow = '│' + headers.map(function(header, i) {
+  const headerRow = '│' + headers.map(function (header, i) {
     return ` ${chalk.bold(header.padEnd(colWidths[i]))} `;
   }).join('│') + '│';
 
-  const headerSep = '├' + colWidths.map(function(w) {
+  const headerSep = '├' + colWidths.map(function (w) {
     return '─'.repeat(w + 2);
   }).join('┼') + '┤';
 
-  const dataRows = rows.map(function(row) {
-    return '│' + row.map(function(cell, i) {
+  const dataRows = rows.map(function (row) {
+    return '│' + row.map(function (cell, i) {
       return ` ${String(cell || '').padEnd(colWidths[i])} `;
     }).join('│') + '│';
   });
 
-  const bottomBorder = '└' + colWidths.map(function(w) {
+  const bottomBorder = '└' + colWidths.map(function (w) {
     return '─'.repeat(w + 2);
   }).join('┴') + '┘';
 
@@ -1087,13 +1087,13 @@ function createTable(headers, rows) {
 }
 
 function prompt(question) {
-  return new Promise(function(resolve) {
+  return new Promise(function (resolve) {
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
     });
 
-    rl.question(question, function(answer) {
+    rl.question(question, function (answer) {
       rl.close();
       resolve(answer.trim());
     });
@@ -1101,7 +1101,7 @@ function prompt(question) {
 }
 
 function singleKeypress(message) {
-  return new Promise(function(resolve) {
+  return new Promise(function (resolve) {
     if (message) {
       process.stdout.write(message);
     }
@@ -1110,7 +1110,7 @@ function singleKeypress(message) {
     process.stdin.resume();
     process.stdin.setEncoding('utf8');
 
-    process.stdin.once('data', function(key) {
+    process.stdin.once('data', function (key) {
       process.stdin.setRawMode(false);
       process.stdin.pause();
       resolve(key.toString());
@@ -1134,7 +1134,7 @@ async function multiSelect(message, choices) {
   console.log(`\n${message}`);
   console.log(chalk.dim('Press "a" to kill all, or enter numbers (comma-separated):'));
 
-  choices.forEach(function(choice, index) {
+  choices.forEach(function (choice, index) {
     console.log(`  ${chalk.yellow((index + 1).toString().padStart(2))}. ${choice.name}`);
   });
 
@@ -1142,10 +1142,10 @@ async function multiSelect(message, choices) {
 
   if (answer.toLowerCase() === 'a') {
     globalOptions.force = true;
-    return choices.map(function(c) { return c.value; });
+    return choices.map(function (c) { return c.value; });
   }
 
-  const fullAnswer = answer + (await new Promise(function(resolve) {
+  const fullAnswer = answer + (await new Promise(function (resolve) {
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -1154,7 +1154,7 @@ async function multiSelect(message, choices) {
 
     process.stdin.resume();
 
-    rl.on('line', function(line) {
+    rl.on('line', function (line) {
       rl.close();
       process.stdin.pause();
       resolve(line);
@@ -1163,14 +1163,14 @@ async function multiSelect(message, choices) {
 
   if (fullAnswer.toLowerCase() === 'all') {
     globalOptions.force = true;
-    return choices.map(function(c) { return c.value; });
+    return choices.map(function (c) { return c.value; });
   }
 
   const indices = fullAnswer.split(',')
-    .map(function(s) { return parseInt(s.trim(), 10) - 1; })
-    .filter(function(i) { return i >= 0 && i < choices.length; });
+    .map(function (s) { return parseInt(s.trim(), 10) - 1; })
+    .filter(function (i) { return i >= 0 && i < choices.length; });
 
-  return indices.map(function(i) { return choices[i].value; });
+  return indices.map(function (i) { return choices[i].value; });
 }
 
 function outputJSON(data) {
@@ -1196,7 +1196,7 @@ async function scanPortsParallel(ports) {
   }
 
   const results = await Promise.all(
-    ports.map(function(port) {
+    ports.map(function (port) {
       return findProcessesByPort(port);
     })
   );
@@ -1267,7 +1267,7 @@ async function selectProcesses(allProcesses) {
     return allProcesses;
   }
 
-  const choices = allProcesses.map(function(proc) {
+  const choices = allProcesses.map(function (proc) {
     return {
       name: `Port ${proc.port} (${proc.name}) - PID: ${proc.pid}`,
       value: proc,
@@ -1284,7 +1284,7 @@ async function selectProcesses(allProcesses) {
 async function handleDryRun(selectedProcesses) {
   console.log(chalk.yellow(`\n📋 ${APP_CONFIG.messages.DRY_RUN_WARNING}\n`));
 
-  const dryRunData = selectedProcesses.map(function(proc) {
+  const dryRunData = selectedProcesses.map(function (proc) {
     return [chalk.red('WOULD KILL'), proc.port.toString(), proc.pid.toString(), proc.name];
   });
 
@@ -1316,7 +1316,7 @@ async function killSelectedProcesses(selectedProcesses) {
     }
 
     if (i < selectedProcesses.length - 1) {
-      await new Promise(function(resolve) {
+      await new Promise(function (resolve) {
         setTimeout(resolve, APP_CONFIG.limits.KILL_DELAY_MS);
       });
     }
@@ -1386,7 +1386,7 @@ function filterDevelopmentPorts(processes) {
     8443,  // Alt HTTPS
   ]);
 
-  return processes.filter(function(proc) {
+  return processes.filter(function (proc) {
     // Filter by port
     if (nonDevPorts.has(proc.port)) {
       return false;
@@ -1461,7 +1461,7 @@ async function main() {
 
   console.log(`\n${chalk.bold('◆')} Found ${chalk.bold(allProcesses.length)} active process(es):\n`);
 
-  const tableData = allProcesses.map(function(proc) {
+  const tableData = allProcesses.map(function (proc) {
     return [proc.port.toString(), proc.pid.toString(), proc.name];
   });
 
@@ -1531,9 +1531,9 @@ async function main() {
 
     if (APP_CONFIG.flags.SAVE_HISTORY) {
       saveToHistory({
-        ports: selectedProcesses.map(function(p) { return p.port; }),
+        ports: selectedProcesses.map(function (p) { return p.port; }),
         count: successCount,
-        pids: selectedProcesses.map(function(p) { return p.pid; }),
+        pids: selectedProcesses.map(function (p) { return p.pid; }),
       });
     }
 
@@ -1596,23 +1596,23 @@ function cleanupStdin() {
   }
 }
 
-process.on('SIGINT', function() {
+process.on('SIGINT', function () {
   console.log(chalk.yellow(`\n\n⚠️  ${APP_CONFIG.messages.OPERATION_CANCELLED}`));
   cleanupStdin();
   process.exit(0);
 });
 
-process.on('unhandledRejection', function(error) {
+process.on('unhandledRejection', function (error) {
   console.error(chalk.red('An unexpected error occurred:'), error);
   cleanupStdin();
   process.exit(1);
 });
 
-process.on('exit', function() {
+process.on('exit', function () {
   cleanupStdin();
 });
 
-main().catch(function(error) {
+main().catch(function (error) {
   console.error(chalk.red('A critical error occurred:'), error);
   cleanupStdin();
   process.exit(1);

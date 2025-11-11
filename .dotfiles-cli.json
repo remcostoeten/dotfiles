@@ -1,14 +1,17 @@
 {
   "layout": "categories",
   "banner": "classic",
-  "includeAliases": true,
-  "includeFunctions": true,
-  "groupAliases": true,
+  "includeAliases": false,
+  "includeFunctions": false,
+  "groupAliases": false,
   "preferBinOverScripts": true,
   "fzfHeight": "85%",
   "showDescriptions": true,
   "enableCategories": true,
   "recentItems": [
-    "alias-group::c::clear"
+    "script::database::postgres::/home/remco-stoeten/.config/dotfiles/scripts/postgres",
+    "script::database::db::/home/remco-stoeten/.config/dotfiles/scripts/db",
+    "bin::utility::todo::/home/remco-stoeten/.config/dotfiles/bin/todo",
+    "bin::utility::scripts::/home/remco-stoeten/.config/dotfiles/bin/scripts"
   ]
 }

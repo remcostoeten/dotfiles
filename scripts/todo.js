@@ -189,7 +189,7 @@ function formatTimeRemaining(timestamp) {
     } else if (hours > 0) {
       return `${hours}h overdue`;
     } else {
-      return `${minutes}m overdue`;
+      return `${minutes} min ago`;
     }
   } else {
     const minutes = Math.floor(absDiff / (60 * 1000));
@@ -308,18 +308,65 @@ function formatTaskForDisplay(task, showId = false) {
   return parts.join(" ");
 }
 function displayTasksForShell(tasks) {
-  const pending = tasks.filter((t) => t.status === "pending" && t.dueDate);
+  const pending = tasks.filter((t) => t.status === "pending");
   if (pending.length === 0)
     return;
+
+  // Sort by due date first, then creation date
   pending.sort((a, b) => {
-    if (!a.dueDate)
-      return 1;
-    if (!b.dueDate)
+    if (a.dueDate && b.dueDate)
+      return a.dueDate - b.dueDate;
+    if (a.dueDate)
       return -1;
-    return a.dueDate - b.dueDate;
+    if (b.dueDate)
+      return 1;
+    return a.createdAt - b.createdAt;
   });
-  for (const task of pending) {
-    console.log(formatTaskForDisplay(task));
+
+  // Limit to 5 tasks max
+  const displayTasks = pending.slice(0, 5);
+  const hasMore = pending.length > 5;
+
+  console.log(`${COLORS.BRIGHT}${COLORS.MAUVE}📋 Tasks (${pending.length})${COLORS.RESET}`);
+
+  for (const task of displayTasks) {
+    const createdDate = new Date(task.createdAt);
+    const createdStr = createdDate.toLocaleDateString() + " " + createdDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    const parts = [];
+
+    // Status prefix
+    if (task.dueDate) {
+      if (isUpcoming(task.dueDate)) {
+        parts.push(`${COLORS.YELLOW2}[UPCOMING]${COLORS.RESET}`);
+      } else if (isOverdue(task.dueDate)) {
+        parts.push(`${COLORS.RED2}[OVERDUE]${COLORS.RESET}`);
+      }
+    }
+
+    // Description (truncate to 50 chars max for single line)
+    const color = getUrgencyColor(task.dueDate);
+    let description = task.description;
+    if (description.length > 50) {
+      description = description.substring(0, 47) + "...";
+    }
+    parts.push(`${color}${description}${COLORS.RESET}`);
+
+    // Due date
+    if (task.dueDate) {
+      const timeStr = formatTimeRemaining(task.dueDate);
+      parts.push(`${COLORS.DIM}- due ${timeStr}${COLORS.RESET}`);
+    }
+
+    // Created timestamp (shortened format)
+    const shortDate = createdDate.toLocaleDateString() + " " + createdDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    parts.push(`${COLORS.DIM}(${shortDate})${COLORS.RESET}`);
+
+    console.log(`  ${parts.join(" ")}`);
+  }
+
+  if (hasMore) {
+    console.log(`  ${COLORS.DIM}... and ${pending.length - 5} more tasks${COLORS.RESET}`);
   }
 }
 
@@ -781,6 +828,11 @@ async function handleCLI(args) {
     return;
   }
   const command = args[0];
+  if (command === "count") {
+    const pendingCount = tasks.filter((t) => t.status === "pending").length;
+    console.log(pendingCount);
+    return;
+  }
   if (command === "list") {
     const filter = args[1];
     let filtered = tasks.filter((t) => t.status === "pending");
@@ -836,11 +888,17 @@ async function handleCLI(args) {
     }
     return;
   }
+  if (command === "shell-display") {
+    displayTasksForShell(tasks);
+    return;
+  }
   if (command === "help") {
     console.log(`${COLORS.BRIGHT}Todo Manager${COLORS.RESET}
 `);
     console.log(`Usage:`);
     console.log(`  todo                    # Show upcoming tasks (for shell startup)`);
+    console.log(`  todo shell-display      # Show tasks for shell startup (explicit)`);
+    console.log(`  todo count              # Show number of pending tasks`);
     console.log(`  todo interactive        # Launch interactive menu`);
     console.log(`  todo "Task" 15pm        # Create task`);
     console.log(`  todo "Task" 15pm --r 10,30,60  # Create with reminders`);

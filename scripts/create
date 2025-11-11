@@ -20,11 +20,11 @@ if [ -z "${NO_COLOR:-}" ] && [ -t 1 ] && command -v tput >/dev/null 2>&1; then
     GRAY=$(tput setaf 8 2>/dev/null || printf '\033[90m')
     BRIGHT=$(tput setaf 7 2>/dev/null || printf '\033[97m')
     CYAN=$(tput setaf 6 2>/dev/null || printf '\033[36m')
-else
+
     BOLD=""
     DIM=""
     RESET=""
-    GRAY=""
+
     BRIGHT=""
     CYAN=""
 fi

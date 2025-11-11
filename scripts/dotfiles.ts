@@ -147,14 +147,20 @@ function isUnwantedExecutable(name: string): boolean {
     const unwanted = [
         '.', '..', '..', '....',
         'fish_variables', 'scripts', 'ui-import-transformer',
-        'setup-env', 'minimal-fish-config', 'welcome_banner'
+        'setup-env', 'minimal-fish-config', 'welcome_banner',
+        'stop_alarm', 'screen', 'screenshot', 'cat'
     ];
     return unwanted.includes(name) ||
            name.startsWith('.') ||
            name.includes('internal') ||
            name.includes('config') ||
            name.includes('manager') && !['env-manager'].includes(name) ||
-           name === '...';
+           name === '...' ||
+           name.startsWith('alarm') ||
+           name.includes('generate-turso-db') ||
+           name.includes('remove-unused-files') ||
+           name.includes('license-generator') ||
+           name.includes('vm') && name !== 'vm';
 }
 
 function uniqueId(parts: string[]): string {
