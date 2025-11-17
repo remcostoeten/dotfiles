@@ -608,6 +608,82 @@ async function interactiveMode() {
     return output.trim() || null;
   };
 
+  const askToSaveToFile = async () => {
+    console.log(`\n${PASTEL_COLORS.PINK}Would you like to save this ASCII art to an executable file?${PASTEL_COLORS.RESET}`);
+    console.log(`  ${PASTEL_COLORS.GREEN}Y${PASTEL_COLORS.RESET} - Yes, save to file`);
+    console.log(`  ${PASTEL_COLORS.GREEN}n${PASTEL_COLORS.RESET} - No, just show me the output`);
+    console.log(`  ${PASTEL_COLORS.GREEN}c${PASTEL_COLORS.RESET} - Copy to clipboard`);
+
+    const choice = await question(`${PASTEL_COLORS.YELLOW}Your choice (Y/n/c):${PASTEL_COLORS.RESET} `);
+    return choice.trim().toLowerCase();
+  };
+
+  const getPathChoice = async () => {
+    console.log(`\n${PASTEL_COLORS.PINK}Where would you like to save the file?${PASTEL_COLORS.RESET}`);
+    console.log(`  ${PASTEL_COLORS.GREEN}1${PASTEL_COLORS.RESET} - Current directory (auto-generated filename)`);
+    console.log(`  ${PASTEL_COLORS.GREEN}2${PASTEL_COLORS.RESET} - Custom path`);
+
+    const choice = await question(`${PASTEL_COLORS.YELLOW}Your choice (1/2) [1]:${PASTEL_COLORS.RESET} `);
+    return choice.trim() || '1';
+  };
+
+  const getCustomPath = async () => {
+    const promptText = `${PASTEL_COLORS.YELLOW}Enter custom file path:${PASTEL_COLORS.RESET} `;
+    const path = await question(promptText);
+    return path.trim();
+  };
+
+  const generateFileName = (type) => {
+    const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    return `ascii-banner-${type}-${date}.sh`;
+  };
+
+  const makeExecutable = async (filePath) => {
+    try {
+      const { execSync } = require('child_process');
+      execSync(`chmod +x "${filePath}"`, { stdio: 'ignore' });
+      console.log(`${PASTEL_COLORS.GREEN}✓ Made file executable: ${PASTEL_COLORS.CYAN}${filePath}${PASTEL_COLORS.RESET}`);
+    } catch (error) {
+      console.log(`${PASTEL_COLORS.YELLOW}⚠ Could not make file executable: ${error.message}${PASTEL_COLORS.RESET}`);
+    }
+  };
+
+  const copyToClipboard = async (text) => {
+    try {
+      const { execSync } = require('child_process');
+
+      // Try different clipboard methods based on what's available
+      if (process.platform === 'darwin') {
+        // macOS
+        execSync('pbcopy', { input: text });
+        console.log(`${PASTEL_COLORS.GREEN}✓ ASCII header copied to clipboard${PASTEL_COLORS.RESET}`);
+      } else if (process.platform === 'linux') {
+        // Linux - try xclip first, then xsel
+        try {
+          execSync('which xclip', { stdio: 'ignore' });
+          execSync('xclip -selection clipboard', { input: text });
+          console.log(`${PASTEL_COLORS.GREEN}✓ ASCII header copied to clipboard${PASTEL_COLORS.RESET}`);
+        } catch {
+          try {
+            execSync('which xsel', { stdio: 'ignore' });
+            execSync('xsel --clipboard --input', { input: text });
+            console.log(`${PASTEL_COLORS.GREEN}✓ ASCII header copied to clipboard${PASTEL_COLORS.RESET}`);
+          } catch {
+            console.log(`${PASTEL_COLORS.YELLOW}⚠ Clipboard not available. Please install xclip or xsel${PASTEL_COLORS.RESET}`);
+            return false;
+          }
+        }
+      } else {
+        console.log(`${PASTEL_COLORS.YELLOW}⚠ Clipboard not supported on this platform${PASTEL_COLORS.RESET}`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.log(`${PASTEL_COLORS.YELLOW}⚠ Could not copy to clipboard: ${error.message}${PASTEL_COLORS.RESET}`);
+      return false;
+    }
+  };
+
   const generateAndShow = async (options) => {
     const { type, lang, name, tagline, output } = options;
 
@@ -632,14 +708,60 @@ async function interactiveMode() {
         break;
     }
 
+    // If output was specified directly, use that behavior
     if (output) {
       try {
         fs.writeFileSync(output, header);
-        console.log(`${PASTEL_COLORS.GREEN}✓ ASCII header generated and saved to: ${PASTEL_COLORS.CYAN}${output}${PASTEL_COLORS.RESET}\n`);
+        console.log(`${PASTEL_COLORS.GREEN}✓ ASCII header generated and saved to: ${PASTEL_COLORS.CYAN}${output}${PASTEL_COLORS.RESET}`);
+        await makeExecutable(output);
+        console.log('');
       } catch (error) {
         console.error(`${PASTEL_COLORS.RED}Error writing to file '${output}': ${error.message}${PASTEL_COLORS.RESET}\n`);
       }
+      return;
+    }
+
+    // New interactive behavior for file saving
+    const saveChoice = await askToSaveToFile();
+
+    if (saveChoice === 'y' || saveChoice === 'yes' || saveChoice === '') {
+      // User wants to save to file
+      const pathChoice = await getPathChoice();
+      let filePath;
+
+      if (pathChoice === '1') {
+        // Current directory with auto-generated filename
+        filePath = generateFileName(type);
+      } else {
+        // Custom path
+        const customPath = await getCustomPath();
+        if (customPath) {
+          filePath = customPath;
+        } else {
+          console.log(`${PASTEL_COLORS.YELLOW}No path specified. Using current directory.${PASTEL_COLORS.RESET}`);
+          filePath = generateFileName(type);
+        }
+      }
+
+      try {
+        fs.writeFileSync(filePath, header);
+        console.log(`${PASTEL_COLORS.GREEN}✓ ASCII header generated and saved to: ${PASTEL_COLORS.CYAN}${filePath}${PASTEL_COLORS.RESET}`);
+        await makeExecutable(filePath);
+        console.log('');
+      } catch (error) {
+        console.error(`${PASTEL_COLORS.RED}Error writing to file '${filePath}': ${error.message}${PASTEL_COLORS.RESET}\n`);
+        console.log(`${PASTEL_COLORS.CYAN}--- Generated ASCII Header ---${PASTEL_COLORS.RESET}\n`);
+        console.log(header);
+      }
+    } else if (saveChoice === 'c') {
+      // Copy to clipboard
+      const success = await copyToClipboard(header);
+      if (!success) {
+        console.log(`${PASTEL_COLORS.CYAN}--- Generated ASCII Header ---${PASTEL_COLORS.RESET}\n`);
+        console.log(header);
+      }
     } else {
+      // Just show the output
       console.log(`${PASTEL_COLORS.CYAN}--- Generated ASCII Header ---${PASTEL_COLORS.RESET}\n`);
       console.log(header);
     }
@@ -652,9 +774,8 @@ async function interactiveMode() {
   const lang = await getLanguageChoice();
   const name = await getName();
   const tagline = await getTagline();
-  const output = await getOutputFile();
 
-  await generateAndShow({ type, lang, name, tagline, output });
+  await generateAndShow({ type, lang, name, tagline });
 
   rl.close();
 }
@@ -722,6 +843,15 @@ function main() {
     try {
       fs.writeFileSync(output, header);
       console.log(`${PASTEL_COLORS.GREEN}✓ ASCII header generated and saved to: ${PASTEL_COLORS.CYAN}${output}${PASTEL_COLORS.RESET}`);
+
+      // Make the file executable
+      const { execSync } = require('child_process');
+      try {
+        execSync(`chmod +x "${output}"`, { stdio: 'ignore' });
+        console.log(`${PASTEL_COLORS.GREEN}✓ Made file executable${PASTEL_COLORS.RESET}`);
+      } catch (error) {
+        console.log(`${PASTEL_COLORS.YELLOW}⚠ Could not make file executable: ${error.message}${PASTEL_COLORS.RESET}`);
+      }
     } catch (error) {
       console.error(`${PASTEL_COLORS.RED}Error writing to file '${output}': ${error.message}${PASTEL_COLORS.RESET}`);
       process.exit(1);
