@@ -69,7 +69,6 @@
   "editor.fontLigatures": true,
   "editor.wordWrap": "on",
   "files.autoSave": "onFocusChange",
-  "editor.formatOnSave": true,
   "terminal.external.linuxExec": "kitty",
   "terminal.external.osxExec": "kitty",
   "update.releaseTrack": "dev",

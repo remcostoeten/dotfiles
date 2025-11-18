@@ -1,0 +1,409 @@
+#!/usr/bin/env bash
+
+# Convert - Interactive Image Converter
+# A beautiful CLI tool for converting images between formats
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+GRAY='\033[0;37m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# ASCII Art Logo
+echo -e "${CYAN}██╗   ██╗███╗   ██╗███████╗██╗   ██╗███╗   ██╗████████╗${NC}"
+echo -e "${RED}██║   ██║████╗  ██║██╔════╝██║   ██║████╗  ██║╚══██╔══╝${NC}"
+echo -e "${YELLOW}██║   ██║██╔██╗ ██║█████╗  ██║   ██║██╔██╗ ██║   ██║   ${NC}"
+echo -e "${GREEN}██║   ██║██║╚██╗██║██╔══╝  ██║   ██║██║╚██╗██║   ██║   ${NC}"
+echo -e "${BLUE}╚██████╔╝██║ ╚████║██║     ╚██████╔╝██║ ╚████║   ██║   ${NC}"
+echo -e "${PURPLE} ╚═════╝ ╚═╝  ╚═══╝╚═╝      ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ${NC}"
+echo -e "${BOLD}${WHITE}              Interactive Image Converter                  ${NC}"
+echo -e "${GRAY}~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+
+# Check if ImageMagick is installed
+if ! command -v /usr/bin/convert &> /dev/null; then
+    echo -e "${RED}❌ Error: ImageMagick is not installed!${NC}"
+    echo -e "${YELLOW}💡 Please install ImageMagick first:${NC}"
+    echo -e "${CYAN}   Ubuntu/Debian: sudo apt install imagemagick${NC}"
+    echo -e "${CYAN}   macOS: brew install imagemagick${NC}"
+    echo -e "${CYAN}   Other: https://imagemagick.org/script/download.php${NC}"
+    exit 1
+fi
+
+# Set ImageMagick convert command to avoid conflicts
+IMAGEMAGICK_CONVERT="/usr/bin/convert"
+
+# Helper functions
+print_step() {
+    echo -e "\n${BLUE}📍 $1${NC}"
+}
+
+print_success() {
+    echo -e "\n${GREEN}✅ $1${NC}"
+}
+
+print_error() {
+    echo -e "\n${RED}❌ $1${NC}"
+}
+
+print_info() {
+    echo -e "${YELLOW}💡 $1${NC}"
+}
+
+# Supported formats
+SUPPORTED_FORMATS=("jpeg" "jpg" "png" "webp" "gif" "bmp" "tiff" "ico" "pdf")
+
+# Main conversion logic
+main() {
+    echo -e "\n${BOLD}${WHITE}🚀 Let's convert your image!${NC}"
+
+    # Step 1: Get input image path
+    print_step "Step 1: Select your image"
+    while true; do
+        echo -e "${CYAN}Enter the path to your image:${NC} " >&2
+        read -r image_path
+
+        if [[ -z "$image_path" ]]; then
+            print_error "Please enter a valid path"
+            continue
+        fi
+
+        if [[ ! -f "$image_path" ]]; then
+            print_error "File not found: $image_path"
+            continue
+        fi
+
+        # Check if it's an image
+        if ! file "$image_path" | grep -q -E "(image|PNG|JPEG|GIF|WebP|Bitmap)"; then
+            print_error "This doesn't appear to be a valid image file"
+            continue
+        fi
+
+        break
+    done
+
+    # Detect current format
+    current_format=$(file "$image_path" | grep -oE "(JPEG|PNG|GIF|WebP|BMP|TIFF|ICO)" | head -1 | tr '[:upper:]' '[:lower:]')
+    if [[ -z "$current_format" ]]; then
+        current_format=$(echo "${image_path##*.}" | tr '[:upper:]' '[:lower:]')
+    fi
+
+    print_success "Image detected: $current_format format"
+
+    # Step 2: Select output format
+    echo -e "\n${WHITE}🎨 Available formats:${NC}"
+    for i in "${!SUPPORTED_FORMATS[@]}"; do
+        format="${SUPPORTED_FORMATS[$i]}"
+        if [[ "$format" == "$current_format" ]]; then
+            echo -e "  ${GRAY}$((i+1))) $format (current)${NC}"
+        else
+            echo -e "  ${GREEN}$((i+1))) $format${NC}"
+        fi
+    done
+
+    print_step "Step 2: Choose output format"
+    while true; do
+        echo -e "${CYAN}Enter format number or name:${NC} " >&2
+        read -r format_choice
+
+        # Check if number
+        if [[ "$format_choice" =~ ^[0-9]+$ ]]; then
+            index=$((format_choice - 1))
+            if [[ $index -ge 0 && $index -lt ${#SUPPORTED_FORMATS[@]} ]]; then
+                output_format="${SUPPORTED_FORMATS[$index]}"
+                break
+            else
+                print_error "Invalid number. Please choose 1-${#SUPPORTED_FORMATS[@]}"
+            fi
+        else
+            # Check if format name
+            format_choice=$(echo "$format_choice" | tr '[:upper:]' '[:lower:]')
+            if [[ " ${SUPPORTED_FORMATS[*]} " =~ " ${format_choice} " ]]; then
+                output_format="$format_choice"
+                break
+            else
+                print_error "Invalid format. Please choose from: ${SUPPORTED_FORMATS[*]}"
+            fi
+        fi
+    done
+
+    # Step 3: Determine output path
+    print_step "Step 3: Choose output location"
+
+    # Generate default output path
+    base_name="${image_path%.*}"
+    default_output="$base_name.$output_format"
+
+    echo -e "${CYAN}Enter output path [$default_output]:${NC} " >&2
+    read -r output_path
+    if [[ -z "$output_path" ]]; then
+        output_path="$default_output"
+    fi
+
+    # Check if output directory exists
+    output_dir=$(dirname "$output_path")
+    if [[ ! -d "$output_dir" ]]; then
+        print_error "Output directory does not exist: $output_dir"
+        exit 1
+    fi
+
+    # Step 4: Convert the image
+    echo -e "\n${BOLD}${WHITE}🔄 Converting image...${NC}"
+    echo -e "${GRAY}   From: $image_path ($current_format)${NC}"
+    echo -e "${GRAY}   To:   $output_path ($output_format)${NC}"
+
+    # Perform conversion
+    if $IMAGEMAGICK_CONVERT "$image_path" "$output_path" 2>/dev/null; then
+        print_success "Conversion completed successfully!"
+
+        # Show file info
+        original_size=$(du -h "$image_path" | cut -f1)
+        new_size=$(du -h "$output_path" | cut -f1)
+
+        echo -e "\n${WHITE}📊 File information:${NC}"
+        echo -e "${CYAN}   Original: $original_size${NC}"
+        echo -e "${CYAN}   Converted: $new_size${NC}"
+
+        # Ask if user wants to open the file
+        echo -e "${CYAN}Open the converted image? (y/n) [n]:${NC} " >&2
+        read -r open_choice
+        if [[ "$open_choice" =~ ^[Yy]$ ]]; then
+            if command -v xdg-open &> /dev/null; then
+                xdg-open "$output_path" &>/dev/null &
+            elif command -v open &> /dev/null; then
+                open "$output_path" &>/dev/null &
+            else
+                print_info "Cannot open file automatically. Please open: $output_path"
+            fi
+        fi
+    else
+        print_error "Conversion failed!"
+        echo -e "${YELLOW}💡 Make sure ImageMagick supports this conversion.${NC}"
+        exit 1
+    fi
+
+    echo -e "\n${BOLD}${GREEN}🎉 All done! Happy converting!${NC}\n"
+}
+
+# Show help
+show_help() {
+    echo -e "${BOLD}${WHITE}Convert - Interactive Image Converter${NC}"
+    echo ""
+    echo -e "${YELLOW}USAGE:${NC}"
+    echo "    img-convert                           # Interactive mode"
+    echo "    img-convert [OPTIONS]                 # Argument-based mode"
+    echo "    img-convert INPUT_FILE OUTPUT_FILE    # Simple conversion"
+    echo ""
+    echo -e "${YELLOW}OPTIONS:${NC}"
+    echo "    -h, --help         Show this help message"
+    echo "    -v, --version      Show version information"
+    echo "    -i, --input FILE   Input image file path"
+    echo "    -o, --output FILE  Output file path or format"
+    echo ""
+    echo -e "${YELLOW}EXAMPLES:${NC}"
+    echo "    img-convert                                              # Interactive mode"
+    echo "    img-convert image.webp                                    # Interactive with input"
+    echo "    img-convert image.webp output.jpg                         # Direct conversion"
+    echo ""
+    echo "    img-convert -i photo.png -o jpg                          # Convert to JPEG (same dir)"
+    echo "    img-convert --input photo.webp --output ./photos/         # Convert to PNG in folder"
+    echo "    img-convert -i image.png -o /path/to/final/result.jpg    # Full path with name"
+    echo "    img-convert -i screenshot.png -o webp                    # Convert to WebP format"
+    echo ""
+    echo -e "${YELLOW}OUTPUT SPECIFICATION:${NC}"
+    echo "    • Just a format (e.g., 'jpg', 'png') → same directory, new extension"
+    echo "    • Directory path (e.g., './photos/') → same filename, new extension auto-detected"
+    echo "    • Full path (e.g., '/path/file.jpg') → explicit output location"
+    echo ""
+    echo -e "${YELLOW}SUPPORTED FORMATS:${NC}"
+    echo "    JPEG, PNG, WebP, GIF, BMP, TIFF, ICO, PDF"
+    echo ""
+    echo -e "${YELLOW}REQUIREMENTS:${NC}"
+    echo "    ImageMagick must be installed on your system."
+}
+
+# Smart output path resolver
+resolve_output_path() {
+    local input_path="$1"
+    local output_spec="$2"
+
+    # Check if output_spec is just a format (extension)
+    if [[ "$output_spec" =~ ^[a-zA-Z0-9]+$ ]]; then
+        local format=$(echo "$output_spec" | tr '[:upper:]' '[:lower:]')
+
+        # Normalize common format names
+        case "$format" in
+            "jpg") format="jpeg" ;;
+            "tif") format="tiff" ;;
+        esac
+
+        # Check if format is supported
+        if [[ " ${SUPPORTED_FORMATS[*]} " =~ " ${format} " ]]; then
+            local base_name="${input_path%.*}"
+            echo "${base_name}.${format}"
+            return 0
+        else
+            echo "ERROR: Unsupported format '$output_spec'. Use: ${SUPPORTED_FORMATS[*]}" >&2
+            return 1
+        fi
+    fi
+
+    # Check if output_spec is a directory (ends with /)
+    if [[ "$output_spec" =~ /$ ]]; then
+        if [[ ! -d "$output_spec" ]]; then
+            echo "ERROR: Directory does not exist: $output_spec" >&2
+            return 1
+        fi
+
+        local filename=$(basename "$input_path")
+        local base_name="${filename%.*}"
+        echo "${output_spec}${base_name}.png"  # Default to PNG for directories
+        return 0
+    fi
+
+    # Check if output_spec has no extension (contains no dot or dot is at the end)
+    if [[ ! "$output_spec" == *.* ]] || [[ "${output_spec##*.}" == "" ]]; then
+        print_error "Output file must have an extension. Please specify the desired format."
+        echo "Example: --output /path/to/file.jpg or --output jpg" >&2
+        return 1
+    fi
+
+    # Full path - validate extension
+    local ext="${output_spec##*.}"
+    local format=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+
+    case "$format" in
+        "jpg") format="jpeg" ;;
+        "tif") format="tiff" ;;
+    esac
+
+    if [[ ! " ${SUPPORTED_FORMATS[*]} " =~ " ${format} " ]]; then
+        echo "ERROR: Unsupported format '$ext'. Use: ${SUPPORTED_FORMATS[*]}" >&2
+        return 1
+    fi
+
+    # Check if directory exists
+    local output_dir=$(dirname "$output_spec")
+    if [[ ! -d "$output_dir" ]]; then
+        echo "ERROR: Output directory does not exist: $output_dir" >&2
+        return 1
+    fi
+
+    echo "$output_spec"
+    return 0
+}
+
+# Handle argument-based conversion
+handle_args_conversion() {
+    local input_file=""
+    local output_spec=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -i|--input)
+                input_file="$2"
+                shift 2
+                ;;
+            -o|--output)
+                output_spec="$2"
+                shift 2
+                ;;
+            -h|--help|help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                echo "Convert v1.0.0 - Interactive Image Converter"
+                exit 0
+                ;;
+            -*)
+                echo -e "${RED}❌ Unknown option: $1${NC}"
+                echo -e "${YELLOW}💡 Use --help for usage information.${NC}"
+                exit 1
+                ;;
+            *)
+                if [[ -z "$input_file" ]]; then
+                    input_file="$1"
+                elif [[ -z "$output_spec" ]]; then
+                    output_spec="$1"
+                else
+                    echo -e "${RED}❌ Too many arguments${NC}"
+                    echo -e "${YELLOW}💡 Use --help for usage information.${NC}"
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Validate input
+    if [[ -z "$input_file" ]]; then
+        echo -e "${RED}❌ Input file is required${NC}"
+        echo -e "${YELLOW}💡 Use --input FILE or -i FILE${NC}"
+        exit 1
+    fi
+
+    if [[ ! -f "$input_file" ]]; then
+        echo -e "${RED}❌ Input file not found: $input_file${NC}"
+        exit 1
+    fi
+
+    # Validate output
+    if [[ -z "$output_spec" ]]; then
+        echo -e "${RED}❌ Output specification is required${NC}"
+        echo -e "${YELLOW}💡 Use --output FORMAT or --output PATH or -o OUTPUT${NC}"
+        exit 1
+    fi
+
+    # Resolve output path
+    local output_path
+    output_path=$(resolve_output_path "$input_file" "$output_spec")
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}❌ Failed to resolve output path${NC}"
+        exit 1
+    fi
+
+    # Perform conversion
+    echo -e "${BOLD}${WHITE}🔄 Converting image...${NC}"
+    echo -e "${GRAY}   From: $input_file${NC}"
+    echo -e "${GRAY}   To:   $output_path${NC}"
+
+    if $IMAGEMAGICK_CONVERT "$input_file" "$output_path" 2>/dev/null; then
+        print_success "Conversion completed successfully!"
+
+        # Show file info
+        local original_size=$(du -h "$input_file" | cut -f1)
+        local new_size=$(du -h "$output_path" | cut -f1)
+
+        echo -e "\n${WHITE}📊 File information:${NC}"
+        echo -e "${CYAN}   Original: $original_size${NC}"
+        echo -e "${CYAN}   Converted: $new_size${NC}"
+    else
+        print_error "Conversion failed!"
+        exit 1
+    fi
+}
+
+# Parse arguments
+case "${1:-}" in
+    "")
+        main
+        ;;
+    *)
+        # Check if using long/short options or simple format
+        if [[ "$1" =~ ^(-h|--help|-v|--version|-i|--input|-o|--output)$ ]] || [[ "$2" =~ ^(-i|--input|-o|--output)$ ]]; then
+            handle_args_conversion "$@"
+        else
+            # Legacy simple format: img-convert INPUT OUTPUT
+            handle_args_conversion "$@"
+        fi
+        ;;
+esac
