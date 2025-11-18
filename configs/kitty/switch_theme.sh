@@ -3,13 +3,13 @@
 # Kitty Theme Switcher Script
 # Usage: switch_theme.sh [theme_name]
 
-THEME_DIR="$HOME/.config/kitty/themes"
+THEME_DIR="$HOME/.config/kitty"
 CONFIG_FILE="$HOME/.config/kitty/kitty.conf"
 
 # List available themes
 list_themes() {
     echo "Available themes:"
-    ls -1 "$THEME_DIR"/*.conf | sed 's/.*\///' | sed 's/.conf$//' | nl
+    ls -1 "$THEME_DIR"/*.conf | grep -v kitty.conf | sed 's/.*\///' | sed 's/.conf$//' | nl
 }
 
 # Switch theme
@@ -42,7 +42,7 @@ interactive_switch() {
 
     read -p "Select theme number: " choice
 
-    local theme_file=$(ls -1 "$THEME_DIR"/*.conf | sed -n "${choice}p")
+    local theme_file=$(ls -1 "$THEME_DIR"/*.conf | grep -v kitty.conf | sed -n "${choice}p")
     local theme_name=$(basename "$theme_file" .conf)
 
     if [[ -z "$theme_name" ]]; then

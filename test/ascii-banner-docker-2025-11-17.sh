@@ -24,25 +24,25 @@ end
 set -g defaultTagline "Welcome to the dotfiles experience!"
 
 function show_banner
-    set version (get_version)
+    set script_version (get_version)
     set tagline "$tagline"
     if test -z "$tagline"
         set tagline "$defaultTagline"
     end
 
     # ASCII art with gradient colors
-    echo -n '    '; echo $PASTEL_PINK'██████╗  ██████╗  ██████╗██╗  ██╗███████╗██████╗'$normal
-    echo -n '    '; echo $PASTEL_MAGENTA'██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝██╔══██╗'$normal
-    echo -n '    '; echo $PASTEL_PURPLE'██║  ██║██║   ██║██║     █████╔╝ █████╗  ██████╔╝'$normal
-    echo -n '    '; echo $PASTEL_BLUE'██║  ██║██║   ██║██║     ██╔═██╗ ██╔══╝  ██╔══██╗'$normal
-    echo -n '    '; echo $PASTEL_CYAN'██████╔╝╚██████╔╝╚██████╗██║  ██╗███████╗██║  ██║'$normal
-    echo -n '    '; echo $PASTEL_GREEN'╚═════╝  ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝'$normal
+    echo $PASTEL_PINK'    ██████╗  ██████╗  ██████╗██╗  ██╗███████╗██████╗'$normal
+    echo $PASTEL_MAGENTA'    ██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝██╔══██╗'$normal
+    echo $PASTEL_PURPLE'    ██║  ██║██║   ██║██║     █████╔╝ █████╗  ██████╔╝'$normal
+    echo $PASTEL_BLUE'    ██║  ██║██║   ██║██║     ██╔═██╗ ██╔══╝  ██╔══██╗'$normal
+    echo $PASTEL_CYAN'    ██████╔╝╚██████╔╝╚██████╗██║  ██╗███████╗██║  ██║'$normal
+    echo $PASTEL_GREEN'    ╚═════╝  ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝'$normal
 
     # Show footer info
     echo -n "  "
     echo -n "$PASTEL_YELLOW" "updated "
     echo -n "$PASTEL_ORANGE" "(just now)"
-    echo -n "$PASTEL_PINK" " · $version"
+    echo -n "$PASTEL_PINK" " · $script_version"
     echo -n "$PASTEL_CYAN" "  │  "
     echo -n "$PASTEL_BLUE" "$tagline"
     echo "$normal"

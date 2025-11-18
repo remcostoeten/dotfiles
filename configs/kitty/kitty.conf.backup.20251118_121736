@@ -1,0 +1,72 @@
+# Kitty Configuration
+# Theme: dreamy
+# Generated on Tue Nov 18 12:03:00 PM CET 2025
+
+# Include theme
+include /home/remcostoeten/.config/kitty/themes/dreamy.conf
+
+# Font settings - Hack Mono with enhanced readability
+font_family        Hack Mono Nerd Font
+bold_font          Hack Mono Nerd Font Bold
+italic_font        Hack Mono Nerd Font Italic
+bold_italic_font   Hack Mono Nerd Font Bold Italic
+
+# Font sizing and spacing for better readability
+# Line height: 125% (1.25x normal), Column width: 105% (1.05x normal)
+font_size          11.0
+adjust_line_height 125
+adjust_column_width 105
+
+# Performance and GPU settings
+repaint_delay      10
+input_delay        3
+sync_to_monitor    yes
+
+# GPU optimization settings
+touch_scroll_multiplier 1.0
+disable_ligatures never
+# Reduce GPU memory usage
+remember_window_size   no
+resize_in_steps        yes
+
+# Window settings
+window_padding_width 8
+tab_bar_style       powerline
+tab_powerline_style  angled
+active_tab_font_style   bold
+inactive_tab_font_style normal
+
+# Other settings
+enable_audio_bell no
+initial_window_width   100c
+initial_window_height  30c
+
+# Cursor
+cursor_shape         block
+cursor_blink_interval 0
+
+# Keybindings for splits and navigation
+# Splits
+map ctrl+shift+enter launch --cwd=current --location=hsplit
+map ctrl+enter        launch --cwd=current --location=vsplit
+
+# Navigation between splits
+map ctrl+left         neighboring_window left
+map ctrl+right        neighboring_window right
+map ctrl+up           neighboring_window up
+map ctrl+down         neighboring_window down
+
+# Alternative navigation with arrow keys
+map ctrl+shift+left   neighboring_window left
+map ctrl+shift+right  neighboring_window right
+map ctrl+shift+up     neighboring_window up
+map ctrl+shift+down   neighboring_window down
+
+# Resize splits
+map ctrl+alt+left     resize_window narrower
+map ctrl+alt+right    resize_window wider
+map ctrl+alt+up       resize_window taller
+map ctrl+alt+down     resize_window shorter
+
+# Close current split
+map ctrl+shift+w      close_window

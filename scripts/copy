@@ -43,11 +43,11 @@ function copy_to_clipboard() {
 
     # Display the copied content
     echo
-    printf "%s\n" "$(bold "$(cyan "=== $title ===")")
+    printf "%s\n" "$(bold "$(cyan "=== $title ===")")"
     echo
     printf "%s\n" "$content"
     echo
-    printf "%s\n" "$(bold "$(cyan "=== End of $title ===")")
+    printf "%s\n" "$(bold "$(cyan "=== End of $title ===")")"
     echo
     printf "%s\n" "$(success "Content copied to clipboard!")"
     echo
@@ -102,6 +102,42 @@ function handle_pwd() {
     fi
 
     return 0
+}
+
+# Handle command output display
+function handle_output() {
+    if [[ $# -eq 0 ]]; then
+        printf "%s No command provided. Usage: copy output <command>\n" "$(error)"
+        return 1
+    fi
+
+    local command="$*"
+    local output
+    local exit_code
+
+    # Execute the command and capture both output and exit code
+    if output=$(eval "$command" 2>&1); then
+        exit_code=0
+    else
+        exit_code=$?
+    fi
+
+    # Copy the output to clipboard
+    copy_to_clipboard "$output" "Command Output: $command"
+
+    # Display execution result
+    if [[ $exit_code -eq 0 ]]; then
+        printf "%s ✅ Command executed successfully\n" "$(success)"
+    else
+        printf "%s ❌ Command failed with exit code %s\n" "$(error)" "$(bold "$exit_code")"
+    fi
+
+    # Show output stats
+    local line_count=$(echo "$output" | wc -l)
+    local char_count=$(echo "$output" | wc -c)
+    printf "%s 📊 Output: %s lines, %s characters\n" "$(info)" "$(bold "$line_count")" "$(bold "$char_count")"
+
+    return $exit_code
 }
 
 # Handle git remote display
@@ -396,6 +432,7 @@ function handle_help() {
     printf "    %s [path]             Display current directory or specified path\n" "$(cyan "pwd")"
     printf "    %s                 Display git remote URL\n" "$(cyan "remote")"
     printf "    %s [options] [path]   Display directory tree (excludes generated folders)\n" "$(cyan "tree")"
+    printf "    %s <command>          Execute command and copy its output\n" "$(cyan "output")"
     printf "    %s       Show this help message\n" "$(cyan "help, --help, -h")"
     echo
     printf "%s\n" "$(bold "EXAMPLES:")"
@@ -405,6 +442,8 @@ function handle_help() {
     printf "    %s            # Display git remote URL\n" "$(green "copy remote")"
     printf "    %s               # Display directory tree\n" "$(green "copy tree")"
     printf "    %s            # Tree limited to 2 levels\n" "$(green "copy tree -l 2")"
+    printf "    %s           # Execute and copy command output\n" "$(green "copy output echo \"hello world\"")"
+    printf "    %s       # Copy build output\n" "$(green "copy output npm run build")"
     printf "    %s                   # Interactive mode with menu\n" "$(green "copy")"
     echo
     printf "%s\n" "$(bold "INTERACTIVE MODE:")"
@@ -425,10 +464,11 @@ function interactive_mode() {
         printf "3) %s\n" "$(cyan "Specific directory path")"
         printf "4) %s\n" "$(cyan "Git remote URL")"
         printf "5) %s\n" "$(cyan "Directory tree")"
-        printf "6) %s\n" "$(cyan "Quit")"
+        printf "6) %s\n" "$(cyan "Command output")"
+        printf "7) %s\n" "$(cyan "Quit")"
         echo
 
-        printf "%s " "$(bold "Choice (1-6):")"
+        printf "%s " "$(bold "Choice (1-7):")"
         read -r choice
         echo
 
@@ -530,11 +570,20 @@ function interactive_mode() {
                 handle_tree "${tree_interactive_args[@]}" && break
                 ;;
             6)
+                printf "%s " "$(blue "Enter command to execute:")"
+                read -r cmd
+                if [[ -n "$cmd" ]]; then
+                    handle_output "$cmd" && break
+                else
+                    printf "%s No command provided\n" "$(warning)"
+                fi
+                ;;
+            7)
                 printf "%s Goodbye! 👋\n" "$(info)"
                 exit 0
                 ;;
             *)
-                printf "%s Invalid choice. Please select 1-6.\n" "$(warning)"
+                printf "%s Invalid choice. Please select 1-7.\n" "$(warning)"
                 ;;
         esac
         echo
@@ -568,6 +617,9 @@ main() {
             ;;
         tree)
             handle_tree "$@"
+            ;;
+        output)
+            handle_output "$@"
             ;;
         --version|-v)
             echo "$SCRIPT_NAME version $VERSION"

@@ -1,0 +1,12 @@
+# Configuration Files
+This is the original file with some content.
+
+## Features
+- Dark theme support
+- Enhanced diff highlighting
+- Better color scheme
+
+## Settings
+color=dark
+highlight=enhanced
+aesthetic=beautiful

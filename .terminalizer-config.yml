@@ -1,0 +1,19 @@
+command: bun run setup
+cols: 120
+rows: 40
+repeat: 0
+quality: 100
+frameDelay: auto
+maxIdleTime: 2000
+frameBox:
+  type: solid
+  title: 'Dotfiles Setup Demo'
+  style:
+    border: 0px
+    boxShadow: none
+watermark:
+  imagePath: null
+  style: {}
+theme:
+  background: 'transparent'
+  foreground: '#4ec9b0'
