@@ -1,0 +1,1874 @@
+#!/usr/bin/env bash
+
+# Convert - Interactive Media Converter
+# A beautiful CLI tool for converting images and videos between formats
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+GRAY='\033[0;37m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# ASCII Art Logo
+echo -e "${CYAN}██╗   ██╗███╗   ██╗███████╗██╗   ██╗███╗   ██╗████████╗${NC}"
+echo -e "${RED}██║   ██║████╗  ██║██╔════╝██║   ██║████╗  ██║╚══██╔══╝${NC}"
+echo -e "${YELLOW}██║   ██║██╔██╗ ██║█████╗  ██║   ██║██╔██╗ ██║   ██║   ${NC}"
+echo -e "${GREEN}██║   ██║██║╚██╗██║██╔══╝  ██║   ██║██║╚██╗██║   ██║   ${NC}"
+echo -e "${BLUE}╚██████╔╝██║ ╚████║██║     ╚██████╔╝██║ ╚████║   ██║   ${NC}"
+echo -e "${PURPLE} ╚═════╝ ╚═╝  ╚═══╝╚═╝      ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ${NC}"
+echo -e "${BOLD}${WHITE}           Interactive Media Converter                      ${NC}"
+echo -e "${GRAY}~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+
+# Check dependencies and set commands
+IMAGEMAGICK_CONVERT=""
+FFMPEG_CONVERT=""
+HAS_IMAGEMAGICK=false
+HAS_FFMPEG=false
+
+# Check if ImageMagick is installed
+if command -v /usr/bin/convert &> /dev/null; then
+    HAS_IMAGEMAGICK=true
+    IMAGEMAGICK_CONVERT="/usr/bin/convert"
+fi
+
+# Check if FFmpeg is installed
+if command -v ffmpeg &> /dev/null; then
+    HAS_FFMPEG=true
+    FFMPEG_CONVERT="ffmpeg"
+fi
+
+# Show available conversion capabilities
+echo -e "${WHITE}🔧 Available conversion tools:${NC}"
+if [[ "$HAS_IMAGEMAGICK" == true ]]; then
+    echo -e "  ${GREEN}✅ ImageMagick${NC} - Image conversion"
+else
+    echo -e "  ${RED}❌ ImageMagick${NC} - Not installed (no image conversion)"
+fi
+
+if [[ "$HAS_FFMPEG" == true ]]; then
+    echo -e "  ${GREEN}✅ FFmpeg${NC} - Video conversion"
+else
+    echo -e "  ${RED}❌ FFmpeg${NC} - Not installed (no video conversion)"
+fi
+
+# Install instructions
+if [[ "$HAS_IMAGEMAGICK" == false ]] || [[ "$HAS_FFMPEG" == false ]]; then
+    echo -e "\n${YELLOW}💡 Install missing tools:${NC}"
+    if [[ "$HAS_IMAGEMAGICK" == false ]]; then
+        echo -e "${CYAN}   ImageMagick: sudo apt install imagemagick  # Ubuntu/Debian${NC}"
+        echo -e "${CYAN}                brew install imagemagick        # macOS${NC}"
+    fi
+    if [[ "$HAS_FFMPEG" == false ]]; then
+        echo -e "${CYAN}   FFmpeg:      sudo apt install ffmpeg           # Ubuntu/Debian${NC}"
+        echo -e "${CYAN}                brew install ffmpeg              # macOS${NC}"
+    fi
+    echo -e "${GRAY}   Or visit: https://ffmpeg.org/download.html${NC}"
+fi
+
+# Exit if no conversion tools available
+if [[ "$HAS_IMAGEMAGICK" == false ]] && [[ "$HAS_FFMPEG" == false ]]; then
+    echo -e "\n${RED}❌ No conversion tools available. Please install ImageMagick and/or FFmpeg.${NC}"
+    exit 1
+fi
+
+echo ""
+
+# Helper functions
+print_step() {
+    echo -e "\n${BLUE}📍 $1${NC}"
+}
+
+print_success() {
+    echo -e "\n${GREEN}✅ $1${NC}"
+}
+
+print_error() {
+    echo -e "\n${RED}❌ $1${NC}"
+}
+
+print_info() {
+    echo -e "${YELLOW}💡 $1${NC}"
+}
+
+# Supported formats
+IMAGE_FORMATS=("jpeg" "jpg" "png" "webp" "gif" "bmp" "tiff" "ico" "pdf")
+VIDEO_FORMATS=("mp4" "avi" "mkv" "mov" "wmv" "flv" "webm" "m4v" "3gp" "ogv")
+SUPPORTED_FORMATS=("${IMAGE_FORMATS[@]}" "${VIDEO_FORMATS[@]}")
+
+# Function to detect if format is video
+is_video_format() {
+    local format="$1"
+    [[ " ${VIDEO_FORMATS[*]} " =~ " $format " ]]
+}
+
+# Function to detect if format is image
+is_image_format() {
+    local format="$1"
+    [[ " ${IMAGE_FORMATS[*]} " =~ " $format " ]]
+}
+
+# Function to detect media type from file
+detect_media_type() {
+    local file_path="$1"
+    local file_output=$(file "$file_path" 2>/dev/null || echo "")
+
+    # Check file command output
+    if echo "$file_output" | grep -q -i "video\|MP4\|AVI\|MKV\|MOV\|WMV"; then
+        echo "video"
+    elif echo "$file_output" | grep -q -i "image\|PNG\|JPEG\|GIF\|WebP\|Bitmap"; then
+        echo "image"
+    else
+        # Fallback to extension
+        local ext="${file_path##*.}"
+        ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+
+        case "$ext" in
+            "jpg"|"jpeg"|"png"|"webp"|"gif"|"bmp"|"tiff"|"ico"|"pdf") echo "image" ;;
+            "mp4"|"avi"|"mkv"|"mov"|"wmv"|"flv"|"webm"|"m4v"|"3gp"|"ogv") echo "video" ;;
+            *) echo "unknown" ;;
+        esac
+    fi
+}
+
+# GIF Creator Functions
+generate_gif_preset_html() {
+    local output_dir="$1"
+    local html_file="$output_dir/gif_preview.html"
+
+    cat > "$html_file" << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIF Preview - Interactive Media Converter</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .preview-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .preview-item {
+            background: #2a2a2a;
+            border-radius: 12px;
+            padding: 20px;
+            border: 2px solid #444;
+            transition: all 0.3s ease;
+        }
+        .preview-item:hover {
+            border-color: #4CAF50;
+            transform: translateY(-2px);
+        }
+        .preview-number {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 20px;
+            margin-bottom: 10px;
+        }
+        .preview-quality {
+            color: #81C784;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        .preview-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .preview-stats span {
+            background: #444;
+            padding: 3px 8px;
+            border-radius: 6px;
+        }
+        .preview-gif {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            background: #000;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        .instructions {
+            background: #3a3a3a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4CAF50;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎬 GIF Preview Gallery</h1>
+    <div class="instructions">
+        <h3>📋 Instructions:</h3>
+        <p>Review the GIF previews below. Return to the terminal and enter the number(s) of the version(s) you want to keep.</p>
+        <ul>
+            <li><strong>Single version:</strong> Enter: <code>2</code></li>
+            <li><strong>Multiple versions:</strong> Enter: <code>1,3,4</code></li>
+            <li><strong>All versions:</strong> Enter: <code>1,2,3,4,5</code></li>
+        </ul>
+    </div>
+    <div class="preview-container" id="previews">
+        <!-- Previews will be inserted here -->
+    </div>
+</body>
+</html>
+EOF
+
+    echo "$html_file"
+}
+
+add_preview_to_html() {
+    local html_file="$1"
+    local number="$2"
+    local gif_file="$3"
+    local quality_name="$4"
+    local fps="$5"
+    local file_size="$6"
+    local duration="$7"
+
+    # Convert gif_file basename for display
+    local gif_name=$(basename "$gif_file")
+
+    # Create HTML snippet for this preview
+    cat >> "$html_file" << EOF
+        <div class="preview-item">
+            <div class="preview-number">Version $number</div>
+            <div class="preview-quality">$quality_name</div>
+            <div class="preview-stats">
+                <span>📦 ${file_size}</span>
+                <span>⚡ ${fps} FPS</span>
+                <span>⏱️ ${duration}s</span>
+            </div>
+            <img src="$gif_name" alt="GIF Preview $number" class="preview-gif">
+        </div>
+EOF
+}
+
+estimate_gif_filesize() {
+    local input_video="$1"
+    local fps="$2"
+    local scale="$3"
+    local duration="$4"
+
+    # Get video dimensions
+    local video_info=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$input_video")
+    local width=$(echo "$video_info" | cut -d',' -f1)
+    local height=$(echo "$video_info" | cut -d',' -f2)
+
+    # Calculate new dimensions
+    local new_width=$scale
+    local new_height=$((height * scale / width))
+
+    # Estimate file size (rough calculation based on pixels, fps, and duration)
+    # GIF typically uses ~0.1 bytes per pixel per frame at decent compression
+    local pixels=$((new_width * new_height))
+    local frames=$((fps * duration))
+    local estimated_bytes=$((pixels * frames / 10))
+
+    # Format the size
+    if [[ $estimated_bytes -lt 1024 ]]; then
+        echo "${estimated_bytes}B"
+    elif [[ $estimated_bytes -lt 1048576 ]]; then
+        echo "$((estimated_bytes / 1024))KB"
+    else
+        echo "$((estimated_bytes / 1048576))MB"
+    fi
+}
+
+create_gif_preview() {
+    local input_video="$1"
+    local output_dir="$2"
+    local start_time="$3"
+    local duration="$4"
+    local fps="$5"
+    local scale="$6"
+    local quality_preset="$7"
+    local preset_number="$8"
+
+    local output_file="$output_dir/preview_${preset_number}.gif"
+
+    # Create GIF using FFmpeg with optimized settings
+    ffmpeg -ss "$start_time" -t "$duration" -i "$input_video" \
+           -vf "fps=$fps,scale=$scale:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
+           -y "$output_file" 2>/dev/null
+
+    if [[ -f "$output_file" ]]; then
+        local actual_size=$(du -h "$output_file" | cut -f1)
+        echo "$output_file|$actual_size"
+    else
+        echo "ERROR|Failed to create GIF"
+    fi
+}
+
+interactive_gif_creator() {
+    echo -e "\n${BOLD}${WHITE}🎬 Advanced GIF Creator${NC}"
+    echo -e "${GRAY}~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+
+    # Check if FFmpeg is available
+    if [[ "$HAS_FFMPEG" == false ]]; then
+        print_error "FFmpeg is required for GIF creation. Please install FFmpeg first."
+        echo -e "${YELLOW}💡 Install with: sudo apt install ffmpeg  # Ubuntu/Debian${NC}"
+        echo -e "${CYAN}              brew install ffmpeg             # macOS${NC}"
+        return 1
+    fi
+
+    # Step 1: Get input video file
+    print_step "Step 1: Select your video file"
+    while true; do
+        echo -e "${CYAN}Enter the path to your video file:${NC} " >&2
+        read -r video_path
+
+        if [[ -z "$video_path" ]]; then
+            print_error "Please enter a valid path"
+            continue
+        fi
+
+        if [[ ! -f "$video_path" ]]; then
+            print_error "File not found: $video_path"
+            continue
+        fi
+
+        # Check if it's actually a video
+        local media_type=$(detect_media_type "$video_path")
+        if [[ "$media_type" != "video" ]]; then
+            print_error "This doesn't appear to be a valid video file"
+            continue
+        fi
+
+        break
+    done
+
+    # Get video information - more robust parsing
+    local video_info=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=width,height,duration -of csv=p=0 "$video_path" 2>/dev/null)
+    local width=$(echo "$video_info" | cut -d',' -f1)
+    local height=$(echo "$video_info" | cut -d',' -f2)
+    local raw_duration=$(echo "$video_info" | cut -d',' -f3)
+
+    # Handle missing or invalid duration
+    local total_duration="unknown"
+    if [[ -n "$raw_duration" && "$raw_duration" != "N/A" && "$raw_duration" != "" ]]; then
+        total_duration=$(echo "$raw_duration" | cut -d'.' -f1)
+        # If duration is still empty or 0, try alternative method
+        if [[ -z "$total_duration" || "$total_duration" == "0" ]]; then
+            total_duration=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$video_path" 2>/dev/null | cut -d'.' -f1)
+        fi
+    fi
+
+    # Fallback to file-based duration estimation
+    if [[ "$total_duration" == "unknown" || -z "$total_duration" ]]; then
+        echo -e "${YELLOW}⚠️  Could not determine video duration. Please enter duration manually.${NC}"
+        echo -e "${CYAN}💡 You can check duration with: ffprobe -show_entries format=duration -v quiet -of csv=p=0 \"$video_path\"${NC}"
+        total_duration="unknown"
+    fi
+
+    if [[ "$total_duration" != "unknown" ]]; then
+        echo -e "${GREEN}✅ Video loaded: ${width}x${height}, ${total_duration}s duration${NC}"
+    else
+        echo -e "${GREEN}✅ Video loaded: ${width}x${height}, duration: manual${NC}"
+    fi
+
+    # Step 2: Select duration
+    print_step "Step 2: Choose video duration for GIF"
+      # Display duration safely
+    local duration_display="$total_duration"
+    if [[ "$total_duration" == "unknown" ]]; then
+        duration_display="unknown"
+    elif [[ -z "$total_duration" ]]; then
+        duration_display="unknown"
+    fi
+
+    echo -e "${WHITE}Options:${NC}"
+    if [[ "$duration_display" != "unknown" ]]; then
+        echo -e "  ${GREEN}1)${NC} Full video (${duration_display}s)"
+    else
+        echo -e "  ${GREEN}1)${NC} Full video (duration unknown)"
+    fi
+    echo -e "  ${GREEN}2)${NC} Custom duration range"
+
+    local start_time="0"
+    local gif_duration="unknown"
+
+    # Set default duration if known
+    if [[ "$total_duration" != "unknown" && -n "$total_duration" ]]; then
+        gif_duration="$total_duration"
+    fi
+
+    while true; do
+        echo -e "${CYAN}Choose option (1-2):${NC} " >&2
+        read -r duration_choice
+
+        case "$duration_choice" in
+            1)
+                if [[ "$duration_display" != "unknown" ]]; then
+                    echo -e "${GREEN}✅ Using full video duration: ${duration_display}s${NC}"
+                else
+                    echo -e "${GREEN}✅ Using full video duration${NC}"
+                fi
+                break
+                ;;
+            2)
+                echo -e "${CYAN}Enter start time (seconds):${NC} " >&2
+                read -r start_time
+                echo -e "${CYAN}Enter duration in seconds (not end time):${NC} " >&2
+                read -r duration_input
+
+                # Clean input: remove 's' suffix if present
+                start_time=$(echo "$start_time" | sed 's/s$//' | tr -d ' ')
+                duration_input=$(echo "$duration_input" | sed 's/s$//' | tr -d ' ')
+
+                # Validate inputs are numbers
+                if [[ "$start_time" =~ ^[0-9]+$ ]] && [[ "$duration_input" =~ ^[0-9]+$ ]]; then
+                    # Calculate end time
+                    local end_time=$((start_time + duration_input))
+
+                    # Validate duration is positive
+                    if [[ $duration_input -gt 0 ]]; then
+                        gif_duration="$duration_input"
+                        echo -e "${GREEN}✅ Using ${duration_input}s from ${start_time}s to ${end_time}s${NC}"
+
+                        # Check if we have a known total duration and validate against it
+                        if [[ "$total_duration" != "unknown" && -n "$total_duration" ]]; then
+                            if [[ $end_time -gt $total_duration ]]; then
+                                echo -e "${YELLOW}⚠️  End time (${end_time}s) exceeds video duration (${total_duration}s)${NC}"
+                                echo -e "${YELLOW}   The GIF will be trimmed to the video's end.${NC}"
+                                # Adjust duration to fit within video
+                                gif_duration=$((total_duration - start_time))
+                                if [[ $gif_duration -le 0 ]]; then
+                                    gif_duration="$duration_input"
+                                    echo -e "${YELLOW}   Proceeding with requested duration${NC}"
+                                fi
+                            fi
+                        fi
+                        break
+                    else
+                        print_error "Duration must be greater than 0 seconds."
+                    fi
+                else
+                    print_error "Please enter valid numbers (e.g., '1', '5s', '10')."
+                fi
+                ;;
+            *)
+                print_error "Invalid choice. Please enter 1 or 2."
+                ;;
+        esac
+    done
+
+    # Step 3: Choose quality presets
+    print_step "Step 3: Choose quality presets"
+    echo -e "${WHITE}Available presets:${NC}"
+    echo -e "  ${GREEN}1)${NC} Ultra HQ - 30fps, 800px width - Best quality, larger file"
+    echo -e "  ${GREEN}2)${NC} High Quality - 24fps, 600px width - Excellent balance"
+    echo -e "  ${GREEN}3)${NC} Medium Quality - 18fps, 480px width - Good balance"
+    echo -e "  ${GREEN}4)${NC} Small Size - 12fps, 400px width - Optimized for web"
+    echo -e "  ${GREEN}5)${NC} Tiny Size - 8fps, 320px width - Minimal file size"
+    echo -e "  ${GREEN}6)${NC} All presets - Generate all 5 versions for comparison"
+
+    while true; do
+        echo -e "${CYAN}Choose option (1-6):${NC} " >&2
+        read -r quality_choice
+
+        if [[ "$quality_choice" =~ ^[1-6]$ ]]; then
+            break
+        else
+            print_error "Invalid choice. Please enter 1-6."
+        fi
+    done
+
+    # Create temporary directory
+    local temp_dir=$(mktemp -d)
+    echo -e "${YELLOW}📁 Creating previews in: $temp_dir${NC}"
+
+    # Generate HTML file
+    local html_file=$(generate_gif_preset_html "$temp_dir")
+
+    # Define quality presets
+    local -a presets=(
+        "30|800|Ultra HQ"
+        "24|600|High Quality"
+        "18|480|Medium Quality"
+        "12|400|Small Size"
+        "8|320|Tiny Size"
+    )
+
+    # Generate GIFs based on selection
+    if [[ "$quality_choice" == "6" ]]; then
+        echo -e "\n${BOLD}${WHITE}🔄 Generating all 5 GIF previews...${NC}"
+        local generated_count=0
+
+        for i in "${!presets[@]}"; do
+            local preset_info="${presets[$i]}"
+            local fps=$(echo "$preset_info" | cut -d'|' -f1)
+            local scale=$(echo "$preset_info" | cut -d'|' -f2)
+            local quality_name=$(echo "$preset_info" | cut -d'|' -f3)
+
+            echo -e "${BLUE}   Creating version $((i+1)): $quality_name...${NC}"
+
+            # Estimate file size
+            local estimated_size=$(estimate_gif_filesize "$video_path" "$fps" "$scale" "$gif_duration")
+            echo -e "${GRAY}     Estimated size: ~$estimated_size${NC}"
+
+            # Create GIF
+            local result=$(create_gif_preview "$video_path" "$temp_dir" "$start_time" "$gif_duration" "$fps" "$scale" "$quality_name" "$((i+1))")
+            local output_file=$(echo "$result" | cut -d'|' -f1)
+            local actual_size=$(echo "$result" | cut -d'|' -f2)
+
+            if [[ "$output_file" != "ERROR" ]]; then
+                add_preview_to_html "$html_file" "$((i+1))" "$output_file" "$quality_name" "$fps" "$actual_size" "$gif_duration"
+                generated_count=$((generated_count + 1))
+                echo -e "${GREEN}     ✅ Created: $actual_size${NC}"
+            else
+                echo -e "${RED}     ❌ Failed to create preview${NC}"
+            fi
+        done
+
+        echo -e "\n${GREEN}✅ Generated $generated_count GIF previews${NC}"
+
+    else
+        # Generate single preset
+        local preset_index=$((quality_choice - 1))
+        local preset_info="${presets[$preset_index]}"
+        local fps=$(echo "$preset_info" | cut -d'|' -f1)
+        local scale=$(echo "$preset_info" | cut -d'|' -f2)
+        local quality_name=$(echo "$preset_info" | cut -d'|' -f3)
+
+        echo -e "\n${BOLD}${WHITE}🔄 Creating GIF preview...${NC}"
+
+        # Estimate file size
+        local estimated_size=$(estimate_gif_filesize "$video_path" "$fps" "$scale" "$gif_duration")
+        echo -e "${BLUE}   Creating $quality_name: ~$estimated_size${NC}"
+
+        # Create GIF
+        local result=$(create_gif_preview "$video_path" "$temp_dir" "$start_time" "$gif_duration" "$fps" "$scale" "$quality_name" "1")
+        local output_file=$(echo "$result" | cut -d'|' -f1)
+        local actual_size=$(echo "$result" | cut -d'|' -f2)
+
+        if [[ "$output_file" != "ERROR" ]]; then
+            add_preview_to_html "$html_file" "1" "$output_file" "$quality_name" "$fps" "$actual_size" "$gif_duration"
+            echo -e "${GREEN}   ✅ Created: $actual_size${NC}"
+        else
+            echo -e "${RED}   ❌ Failed to create preview${NC}"
+            return 1
+        fi
+    fi
+
+    # Open preview in browser
+    echo -e "\n${BOLD}${WHITE}🌐 Preview Generated!${NC}"
+    echo -e "${CYAN}Press 'o' to open preview in browser, or Enter to continue:${NC} " >&2
+    read -r open_browser
+
+    if [[ "$open_browser" =~ ^[Oo]$ ]]; then
+        if command -v xdg-open &> /dev/null; then
+            xdg-open "$html_file" &>/dev/null &
+        elif command -v open &> /dev/null; then
+            open "$html_file" &>/dev/null &
+        else
+            echo -e "${YELLOW}Cannot open browser automatically. Please open: $html_file${NC}"
+        fi
+        echo -e "${GREEN}🌍 Preview opened in browser${NC}"
+    fi
+
+    # Step 4: Select versions to keep
+    echo -e "\n${BOLD}${WHITE}📋 Select GIF versions to save:${NC}"
+    echo -e "${WHITE}Enter numbers to keep (e.g., '2' for version 2, '1,3,4' for multiple):${NC} " >&2
+    read -r selections
+
+    if [[ -z "$selections" ]]; then
+        echo -e "${YELLOW}⚠️  No versions selected. All previews will be cleaned up.${NC}"
+        rm -rf "$temp_dir"
+        return 0
+    fi
+
+    # Parse selections and create final GIFs
+    local timestamp=$(date +"%Y%m%d_%H%M%S")
+    local saved_count=0
+
+    # Get current directory for output
+    echo -e "${CYAN}Save to current directory? (y/n) [y]:${NC} " >&2
+    read -r use_current_dir
+
+    local output_dir="."
+    if [[ "$use_current_dir" =~ ^[Nn]$ ]]; then
+        echo -e "${CYAN}Enter output directory path:${NC} " >&2
+        read -r custom_dir
+        if [[ -n "$custom_dir" && -d "$custom_dir" ]]; then
+            output_dir="$custom_dir"
+        else
+            echo -e "${YELLOW}Directory not found. Using current directory.${NC}"
+        fi
+    fi
+
+    IFS=',' read -ra SELECTED_VERSIONS <<< "$selections"
+    for version in "${SELECTED_VERSIONS[@]}"; do
+        version=$(echo "$version" | tr -d ' ')
+        if [[ "$version" =~ ^[1-5]$ ]]; then
+            local preset_index=$((version - 1))
+            local preset_info="${presets[$preset_index]}"
+            local fps=$(echo "$preset_info" | cut -d'|' -f1)
+            local scale=$(echo "$preset_info" | cut -d'|' -f2)
+            local quality_name=$(echo "$preset_info" | cut -d'|' -f3)
+
+            # Normalize quality name for filename
+            local filename_quality=$(echo "$quality_name" | tr '[:upper:]' '[:lower:]' | sed 's/ /_/g')
+
+            local final_name="gif-${filename_quality}-${timestamp}-v${version}.gif"
+            local final_path="$output_dir/$final_name"
+
+            # Copy the preview file to final location
+            if [[ -f "$temp_dir/preview_${version}.gif" ]]; then
+                cp "$temp_dir/preview_${version}.gif" "$final_path"
+                local final_size=$(du -h "$final_path" | cut -f1)
+                echo -e "${GREEN}✅ Saved: $final_name ($final_size)${NC}"
+                saved_count=$((saved_count + 1))
+            fi
+        fi
+    done
+
+    echo -e "\n${BOLD}${GREEN}🎉 GIF Creation Complete!${NC}"
+    echo -e "${WHITE}📊 Results:${NC}"
+    echo -e "${CYAN}   Versions saved: $saved_count${NC}"
+    echo -e "${CYAN}   Location: $output_dir${NC}"
+
+    # Cleanup
+    echo -e "${YELLOW}🧹 Cleaning up temporary files...${NC}"
+    rm -rf "$temp_dir"
+
+    echo -e "\n${BOLD}${GREEN}✨ Happy GIF creating! ✨${NC}\n"
+}
+
+quick_gif_conversion() {
+    echo -e "\n${BOLD}${WHITE}⚡ Quick GIF Conversion${NC}"
+
+    # Check if FFmpeg is available
+    if [[ "$HAS_FFMPEG" == false ]]; then
+        print_error "FFmpeg is required for GIF creation. Please install FFmpeg first."
+        return 1
+    fi
+
+    # Get input video file
+    print_step "Select your video file"
+    while true; do
+        echo -e "${CYAN}Enter the path to your video file:${NC} " >&2
+        read -r video_path
+
+        if [[ -z "$video_path" ]]; then
+            print_error "Please enter a valid path"
+            continue
+        fi
+
+        if [[ ! -f "$video_path" ]]; then
+            print_error "File not found: $video_path"
+            continue
+        fi
+
+        # Check if it's actually a video
+        local media_type=$(detect_media_type "$video_path")
+        if [[ "$media_type" != "video" ]]; then
+            print_error "This doesn't appear to be a valid video file"
+            continue
+        fi
+
+        break
+    done
+
+    # Get video information with robust parsing
+    local video_info=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=width,height,duration -of csv=p=0 "$video_path" 2>/dev/null)
+    local raw_duration=$(echo "$video_info" | cut -d',' -f3)
+
+    # Handle missing or invalid duration
+    local total_duration="unknown"
+    if [[ -n "$raw_duration" && "$raw_duration" != "N/A" && "$raw_duration" != "" ]]; then
+        total_duration=$(echo "$raw_duration" | cut -d'.' -f1)
+        # If duration is still empty or 0, try alternative method
+        if [[ -z "$total_duration" || "$total_duration" == "0" ]]; then
+            total_duration=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$video_path" 2>/dev/null | cut -d'.' -f1)
+        fi
+    fi
+
+    # Duration selection
+    print_step "Choose GIF duration"
+    if [[ "$total_duration" != "unknown" ]]; then
+        echo -e "  ${GREEN}1)${NC} Full video (${total_duration}s)"
+    else
+        echo -e "  ${GREEN}1)${NC} Full video (duration unknown)"
+    fi
+    echo -e "  ${GREEN}2)${NC} Custom duration"
+
+    local start_time="0"
+    local gif_duration="10"  # Default to 10s for quick mode
+
+    while true; do
+        echo -e "${CYAN}Choose option (1-2):${NC} " >&2
+        read -r duration_choice
+
+        case "$duration_choice" in
+            1)
+                break
+                ;;
+            2)
+                echo -e "${CYAN}Enter start time (seconds):${NC} " >&2
+                read -r start_time
+                echo -e "${CYAN}Enter duration (seconds):${NC} " >&2
+                read -r gif_duration
+                if [[ "$start_time" =~ ^[0-9]+$ ]] && [[ "$gif_duration" =~ ^[0-9]+$ ]]; then
+                    break
+                else
+                    print_error "Please enter valid numbers."
+                fi
+                ;;
+            *)
+                print_error "Invalid choice. Please enter 1 or 2."
+                ;;
+        esac
+    done
+
+    # Output path
+    print_step "Choose output location"
+    local base_name="${video_path%.*}"
+    local default_output="${base_name}.gif"
+    echo -e "${CYAN}Enter output path [$default_output]:${NC} " >&2
+    read -r output_path
+    if [[ -z "$output_path" ]]; then
+        output_path="$default_output"
+    fi
+
+    # Create GIF
+    echo -e "\n${BOLD}${WHITE}🔄 Creating GIF...${NC}"
+    echo -e "${GRAY}   From: $video_path${NC}"
+    echo -e "${GRAY}   To:   $output_path${NC}"
+
+    # Use optimized settings for good balance of quality and size
+    if ffmpeg -ss "$start_time" -t "$gif_duration" -i "$video_path" \
+           -vf "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
+           -y "$output_path" 2>/dev/null; then
+
+        local final_size=$(du -h "$output_path" | cut -f1)
+        print_success "GIF created successfully!"
+        echo -e "\n${WHITE}📊 File information:${NC}"
+        echo -e "${CYAN}   Duration: ${gif_duration}s${NC}"
+        echo -e "${CYAN}   Size: $final_size${NC}"
+        echo -e "${CYAN}   Path: $output_path${NC}"
+    else
+        print_error "Failed to create GIF!"
+        exit 1
+    fi
+}
+
+readme_showcase_creator() {
+    echo -e "\n${BOLD}${WHITE}📖 README Showcase Mode - Terminal-Optimized GIFs${NC}"
+    echo -e "${GRAY}~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+
+    # Check if FFmpeg is available
+    if [[ "$HAS_FFMPEG" == false ]]; then
+        print_error "FFmpeg is required for GIF creation. Please install FFmpeg first."
+        echo -e "${YELLOW}💡 Install with: sudo apt install ffmpeg  # Ubuntu/Debian${NC}"
+        echo -e "${CYAN}              brew install ffmpeg             # macOS${NC}"
+        return 1
+    fi
+
+    print_info "${BOLD}🎯 For Perfect README GIFs - Record with these settings:${NC}"
+    echo -e "${CYAN}   📹 Screen Recording:${NC}"
+    echo -e "${WHITE}      ffmpeg -f x11grab -framerate 60 -video_size 1920x1080 -i :0.0 \\${NC}"
+    echo -e "${WHITE}             -c:v libx264 -preset ultrafast -crf 0 -pix_fmt yuv420p recording.mkv${NC}"
+    echo -e "${CYAN}   🎮 Game/Software Recording:${NC}"
+    echo -e "${WHITE}      Record at 1080p 60fps with high bitrate${NC}"
+    echo -e "${CYAN}   ✅ Quality Tips:${NC}"
+    echo -e "${WHITE}      • Use lossless source if possible (crf=0)${NC}"
+    echo -e "${WHITE}      • Record in well-lit environment${NC}"
+    echo -e "${WHITE}      • Minimize background movement${NC}"
+    echo ""
+
+    # Step 1: Get input video file
+    print_step "Step 1: Select your high-quality video file"
+    while true; do
+        echo -e "${CYAN}Enter the path to your video file:${NC} " >&2
+        read -r video_path
+
+        if [[ -z "$video_path" ]]; then
+            print_error "Please enter a valid path"
+            continue
+        fi
+
+        if [[ ! -f "$video_path" ]]; then
+            print_error "File not found: $video_path"
+            continue
+        fi
+
+        # Check if it's actually a video
+        local media_type=$(detect_media_type "$video_path")
+        if [[ "$media_type" != "video" ]]; then
+            print_error "This doesn't appear to be a valid video file"
+            continue
+        fi
+
+        break
+    done
+
+    # Get video information with robust parsing
+    local video_info=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=width,height,duration,fps -of csv=p=0 "$video_path" 2>/dev/null)
+    local width=$(echo "$video_info" | cut -d',' -f1)
+    local height=$(echo "$video_info" | cut -d',' -f2)
+    local raw_duration=$(echo "$video_info" | cut -d',' -f3)
+    local original_fps=$(echo "$video_info" | cut -d',' -f4 | cut -d'/' -f1)
+
+    # Handle missing or invalid duration
+    local total_duration="unknown"
+    if [[ -n "$raw_duration" && "$raw_duration" != "N/A" && "$raw_duration" != "" ]]; then
+        total_duration=$(echo "$raw_duration" | cut -d'.' -f1)
+        # If duration is still empty or 0, try alternative method
+        if [[ -z "$total_duration" || "$total_duration" == "0" ]]; then
+            total_duration=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "$video_path" 2>/dev/null | cut -d'.' -f1)
+        fi
+    fi
+
+    # Handle missing FPS
+    if [[ -z "$original_fps" || "$original_fps" == "" ]]; then
+        original_fps="unknown"
+    fi
+
+    # Display video info safely
+    if [[ "$total_duration" != "unknown" ]]; then
+        echo -e "${GREEN}✅ Video loaded: ${width}x${height}, ${original_fps}fps, ${total_duration}s${NC}"
+    else
+        echo -e "${GREEN}✅ Video loaded: ${width}x${height}, ${original_fps}fps, duration: manual${NC}"
+    fi
+
+    # Step 2: Analyze and suggest optimal settings
+    print_step "Step 2: Optimization Analysis"
+
+    # Calculate optimal dimensions for terminal showcase
+    local optimal_width=800
+    local optimal_fps=30
+
+    # Adjust based on original content
+    if [[ $width -gt 1920 ]]; then
+        optimal_width=1000  # Higher resolution for 4K source
+    elif [[ $width -lt 1280 ]]; then
+        optimal_width=600   # Lower resolution for smaller source
+    fi
+
+    if [[ $original_fps -gt 30 ]]; then
+        optimal_fps=30  # Smooth but not excessive
+    elif [[ $original_fps -lt 24 ]]; then
+        optimal_fps=$original_fps  # Keep original if low
+    fi
+
+    echo -e "${WHITE}🎯 Recommended settings for your source:${NC}"
+    echo -e "${CYAN}   Resolution: ${optimal_width}px wide (auto-scaling)${NC}"
+    echo -e "${CYAN}   FPS: ${optimal_fps} (smooth motion, optimized size)${NC}"
+    echo -e "${CYAN}   Estimated file size: ~500KB-2MB per 10s${NC}"
+    echo ""
+
+    # Step 3: Duration selection
+    print_step "Step 3: Choose showcase duration"
+    echo -e "${WHITE}💡 Best practice: Keep README GIFs short (3-10 seconds)${NC}"
+
+    # Display duration safely
+    local duration_display="$total_duration"
+    if [[ "$total_duration" == "unknown" ]]; then
+        duration_display="unknown"
+    elif [[ -z "$total_duration" ]]; then
+        duration_display="unknown"
+    fi
+
+    echo -e "  ${GREEN}1)${NC} Full video (${duration_display}s) - ${RED}Not recommended for README${NC}"
+    echo -e "  ${GREEN}2)${NC} Custom duration (recommended: 3-10s)"
+    echo -e "  ${GREEN}3)${NC} Auto-trim to 8s showcase (perfect for most cases)"
+
+    local start_time="0"
+    local gif_duration="8"  # Default to 8s for showcase mode
+
+    while true; do
+        echo -e "${CYAN}Choose option (1-3):${NC} " >&2
+        read -r duration_choice
+
+        case "$duration_choice" in
+            1)
+                if [[ "$duration_display" != "unknown" ]]; then
+                    echo -e "${GREEN}✅ Using full video duration: ${duration_display}s${NC}"
+                    gif_duration="$total_duration"
+                else
+                    echo -e "${GREEN}✅ Using full video duration${NC}"
+                fi
+                ;;
+            2)
+                echo -e "${CYAN}Enter start time (seconds):${NC} " >&2
+                read -r start_time
+                echo -e "${CYAN}Enter duration (seconds, 3-10 recommended):${NC} " >&2
+                read -r duration_input
+
+                # Clean input: remove 's' suffix if present
+                start_time=$(echo "$start_time" | sed 's/s$//' | tr -d ' ')
+                duration_input=$(echo "$duration_input" | sed 's/s$//' | tr -d ' ')
+
+                # Validate inputs are numbers
+                if [[ "$start_time" =~ ^[0-9]+$ ]] && [[ "$duration_input" =~ ^[0-9]+$ ]]; then
+                    gif_duration="$duration_input"
+                    if [[ $duration_input -gt 20 ]]; then
+                        echo -e "${YELLOW}⚠️  Duration is quite long. Consider shorter for better loading.${NC}"
+                    fi
+                else
+                    print_error "Please enter valid numbers (e.g., '1', '5s', '10')."
+                    continue
+                fi
+                ;;
+            3)
+                start_time=0
+                gif_duration=8
+                echo -e "${GREEN}✅ Auto-trimmed to 8s showcase${NC}"
+                ;;
+            *)
+                print_error "Invalid choice. Please enter 1, 2, or 3."
+                continue
+                ;;
+        esac
+        break
+    done
+
+    # Step 4: Showcase quality presets
+    print_step "Step 4: Choose showcase quality preset"
+    echo -e "${WHITE}📖 Optimized for README/terminal showcase:${NC}"
+    echo -e "  ${GREEN}1)${NC} 🌟 Ultra Smooth - 30fps, 1000px - Best quality, ~1-2MB"
+    echo -e "  ${GREEN}2)${NC} ⚡ Balanced - 24fps, 800px - Sweet spot, ~500KB-1MB"
+    echo -e "  ${GREEN}3)${NC} 🚀 Fast Loading - 20fps, 600px - Quick loading, ~300-800KB"
+    echo -e "  ${GREEN}4)${NC} 📱 Mobile Friendly - 18fps, 500px - Very small, ~200-500KB"
+    echo -e "  ${GREEN}5)${NC} 🔬 Test All - Generate all 4 variants + recommendations"
+
+    while true; do
+        echo -e "${CYAN}Choose option (1-5):${NC} " >&2
+        read -r quality_choice
+
+        if [[ "$quality_choice" =~ ^[1-5]$ ]]; then
+            break
+        else
+            print_error "Invalid choice. Please enter 1-5."
+        fi
+    done
+
+    # Create temporary directory
+    local temp_dir=$(mktemp -d)
+    echo -e "${YELLOW}📁 Creating showcase previews in: $temp_dir${NC}"
+
+    # Generate HTML file for showcase
+    local html_file=$(generate_showcase_html "$temp_dir")
+
+    # Define showcase presets (optimized for terminal showcase)
+    local -a showcase_presets=(
+        "30|1000|Ultra_Smooth"
+        "24|800|Balanced"
+        "20|600|Fast_Loading"
+        "18|500|Mobile_Friendly"
+    )
+
+    # Generate GIFs based on selection
+    if [[ "$quality_choice" == "5" ]]; then
+        echo -e "\n${BOLD}${WHITE}🔬 Generating all showcase variants for comparison...${NC}"
+        local generated_count=0
+
+        for i in "${!showcase_presets[@]}"; do
+            local preset_info="${showcase_presets[$i]}"
+            local fps=$(echo "$preset_info" | cut -d'|' -f1)
+            local scale=$(echo "$preset_info" | cut -d'|' -f2)
+            local quality_name=$(echo "$preset_info" | cut -d'|' -f3 | tr '_' ' ')
+
+            echo -e "${BLUE}   Creating showcase variant $((i+1)): $quality_name...${NC}"
+
+            # Estimate file size
+            local estimated_size=$(estimate_gif_filesize "$video_path" "$fps" "$scale" "$gif_duration")
+            echo -e "${GRAY}     Estimated size: ~$estimated_size${NC}"
+
+            # Create GIF with showcase optimizations
+            local result=$(create_showcase_gif "$video_path" "$temp_dir" "$start_time" "$gif_duration" "$fps" "$scale" "$quality_name" "$((i+1))")
+            local output_file=$(echo "$result" | cut -d'|' -f1)
+            local actual_size=$(echo "$result" | cut -d'|' -f2)
+
+            if [[ "$output_file" != "ERROR" ]]; then
+                add_showcase_preview_to_html "$html_file" "$((i+1))" "$output_file" "$quality_name" "$fps" "$actual_size" "$gif_duration"
+                generated_count=$((generated_count + 1))
+                echo -e "${GREEN}     ✅ Created: $actual_size${NC}"
+            else
+                echo -e "${RED}     ❌ Failed to create preview${NC}"
+            fi
+        done
+
+        # Add recommendations
+        add_showcase_recommendations "$html_file"
+        echo -e "\n${GREEN}✅ Generated $generated_count showcase variants with recommendations${NC}"
+
+    else
+        # Generate single showcase preset
+        local preset_index=$((quality_choice - 1))
+        local preset_info="${showcase_presets[$preset_index]}"
+        local fps=$(echo "$preset_info" | cut -d'|' -f1)
+        local scale=$(echo "$preset_info" | cut -d'|' -f2)
+        local quality_name=$(echo "$preset_info" | cut -d'|' -f3 | tr '_' ' ')
+
+        echo -e "\n${BOLD}${WHITE}🔄 Creating showcase GIF...${NC}"
+
+        # Estimate file size
+        local estimated_size=$(estimate_gif_filesize "$video_path" "$fps" "$scale" "$gif_duration")
+        echo -e "${BLUE}   Creating $quality_name showcase: ~$estimated_size${NC}"
+
+        # Create GIF with showcase optimizations
+        local result=$(create_showcase_gif "$video_path" "$temp_dir" "$start_time" "$gif_duration" "$fps" "$scale" "$quality_name" "1")
+        local output_file=$(echo "$result" | cut -d'|' -f1)
+        local actual_size=$(echo "$result" | cut -d'|' -f2)
+
+        if [[ "$output_file" != "ERROR" ]]; then
+            add_showcase_preview_to_html "$html_file" "1" "$output_file" "$quality_name" "$fps" "$actual_size" "$gif_duration"
+            echo -e "${GREEN}   ✅ Created: $actual_size${NC}"
+        else
+            echo -e "${RED}   ❌ Failed to create preview${NC}"
+            return 1
+        fi
+    fi
+
+    # Open preview in browser
+    echo -e "\n${BOLD}${WHITE}🌐 Showcase Preview Generated!${NC}"
+    echo -e "${CYAN}Press 'o' to open preview in browser, or Enter to continue:${NC} " >&2
+    read -r open_browser
+
+    if [[ "$open_browser" =~ ^[Oo]$ ]]; then
+        if command -v xdg-open &> /dev/null; then
+            xdg-open "$html_file" &>/dev/null &
+        elif command -v open &> /dev/null; then
+            open "$html_file" &>/dev/null &
+        else
+            echo -e "${YELLOW}Cannot open browser automatically. Please open: $html_file${NC}"
+        fi
+        echo -e "${GREEN}🌍 Showcase preview opened in browser${NC}"
+    fi
+
+    # Step 5: Select and save showcase GIFs
+    echo -e "\n${BOLD}${WHITE}📋 Select showcase GIFs to save for README:${NC}"
+    echo -e "${WHITE}Enter numbers to keep (e.g., '2' for variant 2, '1,3' for multiple):${NC} " >&2
+    read -r selections
+
+    if [[ -z "$selections" ]]; then
+        echo -e "${YELLOW}⚠️  No variants selected. All previews will be cleaned up.${NC}"
+        rm -rf "$temp_dir"
+        return 0
+    fi
+
+    # Parse selections and create final GIFs
+    local timestamp=$(date +"%Y%m%d_%H%M%S")
+    local saved_count=0
+
+    # Get output location
+    echo -e "${CYAN}Save to current directory? (y/n) [y]:${NC} " >&2
+    read -r use_current_dir
+
+    local output_dir="."
+    if [[ "$use_current_dir" =~ ^[Nn]$ ]]; then
+        echo -e "${CYAN}Enter output directory path:${NC} " >&2
+        read -r custom_dir
+        if [[ -n "$custom_dir" && -d "$custom_dir" ]]; then
+            output_dir="$custom_dir"
+        else
+            echo -e "${YELLOW}Directory not found. Using current directory.${NC}"
+        fi
+    fi
+
+    IFS=',' read -ra SELECTED_VERSIONS <<< "$selections"
+    for version in "${SELECTED_VERSIONS[@]}"; do
+        version=$(echo "$version" | tr -d ' ')
+        if [[ "$version" =~ ^[1-4]$ ]]; then
+            local preset_index=$((version - 1))
+            local preset_info="${showcase_presets[$preset_index]}"
+            local fps=$(echo "$preset_info" | cut -d'|' -f1)
+            local scale=$(echo "$preset_info" | cut -d'|' -f2)
+            local quality_name=$(echo "$preset_info" | cut -d'|' -f3)
+
+            # Normalize quality name for filename
+            local filename_quality=$(echo "$quality_name" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+
+            local final_name="readme-showcase-${filename_quality}-${timestamp}-v${version}.gif"
+            local final_path="$output_dir/$final_name"
+
+            # Copy the preview file to final location
+            if [[ -f "$temp_dir/preview_${version}.gif" ]]; then
+                cp "$temp_dir/preview_${version}.gif" "$final_path"
+                local final_size=$(du -h "$final_path" | cut -f1)
+                echo -e "${GREEN}✅ Saved: $final_name ($final_size)${NC}"
+                saved_count=$((saved_count + 1))
+            fi
+        fi
+    done
+
+    echo -e "\n${BOLD}${GREEN}🎉 README Showcase GIF Creation Complete!${NC}"
+    echo -e "${WHITE}📊 Results:${NC}"
+    echo -e "${CYAN}   Showcase GIFs saved: $saved_count${NC}"
+    echo -e "${CYAN}   Location: $output_dir${NC}"
+    echo ""
+    echo -e "${WHITE}💡 README Integration Tips:${NC}"
+    echo -e "${CYAN}   • Add to README: ![Demo](./$(ls -1 "$output_dir"/readme-showcase-*.gif 2>/dev/null | head -1))${NC}"
+    echo -e "${CYAN}   • Keep file names descriptive for clarity${NC}"
+    echo -e "${CYAN}   • Test loading speed on slow connections${NC}"
+
+    # Cleanup
+    echo -e "${YELLOW}🧹 Cleaning up temporary files...${NC}"
+    rm -rf "$temp_dir"
+
+    echo -e "\n${BOLD}${GREEN}✨ Your README is ready for stunning GIFs! ✨${NC}\n"
+}
+
+generate_showcase_html() {
+    local output_dir="$1"
+    local html_file="$output_dir/showcase_preview.html"
+
+    cat > "$html_file" << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>README Showcase GIF Preview</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Fira Code', monospace;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #fff;
+        }
+        .showcase-header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px;
+            border-radius: 15px;
+            color: white;
+        }
+        .showcase-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+        .showcase-item {
+            background: #2d2d2d;
+            border-radius: 15px;
+            padding: 25px;
+            border: 2px solid #444;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        .showcase-item:hover {
+            border-color: #4CAF50;
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(76, 175, 80, 0.3);
+        }
+        .showcase-number {
+            display: inline-block;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            font-weight: bold;
+            padding: 8px 15px;
+            border-radius: 25px;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .showcase-quality {
+            color: #81C784;
+            font-weight: 600;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+        .showcase-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .showcase-stats span {
+            background: #444;
+            padding: 5px 10px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .showcase-gif {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+            background: #000;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+        }
+        .recommendations {
+            background: #3a3a3a;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border-left: 5px solid #4CAF50;
+            font-family: 'Fira Code', monospace;
+        }
+        .recommendations h3 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+        .recommendations ul {
+            list-style: none;
+            padding: 0;
+        }
+        .recommendations li {
+            padding: 5px 0;
+            border-bottom: 1px solid #555;
+        }
+        .recommendations li:last-child {
+            border-bottom: none;
+        }
+        h1 {
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        .terminal {
+            background: #000;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Fira Code', monospace;
+            margin: 10px 0;
+            font-size: 12px;
+            color: #0f0;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="showcase-header">
+        <h1>📖 README Showcase GIF Preview</h1>
+        <p>Optimized for Terminal/IDE Documentation</p>
+    </div>
+    <div class="recommendations" id="recommendations">
+        <h3>🎯 README Best Practices</h3>
+        <ul>
+            <li><strong>File Size:</strong> Keep under 2MB for fast loading</li>
+            <li><strong>Duration:</strong> 3-8 seconds is ideal</li>
+            <li><strong>Resolution:</strong> 800px+ for retina displays</li>
+            <li><strong>Frame Rate:</strong> 24-30fps for smooth motion</li>
+            <li><strong>Content:</strong> Focus on core functionality, avoid noise</li>
+        </ul>
+    </div>
+    <div class="showcase-container" id="showcases">
+        <!-- Showcase previews will be inserted here -->
+    </div>
+</body>
+</html>
+EOF
+
+    echo "$html_file"
+}
+
+add_showcase_preview_to_html() {
+    local html_file="$1"
+    local number="$2"
+    local gif_file="$3"
+    local quality_name="$4"
+    local fps="$5"
+    local file_size="$6"
+    local duration="$7"
+
+    # Convert gif_file basename for display
+    local gif_name=$(basename "$gif_file")
+
+    # Determine quality recommendation
+    local recommendation=""
+    case "$quality_name" in
+        "Ultra Smooth") recommendation="🌟 Best for retina displays" ;;
+        "Balanced") recommendation="⚡ Sweet spot for most cases" ;;
+        "Fast Loading") recommendation="🚀 Great for mobile networks" ;;
+        "Mobile Friendly") recommendation="📱 Perfect for all devices" ;;
+    esac
+
+    # Create HTML snippet for this showcase preview
+    cat >> "$html_file" << EOF
+        <div class="showcase-item">
+            <div class="showcase-number">Variant $number</div>
+            <div class="showcase-quality">$quality_name</div>
+            <div class="terminal">$recommendation</div>
+            <div class="showcase-stats">
+                <span>📦 ${file_size}</span>
+                <span>⚡ ${fps} FPS</span>
+                <span>⏱️ ${duration}s</span>
+            </div>
+            <img src="$gif_name" alt="Showcase GIF $number" class="showcase-gif">
+        </div>
+EOF
+}
+
+add_showcase_recommendations() {
+    local html_file="$1"
+
+    cat >> "$html_file" << 'EOF'
+    <div class="recommendations">
+        <h3>🏆 Which Variant to Choose?</h3>
+        <ul>
+            <li><strong>Variant 1 (Ultra Smooth):</strong> High-resolution demos, professional portfolios</li>
+            <li><strong>Variant 2 (Balanced):</strong> Most README files, general documentation</li>
+            <li><strong>Variant 3 (Fast Loading):</strong> READMEs with many GIFs, slow networks</li>
+            <li><strong>Variant 4 (Mobile Friendly):</strong> Mobile-first documentation, minimal bandwidth</li>
+        </ul>
+        <div class="terminal">
+            <strong>README Integration:</strong><br>
+            ![Demo](./readme-showcase-balanced-20241118_123456-v2.gif)
+        </div>
+    </div>
+EOF
+}
+
+create_showcase_gif() {
+    local input_video="$1"
+    local output_dir="$2"
+    local start_time="$3"
+    local duration="$4"
+    local fps="$5"
+    local scale="$6"
+    local quality_preset="$7"
+    local preset_number="$8"
+
+    local output_file="$output_dir/preview_${preset_number}.gif"
+
+    # Create GIF with showcase optimizations:
+    # - High-quality scaling with lanczos
+    # - Smart palette generation
+    # - Optimized dithering
+    ffmpeg -ss "$start_time" -t "$duration" -i "$input_video" \
+           -vf "fps=$fps,scale=$scale:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256:reserve_transparent=0[p];[s1][p]paletteuse=dither=floyd_steinberg" \
+           -y "$output_file" 2>/dev/null
+
+    if [[ -f "$output_file" ]]; then
+        local actual_size=$(du -h "$output_file" | cut -f1)
+        echo "$output_file|$actual_size"
+    else
+        echo "ERROR|Failed to create showcase GIF"
+    fi
+}
+
+# Main conversion logic
+main() {
+    echo -e "\n${BOLD}${WHITE}🚀 Welcome to Interactive Media Converter!${NC}"
+
+    # Mode selection
+    print_step "Choose conversion mode"
+    echo -e "${WHITE}Available modes:${NC}"
+    echo -e "  ${GREEN}1)${NC} Standard conversion (image ↔ image, video ↔ video)"
+    echo -e "  ${GREEN}2)${NC} 🎬 Advanced GIF creator (video → animated GIF)"
+    echo -e "  ${GREEN}3)${NC} Convert to GIF (single format, no preview)"
+    echo -e "  ${PURPLE}4)${NC} 📖 README Showcase mode (optimized for terminal/IDE demos)"
+
+    while true; do
+        echo -e "${CYAN}Choose mode (1-4):${NC} " >&2
+        read -r mode_choice
+
+        case "$mode_choice" in
+            1)
+                echo -e "${GREEN}✅ Standard conversion mode${NC}"
+                standard_conversion
+                return 0
+                ;;
+            2)
+                echo -e "${GREEN}✅ Advanced GIF creator mode${NC}"
+                interactive_gif_creator
+                return 0
+                ;;
+            3)
+                echo -e "${GREEN}✅ Quick GIF conversion mode${NC}"
+                quick_gif_conversion
+                return 0
+                ;;
+            4)
+                echo -e "${PURPLE}✅ README Showcase mode${NC}"
+                readme_showcase_creator
+                return 0
+                ;;
+            *)
+                print_error "Invalid choice. Please enter 1, 2, 3, or 4."
+                ;;
+        esac
+    done
+}
+
+standard_conversion() {
+    echo -e "\n${BOLD}${WHITE}🔄 Standard Media Conversion${NC}"
+
+    # Step 1: Get input file path
+    print_step "Step 1: Select your media file"
+    while true; do
+        echo -e "${CYAN}Enter the path to your image or video:${NC} " >&2
+        read -r media_path
+
+        if [[ -z "$media_path" ]]; then
+            print_error "Please enter a valid path"
+            continue
+        fi
+
+        if [[ ! -f "$media_path" ]]; then
+            print_error "File not found: $media_path"
+            continue
+        fi
+
+        # Detect media type
+        media_type=$(detect_media_type "$media_path")
+        if [[ "$media_type" == "unknown" ]]; then
+            print_error "This doesn't appear to be a valid image or video file"
+            continue
+        fi
+
+        break
+    done
+
+    # Detect current format
+    current_format=$(file "$media_path" | grep -oE "(JPEG|PNG|GIF|WebP|BMP|TIFF|ICO|MP4|AVI|MKV|MOV|WMV|FLV|WebM|M4V|3GP|OGV)" | head -1 | tr '[:upper:]' '[:lower:]')
+    if [[ -z "$current_format" ]]; then
+        current_format=$(echo "${media_path##*.}" | tr '[:upper:]' '[:lower:]')
+    fi
+
+    # Check if conversion is supported for this media type
+    if [[ "$media_type" == "image" && "$HAS_IMAGEMAGICK" == false ]]; then
+        print_error "ImageMagick is not installed. Cannot convert images."
+        exit 1
+    elif [[ "$media_type" == "video" && "$HAS_FFMPEG" == false ]]; then
+        print_error "FFmpeg is not installed. Cannot convert videos."
+        exit 1
+    fi
+
+    print_success "$media_type detected: $current_format format"
+
+    # Step 2: Select output format
+    echo -e "\n${WHITE}🎨 Available formats for $media_type:${NC}"
+
+    local available_formats=()
+    local format_type=""
+
+    if [[ "$media_type" == "image" ]]; then
+        available_formats=("${IMAGE_FORMATS[@]}")
+        format_type="Image"
+    else
+        available_formats=("${VIDEO_FORMATS[@]}")
+        format_type="Video"
+    fi
+
+    for i in "${!available_formats[@]}"; do
+        format="${available_formats[$i]}"
+        if [[ "$format" == "$current_format" ]]; then
+            echo -e "  ${GRAY}$((i+1))) $format (current)${NC}"
+        else
+            echo -e "  ${GREEN}$((i+1))) $format${NC}"
+        fi
+    done
+
+    print_step "Step 2: Choose output format"
+    while true; do
+        echo -e "${CYAN}Enter format number or name:${NC} " >&2
+        read -r format_choice
+
+        # Check if number
+        if [[ "$format_choice" =~ ^[0-9]+$ ]]; then
+            index=$((format_choice - 1))
+            if [[ $index -ge 0 && $index -lt ${#available_formats[@]} ]]; then
+                output_format="${available_formats[$index]}"
+                break
+            else
+                print_error "Invalid number. Please choose 1-${#available_formats[@]}"
+            fi
+        else
+            # Check if format name
+            format_choice=$(echo "$format_choice" | tr '[:upper:]' '[:lower:]')
+            if [[ " ${available_formats[*]} " =~ " ${format_choice} " ]]; then
+                output_format="$format_choice"
+                break
+            else
+                print_error "Invalid format. Please choose from: ${available_formats[*]}"
+            fi
+        fi
+    done
+
+    # Step 3: Determine output path
+    print_step "Step 3: Choose output location"
+
+    # Generate default output path
+    base_name="${media_path%.*}"
+    default_output="$base_name.$output_format"
+
+    echo -e "${CYAN}Enter output path [$default_output]:${NC} " >&2
+    read -r output_path
+    if [[ -z "$output_path" ]]; then
+        output_path="$default_output"
+    fi
+
+    # Check if output directory exists
+    output_dir=$(dirname "$output_path")
+    if [[ ! -d "$output_dir" ]]; then
+        print_error "Output directory does not exist: $output_dir"
+        exit 1
+    fi
+
+    # Step 4: Convert the media file
+    echo -e "\n${BOLD}${WHITE}🔄 Converting $media_type...${NC}"
+    echo -e "${GRAY}   From: $media_path ($current_format)${NC}"
+    echo -e "${GRAY}   To:   $output_path ($output_format)${NC}"
+
+    local conversion_success=false
+
+    if [[ "$media_type" == "image" ]]; then
+        # Use ImageMagick for images
+        if $IMAGEMAGICK_CONVERT "$media_path" "$output_path" 2>/dev/null; then
+            conversion_success=true
+        fi
+    elif [[ "$media_type" == "video" ]]; then
+        # Use FFmpeg for videos
+        if ffmpeg -i "$media_path" -c:v libx264 -c:a aac -y "$output_path" 2>/dev/null; then
+            conversion_success=true
+        fi
+    fi
+
+    if [[ "$conversion_success" == true ]]; then
+        print_success "Conversion completed successfully!"
+
+        # Show file info
+        original_size=$(du -h "$media_path" | cut -f1)
+        new_size=$(du -h "$output_path" | cut -f1)
+
+        echo -e "\n${WHITE}📊 File information:${NC}"
+        echo -e "${CYAN}   Original: $original_size${NC}"
+        echo -e "${CYAN}   Converted: $new_size${NC}"
+
+        # Ask if user wants to open the file
+        echo -e "${CYAN}Open the converted $media_type? (y/n) [n]:${NC} " >&2
+        read -r open_choice
+        if [[ "$open_choice" =~ ^[Yy]$ ]]; then
+            if command -v xdg-open &> /dev/null; then
+                xdg-open "$output_path" &>/dev/null &
+            elif command -v open &> /dev/null; then
+                open "$output_path" &>/dev/null &
+            else
+                print_info "Cannot open file automatically. Please open: $output_path"
+            fi
+        fi
+    else
+        print_error "Conversion failed!"
+        echo -e "${YELLOW}💡 Make sure ImageMagick supports this conversion.${NC}"
+        exit 1
+    fi
+
+    echo -e "\n${BOLD}${GREEN}🎉 All done! Happy converting!${NC}\n"
+}
+
+# Show help
+show_help() {
+    echo -e "${BOLD}${WHITE}Convert - Interactive Media Converter${NC}"
+    echo ""
+    echo -e "${YELLOW}USAGE:${NC}"
+    echo "    img-convert                           # Interactive mode"
+    echo "    img-convert [OPTIONS]                 # Argument-based mode"
+    echo "    img-convert INPUT_FILE OUTPUT_FILE    # Simple conversion"
+    echo ""
+    echo -e "${YELLOW}OPTIONS:${NC}"
+    echo "    -h, --help         Show this help message"
+    echo "    -v, --version      Show version information"
+    echo "    -i, --input FILE   Input media file path (image or video)"
+    echo "    -o, --output FILE  Output file path or format"
+    echo ""
+    echo -e "${YELLOW}EXAMPLES:${NC}"
+    echo "    img-convert                                              # Interactive mode"
+    echo "    img-convert video.mkv                                    # Interactive with input"
+    echo "    img-convert video.mp4 result.avi                         # Direct conversion"
+    echo ""
+    echo -e "${CYAN}Image conversions:${NC}"
+    echo "    img-convert -i photo.png -o jpg                          # Convert PNG to JPEG"
+    echo "    img-convert --input photo.webp --output ./photos/         # Convert to PNG in folder"
+    echo "    img-convert -i screenshot.png -o webp                    # Convert to WebP"
+    echo ""
+    echo -e "${CYAN}Video conversions:${NC}"
+    echo "    img-convert -i movie.mp4 -o avi                          # Convert MP4 to AVI"
+    echo "    img-convert --input video.mkv --output ./videos/          # Convert to MP4 in folder"
+    echo "    img-convert -i clip.mov -o webm                          # Convert MOV to WebM"
+    echo ""
+    echo -e "${PURPLE}🎬 Advanced GIF Creator (Interactive Mode):${NC}"
+    echo "    img-convert                                              # Choose mode 2-4"
+    echo "    └─ Mode 2: Advanced GIF creator with preview system"
+    echo "    └─ Mode 3: Quick GIF conversion"
+    echo "    └─ Mode 4: 📖 README Showcase (terminal-optimized)"
+    echo ""
+    echo -e "${PURPLE}🎬 GIF Creator Features:${NC}"
+    echo "    • Interactive quality presets (5 levels: Ultra HQ to Tiny)"
+    echo "    • Custom duration selection (full video or time range)"
+    echo "    • Intelligent file size estimation"
+    echo "    • HTML preview gallery with browser auto-open"
+    echo "    • Multiple variant generation at once"
+    echo "    • Smart filename system: gif-\$quality-\$timestamp-v\$N.gif"
+    echo "    • Interactive selection (single or comma-separated)"
+    echo "    • Automatic temporary file cleanup"
+    echo ""
+    echo -e "${PURPLE}📖 README Showcase Mode (NEW):${NC}"
+    echo "    • 🎯 Optimized for terminal/IDE documentation"
+    echo "    • 📹 Recording guidelines for maximum quality"
+    echo "    • ⚡ 4 showcase presets: Ultra Smooth (1000px/30fps) → Mobile Friendly (500px/18fps)"
+    echo "    • 🧠 Smart analysis of source video for optimal settings"
+    echo "    • 📏 Auto-trim to 8s showcase duration (perfect for README)"
+    echo "    • 🎨 Beautiful terminal-themed HTML preview with recommendations"
+    echo "    • 📱 File size optimization: 200KB-2MB for web loading"
+    echo "    • 🏆 Filename format: readme-showcase-\$quality-\$timestamp-v\$N.gif"
+    echo ""
+    echo -e "${YELLOW}OUTPUT SPECIFICATION:${NC}"
+    echo "    • Just a format (e.g., 'jpg', 'mp4') → same directory, new extension"
+    echo "    • Directory path (e.g., './photos/') → same filename, default format"
+    echo "    • Full path (e.g., '/path/file.mp4') → explicit output location"
+    echo ""
+    echo -e "${YELLOW}SUPPORTED IMAGE FORMATS:${NC}"
+    echo "    JPEG, PNG, WebP, GIF, BMP, TIFF, ICO, PDF"
+    echo ""
+    echo -e "${YELLOW}SUPPORTED VIDEO FORMATS:${NC}"
+    echo "    MP4, AVI, MKV, MOV, WMV, FLV, WebM, M4V, 3GP, OGV"
+    echo ""
+    echo -e "${YELLOW}REQUIREMENTS:${NC}"
+    echo "    • ImageMagick - for image conversion"
+    echo "    • FFmpeg - for video conversion"
+    echo "    • At least one of these tools must be installed"
+}
+
+# Smart output path resolver
+resolve_output_path() {
+    local input_path="$1"
+    local output_spec="$2"
+
+    # Check if output_spec is just a format (extension)
+    if [[ "$output_spec" =~ ^[a-zA-Z0-9]+$ ]]; then
+        local format=$(echo "$output_spec" | tr '[:upper:]' '[:lower:]')
+
+        # Normalize common format names
+        case "$format" in
+            "jpg") format="jpeg" ;;
+            "tif") format="tiff" ;;
+        esac
+
+        # Check if format is supported
+        if [[ " ${SUPPORTED_FORMATS[*]} " =~ " ${format} " ]]; then
+            local base_name="${input_path%.*}"
+            echo "${base_name}.${format}"
+            return 0
+        else
+            echo "ERROR: Unsupported format '$output_spec'. Use: ${SUPPORTED_FORMATS[*]}" >&2
+            return 1
+        fi
+    fi
+
+    # Check if output_spec is a directory (ends with /)
+    if [[ "$output_spec" =~ /$ ]]; then
+        if [[ ! -d "$output_spec" ]]; then
+            echo "ERROR: Directory does not exist: $output_spec" >&2
+            return 1
+        fi
+
+        local filename=$(basename "$input_path")
+        local base_name="${filename%.*}"
+        echo "${output_spec}${base_name}.png"  # Default to PNG for directories
+        return 0
+    fi
+
+    # Check if output_spec has no extension (contains no dot or dot is at the end)
+    if [[ ! "$output_spec" == *.* ]] || [[ "${output_spec##*.}" == "" ]]; then
+        print_error "Output file must have an extension. Please specify the desired format."
+        echo "Example: --output /path/to/file.jpg or --output jpg" >&2
+        return 1
+    fi
+
+    # Full path - validate extension
+    local ext="${output_spec##*.}"
+    local format=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+
+    case "$format" in
+        "jpg") format="jpeg" ;;
+        "tif") format="tiff" ;;
+    esac
+
+    if [[ ! " ${SUPPORTED_FORMATS[*]} " =~ " ${format} " ]]; then
+        echo "ERROR: Unsupported format '$ext'. Use: ${SUPPORTED_FORMATS[*]}" >&2
+        return 1
+    fi
+
+    # Check if directory exists
+    local output_dir=$(dirname "$output_spec")
+    if [[ ! -d "$output_dir" ]]; then
+        echo "ERROR: Output directory does not exist: $output_dir" >&2
+        return 1
+    fi
+
+    echo "$output_spec"
+    return 0
+}
+
+# Handle argument-based conversion
+handle_args_conversion() {
+    local input_file=""
+    local output_spec=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -i|--input)
+                input_file="$2"
+                shift 2
+                ;;
+            -o|--output)
+                output_spec="$2"
+                shift 2
+                ;;
+            -h|--help|help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                echo "Convert v1.0.0 - Interactive Media Converter"
+                exit 0
+                ;;
+            -*)
+                echo -e "${RED}❌ Unknown option: $1${NC}"
+                echo -e "${YELLOW}💡 Use --help for usage information.${NC}"
+                exit 1
+                ;;
+            *)
+                if [[ -z "$input_file" ]]; then
+                    input_file="$1"
+                elif [[ -z "$output_spec" ]]; then
+                    output_spec="$1"
+                else
+                    echo -e "${RED}❌ Too many arguments${NC}"
+                    echo -e "${YELLOW}💡 Use --help for usage information.${NC}"
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Validate input
+    if [[ -z "$input_file" ]]; then
+        echo -e "${RED}❌ Input file is required${NC}"
+        echo -e "${YELLOW}💡 Use --input FILE or -i FILE${NC}"
+        exit 1
+    fi
+
+    if [[ ! -f "$input_file" ]]; then
+        echo -e "${RED}❌ Input file not found: $input_file${NC}"
+        exit 1
+    fi
+
+    # Validate output
+    if [[ -z "$output_spec" ]]; then
+        echo -e "${RED}❌ Output specification is required${NC}"
+        echo -e "${YELLOW}💡 Use --output FORMAT or --output PATH or -o OUTPUT${NC}"
+        exit 1
+    fi
+
+    # Resolve output path
+    local output_path
+    output_path=$(resolve_output_path "$input_file" "$output_spec")
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}❌ Failed to resolve output path${NC}"
+        exit 1
+    fi
+
+    # Detect media type and validate tools
+    local media_type=$(detect_media_type "$input_file")
+    if [[ "$media_type" == "unknown" ]]; then
+        echo -e "${RED}❌ Unable to detect media type for: $input_file${NC}"
+        echo -e "${YELLOW}💡 Supported formats: ${SUPPORTED_FORMATS[*]}${NC}"
+        exit 1
+    fi
+
+    # Check if conversion is supported for this media type
+    if [[ "$media_type" == "image" && "$HAS_IMAGEMAGICK" == false ]]; then
+        echo -e "${RED}❌ ImageMagick is not installed. Cannot convert images.${NC}"
+        exit 1
+    elif [[ "$media_type" == "video" && "$HAS_FFMPEG" == false ]]; then
+        echo -e "${RED}❌ FFmpeg is not installed. Cannot convert videos.${NC}"
+        exit 1
+    fi
+
+    # Perform conversion
+    echo -e "${BOLD}${WHITE}🔄 Converting $media_type...${NC}"
+    echo -e "${GRAY}   From: $input_file${NC}"
+    echo -e "${GRAY}   To:   $output_path${NC}"
+
+    local conversion_success=false
+
+    if [[ "$media_type" == "image" ]]; then
+        # Use ImageMagick for images
+        if $IMAGEMAGICK_CONVERT "$input_file" "$output_path" 2>/dev/null; then
+            conversion_success=true
+        fi
+    elif [[ "$media_type" == "video" ]]; then
+        # Use FFmpeg for videos
+        if ffmpeg -i "$input_file" -c:v libx264 -c:a aac -y "$output_path" 2>/dev/null; then
+            conversion_success=true
+        fi
+    fi
+
+    if [[ "$conversion_success" == true ]]; then
+        print_success "Conversion completed successfully!"
+
+        # Show file info
+        local original_size=$(du -h "$input_file" | cut -f1)
+        local new_size=$(du -h "$output_path" | cut -f1)
+
+        echo -e "\n${WHITE}📊 File information:${NC}"
+        echo -e "${CYAN}   Original: $original_size${NC}"
+        echo -e "${CYAN}   Converted: $new_size${NC}"
+    else
+        print_error "Conversion failed!"
+        if [[ "$media_type" == "image" ]]; then
+            echo -e "${YELLOW}💡 Make sure ImageMagick supports this conversion.${NC}"
+        else
+            echo -e "${YELLOW}💡 Make sure FFmpeg supports this conversion.${NC}"
+        fi
+        exit 1
+    fi
+}
+
+# Parse arguments
+case "${1:-}" in
+    "")
+        main
+        ;;
+    *)
+        # Check if using long/short options or simple format
+        if [[ "$1" =~ ^(-h|--help|-v|--version|-i|--input|-o|--output)$ ]] || [[ "$2" =~ ^(-i|--input|-o|--output)$ ]]; then
+            handle_args_conversion "$@"
+        else
+            # Legacy simple format: img-convert INPUT OUTPUT
+            handle_args_conversion "$@"
+        fi
+        ;;
+esac

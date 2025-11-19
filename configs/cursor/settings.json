@@ -1,12 +1,15 @@
 {
   "window.commandCenter": true,
   "workbench.settings.openDefaultKeybindings": true,
-  "editor.fontSize": 15,
-  "editor.fontFamily": "Geist Mono",
-  "terminal.integrated.fontFamily": "JetBrainsMono Nerd Font",
-  "terminal.integrated.fontSize": 17,
-  "editor.letterSpacing": 1.2,
-  "editor.lineHeight": 1.35,
+  "editor.fontSize": 16,
+  // "editor.fontFamily": "Hack Nerd Font Mono",
+  // "editor.fontFamily": "Inter Mono",
+  // "editor.fontFamily": "Roboto Mono",
+    "editor.fontFamily": "IBM  Plex mono",      
+  // "editor.fontFamily": "Source code Pr",   
+  // "terminal.integrated.fontFamily": "JetBrainsMono Nerd Font",
+  "editor.letterSpacing": 1.49,
+  "editor.lineHeight": 1.75,
   "typescript.tsserver.maxTsServerMemory": 4000,
   "git.enableSmartCommit": true,
   "[typescriptreact]": {
@@ -42,7 +45,7 @@
     "bun run"
   ],
   "roo-cline.deniedCommands": [],
-  "workbench.colorTheme": "Best Themes - Blueberry Banana",
+  "workbench.colorTheme": "Best Themes - Pink Panther",
   "explorer.fileNesting.patterns": {
     "*.ts": "${capture}.js",
     "*.js": "${capture}.js.map, ${capture}.min.js, ${capture}.d.ts",
@@ -69,13 +72,16 @@
   "editor.fontLigatures": true,
   "editor.wordWrap": "on",
   "files.autoSave": "onFocusChange",
-  "editor.formatOnSave": true,
   "terminal.external.linuxExec": "kitty",
   "terminal.external.osxExec": "kitty",
   "update.releaseTrack": "dev",
   "editor.inlineSuggest.edits.showCollapsed": true,
   "cursor.cpp.disabledLanguages": [
-    "markdown"
+    "plaintext"
   ],
-  "window.menuBarVisibility": "compact"
+  "window.menuBarVisibility": "compact",
+  "git.openRepositoryInParentFolders": "always",
+  "terminal.integrated.fontFamily": "monospace",
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "update.mode": "silentlyApplyOnQuit",
 }

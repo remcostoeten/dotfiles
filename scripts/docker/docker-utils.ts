@@ -483,6 +483,41 @@ export function generateDockerCompose(containers: TContainer[]): string {
 }
 
 /**
+ * Extracts project path information from container labels
+ */
+export async function getContainerProjectPath(id: string): Promise<TResult<{ workingDir: string; configFile: string; projectName: string } | null, string>> {
+    try {
+        const inspectResult = await inspectContainer(id);
+        if (!inspectResult.ok) {
+            return { ok: false, error: inspectResult.error };
+        }
+
+        const container = inspectResult.value;
+        const labels = container.Config?.Labels || {};
+
+        // Check if container was created with docker-compose
+        const workingDir = labels['com.docker.compose.project.working_dir'];
+        const configFile = labels['com.docker.compose.project.config_files'];
+        const projectName = labels['com.docker.compose.project'];
+
+        if (!workingDir || !configFile || !projectName) {
+            return { ok: true, value: null }; // Not a docker-compose container
+        }
+
+        return {
+            ok: true,
+            value: {
+                workingDir,
+                configFile: configFile.split(',')[0], // Take first config file if multiple
+                projectName
+            }
+        };
+    } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : 'Failed to get container project path' };
+    }
+}
+
+/**
  * Generates a random password
  */
 function generateRandomPassword(length: number = 16): string {

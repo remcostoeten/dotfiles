@@ -10,6 +10,7 @@ export const COLORS = {
     MAGENTA: '\x1b[35m',
     CYAN: '\x1b[36m',
     WHITE: '\x1b[37m',
+    BLACK: '\x1b[30m',
     BG_RED: '\x1b[41m',
     BG_GREEN: '\x1b[42m',
     BG_YELLOW: '\x1b[43m',
@@ -26,6 +27,9 @@ export const COLORS = {
     PASTEL_BLUE: '\x1b[38;2;165;216;255m',     // a5d8ff
     PASTEL_CYAN: '\x1b[38;2;137;220;235m',     // 89dceb
     PASTEL_GREEN: '\x1b[38;2;178;242;187m',    // b2f2bb
+    // Dark colors for better contrast on light backgrounds
+    DARK_GRAY: '\x1b[38;2;64;64;64m',         // Dark gray for text
+    VERY_DARK: '\x1b[38;2;32;32;32m',         // Very dark for high contrast
 } as const;
 /**
  * Clears the terminal screen
@@ -82,7 +86,7 @@ export function colorizeStatus(status: string): string {
  * @param indicator - Optional indicator to show after the text
  */
 export function printMenuItem(index: number, text: string, isSelected: boolean, indicator?: string): void {
-    const prefix = isSelected ? `${COLORS.BG_CYAN}${COLORS.BRIGHT} ▶ ` : '   ';
+    const prefix = isSelected ? `${COLORS.BG_CYAN}${COLORS.BRIGHT}${COLORS.VERY_DARK} ▶ ` : '   ';
     const suffix = isSelected ? ` ${COLORS.RESET}` : '';
     const indicatorText = indicator ? ` ${indicator}` : '';
 

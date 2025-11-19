@@ -270,7 +270,7 @@ export function printMainMenu(selectedIndex: number): void {
         if (!isSelected) {
             return option;
         }
-        return `${COLORS.BG_MAGENTA}${COLORS.BRIGHT} ▶ ${option}${COLORS.RESET}`;
+        return `${COLORS.BG_MAGENTA}${COLORS.BRIGHT}${COLORS.VERY_DARK} ▶ ${option}${COLORS.RESET}`;
     };
 
     options.forEach((option, index) => {
@@ -321,6 +321,8 @@ export function printCommands(view: TViewState): void {
                 's: Stats',
                 'c: Copy ID',
                 'e: Copy Env',
+                'p: Copy Project Path',
+                'j: Jump to Project',
                 'x: Exec',
                 ...commonCommands,
             ];
