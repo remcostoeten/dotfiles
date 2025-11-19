@@ -361,6 +361,12 @@ export class TerminalManager {
                         await this.waitForKey();
                     }
                     break;
+                case 'p':
+                    await this.copyContainerProjectPath(container);
+                    break;
+                case 'j':
+                    await this.jumpToProject(container);
+                    break;
                 case 'r':
                     await this.restartContainer(container);
                     await this.refreshContainers();
@@ -562,34 +568,102 @@ export class TerminalManager {
             return;
         }
 
-        clearScreen();
-        UI.printHeader();
-        console.log(`${COLORS.BRIGHT}${COLORS.WHITE}Environment Variables: ${container.name}${COLORS.RESET}\n`);
-
         const envVars = Object.entries(result.value);
         if (envVars.length === 0) {
+            clearScreen();
+            UI.printHeader();
             printWarning('No environment variables found');
-        } else {
-            envVars.forEach(([key, value]) => {
-                console.log(`${COLORS.CYAN}${key}${COLORS.RESET}=${value}`);
-            });
+            await this.waitForKey();
+            return;
+        }
 
-            console.log(`\n${COLORS.DIM}Select an environment variable to copy:${COLORS.RESET}`);
-            console.log(`${COLORS.DIM}Or type "all" to copy all as .env format${COLORS.RESET}\n`);
+        // Copy all environment variables in .env format for local dev
+        const envFormat = envVars.map(([k, v]) => `${k}=${v}`).join('\n');
+        await this.copyToClipboard(envFormat, 'Environment variables (.env format)');
+    }
 
-            const selection = await this.prompt('> ');
+    private async copyContainerProjectPath(container: TContainer): Promise<void> {
+        UI.printLoading('Detecting project path');
+        const result = await DockerUtils.getContainerProjectPath(container.id);
 
-            if (selection.toLowerCase() === 'all') {
-                const envFormat = envVars.map(([k, v]) => `${k}=${v}`).join('\n');
-                await this.copyToClipboard(envFormat, 'All environment variables');
-            } else {
-                const found = envVars.find(([k]) => k.toLowerCase() === selection.toLowerCase());
-                if (found) {
-                    await this.copyToClipboard(found[1], `Environment variable ${found[0]}`);
+        if (!result.ok) {
+            printError(result.error);
+            await this.waitForKey();
+            return;
+        }
+
+        if (!result.value) {
+            printWarning('This container was not created with docker-compose, so no project path is available.');
+            printWarning('Only containers created with docker-compose have project path information.');
+            await this.waitForKey();
+            return;
+        }
+
+        const { workingDir, projectName, configFile } = result.value;
+
+        clearScreen();
+        UI.printHeader();
+        console.log(`${COLORS.BRIGHT}${COLORS.WHITE}Project Information: ${container.name}${COLORS.RESET}\n`);
+
+        console.log(`${COLORS.CYAN}Project Name:${COLORS.RESET} ${projectName}`);
+        console.log(`${COLORS.CYAN}Working Directory:${COLORS.RESET} ${workingDir}`);
+        console.log(`${COLORS.CYAN}Config File:${COLORS.RESET} ${configFile}\n`);
+
+        await this.copyToClipboard(workingDir, 'Project path');
+        await this.waitForKey();
+    }
+
+    private async jumpToProject(container: TContainer): Promise<void> {
+        UI.printLoading('Detecting project path');
+        const result = await DockerUtils.getContainerProjectPath(container.id);
+
+        if (!result.ok) {
+            printError(result.error);
+            await this.waitForKey();
+            return;
+        }
+
+        if (!result.value) {
+            printWarning('This container was not created with docker-compose, so no project path is available.');
+            printWarning('Only containers created with docker-compose have project path information.');
+            await this.waitForKey();
+            return;
+        }
+
+        const { workingDir, projectName } = result.value;
+
+        clearScreen();
+        UI.printHeader();
+        console.log(`${COLORS.BRIGHT}${COLORS.WHITE}Navigate to Project: ${container.name}${COLORS.RESET}\n`);
+
+        console.log(`${COLORS.CYAN}Project Name:${COLORS.RESET} ${projectName}`);
+        console.log(`${COLORS.CYAN}Working Directory:${COLORS.RESET} ${workingDir}\n`);
+
+        console.log(`${COLORS.DIM}Choose how to navigate to the project:${COLORS.RESET}`);
+        console.log(`${COLORS.GREEN}1.${COLORS.RESET} Copy cd command to clipboard`);
+        console.log(`${COLORS.GREEN}2.${COLORS.RESET} Create temporary script to source`);
+        console.log(`${COLORS.GREEN}3.${COLORS.RESET} Show terminal command to run manually\n`);
+
+        const choice = await this.prompt('Enter your choice (1-3): ');
+
+        switch (choice.trim()) {
+            case '1':
+                await this.copyToClipboard(`cd "${workingDir}"`, 'cd command');
+                break;
+            case '2':
+                const changeResult = await SystemUtils.changeDirectory(workingDir);
+                if (changeResult.ok) {
+                    printSuccess('Temporary script created. Run: source /tmp/docker-manager-cd.sh');
                 } else {
-                    printWarning('Environment variable not found');
+                    printError(changeResult.error);
                 }
-            }
+                break;
+            case '3':
+                await SystemUtils.changeDirectory(workingDir);
+                break;
+            default:
+                printWarning('Invalid choice');
+                break;
         }
 
         await this.waitForKey();
@@ -960,6 +1034,10 @@ export class TerminalManager {
                     resolve('l');
                 } else if (str === 'c') {
                     resolve('c');
+                } else if (str === 'p') {
+                    resolve('p');
+                } else if (str === 'j') {
+                    resolve('j');
                 } else if (str === 'e' || str === 'x') {
                     resolve('e');
                 } else if (str === '/') {
@@ -984,12 +1062,35 @@ export class TerminalManager {
             process.stdin.setRawMode(false);
         }
 
+        // Resume stdin if it was paused
+        process.stdin.resume();
+        process.stdin.setEncoding('utf8');
+
+        // Small delay to ensure raw mode is fully disabled
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        // Drain any remaining input
+        while (process.stdin.read() !== null) {
+            // Keep reading to clear buffer
+        }
+
         return new Promise((resolve) => {
-            this.rl.question(question, (answer) => {
-                // Re-enable raw mode
-                if (process.stdin.isTTY) {
-                    process.stdin.setRawMode(true);
-                }
+            // Create a new readline interface to ensure clean state
+            const tempRl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+
+            tempRl.question(question, (answer) => {
+                tempRl.close();
+                
+                // Re-enable raw mode after a small delay to ensure clean state
+                setTimeout(() => {
+                    if (process.stdin.isTTY) {
+                        process.stdin.setRawMode(true);
+                    }
+                }, 50);
+
                 resolve(answer.trim());
             });
         });

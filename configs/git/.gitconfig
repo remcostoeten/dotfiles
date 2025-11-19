@@ -5,6 +5,9 @@
 	st = status
 [pull]
 	rebase = true
+[push]
+	autoSetupRemote = true
+	default = simple
 [user]
 	name = Remco Stoeten
 	email = remcostoeten@hotmail.com

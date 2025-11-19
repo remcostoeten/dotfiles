@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+exec bun "$HOME/.config/dotfiles/scripts/timer.ts" "$@"
+
+
+

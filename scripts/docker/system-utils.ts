@@ -165,3 +165,46 @@ export async function withProgress<T>(
         throw error;
     }
 }
+
+/**
+ * Changes to a directory and optionally executes a command
+ */
+export async function changeDirectory(path: string, command?: string): Promise<TResult<void, string>> {
+    try {
+        if (!path || path.trim() === '') {
+            return { ok: false, error: 'Invalid path' };
+        }
+
+        // Verify the directory exists
+        try {
+            await execAsync(`test -d "${path}"`);
+        } catch {
+            return { ok: false, error: `Directory does not exist: ${path}` };
+        }
+
+        // Get the current shell
+        const shell = process.env.SHELL || '/bin/bash';
+
+        if (command) {
+            // If a command is provided, change directory and execute it
+            await execAsync(`${shell} -c 'cd "${path}" && ${command}'`);
+        } else {
+            // Just print the command to change directory (user can run it manually)
+            console.log(`\n${COLORS.CYAN}To navigate to the project directory, run:${COLORS.RESET}`);
+            console.log(`${COLORS.BRIGHT}cd "${path}"${COLORS.RESET}\n`);
+
+            // Try to write the command to a temporary file that the user can source
+            try {
+                const tempFile = '/tmp/docker-manager-cd.sh';
+                await execAsync(`echo 'cd "${path}"' > ${tempFile} && chmod +x ${tempFile}`);
+                console.log(`${COLORS.DIM}Or run: source ${tempFile}${COLORS.RESET}\n`);
+            } catch {
+                // If creating temp file fails, that's okay
+            }
+        }
+
+        return { ok: true, value: undefined };
+    } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : 'Failed to change directory' };
+    }
+}

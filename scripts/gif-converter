@@ -1,0 +1,649 @@
+#!/usr/bin/env bun
+
+/**
+ * GIF Converter Tool
+ *
+ * Usage:
+ *   gif-converter convert <input-file>     # Convert video to GIF
+ *   gif-converter preview <directory>      # Open GIF preview gallery
+ *   gif-converter serve                    # Start preview server
+ *   gif-converter list                     # List recent conversions
+ */
+
+import { spawnSync, spawn } from 'child_process';
+import { readdirSync, statSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { join, basename, extname, dirname } from 'path';
+import readline from 'readline';
+
+const CONVERTED_GIFS_DIR = join(process.env.HOME!, '.dotfiles', 'converted-gifs');
+const SERVER_PORT = 3000;
+
+// Ensure the directory exists
+if (!existsSync(CONVERTED_GIFS_DIR)) {
+    mkdirSync(CONVERTED_GIFS_DIR, { recursive: true });
+}
+
+function showHelp() {
+    console.log(`
+🎬 GIF Converter Tool
+
+USAGE:
+    gif-converter <command> [options]
+
+COMMANDS:
+    convert <file>         Convert video file to GIF with multiple quality options
+    preview [directory]    Open GIF preview gallery in browser
+    serve                  Start the preview web server
+    list                   List recent conversion sessions
+    help                   Show this help message
+
+EXAMPLES:
+    gif-converter convert video.webm
+    gif-converter preview
+    gif-converter serve
+
+    # Access via dotfiles CLI:
+    dotfiles gif-converter
+    dotfiles gif-converter convert my-video.webm
+    dotfiles gif-converter preview
+`);
+}
+
+function createTimestampedSession(metadata: string = 'conversion'): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const sessionDir = join(CONVERTED_GIFS_DIR, `${timestamp}-${metadata}`);
+    mkdirSync(sessionDir, { recursive: true });
+    return sessionDir;
+}
+
+function getLatestSession(): string | null {
+    try {
+        const sessions = readdirSync(CONVERTED_GIFS_DIR)
+            .filter(name => !name.startsWith('.'))
+            .map(name => ({ name, path: join(CONVERTED_GIFS_DIR, name) }))
+            .filter(({ path }) => statSync(path).isDirectory())
+            .sort((a, b) => statSync(b.path).mtime.getTime() - statSync(a.path).mtime.getTime());
+
+        return sessions.length > 0 ? sessions[0].path : null;
+    } catch {
+        return null;
+    }
+}
+
+function startServer(): Promise<number> {
+    return new Promise((resolve) => {
+        console.log('🚀 Starting GIF preview server...');
+
+        const server = spawn('bunx', ['serve', '-p', SERVER_PORT, CONVERTED_GIFS_DIR], {
+            stdio: ['inherit', 'pipe', 'pipe']
+        });
+
+        server.stdout.on('data', (data) => {
+            const output = data.toString();
+            console.log(output);
+            if (output.includes('Accepting connections')) {
+                console.log(`✅ Server running at http://localhost:${SERVER_PORT}`);
+                console.log(`📁 Serving from: ${CONVERTED_GIFS_DIR}`);
+                resolve(0);
+            }
+        });
+
+        server.stderr.on('data', (data) => {
+            console.error(`Server error: ${data}`);
+        });
+
+        server.on('exit', (code) => {
+            resolve(code || 0);
+        });
+
+        // Open browser after a short delay
+        setTimeout(() => {
+            const latestSession = getLatestSession();
+            if (latestSession) {
+                const sessionName = basename(latestSession);
+                spawn('xdg-open', [`http://localhost:${SERVER_PORT}/${sessionName}/`], { stdio: 'ignore' });
+            } else {
+                spawn('xdg-open', [`http://localhost:${SERVER_PORT}`], { stdio: 'ignore' });
+            }
+        }, 1000);
+    });
+}
+
+function convertVideo(inputFile: string): Promise<number> {
+    return new Promise(async (resolve) => {
+        if (!existsSync(inputFile)) {
+            console.error(`❌ File not found: ${inputFile}`);
+            resolve(1);
+            return;
+        }
+
+        const fileName = basename(inputFile, extname(inputFile));
+        const sessionDir = createTimestampedSession(fileName);
+
+        console.log(`🎬 Converting: ${inputFile}`);
+        console.log(`📁 Output directory: ${sessionDir}`);
+
+        // Copy theme CSS
+        const themeSource = join(process.env.HOME!, '.config', 'dotfiles', '_abandoned-misc', 'tailwind-theme.css');
+        const themeDest = join(sessionDir, 'tailwind-theme.css');
+
+        if (existsSync(themeSource)) {
+            const themeContent = readFileSync(themeSource, 'utf8');
+            writeFileSync(themeDest, themeContent);
+        }
+
+        // Create preview HTML
+        const htmlContent = createPreviewHTML();
+        writeFileSync(join(sessionDir, 'index.html'), htmlContent);
+
+        // Define multiple quality presets
+        const qualities = [
+            { name: 'Ultra HQ', width: 800, fps: 30, colors: 256 },
+            { name: 'High Quality', width: 600, fps: 24, colors: 128 },
+            { name: 'Medium Quality', width: 400, fps: 18, colors: 64 },
+            { name: 'Low Quality', width: 300, fps: 15, colors: 32 },
+            { name: 'Thumbnail', width: 200, fps: 12, colors: 16 }
+        ];
+
+        console.log('\n🔄 Generating preview versions...');
+
+        let completed = 0;
+        for (let i = 0; i < qualities.length; i++) {
+            const quality = qualities[i];
+            const outputFile = join(sessionDir, `preview_${i + 1}.gif`);
+
+            console.log(`   ${i + 1}/${qualities.length} - ${quality.name} (${quality.width}px, ${quality.fps}fps)`);
+
+            const ffmpeg = spawn('ffmpeg', [
+                '-i', inputFile,
+                '-vf', `fps=${quality.fps},scale=${quality.width}:-1:flags=lanczos,palettegen`,
+                '-y', `${sessionDir}/palette_${i + 1}.png`
+            ], { stdio: 'pipe' });
+
+            await new Promise<void>((resolveConvert) => {
+                ffmpeg.on('exit', (code) => {
+                    if (code === 0) {
+                        const ffmpeg2 = spawn('ffmpeg', [
+                            '-i', inputFile,
+                            '-i', `${sessionDir}/palette_${i + 1}.png`,
+                            '-filter_complex', `fps=${quality.fps},scale=${quality.width}:-1:flags=lanczos[x];[x][1:v]paletteuse`,
+                            '-y', outputFile
+                        ], { stdio: 'pipe' });
+
+                        ffmpeg2.on('exit', (code2) => {
+                            if (code2 === 0) {
+                                // Clean up palette file
+                                spawn('rm', [`${sessionDir}/palette_${i + 1}.png`], { stdio: 'ignore' });
+                            }
+                            completed++;
+                            resolveConvert();
+                        });
+                    } else {
+                        completed++;
+                        resolveConvert();
+                    }
+                });
+            });
+        }
+
+        console.log('\n✅ Conversion complete!');
+        console.log(`📂 Session saved to: ${sessionDir}`);
+        console.log('💡 Run "gif-converter preview" or "gif-converter serve" to view results');
+
+        resolve(0);
+    });
+}
+
+function createPreviewHTML(): string {
+    return `<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIF Preview - Interactive Media Converter</title>
+    <link rel="stylesheet" href="./tailwind-theme.css">
+    <style>
+        html {
+            --color-background: #0a0a0a !important;
+            --color-background-secondary: #0d0d0d !important;
+            --color-background-tertiary: #111111 !important;
+            --color-foreground: #d4d4d4 !important;
+            --color-foreground-bright: #e0e0e0 !important;
+            --color-foreground-muted: #bdbdbd !important;
+            --color-accent: #4ec9b0 !important;
+            --color-accent-bg: #1e3a2e !important;
+            --color-border-primary: #2a2a2a !important;
+            --color-border-accent: #4ec9b0 !important;
+            --color-card-bg: #111111 !important;
+            --color-button-bg: #141414 !important;
+            --color-button-border: #242424 !important;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+            background: #0a0a0a !important;
+            color: #d4d4d4 !important;
+            line-height: 1.6;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        .header {
+            background: var(--color-background-secondary);
+            border-bottom: 1px solid var(--color-border-primary);
+            padding: var(--spacing-lg);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--color-foreground-bright);
+            margin-bottom: 0.25rem;
+        }
+
+        .subtitle {
+            color: var(--color-foreground-muted);
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: var(--spacing-lg);
+        }
+
+        .instructions {
+            background: #111111 !important;
+            border: 1px solid #2a2a2a !important;
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-xl);
+            border-left: 4px solid #4ec9b0 !important;
+        }
+
+        .instructions h3 {
+            color: var(--color-foreground-bright);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .instructions p {
+            color: var(--color-foreground-muted);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .instructions ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .instructions li {
+            padding: 0.5rem 0;
+            color: var(--color-foreground-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .instructions li::before {
+            content: "→";
+            color: var(--color-accent);
+            font-weight: bold;
+        }
+
+        .code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--color-background-tertiary);
+            padding: 0.2rem 0.4rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            color: var(--color-accent);
+        }
+
+        .preview-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: var(--spacing-lg);
+            margin-top: var(--spacing-lg);
+        }
+
+        .preview-item {
+            background: #111111 !important;
+            border: 1px solid #2a2a2a !important;
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            transition: var(--transition-all);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .preview-item:hover {
+            border-color: var(--color-border-accent);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+
+        .version-badge {
+            display: inline-block;
+            background: var(--color-accent-bg);
+            color: var(--color-accent);
+            border: 1px solid var(--color-border-accent);
+            border-radius: var(--radius-full);
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 0.25rem 0.75rem;
+            margin-bottom: var(--spacing-md);
+        }
+
+        .quality-badge {
+            color: var(--color-foreground-bright);
+            font-weight: 600;
+            margin-bottom: var(--spacing-md);
+            font-size: 1.1rem;
+        }
+
+        .preview-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .stat-item {
+            background: var(--color-background-tertiary);
+            border: 1px solid var(--color-border-secondary);
+            border-radius: var(--radius-md);
+            padding: 0.5rem 0.75rem;
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--color-foreground-muted);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            opacity: 0.8;
+        }
+
+        .preview-gif {
+            width: 100%;
+            height: auto;
+            border-radius: var(--radius-md);
+            background: var(--color-background-tertiary);
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            border: 1px solid var(--color-border-primary);
+        }
+
+        .theme-toggle {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-button-bg);
+            border: 1px solid var(--color-button-border);
+            border-radius: var(--radius-lg);
+            cursor: pointer;
+            transition: var(--transition-all);
+            font-size: 1.5rem;
+        }
+
+        .theme-toggle:hover {
+            background: var(--color-button-hover-bg);
+            border-color: var(--color-border-accent);
+            transform: scale(1.05);
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            color: var(--color-foreground-muted);
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .preview-container {
+                grid-template-columns: 1fr;
+            }
+            .header-content {
+                flex-direction: column;
+                gap: var(--spacing-md);
+                text-align: center;
+            }
+            .preview-stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div>
+                <h1>🎬 GIF Preview Gallery</h1>
+                <p class="subtitle">Interactive media converter with your dotfiles theme</p>
+            </div>
+            <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                <span id="theme-icon">🌙</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="instructions">
+            <h3>📋 How to Use:</h3>
+            <p>Review the GIF previews below. Return to the terminal and enter the number(s) of the version(s) you want to keep.</p>
+            <ul>
+                <li><strong>Single version:</strong> Enter: <span class="code">2</span></li>
+                <li><strong>Multiple versions:</strong> Enter: <span class="code">1,3,4</span></li>
+                <li><strong>All versions:</strong> Enter: <span class="code">1,2,3,4,5</span></li>
+            </ul>
+        </div>
+
+        <div class="preview-container" id="previews">
+            <div class="loading" style="grid-column: 1 / -1;">
+                Loading preview...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            document.getElementById('theme-icon').textContent = newTheme === 'dark' ? '🌙' : '☀️';
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme');
+            const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const theme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+            document.getElementById('theme-icon').textContent = theme === 'dark' ? '🌙' : '☀️';
+            loadPreviews();
+        });
+
+        function loadPreviews() {
+            const previewsContainer = document.getElementById('previews');
+            const previewData = [
+                { version: 1, quality: 'Ultra HQ', size: '~2MB', fps: '30 FPS', width: '800px', gifFile: 'preview_1.gif' },
+                { version: 2, quality: 'High Quality', size: '~1MB', fps: '24 FPS', width: '600px', gifFile: 'preview_2.gif' },
+                { version: 3, quality: 'Medium Quality', size: '~500KB', fps: '18 FPS', width: '400px', gifFile: 'preview_3.gif' },
+                { version: 4, quality: 'Low Quality', size: '~200KB', fps: '15 FPS', width: '300px', gifFile: 'preview_4.gif' },
+                { version: 5, quality: 'Thumbnail', size: '~50KB', fps: '12 FPS', width: '200px', gifFile: 'preview_5.gif' }
+            ];
+
+            previewsContainer.innerHTML = previewData.map(preview => \`
+                <div class="preview-item">
+                    <div class="version-badge">Version \${preview.version}</div>
+                    <div class="quality-badge">\${preview.quality}</div>
+                    <div class="preview-stats">
+                        <div class="stat-item">
+                            <span>📦</span>
+                            <span>\${preview.size}</span>
+                            <span class="stat-label">Size</span>
+                        </div>
+                        <div class="stat-item">
+                            <span>⚡</span>
+                            <span>\${preview.fps}</span>
+                            <span class="stat-label">Frame Rate</span>
+                        </div>
+                        <div class="stat-item">
+                            <span>📏</span>
+                            <span>\${preview.width}</span>
+                            <span class="stat-label">Width</span>
+                        </div>
+                    </div>
+                    <img src="\${preview.gifFile}" alt="GIF Preview \${preview.version}" class="preview-gif"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div style="display:none; align-items:center; justify-content:center; min-height:200px; background: var(--color-background-tertiary); border-radius: var(--radius-md); border: 1px solid var(--color-border-primary);">
+                        <div style="text-align: center; color: var(--color-foreground-muted);">
+                            <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎬</div>
+                            <div>GIF loading...</div>
+                        </div>
+                    </div>
+                </div>
+            \`).join('');
+        }
+    </script>
+</body>
+</html>`;
+}
+
+function listSessions(): void {
+    try {
+        const sessions = readdirSync(CONVERTED_GIFS_DIR)
+            .filter(name => !name.startsWith('.'))
+            .map(name => ({ name, path: join(CONVERTED_GIFS_DIR, name) }))
+            .filter(({ path }) => statSync(path).isDirectory())
+            .sort((a, b) => statSync(b.path).mtime.getTime() - statSync(a.path).mtime.getTime());
+
+        if (sessions.length === 0) {
+            console.log('📁 No conversion sessions found.');
+            console.log('💡 Run "gif-converter convert <video-file>" to create one.');
+            return;
+        }
+
+        console.log('\n📂 Recent Conversion Sessions:');
+        console.log('');
+
+        sessions.forEach(({ name, path }, index) => {
+            const stats = statSync(path);
+            const date = stats.mtime.toLocaleDateString();
+            const time = stats.mtime.toLocaleTimeString();
+
+            console.log(`  ${index + 1}. ${name}`);
+            console.log(`     📅 ${date} ${time}`);
+            console.log(`     📁 ${path}`);
+
+            // Count GIF files
+            try {
+                const files = readdirSync(path).filter(f => f.endsWith('.gif')).length;
+                console.log(`     🎬 ${files} GIF version${files !== 1 ? 's' : ''}`);
+            } catch {}
+
+            console.log('');
+        });
+
+        console.log(`💡 Run "gif-converter preview" to view the latest session`);
+        console.log(`💡 Run "gif-converter serve" to start the web server`);
+
+    } catch (error) {
+        console.error('❌ Error listing sessions:', error.message);
+    }
+}
+
+function openPreview(directory?: string): number {
+    const targetDir = directory ? join(CONVERTED_GIFS_DIR, directory) : getLatestSession();
+
+    if (!targetDir || !existsSync(targetDir)) {
+        console.log('📁 No preview sessions found.');
+        console.log('💡 Run "gif-converter convert <video-file>" to create one first.');
+        return 1;
+    }
+
+    const sessionName = basename(targetDir);
+    const previewUrl = `http://localhost:${SERVER_PORT}/${sessionName}/`;
+
+    console.log(`🌐 Opening preview: ${previewUrl}`);
+
+    // Start server in background and open browser
+    spawn('bunx', ['serve', '-p', SERVER_PORT, CONVERTED_GIFS_DIR], {
+        stdio: 'ignore',
+        detached: true
+    }).unref();
+
+    setTimeout(() => {
+        spawn('xdg-open', [previewUrl], { stdio: 'ignore' });
+    }, 500);
+
+    console.log('✅ Preview server started and browser opened');
+    return 0;
+}
+
+async function main() {
+    const args = process.argv.slice(2);
+    const command = args[0] || 'help';
+
+    switch (command) {
+        case 'convert':
+            if (!args[1]) {
+                console.error('❌ Please specify a video file to convert');
+                console.log('Usage: gif-converter convert <video-file>');
+                process.exit(1);
+            }
+            const code = await convertVideo(args[1]);
+            process.exit(code);
+
+        case 'preview':
+            const previewCode = openPreview(args[1]);
+            process.exit(previewCode);
+
+        case 'serve':
+            const serverCode = await startServer();
+            process.exit(serverCode);
+
+        case 'list':
+            listSessions();
+            process.exit(0);
+
+        case 'help':
+        case '--help':
+        case '-h':
+            showHelp();
+            process.exit(0);
+
+        default:
+            console.error(`❌ Unknown command: ${command}`);
+            showHelp();
+            process.exit(1);
+    }
+}
+
+main().catch(err => {
+    console.error('❌ Error:', err.message);
+    process.exit(1);
+});
