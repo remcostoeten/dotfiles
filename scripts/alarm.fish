@@ -121,20 +121,65 @@ function play_alarm_sound
     end
 
     if test -n "$sound_file"
+        # Check if audio system is working
+        set -l audio_working false
+
+        # Try MPV with ALSA first (best compatibility)
         if command -v mpv >/dev/null
-            mpv --no-terminal --volume=80 --loop=inf $sound_file >/dev/null 2>&1 &
-            echo $last_pid > /tmp/alarm_sound_pid
-        else if command -v paplay >/dev/null
-            paplay --loop $sound_file >/dev/null 2>&1 &
-            echo $last_pid > /tmp/alarm_sound_pid
-        else if command -v aplay >/dev/null
-            aplay $sound_file >/dev/null 2>&1 &
-            echo $last_pid > /tmp/alarm_sound_pid
-        else
-            printf "%s%s[WARNING]%s No audio player found (mpv, paplay, aplay)\n" "$fish_color_yellow" "$fish_color_bold" "$fish_color_reset"
+            mpv --no-terminal --volume=60 --ao=alsa $sound_file >/dev/null 2>&1 &
+            set -l pid $last_pid
+
+            # Wait a moment to see if MPV starts successfully
+            sleep 0.5
+            if kill -0 $pid 2>/dev/null
+                # Audio started successfully, make it loop
+                kill $pid 2>/dev/null
+                mpv --no-terminal --volume=60 --ao=alsa --loop=inf $sound_file >/dev/null 2>&1 &
+                echo $last_pid > /tmp/alarm_sound_pid
+                set audio_working true
+            end
+        end
+
+        # Fallback: Convert MP3 to WAV and use aplay if MPV didn't work
+        if test "$audio_working" = false; and command -v ffmpeg >/dev/null; and command -v aplay >/dev/null
+            if string match -q "*.mp3" $sound_file
+                # Convert to WAV for better ALSA compatibility
+                set -l wav_file "/tmp/alarm.wav"
+                ffmpeg -i $sound_file -acodec pcm_s16le -ar 44100 -ac 2 $wav_file -y 2>/dev/null
+
+                if test -f $wav_file
+                    aplay $wav_file >/dev/null 2>&1 &
+                    echo $last_pid > /tmp/alarm_sound_pid
+                    set audio_working true
+                end
+            else
+                aplay $sound_file >/dev/null 2>&1 &
+                echo $last_pid > /tmp/alarm_sound_pid
+                set audio_working true
+            end
+        end
+
+        # If still no audio working, try pulseaudio
+        if test "$audio_working" = false; and command -v paplay >/dev/null
+            if pactl info >/dev/null 2>&1
+                paplay --loop $sound_file >/dev/null 2>&1 &
+                echo $last_pid > /tmp/alarm_sound_pid
+                set audio_working true
+            end
+        end
+
+        # Final fallback - show status and use system bell
+        if test "$audio_working" = false
+            printf "%s%s[WARNING]%s Audio playback failed - no working audio output found\n" "$fish_color_yellow" "$fish_color_bold" "$fish_color_reset"
+            printf "%s%s[INFO]%s Check if audio system is running or headphones are connected\n" "$fish_color_blue" "$fish_color_bold" "$fish_color_reset"
+            # Fallback: use system bell and visual alerts
+            for i in (seq 1 5)
+                printf "\a"
+                sleep 0.2
+            end
         end
     else
-        printf "%s%s[WARNING]%s Alarm sound not found. Please download one to ~/Music/alarm.mp3\n" "$fish_color_yellow" "$fish_color_bold" "$fish_color_reset"
+        printf "%s%s[WARNING]%s Alarm sound not found. Please download one to ~/Audio/alarm.mp3\n" "$fish_color_yellow" "$fish_color_bold" "$fish_color_reset"
         # Fallback: use system bell
         printf "\a"
     end
@@ -180,7 +225,8 @@ Run 'stop_alarm' to dismiss" &
     end
 
     # Method 3: Use our custom notification script as fallback
-    fish send_notification.fish "🔔 ALARM! 🔔" "$message\n\nRun 'stop_alarm' to dismiss" $urgency &
+    set -l script_dir (dirname (realpath (status --current-filename)))
+    fish "$script_dir/send_notification.fish" "🔔 ALARM! 🔔" "$message\n\nRun 'stop_alarm' to dismiss" $urgency &
 
     # Method 4: Try to send a desktop notification via GNOME-specific method
     if command -v gdbus >/dev/null

@@ -403,6 +403,16 @@ function rotateDisplay(displayName: string, rotation: string): boolean {
 
 function turnOffDisplay(displayName: string): boolean {
     try {
+        // Check if this is the only active display
+        const displays = getDisplays();
+        const activeDisplays = displays.filter(d => d.connected && d.currentResolution !== 'Unknown');
+
+        if (activeDisplays.length === 1 && activeDisplays[0].name === displayName) {
+            console.log(c('yellow', `⚠️  Cannot turn off ${displayName}: It's the only active display`));
+            console.log(c('dim', '   Turning off the only display would leave you with no usable screen.'));
+            return false;
+        }
+
         execSync(`xrandr --output ${displayName} --off`, { stdio: 'inherit' });
         return true;
     } catch (error) {
