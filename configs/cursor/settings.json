@@ -84,4 +84,5 @@
   "terminal.integrated.fontFamily": "monospace",
   "typescript.updateImportsOnFileMove.enabled": "always",
   "update.mode": "silentlyApplyOnQuit",
+  "claudeCode.preferredLocation": "panel",
 }

@@ -269,12 +269,12 @@ if status is-interactive
     # Interactive Media Converter alias (replaces ImageMagick convert)
     # Note: img-convert script is already in ~/.config/dotfiles/bin which is in PATH
     # This alias ensures `convert` uses our media converter instead of ImageMagick
-
-    if command -v img-convert >/dev/null 2>&1
-        alias convert img-convert
-        echo "🎬 Media Converter: `convert` aliased to `img-convert` (README Showcase, GIF creator, etc.)" >&2
-    end
-
+    #  ?????
+    #if command -v img-convert >/dev/null 2>&1
+    #alias convert img-convert
+    #        echo "🎬 Media Converter: `convert` aliased to `img-convert` (README Showcase, GIF creator, etc.)" >&2
+    #end
+    #?????
     # Final deduplication at the end of config
-    dedupe_path
+    # dedupe_path
 end
