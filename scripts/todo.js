@@ -380,13 +380,21 @@ class TodoTUI {
   selectedTasks = new Set;
   currentView = "main";
   constructor() {
+    // Create readline interface but don't use it for key events
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout
     });
+
+    // Enable keypress events
     readline.emitKeypressEvents(process.stdin);
+
+    // Set raw mode for immediate key input
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
+      // Ensure stdin is in the correct state
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
     }
   }
   loadTasks() {
@@ -512,12 +520,14 @@ ${COLORS.DIM}Arrow keys: Navigate | Space: Select | Enter: Confirm | e: Edit | d
       // Disable raw mode for readline questions
       if (process.stdin.isTTY && process.stdin.setRawMode) {
         process.stdin.setRawMode(false);
+        process.stdin.pause();
       }
-      
+
       this.rl.question(prompt, (answer) => {
         // Re-enable raw mode after getting answer
         if (process.stdin.isTTY && process.stdin.setRawMode) {
           process.stdin.setRawMode(true);
+          process.stdin.resume();
         }
         resolve(answer.trim());
       });
@@ -582,6 +592,9 @@ Add this task? (Y/n): `)).toLowerCase();
     this.sortTasks();
     return new Promise((resolve) => {
       const handleKeypress = async (str, key) => {
+        // Debug: uncomment to see what keys are being received
+        // console.log('Key received:', { str, key });
+
         if (key.name === "escape") {
           process.stdin.removeListener("keypress", handleKeypress);
           resolve();
@@ -655,6 +668,9 @@ Add this task? (Y/n): `)).toLowerCase();
     this.sortTasks();
     return new Promise((resolve) => {
       const handleKeypress = async (str, key) => {
+        // Debug: uncomment to see what keys are being received
+        // console.log('Key received:', { str, key });
+
         if (key.name === "escape") {
           process.stdin.removeListener("keypress", handleKeypress);
           resolve();
@@ -816,7 +832,11 @@ Current due date: ${task.dueDate ? formatDueDate(task.dueDate) : "None"}`);
     }
   }
   cleanup() {
-    process.stdin.setRawMode(false);
+    // Restore terminal state
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+    }
     this.rl.close();
   }
 }

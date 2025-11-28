@@ -1,55 +1,60 @@
 [
   {
-    "id": "1762813462763",
-    "description": "create claude spellcheck",
-    "createdAt": 1762813462763,
-    "updatedAt": 1762813462763,
+    "id": "1763634129101",
+    "description": "rebuild: env verify integration",
+    "createdAt": 1763634129102,
+    "updatedAt": 1763634129102,
     "status": "pending",
-    "reminderOffsets": [],
+    "reminderOffsets": [
+      10,
+      30,
+      60
+    ],
     "notificationsSent": {
       "reminders": []
     }
   },
   {
-    "id": "1762813482567",
-    "description": "create claude create prompt from clipboard",
-    "createdAt": 1762813482567,
-    "updatedAt": 1762813482567,
+    "id": "1763647938794",
+    "description": "loveable invite credits test",
+    "createdAt": 1763647938795,
+    "updatedAt": 1763647938795,
     "status": "pending",
-    "reminderOffsets": [],
+    "reminderOffsets": [
+      10,
+      30,
+      60
+    ],
     "notificationsSent": {
       "reminders": []
     }
   },
   {
-    "id": "1762813505456",
-    "description": "create claude error wrapper for dotfiles",
-    "createdAt": 1762813505456,
-    "updatedAt": 1762813505456,
+    "id": "1763649890948",
+    "description": "extarct toast studio",
+    "createdAt": 1763649890948,
+    "updatedAt": 1763649890948,
     "status": "pending",
-    "reminderOffsets": [],
+    "reminderOffsets": [
+      10,
+      30,
+      60
+    ],
     "notificationsSent": {
       "reminders": []
     }
   },
   {
-    "id": "1762890276931",
-    "description": "vscode theme create",
-    "createdAt": 1762890276931,
-    "updatedAt": 1762890276931,
+    "id": "1763649913796",
+    "description": "extract/primitize the task widget",
+    "createdAt": 1763649913796,
+    "updatedAt": 1763649913796,
     "status": "pending",
-    "reminderOffsets": [],
-    "notificationsSent": {
-      "reminders": []
-    }
-  },
-  {
-    "id": "1762890295094",
-    "description": "cv typo fixes / cleanup",
-    "createdAt": 1762890295094,
-    "updatedAt": 1762890295094,
-    "status": "pending",
-    "reminderOffsets": [],
+    "reminderOffsets": [
+      10,
+      30,
+      60
+    ],
     "notificationsSent": {
       "reminders": []
     }
