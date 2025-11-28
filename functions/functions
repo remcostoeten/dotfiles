@@ -29,6 +29,12 @@ if [ -f "$FUNCTIONS_DIR/ensure-script-data-dir" ]; then
     source "$FUNCTIONS_DIR/ensure-script-data-dir" 2>/dev/null || true
 fi
 
+# Pre-register restartgnome if it exists
+if [ -f "$FUNCTIONS_DIR/restartgnome" ]; then
+    . "$FUNCTIONS_DIR/restartgnome" 2>/dev/null || \
+    source "$FUNCTIONS_DIR/restartgnome" 2>/dev/null || true
+fi
+
 # The functions registry is now available
 # Usage: functions (interactive menu) or functions <function-name> (direct execution)
 

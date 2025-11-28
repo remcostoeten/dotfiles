@@ -1,0 +1,605 @@
+#!/usr/bin/env python3
+# Spellcheck CLI - interactive spell fixer with history and clipboard helpers
+"""Spellcheck utility with interactive mode, history, and clipboard helpers."""
+
+from __future__ import annotations
+
+import difflib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Optional
+
+DATA_ROOT = Path(os.environ.get("DOTFILES_DATA_DIR", str(Path.home() / ".dotfiles")))
+SPELLCHECK_DATA = DATA_ROOT / "spellcheck"
+HISTORY_DIR = SPELLCHECK_DATA / "history"
+HISTORY_FILE = HISTORY_DIR / "history.jsonl"
+DEFAULT_MODEL = os.environ.get("SPELLCHECK_DEFAULT_MODEL", "claude")
+DEFAULT_PROMPT_TEMPLATE = os.environ.get(
+    "SPELLCHECK_PROMPT_TEMPLATE",
+    "Please fix the spelling and grammar in the following text. "
+    "Respond with ONLY the corrected text:\n{text}",
+)
+
+COLORS = {
+    "reset": "\033[0m",
+    "primary": "\033[38;5;252m",
+    "accent": "\033[38;5;109m",
+    "muted": "\033[38;5;244m",
+    "success": "\033[38;5;114m",
+    "warning": "\033[38;5;215m",
+    "error": "\033[38;5;203m",
+}
+
+TOKEN_PATTERN = re.compile(r"[A-Za-z']+|\s+|[^\w\s]", re.UNICODE)
+SUGGESTION_MODES = {
+    "claude": "fast",
+    "gemini": "normal",
+    "openai": "bad-spellers",
+}
+
+CLI_MODEL_CONFIG = {
+    "claude": {
+        "command": os.environ.get("SPELLCHECK_CLAUDE_CMD", "claude"),
+        "prepend_args": ["--dangerously-skip-permissions"],
+        "append_args": [],
+    },
+    "gemini": {
+        "command": os.environ.get("SPELLCHECK_GEMINI_CMD", "gemini"),
+        "prepend_args": [],
+        "append_args": ["--yolo", "--output-format", "text"],
+    },
+    "codex": {
+        "command": os.environ.get("SPELLCHECK_CODEX_CMD", "codex"),
+        "prepend_args": ["exec", "--dangerously-bypass-approvals-and-sandbox"],
+        "append_args": [],
+    },
+}
+CLI_MODEL_CONFIG["openai"] = {
+    "command": os.environ.get("SPELLCHECK_OPENAI_CMD", CLI_MODEL_CONFIG["codex"]["command"]),
+    "prepend_args": CLI_MODEL_CONFIG["codex"]["prepend_args"],
+    "append_args": CLI_MODEL_CONFIG["codex"]["append_args"],
+}
+
+
+def colorize(kind: str, text: str) -> str:
+    code = COLORS.get(kind, "")
+    reset = COLORS["reset"] if code else ""
+    return f"{code}{text}{reset}"
+
+
+def ensure_history_paths() -> None:
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    if not HISTORY_FILE.exists():
+        HISTORY_FILE.touch()
+
+
+def load_history(limit: int = 20) -> List[Dict]:
+    if not HISTORY_FILE.exists():
+        return []
+    entries: List[Dict] = []
+    with HISTORY_FILE.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return entries[-limit:]
+
+
+def write_history_entry(entry: Dict) -> None:
+    try:
+        ensure_history_paths()
+    except OSError as exc:
+        print(colorize("warning", f"Unable to prepare history directory: {exc}"), file=sys.stderr)
+        return
+    try:
+        with HISTORY_FILE.open("a", encoding="utf-8") as handle:
+            json.dump(entry, handle)
+            handle.write("\n")
+    except OSError as exc:
+        print(colorize("warning", f"Unable to write history file: {exc}"), file=sys.stderr)
+
+
+def copy_to_clipboard(content: str) -> bool:
+    commands = [
+        ["wl-copy"],
+        ["xclip", "-selection", "clipboard"],
+        ["pbcopy"],
+        ["clip.exe"],
+    ]
+    for cmd in commands:
+        exe = shutil.which(cmd[0])
+        if not exe:
+            continue
+        try:
+            subprocess.run([exe, *cmd[1:]], input=content, text=True, check=True)
+            return True
+        except (subprocess.SubprocessError, OSError):
+            continue
+    return False
+
+
+class Spinner:
+    def __init__(self, message: str, interval: float = 0.12) -> None:
+        self.message = message
+        self.interval = interval
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.stop("done" if exc is None else "failed")
+
+    def start(self) -> None:
+        def run():
+            frames = "|/-\\"
+            idx = 0
+            while not self._stop.is_set():
+                frame = frames[idx % len(frames)]
+                sys.stdout.write(f"\r{self.message} {frame}")
+                sys.stdout.flush()
+                idx += 1
+                time.sleep(self.interval)
+
+        self._thread = threading.Thread(target=run, daemon=True)
+        self._thread.start()
+
+    def stop(self, suffix: str = "done") -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join()
+        sys.stdout.write(f"\r{self.message} {suffix}            \n")
+        sys.stdout.flush()
+
+
+def apply_casing(source: str, replacement: str) -> str:
+    if not replacement:
+        return source
+    if source.isupper():
+        return replacement.upper()
+    if source.istitle():
+        return replacement.capitalize()
+    if source.islower():
+        return replacement.lower()
+    return replacement
+
+
+class AspellCorrector:
+    def __init__(self, mode: str = "fast") -> None:
+        if not shutil.which("aspell"):
+            raise RuntimeError("aspell is required for spellcheck but was not found in PATH.")
+        sug_mode = mode if mode in {"fast", "normal", "bad-spellers", "ultra"} else "fast"
+        self.proc = subprocess.Popen(
+            [
+                "aspell",
+                "-a",
+                f"--sug-mode={sug_mode}",
+                "--dont-backup",
+                "--encoding=utf-8",
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        assert self.proc.stdout is not None
+        self.proc.stdout.readline()
+
+    def close(self) -> None:
+        if self.proc and self.proc.poll() is None:
+            if self.proc.stdin:
+                try:
+                    self.proc.stdin.close()
+                except OSError:
+                    pass
+            self.proc.terminate()
+
+    def correct_word(self, word: str) -> Dict:
+        if not self.proc.stdin or not self.proc.stdout:
+            return {"word": word, "suggestion": word, "suggestions": []}
+        self.proc.stdin.write(word + "\n")
+        self.proc.stdin.flush()
+        response = self.proc.stdout.readline().strip()
+        if not response or response.startswith("*"):
+            return {"word": word, "suggestion": word, "suggestions": []}
+        if response.startswith("+"):
+            return {"word": word, "suggestion": word, "suggestions": []}
+        if response.startswith("&") or response.startswith("#"):
+            parts = response.split(":", 1)
+            suggestions: List[str] = []
+            if len(parts) == 2:
+                suggestions = [candidate.strip() for candidate in parts[1].split(",") if candidate.strip()]
+            suggestion = suggestions[0] if suggestions else word
+            return {
+                "word": word,
+                "suggestion": suggestion,
+                "suggestions": suggestions,
+            }
+        return {"word": word, "suggestion": word, "suggestions": []}
+
+
+def compute_text_diff(original: str, corrected: str) -> str:
+    return "\n".join(
+        difflib.unified_diff(
+            original.splitlines(),
+            corrected.splitlines(),
+            fromfile="original",
+            tofile="corrected",
+            lineterm="",
+        )
+    )
+
+
+def compute_change_blocks(original: str, corrected: str) -> List[Dict[str, str]]:
+    original_tokens = TOKEN_PATTERN.findall(original)
+    corrected_tokens = TOKEN_PATTERN.findall(corrected)
+    matcher = difflib.SequenceMatcher(None, original_tokens, corrected_tokens)
+    changes: List[Dict[str, str]] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        original_segment = "".join(original_tokens[i1:i2]).strip()
+        corrected_segment = "".join(corrected_tokens[j1:j2]).strip()
+        if tag == "equal":
+            continue
+        if not original_segment and not corrected_segment:
+            continue
+        changes.append(
+            {
+                "original": original_segment,
+                "corrected": corrected_segment,
+                "suggestions": [],
+            }
+        )
+    return changes
+
+
+def run_cli_spellcheck(text: str, model: str) -> Dict:
+    config = CLI_MODEL_CONFIG.get(model)
+    if not config:
+        raise RuntimeError(f"No CLI config found for model '{model}'.")
+    command = config["command"]
+    executable = shutil.which(command)
+    if not executable:
+        raise RuntimeError(
+            f"Unable to find the '{command}' CLI. Ensure it is installed or set SPELLCHECK_{model.upper()}_CMD."
+        )
+    prompt_template = config.get("prompt_template", DEFAULT_PROMPT_TEMPLATE)
+    prompt = prompt_template.format(text=text)
+    args = [executable, *config.get("prepend_args", []), prompt, *config.get("append_args", [])]
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip() if exc.stderr else ""
+        message = stderr or f"{command} CLI failed with exit code {exc.returncode}"
+        raise RuntimeError(message) from exc
+    output = result.stdout if result.stdout else result.stderr
+    corrected = (output or "").strip()
+    if not corrected:
+        raise RuntimeError(f"{command} CLI returned no output.")
+    diff = compute_text_diff(text, corrected)
+    changes = compute_change_blocks(text, corrected)
+    return {"result": corrected, "changes": changes, "diff": diff}
+
+
+def perform_spellcheck(text: str, model: str) -> Dict:
+    if model in CLI_MODEL_CONFIG:
+        return run_cli_spellcheck(text, model)
+
+    tokens = TOKEN_PATTERN.findall(text)
+    if not tokens:
+        return {"result": text, "changes": [], "diff": ""}
+
+    corrector = AspellCorrector(SUGGESTION_MODES.get(model, "fast"))
+    corrected_tokens: List[str] = []
+    changes: List[Dict[str, str]] = []
+
+    try:
+        for token in tokens:
+            if token.isspace() or not token:
+                corrected_tokens.append(token)
+                continue
+            if re.fullmatch(r"[A-Za-z']+", token):
+                info = corrector.correct_word(token)
+                suggestion = apply_casing(token, info["suggestion"])
+                corrected_tokens.append(suggestion)
+                if suggestion != token:
+                    changes.append(
+                        {
+                            "original": token,
+                            "corrected": suggestion,
+                            "suggestions": info["suggestions"],
+                        }
+                    )
+            else:
+                corrected_tokens.append(token)
+    finally:
+        corrector.close()
+
+    corrected_text = "".join(corrected_tokens)
+    diff = compute_text_diff(text, corrected_text)
+    return {"result": corrected_text, "changes": changes, "diff": diff}
+
+
+def format_help() -> str:
+    def header(label: str) -> str:
+        return colorize("accent", f"{label}:")
+
+    usage_block = "\n".join(
+        [
+            "  spellcheck [text]",
+            "  spellcheck --claude|--gemini|--openai [text]",
+            '  spellcheck --verbose "quoted text to fix"',
+            "  spellcheck --history",
+        ]
+    )
+    def option_line(label: str, description: str) -> str:
+        padded = label.ljust(30)
+        return f"  {colorize('accent', padded)} {description}"
+
+    option_block = "\n".join(
+        [
+            option_line("-h, --help, help", "Show this guide with examples."),
+            option_line("-H, --history, history", "Browse the last 20 entries and copy results."),
+            option_line("-v, --verbose, verbose", "Show applied changes and diffs."),
+            option_line("--model <name>", "Explicit provider name (claude, gemini, openai)."),
+            option_line("--c, --claude, claude", "Shorthand for --model claude."),
+            option_line("--g, --gemini, gemini", "Shorthand for --model gemini."),
+            option_line("--o, --openai, openai,", "Shorthand for --model openai/codex."),
+            option_line("--codex, codex", "Alias for --model openai/codex."),
+        ]
+    )
+    example_block = "\n".join(
+        [
+            "  spellcheck                 # interactive input prompt",
+            '  spellcheck "teh quik"      # fix provided snippet',
+            "  spellcheck --g -v          # verbose corrections using gemini profile",
+            '  echo "smple" | spellcheck  # pipe text',
+        ]
+    )
+    parts = [
+        colorize("primary", "spellcheck - AI-ready spell fixer"),
+        "",
+        header("Usage"),
+        usage_block,
+        "",
+        header("Options"),
+        option_block,
+        "",
+        header("Examples"),
+        example_block,
+    ]
+    return "\n".join(parts)
+
+
+@dataclass
+class ParsedArgs:
+    action: str
+    text: str
+    model: str
+    verbose: bool
+    source: str
+
+
+def parse_args(argv: List[str]) -> ParsedArgs:
+    action = "run"
+    model = DEFAULT_MODEL
+    verbose = False
+    text_parts: List[str] = []
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        if token in {"-h", "--help", "help"}:
+            action = "help"
+            i += 1
+            continue
+        if token in {"--history", "history", "-H"}:
+            action = "history"
+            i += 1
+            continue
+        if token in {"-v", "--verbose", "verbose", "--v"}:
+            verbose = True
+            i += 1
+            continue
+        if token in {"--model", "-m"}:
+            if i + 1 >= len(argv):
+                print(colorize("error", "Missing model name after --model"))
+                sys.exit(1)
+            model = argv[i + 1].lower()
+            i += 2
+            continue
+        if token in {"--claude", "--c", "claude"}:
+            model = "claude"
+            i += 1
+            continue
+        if token in {"--gemini", "--g", "gemini"}:
+            model = "gemini"
+            i += 1
+            continue
+        if token in {"--openai", "--o", "openai", "--codex", "codex"}:
+            model = "openai"
+            i += 1
+            continue
+        text_parts.append(token)
+        i += 1
+
+    text_arg = " ".join(text_parts).strip()
+    if action != "run":
+        text_arg = ""
+
+    if text_arg:
+        source = "cli"
+    elif not sys.stdin.isatty():
+        text_arg = sys.stdin.read().strip()
+        source = "stdin"
+    else:
+        source = "interactive"
+
+    return ParsedArgs(action=action, text=text_arg, model=model, verbose=verbose, source=source)
+
+
+def gather_interactive_text() -> str:
+    print(colorize("accent", "→ Enter your text (empty line to submit, Ctrl+C to abort):"))
+    lines: List[str] = []
+    while True:
+        try:
+            line = input("")
+        except EOFError:
+            break
+        except KeyboardInterrupt:
+            print()
+            sys.exit(1)
+        if not line:
+            if lines:
+                break
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
+def show_history() -> None:
+    try:
+        entries = load_history(limit=20)
+    except OSError as exc:
+        print(colorize("warning", f"Unable to read history: {exc}"))
+        return
+    if not entries:
+        print(colorize("warning", "No history entries yet."))
+        return
+
+    entries = list(reversed(entries))
+    print(colorize("primary", "History (latest 20):"))
+    for idx, entry in enumerate(entries, 1):
+        text = entry.get("corrected_text", "").strip().replace("\n", " ⏎ ")
+        summary = (text[:70] + "…") if len(text) > 70 else text
+        timestamp = entry.get("timestamp", "?")
+        model = entry.get("model", "?")
+        idx_label = colorize("accent", f"[{idx:02}]")
+        time_label = colorize("muted", timestamp)
+        model_label = colorize("primary", f"{model:<7}")
+        summary_label = colorize("accent", summary) if summary else ""
+        print(f"{idx_label} {time_label} | {model_label} | {summary_label}")
+
+    while True:
+        try:
+            choice = input(colorize("accent", "Select entry to view (Enter to exit): ")).strip()
+        except EOFError:
+            print()
+            break
+        if not choice:
+            break
+        if not choice.isdigit() or not (1 <= int(choice) <= len(entries)):
+            print(colorize("warning", "Invalid selection."))
+            continue
+        selected = entries[int(choice) - 1]
+        print(colorize("primary", "Original:"))
+        print(selected.get("original_text", ""))
+        print()
+        print(colorize("primary", "Corrected:"))
+        print(selected.get("corrected_text", ""))
+        print()
+        if selected.get("diff"):
+            print(colorize("primary", "Diff:"))
+            print(selected["diff"])
+            print()
+        action = input(colorize("accent", "Copy [c]orrected / copy [o]riginal / [b]ack: ")).strip().lower()
+        if action == "c":
+            if copy_to_clipboard(selected.get("corrected_text", "")):
+                print(colorize("success", "Copied corrected text."))
+            else:
+                print(colorize("warning", "Clipboard utility not available."))
+        elif action == "o":
+            if copy_to_clipboard(selected.get("original_text", "")):
+                print(colorize("success", "Copied original text."))
+            else:
+                print(colorize("warning", "Clipboard utility not available."))
+        else:
+            continue
+
+
+def print_summary(changes: List[Dict], diff: str, verbose: bool) -> None:
+    if not changes:
+        print(colorize("muted", "No spelling issues detected."))
+        return
+    print(colorize("accent", f"Applied {len(changes)} change(s)."))
+    if verbose:
+        for change in changes:
+            suggestions = ", ".join(change.get("suggestions", [])[:5])
+            detail = f" (suggestions: {suggestions})" if suggestions else ""
+            print(f"  - {change['original']} → {change['corrected']}{detail}")
+        if diff:
+            print()
+            print(colorize("primary", "Diff:"))
+            print(diff)
+
+
+def main(argv: List[str]) -> None:
+    args = parse_args(argv)
+    if args.action == "help":
+        print(format_help())
+        return
+    if args.action == "history":
+        show_history()
+        return
+
+    text = args.text
+    if not text:
+        text = gather_interactive_text()
+    if not text:
+        print(colorize("warning", "No text provided."))
+        return
+
+    message = f"→ Spellchecking with {args.model} profile"
+    try:
+        with Spinner(message):
+            outcome = perform_spellcheck(text, args.model)
+    except RuntimeError as exc:
+        print(colorize("error", str(exc)))
+        return
+
+    corrected = outcome["result"]
+    print(colorize("success", "→ Done."))
+    print()
+    print(colorize("primary", "Corrected text:"))
+    print(corrected)
+    print()
+
+    copied = copy_to_clipboard(corrected)
+    if copied:
+        print(colorize("muted", "Result copied to clipboard."))
+    else:
+        print(colorize("warning", "Clipboard utility missing (install wl-copy or xclip)."))
+
+    print_summary(outcome["changes"], outcome.get("diff", ""), args.verbose)
+
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "model": args.model,
+        "source": args.source,
+        "original_text": text,
+        "corrected_text": corrected,
+        "changes": outcome["changes"],
+        "diff": outcome.get("diff", ""),
+    }
+    write_history_entry(entry)
+
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv[1:])
+    except KeyboardInterrupt:
+        print()
+        sys.exit(1)

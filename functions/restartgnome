@@ -1,0 +1,26 @@
+# DOCSTRING: Restart GNOME Shell to fix mouse/input issues without logging out
+restartgnome() {
+    echo "🔄 Restarting GNOME Shell to fix input issues..."
+    echo "   This will preserve your session and open applications."
+    echo ""
+    
+    # Check if we're running GNOME
+    if ! pgrep -x gnome-shell > /dev/null; then
+        echo "❌ Error: GNOME Shell is not running."
+        echo "   This function only works with GNOME desktop environment."
+        return 1
+    fi
+    
+    # Restart GNOME Shell using SIGQUIT signal
+    # This causes GNOME Shell to restart itself while preserving the session
+    if killall -SIGQUIT gnome-shell 2>/dev/null; then
+        echo "✅ GNOME Shell restart signal sent successfully."
+        echo "   Your session should be preserved - windows and tabs should remain open."
+        echo "   The shell will restart momentarily..."
+    else
+        echo "❌ Error: Failed to restart GNOME Shell."
+        echo "   You may need to run this with appropriate permissions."
+        return 1
+    fi
+}
+

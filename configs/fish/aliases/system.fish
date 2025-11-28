@@ -243,6 +243,9 @@ function tree
     end
 end
 
+# DOCSTRING: Fix GNOME mouse/input issues by restarting GNOME Shell without logging out
+alias restartgnome 'restartgnome'
+
 # DOCSTRING: Alternative tree using exa with better colors (use 'etree' command)
 function etree
     # Comprehensive ignore patterns

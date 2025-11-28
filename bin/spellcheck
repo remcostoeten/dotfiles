@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Wrapper to execute the spellcheck script from the scripts directory.
+SCRIPT_DIR="$HOME/.config/dotfiles/scripts"
+exec "$SCRIPT_DIR/spellcheck" "$@"
