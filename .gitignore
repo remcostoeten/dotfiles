@@ -20,7 +20,14 @@ scripts/docker/node_modules
 **/yarn.lock
 **/pnpm-lock.yaml
 
-# Sensitive data - stored in private repo at ~/.dotfiles
+# Sensitive data - stored in private repo at ~/.dotfiles or env-private/
+# See docs/PRIVATE-FILES.md for best practices
+
+# Private environment variables (unless using git submodule)
+env-private/env
+env-private/env.bak
+
+# User secrets and sensitive data
 secrets/
 postgres/
 *.log

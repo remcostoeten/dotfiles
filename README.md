@@ -76,6 +76,21 @@ The repository is structured as follows:
   * `functions/`: Custom Fish functions
   * `core/`: Core configuration (colors, environment, init)
 * `scripts/`: Utility scripts and tools
+* `env-private/`: Private environment variables (see [Private Files Guide](docs/PRIVATE-FILES.md))
+
+## Private Files & Secrets
+
+This repository is open source, but some files contain sensitive information and are kept private:
+
+* Private environment variables are stored in `env-private/` (gitignored or as git submodule)
+* User-specific data is stored in `$HOME/.dotfiles/` (outside the repository)
+* Secrets and API keys are never committed to the repository
+
+See **[docs/PRIVATE-FILES.md](docs/PRIVATE-FILES.md)** for a complete guide on:
+- How to handle private files and secrets
+- Best practices for open source dotfiles
+- Setting up private configuration
+- Security checklist
 
 ## Installation
 

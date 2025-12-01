@@ -3,3 +3,9 @@
 # All actual configuration is maintained in ~/.config/dotfiles/cfg
 
 source ~/.config/dotfiles/cfg
+# pnpm
+set -gx PNPM_HOME "/home/remco-stoeten/.local/share/pnpm"
+if not string match -q -- $PNPM_HOME $PATH
+  set -gx PATH "$PNPM_HOME" $PATH
+end
+# pnpm end

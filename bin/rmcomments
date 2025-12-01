@@ -1,0 +1,2 @@
+#!/bin/bash
+exec /home/remco-stoeten/.config/dotfiles/scripts/remove-comments.js "$@"
