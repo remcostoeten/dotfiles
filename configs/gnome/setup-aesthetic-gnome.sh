@@ -87,27 +87,6 @@ check_dependencies() {
     log_success "All dependencies satisfied"
 }
 
-install_fonts() {
-    log_step "Installing recommended fonts"
-
-    if confirm "Install Inter font for beautiful UI?"; then
-        log_info "Installing Inter font..."
-        mkdir -p ~/.local/share/fonts
-
-        if command -v wget &> /dev/null; then
-            cd /tmp
-            wget -q "https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip" -O inter.zip
-            unzip -q inter.zip -d inter
-            cp inter/*.ttf ~/.local/share/fonts/
-            fc-cache -f
-            rm -rf inter inter.zip
-            log_success "Inter font installed"
-        else
-            log_warning "wget not found, skipping font installation"
-        fi
-    fi
-}
-
 main() {
     banner
 
@@ -125,8 +104,6 @@ main() {
     fi
 
     check_dependencies
-
-    install_fonts
 
     log_step "Applying GNOME aesthetic configuration"
     if [ -f "$SCRIPT_DIR/apply-gnome-aesthetics.sh" ]; then

@@ -6,8 +6,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
 import readline from "readline";
-var DOTFILES_ROOT = process.env.HOME + "/.config/dotfiles";
-var TODOS_DIR = join(DOTFILES_ROOT, "todos");
+var DOTFILES_DATA_DIR = process.env.HOME + "/.dotfiles";
+var TODOS_DIR = join(DOTFILES_DATA_DIR, "todo");
 var TASKS_FILE = join(TODOS_DIR, "tasks.json");
 var CONFIG_FILE = join(TODOS_DIR, "config.json");
 var COLORS = {

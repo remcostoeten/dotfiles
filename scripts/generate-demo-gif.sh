@@ -22,12 +22,12 @@ if ! command -v terminalizer &> /dev/null; then
 fi
 
 # Check if we're in the right directory
-if [ ! -d "$REPO_ROOT/opentui-setup" ]; then
-    echo "❌ Error: opentui-setup directory not found"
+if [ ! -d "$REPO_ROOT/setup" ]; then
+    echo "❌ Error: setup directory not found"
     exit 1
 fi
 
-cd "$REPO_ROOT/opentui-setup"
+cd "$REPO_ROOT/setup"
 
 # Create a terminalizer config if it doesn't exist
 TERMINALIZER_CONFIG="$REPO_ROOT/.terminalizer-config.yml"

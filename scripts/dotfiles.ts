@@ -159,8 +159,7 @@ function isUnwantedExecutable(name: string): boolean {
            name.startsWith('alarm') ||
            name.includes('generate-turso-db') ||
            name.includes('remove-unused-files') ||
-           name.includes('license-generator') ||
-           name.includes('vm') && name !== 'vm';
+           name.includes('license-generator');
 }
 
 function uniqueId(parts: string[]): string {

@@ -226,7 +226,7 @@ Run 'stop_alarm' to dismiss" &
 
     # Method 3: Use our custom notification script as fallback
     set -l script_dir (dirname (realpath (status --current-filename)))
-    fish "$script_dir/send_notification.fish" "🔔 ALARM! 🔔" "$message\n\nRun 'stop_alarm' to dismiss" $urgency &
+    fish "$script_dir/../functions/send_notification.fish" "🔔 ALARM! 🔔" "$message\n\nRun 'stop_alarm' to dismiss" $urgency &
 
     # Method 4: Try to send a desktop notification via GNOME-specific method
     if command -v gdbus >/dev/null

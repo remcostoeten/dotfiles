@@ -136,7 +136,7 @@ gsettings reset-recursively org.gnome.shell.extensions.blur-my-shell
 ## 💡 Pro Tips
 
 1. **Wallpaper Matters**: Use dark, subtle wallpapers for best effect
-2. **Font Quality**: Install Inter or SF Pro for crisp text
+2. **Font Quality**: Use Nerd Fonts (already installed) or system default fonts
 3. **Performance**: Lower blur sigma if lagging (15-20 is good)
 4. **Backup Settings**: `dconf dump / > gnome-settings-backup.dconf`
 

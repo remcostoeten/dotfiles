@@ -1331,33 +1331,33 @@
             const filesToShow = [
                 {
                     id: 'code-packages',
-                    path: 'opentui-setup/src/packages.ts',
+                    path: 'setup/src/packages.ts',
                     lang: 'typescript'
                 },
                 {
                     id: 'code-executor',
-                    path: 'opentui-setup/src/executor.ts',
+                    path: 'setup/src/executor.ts',
                     lang: 'typescript'
                 },
                 {
                     id: 'code-install-manager',
-                    path: 'opentui-setup/src/install-manager.ts',
+                    path: 'setup/src/install-manager.ts',
                     lang: 'typescript'
                 },
                 {
                     id: 'code-system-config',
-                    path: 'opentui-setup/src/system-config.ts',
+                    path: 'setup/src/system-config.ts',
                     lang: 'typescript'
                 },
                 {
                     id: 'code-verification',
-                    path: 'opentui-setup/src/verification.ts',
+                    path: 'setup/src/verification.ts',
                     lang: 'typescript'
                 }
             ];
 
             const ghOrgRepo = 'remcostoeten/dotfiles';
-            const ghBranch = 'feature/opentui'; // Use current branch
+            const ghBranch = 'master'; // Use current branch
             const rawBase = `https://raw.githubusercontent.com/${ghOrgRepo}/${ghBranch}/`;
             const rawBaseFallback = `https://raw.githubusercontent.com/${ghOrgRepo}/master/`;
 
@@ -1664,7 +1664,7 @@
             if (terminalDemo && runDemoBtn) {
                 const lines = [
                     { type: 'prompt', text: 'remco@ubuntu:~/dotfiles$ ', delay: 100 },
-                    { type: 'command', text: 'cd opentui-setup && bun run setup', delay: 400 },
+                    { type: 'command', text: 'cd setup && bun run setup', delay: 400 },
                     { type: 'output', text: '', delay: 500 },
                     { type: 'output', text: '▶ Starting dotfiles setup...', delay: 200 },
                     { type: 'output', text: '', delay: 150 },
@@ -2160,7 +2160,7 @@
                 const fetchVersion = async () => {
                     try {
                         // Try VERSION file first from current branch
-                        let versionRes = await fetch('https://raw.githubusercontent.com/remcostoeten/dotfiles/feature/opentui/VERSION');
+                        let versionRes = await fetch('https://raw.githubusercontent.com/remcostoeten/dotfiles/master/VERSION');
 
                         // Fallback to main branch
                         if (!versionRes.ok) {
@@ -2179,8 +2179,8 @@
                     }
 
                     try {
-                        // Try package.json from opentui-setup
-                        const pkgRes = await fetch('https://raw.githubusercontent.com/remcostoeten/dotfiles/master/opentui-setup/package.json');
+                        // Try package.json from setup
+                        const pkgRes = await fetch('https://raw.githubusercontent.com/remcostoeten/dotfiles/master/setup/package.json');
                         if (pkgRes.ok) {
                             const pkg = await pkgRes.json();
                             if (pkg.version) {
@@ -2368,7 +2368,7 @@
                             rel="noopener noreferrer">bin/</a></h4>
                     <ul class="package-list">
                         <li>Executable wrappers on system PATH</li>
-                        <li>Docker manager, wallpaper setter, VM controller</li>
+                        <li>Docker manager, wallpaper setter</li>
                         <li>Script selector, alarm utility, emoji picker</li>
                         <li>License generator, clipboard tools</li>
                     </ul>
@@ -2395,8 +2395,8 @@
                     </ul>
                 </div>
                 <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/master/opentui-setup" target="_blank"
-                            rel="noopener noreferrer">opentui-setup/</a></h4>
+                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/master/setup" target="_blank"
+                            rel="noopener noreferrer">setup/</a></h4>
                     <ul class="package-list">
                         <li>TypeScript installation system using OpenTUI</li>
                         <li>Interactive TUI and headless CLI modes</li>
@@ -2405,17 +2405,7 @@
                         <li>System verification and health checks</li>
                     </ul>
                 </div>
-                <div class="package-category">
-                    <h4><a href="https://github.com/remcostoeten/dotfiles/tree/master/shell-setup" target="_blank"
-                            rel="noopener noreferrer">shell-setup/</a></h4>
-                    <ul class="package-list">
-                        <li>Legacy shell-based installer (pre-OpenTUI)</li>
-                        <li>Modular package groups and installers</li>
-                        <li>Still functional, maintained for compatibility</li>
-                        <li>Helper scripts for system configuration</li>
-                    </ul>
-                </div>
-                <div class="package-category">
+                  <div class="package-category">
                     <h4><a href="https://github.com/remcostoeten/dotfiles/tree/master/env-private" target="_blank"
                             rel="noopener noreferrer">env-private/</a></h4>
                     <ul class="package-list">
@@ -2441,7 +2431,7 @@
                 <div class="sub-step-title">Tech Stack</div>
                 <div class="sub-step-desc">
                     <strong>Primary Languages:</strong> TypeScript, Bash, Fish Shell, Python<br>
-                    <strong>UI Framework:</strong> React with @opentui/react (TUI framework)<br>
+                    <strong>UI Framework:</strong> React with ink (TUI framework)<br>
                     <strong>Runtime:</strong> Bun for TypeScript/JavaScript execution<br>
                     <strong>Package Management:</strong> APT, Snap, NPM, GitHub Releases, CURL downloads<br>
                     <strong>Shell:</strong> Fish (with extensive custom functions and aliases)<br>
@@ -2456,9 +2446,8 @@
                     • `bin/` - Executables on PATH (wrappers, direct scripts)<br>
                     • `scripts/` - Implementation logic (called by bin/)<br>
                     • `configs/` - Application configurations (Fish, Neovim, Kitty, etc.)<br>
-                    • `opentui-setup/` - Interactive setup system (TypeScript/React)<br>
-                    • `shell-setup/` - Modular shell installer (package groups)<br><br>
-
+                    • `setup/` - Interactive setup system (TypeScript/React)<br>
+  
                     <strong>Why this structure?</strong><br>
                     • Clean separation between interface (bin) and logic (scripts)<br>
                     • Allows updating implementations without changing PATH<br>
@@ -2545,7 +2534,6 @@
                 <div class="sub-step-title">Fish Shell Architecture</div>
                 <div class="sub-step-desc">
                     <strong>Modular organization:</strong><br>
-                    • `core/` - Core setup (colors, env, init)<br>
                     • `aliases/` - Categorized aliases (dev, git, system, docker, etc.)<br>
                     • `functions/` - Custom Fish functions<br><br>
 
@@ -2613,16 +2601,6 @@
                 </div>
 
                 <div class="package-category">
-                    <h4>🖥️ VM Manager (`vm`)</h4>
-                    <ul class="package-list">
-                        <li><strong>Type:</strong> Fish shell script</li>
-                        <li><strong>Location:</strong> `scripts/vm`</li>
-                        <li><strong>Features:</strong> Virtual machine management</li>
-                        <li>List, start, stop VMs</li>
-                        <li>Quick access to common VM operations</li>
-                        <li>Integrates with libvirt/KVM</li>
-                    </ul>
-                </div>
 
                 <div class="package-category">
                     <h4>📋 Scripts Selector (`scripts`)</h4>
@@ -3137,12 +3115,9 @@
                 <div class="sub-step-title">Master lists in source</div>
                 <div class="sub-step-desc">
                     • Package catalog: <a
-                        href="https://github.com/remcostoeten/dotfiles/blob/master/opentui-setup/src/packages.ts"
-                        target="_blank" rel="noopener noreferrer">opentui-setup/src/packages.ts</a><br>
-                    • Shell package groups: <a
-                        href="https://github.com/remcostoeten/dotfiles/tree/master/shell-setup/packages" target="_blank"
-                        rel="noopener noreferrer">shell-setup/packages</a>
-                </div>
+                        href="https://github.com/remcostoeten/dotfiles/blob/master/setup/src/packages.ts"
+                        target="_blank" rel="noopener noreferrer">setup/src/packages.ts</a><br>
+                    </div>
             </div>
             <div class="package-grid">
                 <div class="package-category">
@@ -3254,7 +3229,7 @@
 
     <div class="command-box" style="text-align: center; margin-top: 2rem;">
         <div style="color: #888; margin-bottom: 0.5rem;">Try it out yourself by running:</div>
-        <div class="command" style="font-size: 1.2rem;">cd ~/.config/dotfiles/opentui-setup && bun run setup --dry-run
+        <div class="command" style="font-size: 1.2rem;">cd ~/.config/dotfiles/setup && bun run setup --dry-run
         </div>
         <div class="command" style="font-size: 0.4rem;">No worries, this wil perform a demo to show how your machine
             handles the setup and what would be installed. if you're ready to run it for real. Run `bun run setup` or

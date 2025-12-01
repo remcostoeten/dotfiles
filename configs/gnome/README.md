@@ -208,22 +208,16 @@ gsettings set org.gnome.shell.extensions.blur-my-shell.panel override-background
 
 ### Font Recommendations
 For the best aesthetic:
-- **UI Font**: Inter, SF Pro, or Segoe UI
-- **Monospace**: JetBrains Mono, Fira Code, or Cascadia Code
+- **UI Font**: Use Nerd Fonts (already installed via setup script) or system default
+- **Monospace**: JetBrains Mono Nerd Font, Fira Code Nerd Font, or Cascadia Code Nerd Font
 
-Install Inter font:
+To change the font:
 ```bash
-mkdir -p ~/.local/share/fonts
-cd /tmp
-wget https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip
-unzip Inter-4.0.zip -d inter
-cp inter/*.ttf ~/.local/share/fonts/
-fc-cache -f
-```
+# Use a Nerd Font (example with JetBrains Mono)
+gsettings set org.gnome.desktop.interface font-name 'JetBrainsMono Nerd Font 10'
 
-Then set it:
-```bash
-gsettings set org.gnome.desktop.interface font-name 'Inter 10'
+# Or use system default
+gsettings set org.gnome.desktop.interface font-name 'Ubuntu 10'
 ```
 
 ## 🔄 Updating

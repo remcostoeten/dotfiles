@@ -204,6 +204,17 @@ if status is-interactive
     # No greeting
     set fish_greeting
 
+    # Show welcome banner on startup (only once per session)
+    function _show_welcome_banner --on-event fish_prompt
+        # Remove this function so it only runs once per session
+        functions --erase _show_welcome_banner
+        
+        # Show welcome banner with ASCII art
+        if functions -q welcome_banner
+            welcome_banner
+        end
+    end
+
     # Use starship
     starship init fish | source
     if test -f ~/.local/state/quickshell/user/generated/terminal/sequences.txt

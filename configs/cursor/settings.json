@@ -45,7 +45,7 @@
     "bun run"
   ],
   "roo-cline.deniedCommands": [],
-  "workbench.colorTheme": "Best Themes - Blueberry Banana",
+  "workbench.colorTheme": "Best Themes - Gruvbox NvChad",
   "explorer.fileNesting.patterns": {
     "*.ts": "${capture}.js",
     "*.js": "${capture}.js.map, ${capture}.min.js, ${capture}.d.ts",

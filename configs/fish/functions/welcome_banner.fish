@@ -10,8 +10,10 @@ function welcome_banner -d "Display welcome banner with ASCII art and last updat
     set -l pastel_red (set_color ff8787)
     set -l pastel_cyan (set_color 89dceb)
     set -l pastel_magenta (set_color f5c2e7)
+    set -l dim (set_color 555)
     set -l normal (set_color normal)
 
+    # ASCII art
     printf "%s%s\n" "$pastel_pink" "  ██████╗ ███████╗███╗   ███╗ ██████╗ ██████╗"
     printf "%s%s\n" "$pastel_magenta" "  ██╔══██╗██╔════╝████╗ ████║██╔════╝██╔═══██╗"
     printf "%s%s\n" "$pastel_purple" "  ██████╔╝█████╗  ██╔████╔██║██║     ██║   ██║"
@@ -61,28 +63,20 @@ function welcome_banner -d "Display welcome banner with ASCII art and last updat
         end
 
         if test -n "$git_date"
-            set -l pastel_pink (set_color faa2c1)
-            set -l pastel_purple (set_color d4bbf8)
-            set -l pastel_blue (set_color a5d8ff)
-            set -l pastel_green (set_color b2f2bb)
-            set -l pastel_yellow (set_color ffec99)
-            set -l pastel_orange (set_color ffd8a8)
-            set -l pastel_red (set_color ff8787)
-            set -l pastel_cyan (set_color 89dceb)
-            set -l pastel_magenta (set_color f5c2e7)
-            set -l normal (set_color normal)
-
-            echo -n "  "
-            echo -n "$pastel_yellow" "updated "
-            echo -n "$pastel_orange" "$git_date"
-            echo -n "$pastel_pink" " · $git_timestamp"
-            echo -n "$pastel_cyan" "  ├─ "
-            echo -n "$pastel_magenta" "launch "
-            echo -n "$pastel_blue" "[df]"
-            echo -n "$pastel_magenta" " → dotfiles menu"
-            echo -n "$pastel_green" " · "
-            echo -n "$pastel_yellow" "$tasks_label"
-            echo "$normal"
+            # Info line with better spacing and visual hierarchy
+            printf "%s  %s" "$pastel_cyan" "└─"
+            printf "%s %s" "$pastel_cyan" "updated"
+            printf "%s %s" "$pastel_orange" "$git_date"
+            printf "%s %s" "$pastel_pink" "·"
+            printf "%s%s" "$pastel_pink" "$git_timestamp"
+            printf "%s  %s" "$pastel_cyan" "│"
+            printf "%s %s" "$pastel_magenta" "launch"
+            printf "%s%s%s" "$pastel_blue" "[df]" "$pastel_magenta"
+            printf "%s %s" "$pastel_magenta" "→"
+            printf "%s%s" "$pastel_blue" "dotfiles menu"
+            printf "%s  %s" "$pastel_cyan" "│"
+            printf "%s %s" "$pastel_green" "$tasks_label"
+            printf "%s\n" "$normal"
         end
     end
 

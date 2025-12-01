@@ -50,7 +50,7 @@ cat > "$GTK3_DIR/settings.ini" << 'EOF'
 gtk-application-prefer-dark-theme=1
 gtk-theme-name=Adwaita-dark
 gtk-icon-theme-name=Yaru
-gtk-font-name=Inter 10
+gtk-font-name=Ubuntu 10
 gtk-cursor-theme-name=Yaru
 gtk-cursor-theme-size=24
 gtk-toolbar-style=GTK_TOOLBAR_BOTH_HORIZ
@@ -72,7 +72,7 @@ cat > "$GTK4_DIR/settings.ini" << 'EOF'
 gtk-application-prefer-dark-theme=1
 gtk-theme-name=Adwaita-dark
 gtk-icon-theme-name=Yaru
-gtk-font-name=Inter 10
+gtk-font-name=Ubuntu 10
 gtk-cursor-theme-name=Yaru
 gtk-cursor-theme-size=24
 gtk-enable-animations=1

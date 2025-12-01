@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VERSION_FILE = join(ROOT_DIR, 'VERSION');
-const PACKAGE_JSON = join(ROOT_DIR, 'opentui-setup', 'package.json');
+const PACKAGE_JSON = join(ROOT_DIR, 'setup', 'package.json');
 
 const colors = {
     reset: '\x1b[0m',
@@ -110,7 +110,7 @@ async function createRelease(bumpType: 'major' | 'minor' | 'patch'): Promise<voi
 
     // Commit version changes
     try {
-        execSync('git add VERSION opentui-setup/package.json', { stdio: 'inherit' });
+        execSync('git add VERSION setup/package.json', { stdio: 'inherit' });
         execSync(`git commit -m "chore: bump version to ${newVersion}"`, { stdio: 'inherit' });
     } catch {
         log('ℹ  No changes to commit or commit failed', 'blue');

@@ -6,9 +6,8 @@
 # ============================================================================
 
 # History directory
-# Use DOTFILES_DIR if set, otherwise default to ~/.config/dotfiles
-DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.config/dotfiles}"
-HISTORY_DIR="$DOTFILES_DIR/create"
+# Store history in current working directory
+HISTORY_DIR="./.create"
 HISTORY_FILE="$HISTORY_DIR/history.log"
 
 # Color codes (only if terminal supports colors)

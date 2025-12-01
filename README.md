@@ -22,9 +22,9 @@ Run `dotfiles --help` or `df --help` for complete usage guide.
 ### Interactive Setup
 
 ```bash
-cd ~/.config/dotfiles/opentui-setup
+cd ~/.config/dotfiles/setup
 bun run setup     # Full interactive TUI
-bun run interactive  # Same as above
+
 bun run cli       # Non-interactive (headless) mode
 ```
 
@@ -74,7 +74,6 @@ The repository is structured as follows:
 * `configs/fish/`: Fish shell configuration
   * `aliases/`: Shell aliases organized by category
   * `functions/`: Custom Fish functions
-  * `core/`: Core configuration (colors, environment, init)
 * `scripts/`: Utility scripts and tools
 * `env-private/`: Private environment variables (see [Private Files Guide](docs/PRIVATE-FILES.md))
 
@@ -94,7 +93,54 @@ See **[docs/PRIVATE-FILES.md](docs/PRIVATE-FILES.md)** for a complete guide on:
 
 ## Installation
 
-### Quick Setup
+### Fresh Machine Setup (Bootstrap)
+
+For a completely fresh machine, use the bootstrap script to handle initial setup.
+
+**Prerequisites (Required Before Running):**
+
+1. ✅ **Internet connection** - To download repositories and tools
+2. ✅ **GitHub authentication** - For the private `env-private` repository:
+   - **Recommended:** Install GitHub CLI and authenticate:
+     ```bash
+     # Install gh (Ubuntu/Debian)
+     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+     sudo apt update && sudo apt install gh -y
+     gh auth login
+     ```
+   - **Alternative:** Use a Personal Access Token (you'll be prompted during clone)
+     - Create one at: https://github.com/settings/tokens
+     - Use it as the password when prompted (username is your GitHub username)
+
+**Note:** The main dotfiles repository is **public** and requires no authentication. Only `env-private` needs authentication.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/remcostoeten/dotfiles/main/bootstrap.sh | bash
+```
+
+Or download and run manually:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/remcostoeten/dotfiles/main/bootstrap.sh -o /tmp/bootstrap.sh
+chmod +x /tmp/bootstrap.sh
+bash /tmp/bootstrap.sh
+```
+
+**What the bootstrap script does:**
+
+1. ✅ Checks prerequisites (internet, GitHub auth)
+2. ✅ Installs Git (if needed)
+3. ✅ Clones the dotfiles repository to `~/.config/dotfiles`
+4. ✅ Initializes git submodules (env-private, nvim config, etc.)
+5. ✅ Restores SSH keys from `env-private/.ssh/` to `~/.ssh/`
+6. ✅ Installs essential tools (Bun runtime)
+7. ✅ Makes all scripts executable
+8. ✅ Prompts to run the main setup script
+
+See [Bootstrap Guide](docs/BOOTSTRAP.md) for detailed troubleshooting and alternative authentication methods.
+
+### Quick Setup (If dotfiles already cloned)
 
 1. Clone this repository:
 
@@ -105,9 +151,9 @@ git clone https://github.com/remcostoeten/dotfiles ~/.config/dotfiles
 2. Run the setup script:
 
 ```bash
-cd ~/.config/dotfiles/opentui-setup;
+cd ~/.config/dotfiles/setup;
 bun install;
-bun run interactive
+bun run setup
 ```
 
 The setup script will:

@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenTUI Setup Workflow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            background: #0a0a0a;
+            color: #d4d4d4;
+            line-height: 1.6;
+                padding: 2rem;
+                max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem;
+            background: #111;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+        }
+
+        .header h1 {
+            color: #ffffff;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 300;
+        }
+
+        .header p {
+            color: #888;
+            font-size: 1.1rem;
+        }
+
+        .workflow {
+            display: grid;
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .step {
+            background: #111;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 1.5rem;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .step:hover {
+            border-color: #444;
+            transform: translateX(5px);
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .step-number {
+            background: #2a2a2a;
+            color: #fff;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 1rem;
+        }
+
+        .step-title {
+            color: #ffffff;
+            font-size: 1.3rem;
+            font-weight: 400;
+        }
+
+        .step-status {
+            margin-left: auto;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            background: #1a1a1a;
+            color: #888;
+        }
+
+        .step-content {
+            margin-left: 3rem;
+        }
+
+        .sub-step {
+            margin: 0.8rem 0;
+            padding-left: 1.5rem;
+            border-left: 2px solid #2a2a2a;
+            position: relative;
+        }
+
+        .sub-step::before {
+            content: "▸";
+            position: absolute;
+            left: -8px;
+            color: #666;
+        }
+
+        .sub-step-title {
+            color: #b8b8b8;
+            margin-bottom: 0.3rem;
+        }
+
+        .sub-step-desc {
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        .package-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .package-category {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 1rem;
+        }
+
+        .package-category h4 {
+            color: #e0e0e0;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .package-list {
+            list-style: none;
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        .package-list li {
+            padding: 0.2rem 0;
+        }
+
+        .package-list li::before {
+            content: "•";
+            color: #666;
+            margin-right: 0.5rem;
+        }
+
+        .error-handling {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .error-handling h3 {
+            color: #ffffff;
+            margin-bottom: 1rem;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .feature {
+            background: #222;
+            padding: 1rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-title {
+            color: #d4d4d4;
+            font-weight: 500;
+            margin-bottom: 0.3rem;
+        }
+
+        .feature-desc {
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        .command-box {
+            background: #0d0d0d;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 1rem;
+            margin: 1rem 0;
+            font-family: monospace;
+        }
+
+        .command {
+            color: #4ec9b0;
+        }
+
+        .arrow {
+            text-align: center;
+            color: #666;
+            font-size: 2rem;
+            margin: -0.5rem 0;
+        }
+
+        .success { color: #4ec9b0; }
+        .warning { color: #dcdcaa; }
+        .error { color: #f44747; }
+
+        @media (max-width: 768px) {
+            body { padding: 1rem; }
+            .header h1 { font-size: 2rem; }
+            .step-content { margin-left: 1rem; }
+            .package-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>OpenTUI Setup Workflow</h1>
+        <p>Complete system setup with dotfiles, packages, and configuration</p>
+    </div>
+
+    <div class="workflow">
+        <!-- Step 1 -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <div class="step-title">Dotfiles & Fish Shell Setup</div>
+                <div class="step-status">Critical</div>
+            </div>
+            <div class="step-content">
+                <div class="sub-step">
+                    <div class="sub-step-title">Fish Configuration</div>
+                    <div class="sub-step-desc">Symlink cfg → ~/.config/fish/config.fish (loads all aliases)</div>
+                </div>
+                <div class="sub-step">
+                    <div class="sub-step-title">Fish Functions</div>
+                    <div class="sub-step-desc">Symlink configs/fish/functions/* → ~/.config/fish/functions/</div>
+                </div>
+                <div class="sub-step">
+                    <div class="sub-step-title">Scripts & Bin</div>
+                    <div class="sub-step-desc">Symlink scripts/* → bin/*, add to PATH, make executable</div>
+                </div>
+                <div class="sub-step">
+                    <div class="sub-step-title">Config Apps</div>
+                    <div class="sub-step-desc">Symlink configs/{kitty,nvim,wezterm,hyprland,waybar} → ~/.config/</div>
+                </div>
+                <div class="sub-step">
+                    <div class="sub-step-title">Submodules</div>
+                    <div class="sub-step-desc">Initialize git submodules (env-private, etc.)</div>
+                </div>
+                <div class="sub-step">
+                    <div class="sub-step-title">Common Directories</div>
+                    <div class="sub-step-desc">Create ~/programs, ~/tmp, ~/sandbox, ~/dev, ~/Audio</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow">↓</div>
+
+        <!-- Step 2 -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <div class="step-title">System Update</div>
+                <div class="step-status">Required</div>
+            </div>
+            <div class="step-content">
+                <div class="sub-step">
+                    <div class="sub-step-title">APT Update</div>
+                    <div class="sub-step-desc">Update package lists and upgrade system packages</div>
+                </div>
+                <div class="command-box">
+                    <span class="command">sudo apt update && sudo apt upgrade -y</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow">↓</div>
+
+        <!-- Step 3 -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <div class="step-title">Package Installation (18 Categories)</div>
+                <div class="step-status">Interactive</div>
+            </div>
+            <div class="step-content">
+                <div class="package-grid">
+                    <div class="package-category">
+                        <h4>📦 Essential</h4>
+                        <ul class="package-list">
+                            <li>git</li>
+                            <li>curl</li>
+                            <li>wget</li>
+                            <li>build-essential</li>
+                            <li>docker.io</li>
+                        </ul>
+                    </div>
+                    <div class="package-category">
+                        <h4>🔧 Development</h4>
+                        <ul class="package-list">
+                            <li>nodejs</li>
+                            <li>python3</li>
+                            <li>rust</li>
+                            <li>go</li>
+                            <li>java</li>
+                        </ul>
+                    </div>
+                    <div class="package-category">
+                        <h4>💻 Terminal Tools</h4>
+                        <ul class="package-list">
+                            <li>tmux</li>
+                            <li>starship</li>
+                            <li>zoxide</li>
+                            <li>bat</li>
+                            <li>exa</li>
+                        </ul>
+                    </div>
+                    <div class="package-category">
+                        <h4>🎨 Terminal Emulators</h4>
+                        <ul class="package-list">
+                            <li>kitty</li>
+                            <li>alacritty</li>
+                            <li>wezterm</li>
+                        </ul>
+                    </div>
+                    <div class="package-category">
+                        <h4>📝 Editors</h4>
+                        <ul class="package-list">
+                            <li>neovim</li>
+                            <li>code (VS Code)</li>
+                        </ul>
+                    </div>
+                    <div class="package-category">
+                        <h4>🌐 Communication</h4>
+                        <ul class="package-list">
+                            <li>discord</li>
+                            <li>slack</li>
+                            <li>telegram-desktop</li>
+                        </ul>
+                    </div>
+                    <div class="package-category">
+                        <h4>📱 Android Development</h4>
+                        <ul class="package-list">
+                            <li>android-studio</li>
+                            <li>emulator tools</li>
+                        </ul>
+                    </div>
+                    <div class="package-category">
+                        <h4>🎮 Entertainment</h4>
+                        <ul class="package-list">
+                            <li>spotify</li>
+                            <li>vlc</li>
+                            <li>obs-studio</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow">↓</div>
+
+        <!-- Step 4 -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">4</div>
+                <div class="step-title">Nerd Fonts Installation</div>
+                <div class="step-status">Optional</div>
+            </div>
+            <div class="step-content">
+                <div class="sub-step">
+                    <div class="sub-step-title">Download ALL Nerd Fonts</div>
+                    <div class="sub-step-desc">Fetch latest release from GitHub, download all font archives</div>
+                </div>
+                <div class="sub-step">
+                    <div class="sub-step-title">Extract & Install</div>
+                    <div class="sub-step-desc">Extract to ~/.local/share/fonts/nerd-fonts-latest/</div>
+                </div>
+                <div class="sub-step">
+                    <div class="sub-step-title">Update Font Cache</div>
+                    <div class="sub-step-desc">Run fc-cache -fv to refresh system fonts</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow">↓</div>
+
+        <!-- Step 5 -->
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">5</div>
+                <div class="step-title">Shell Configuration</div>
+                <div class="step-status">Optional</div>
+            </div>
+            <div class="step-content">
+                <div class="sub-step">
+                    <div class="sub-step-title">Set Fish as Default</div>
+                    <div class="sub-step-desc">chsh -s /usr/bin/fish (restart terminal to apply)</div>
+                </div>
+                <div class="sub-step">
+                    <div class="sub-step-title">GNOME Aesthetics</div>
+                    <div class="sub-step-desc">Run configs/gnome/setup-aesthetic-gnome.sh if exists</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Handling Section -->
+    <div class="error-handling">
+        <h3>🛡️ Advanced Error Handling</h3>
+        <div class="feature-grid">
+            <div class="feature">
+                <div class="feature-icon">🔄</div>
+                <div class="feature-title">Auto Retry</div>
+                <div class="feature-desc">3 attempts with exponential backoff (2s, 4s, 8s)</div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🔗</div>
+                <div class="feature-title">Dependency Check</div>
+                <div class="feature-desc">Auto-installs missing dependencies</div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">↩️</div>
+                <div class="feature-title">Rollback</div>
+                <div class="feature-desc">Removes partial installs on failure</div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">💾</div>
+                <div class="feature-title">Progress Tracking</div>
+                <div class="feature-desc">Saves progress, can resume on crash</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Installation Methods -->
+    <div class="step">
+        <div class="step-header">
+            <div class="step-number">📦</div>
+            <div class="step-title">Installation Methods Supported</div>
+        </div>
+        <div class="step-content">
+            <div class="package-grid">
+                <div class="package-category">
+                    <h4>APT</h4>
+                    <ul class="package-list">
+                        <li>sudo apt install package</li>
+                        <li>Ubuntu/Debian packages</li>
+                        <li>System integration</li>
+                    </ul>
+                </div>
+                <div class="package-category">
+                    <h4>Snap</h4>
+                    <ul class="package-list">
+                        <li>sudo snap install package</li>
+                        <li>Auto-installs snapd</li>
+                        <li>Sandboxed apps</li>
+                    </ul>
+                </div>
+                <div class="package-category">
+                    <h4>CURL</h4>
+                    <ul class="package-list">
+                        <li>Download & install scripts</li>
+                        <li>Bun, pnpm, Turso</li>
+                        <li>Custom installers</li>
+                    </ul>
+                </div>
+                <div class="package-category">
+                    <h4>NPM</h4>
+                    <ul class="package-list">
+                        <li>npm install -g package</li>
+                        <li>Node.js tools</li>
+                        <li>JavaScript ecosystem</li>
+                    </ul>
+                </div>
+                <div class="package-category">
+                    <h4>Cargo</h4>
+                    <ul class="package-list">
+                        <li>cargo install package</li>
+                        <li>Rust tools</li>
+                        <li>Performance apps</li>
+                    </ul>
+                </div>
+                <div class="package-category">
+                    <h4>GitHub</h4>
+                    <ul class="package-list">
+                        <li>Latest releases</li>
+                        <li>Architecture detection</li>
+                        <li>Binary extraction</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Final Result -->
+    <div class="step">
+        <div class="step-header">
+            <div class="step-number">✅</div>
+            <div class="step-title">Final Result</div>
+            <div class="step-status success">Complete</div>
+        </div>
+        <div class="step-content">
+            <div class="sub-step">
+                <div class="sub-step-title success">✓ Fully configured Fish shell with all aliases</div>
+            </div>
+            <div class="sub-step">
+                <div class="sub-step-title success">✓ All config apps symlinked (kitty, nvim, wezterm, etc.)</div>
+            </div>
+            <div class="sub-step">
+                <div class="sub-step-title success">✓ Scripts available in PATH</div>
+            </div>
+            <div class="sub-step">
+                <div class="sub-step-title success">✓ Selected packages installed with error handling</div>
+            </div>
+            <div class="sub-step">
+                <div class="sub-step-title success">✓ Nerd fonts installed for beautiful terminals</div>
+            </div>
+            <div class="sub-step">
+                <div class="sub-step-title success">✓ Android apps (govee, feeld) ready via aliases</div>
+            </div>
+            <div class="sub-step">
+                <div class="sub-step-title success">✓ Progress saved for future runs</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="command-box" style="text-align: center; margin-top: 2rem;">
+        <div style="color: #888; margin-bottom: 0.5rem;">Run the complete setup:</div>
+        <div class="command" style="font-size: 1.2rem;">cd ~/.config/dotfiles/setup && bun run setup</div>
+    </div>
+</body>
+</html>

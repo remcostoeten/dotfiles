@@ -35,6 +35,12 @@ if [ -f "$FUNCTIONS_DIR/restartgnome" ]; then
     source "$FUNCTIONS_DIR/restartgnome" 2>/dev/null || true
 fi
 
+# Pre-register send_notification.fish if it exists
+if [ -f "$FUNCTIONS_DIR/send_notification.fish" ]; then
+    . "$FUNCTIONS_DIR/send_notification.fish" 2>/dev/null || \
+    source "$FUNCTIONS_DIR/send_notification.fish" 2>/dev/null || true
+fi
+
 # The functions registry is now available
 # Usage: functions (interactive menu) or functions <function-name> (direct execution)
 
