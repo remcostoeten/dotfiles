@@ -3,15 +3,16 @@
 
 # Theme & Appearance
 theme = 12-bit Rainbow
-background-opacity = 0.9
-background-blur = 10
+background-opacity = 0.83
 # border-width = 0
 window-decoration = false
 window-padding-x = 10
 window-padding-y = 10
 
 # Font & Typography
-font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
+# font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
+# font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
+ font-family = "Inter"
 font-size = 16
 
 # Custom Color Scheme (overriding theme)
@@ -21,7 +22,7 @@ background = #0a0a0a
 # Cursor & Input
 cursor-color = #61dafb
 # cursor-style-block = true
-cursor-style-blink = false
+cursor-style-blink =  true
 
 # Selection
 selection-background = #264f78
@@ -55,7 +56,12 @@ window-height = 40
 window-save-state = always
 
 # Performance
-# gpu-acceleration = true
+gpu-acceleration = true
 
 # Shell Integration
 shell-integration = detect
+
+# GTK-specific tweaks
+gtk-wide-tabs = true
+gtk-custom-css = gtk.css
+# Custom GTK styling lives in gtk.css alongside this config (see GTK CSS docs)

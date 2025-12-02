@@ -58,7 +58,6 @@ export const categories: Category[] = [
       createPackage("neovim", "neovim", "Neovim", "apt"),
       createPackage("vim", "vim", "Vim", "apt"),
       { ...createPackage("code", "code", "Visual Studio Code", "snap"), flags: "--classic" },
-      createPackage("windsurf", "windsurf", "Windsurf Editor", "apt"),
     ],
   },
   {

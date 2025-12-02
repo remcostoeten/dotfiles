@@ -1,0 +1,36 @@
+/* Ghostty GTK tab styling */
+notebook > header > tabs > tab {
+    min-width: 140px;
+    min-height: 32px;
+    margin: 0 4px;
+    padding: 6px 14px;
+    border-radius: 12px;
+    font-weight: 500;
+    color: rgba(240, 240, 240, 0.7);
+    background: rgba(10, 10, 10, 0.35);
+    transition: background 120ms ease, color 120ms ease;
+}
+
+notebook > header > tabs > tab:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+notebook > header > tabs > tab:checked {
+    color: #f0f0f0;
+    background: rgba(97, 218, 251, 0.35);
+    border: 1px solid rgba(97, 218, 251, 0.7);
+    box-shadow: 0 0 12px rgba(97, 218, 251, 0.35);
+}
+
+notebook > header > tabs > tab:checked:hover {
+    background: rgba(97, 218, 251, 0.45);
+}
+
+notebook > header {
+    padding: 6px 10px;
+    background: transparent;
+}
+
+notebook > header > tabs {
+    margin: 0;
+}

@@ -105,6 +105,11 @@ export async function setupDotfiles(): Promise<DotfilesSetupResult> {
   result.steps.push(...configAppsResult.steps);
   if (!configAppsResult.success) result.success = false;
 
+  // 11.1 Ensure Ghostty specifically points to configs/ghostty
+  const ghosttyResult = await setupGhosttyConfig();
+  result.steps.push(...ghosttyResult.steps);
+  if (!ghosttyResult.success) result.success = false;
+
   // 12. Setup GNOME aesthetics
   const gnomeResult = await setupGnomeAesthetics();
   result.steps.push(...gnomeResult.steps);
@@ -712,6 +717,62 @@ async function setupConfigApps(): Promise<DotfilesSetupResult> {
     success: true,
     message: count > 0 ? `Created ${count} config app symlinks (kitty, nvim, etc.)` : "All config apps already symlinked",
   });
+
+  return result;
+}
+
+/**
+ * Ensure Ghostty binds to configs/ghostty explicitly
+ */
+async function setupGhosttyConfig(): Promise<DotfilesSetupResult> {
+  const result: DotfilesSetupResult = { success: true, steps: [] };
+
+  const sourceDir = `${DOTFILES_DIR}/configs/ghostty`;
+  const targetDir = `${process.env.HOME}/.config/ghostty`;
+
+  if (!existsSync(sourceDir)) {
+    result.steps.push({
+      name: "Ghostty config",
+      success: true,
+      message: "Ghostty config directory not found (skipped)",
+    });
+    return result;
+  }
+
+  try {
+    await mkdir(dirname(targetDir), { recursive: true });
+
+    if (existsSync(targetDir)) {
+      try {
+        const target = await readlink(targetDir);
+        if (target === sourceDir || target.includes("configs/ghostty")) {
+          result.steps.push({
+            name: "Ghostty config",
+            success: true,
+            message: "Ghostty config already symlinked",
+          });
+          return result;
+        }
+      } catch (err) {
+        const backupPath = `${targetDir}.backup.${Date.now()}`;
+        await executeCommand(`mv "${targetDir}" "${backupPath}"`);
+      }
+    }
+
+    await symlink(sourceDir, targetDir);
+    result.steps.push({
+      name: "Ghostty config",
+      success: true,
+      message: `Symlinked ${targetDir} -> ${sourceDir}`,
+    });
+  } catch (err) {
+    result.steps.push({
+      name: "Ghostty config",
+      success: false,
+      message: `Failed to symlink Ghostty config: ${err}`,
+    });
+    result.success = false;
+  }
 
   return result;
 }

@@ -225,7 +225,7 @@ async function installTools() {
       }
 
       // Check if already installed
-      const { name, method, extra } = pkg;
+      const { name, method, extra, flags } = pkg;
       let checkResult;
       switch (method) {
         case "apt":
@@ -273,8 +273,6 @@ async function installTools() {
       console.log(`  ${colors.dim}Installing ${pkg.displayName}...${colors.reset}`);
 
       let result;
-      const { extra, flags } = pkg;
-
       switch (method) {
         case "apt":
           result = await executeCommand(`sudo apt install -y ${name}`, verboseMode);
@@ -428,8 +426,10 @@ async function toggleDryRun() {
 
 async function main() {
   if (!process.stdin.isTTY) {
-    console.log(`${colors.red}❌ This tool requires an interactive terminal.${colors.reset}`);
-    process.exit(1);
+    console.log(`${colors.yellow}ℹ Non-interactive terminal detected.${colors.reset}`);
+    console.log(`${colors.dim}Running installation check once and exiting...${colors.reset}`);
+    await checkInstallation();
+    return;
   }
 
   while (true) {
