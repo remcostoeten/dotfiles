@@ -27,19 +27,18 @@ function log(message, color = 'reset') {
 function showHelp() {
   log('\n🧹 Clean All - Comprehensive project cleanup tool\n', 'cyan');
   log('Usage: npm run rmall [options]\n', 'bright');
-  
+
   log('Options:', 'yellow');
   log('  --help, -h              Show this help message', 'gray');
   log('  --interactive, -i       Interactive mode - choose what to clean', 'gray');
   log('  --dry, -d               Dry run - show what would be deleted', 'gray');
   log('  --verbose, -vv          Verbose output with detailed information', 'gray');
   log('  --nolock, -nl           Only remove lock files', 'gray');
-  log('  --revert, -rev          Restore from backup (expires after 15 min)', 'gray');
   log('  --reinstall, -r         Clean and reinstall with Bun', 'gray');
   log('  --reinstall:pnpm, -rp   Clean and reinstall with pnpm', 'gray');
   log('  --reinstall:npm, -rn    Clean and reinstall with npm', 'gray');
   log('  --reinstall:yarn, -ry   Clean and reinstall with yarn', 'gray');
-  
+
   log('\nFramework-specific:', 'yellow');
   log('  --next, -n              Clean Next.js specific files', 'gray');
   log('  --vite, -v              Clean Vite specific files', 'gray');
@@ -50,17 +49,12 @@ function showHelp() {
   log('  --electron, -e          Clean Electron specific files', 'gray');
   log('  --astro, -a             Clean Astro specific files', 'gray');
   log('  --nuxt, -nu             Clean Nuxt specific files', 'gray');
-  
+
   log('\nExamples:', 'yellow');
   log('  npm run rmall --dry                    # Preview what will be deleted', 'gray');
   log('  npm run rmall --next --reinstall       # Clean Next.js and reinstall', 'gray');
   log('  npm run rmall --interactive            # Choose what to clean', 'gray');
-  log('  npm run rmall --nolock                 # Only remove lock files', 'gray');
-  log('  npm run rmall --revert                 # Restore from backup\n', 'gray');
-  
-  log('Note:', 'yellow');
-  log('  Backups are created automatically and expire after 15 minutes.', 'gray');
-  log('  Only one backup is kept at a time to save disk space.\n', 'gray');
+  log('  npm run rmall --nolock                 # Only remove lock files\n', 'gray');
 }
 
 function getProjectPaths() {
@@ -134,7 +128,6 @@ function parseArgs() {
     dry: false,
     verbose: false,
     nolock: false,
-    revert: false,
     reinstall: null,
     frameworks: []
   };
@@ -160,10 +153,6 @@ function parseArgs() {
       case '--nolock':
       case '-nl':
         options.nolock = true;
-        break;
-      case '--revert':
-      case '-rev':
-        options.revert = true;
         break;
       case '--reinstall':
       case '-r':
@@ -283,192 +272,6 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function getBackupDir() {
-  const homeDir = os.homedir();
-  return path.join(homeDir, '.config', 'dotfiles', 'scripts', 'rmall', 'backups', 'latest');
-}
-
-function getBackupMetadataPath() {
-  return path.join(getBackupDir(), 'metadata.json');
-}
-
-function isBackupExpired() {
-  try {
-    const metadataPath = getBackupMetadataPath();
-    if (!fs.existsSync(metadataPath)) return true;
-    
-    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-    const backupTime = new Date(metadata.timestamp).getTime();
-    const now = Date.now();
-    const fifteenMinutes = 15 * 60 * 1000;
-    
-    return (now - backupTime) > fifteenMinutes;
-  } catch (error) {
-    return true;
-  }
-}
-
-function cleanupExpiredBackup() {
-  const backupDir = getBackupDir();
-  
-  if (fs.existsSync(backupDir) && isBackupExpired()) {
-    try {
-      fs.rmSync(backupDir, { recursive: true, force: true });
-    } catch (error) {
-      // Silently fail
-    }
-  }
-}
-
-function cleanupOldBackup() {
-  const backupDir = getBackupDir();
-  
-  if (fs.existsSync(backupDir)) {
-    try {
-      fs.rmSync(backupDir, { recursive: true, force: true });
-    } catch (error) {
-      log(`⚠ Warning: Could not remove old backup: ${error.message}`, 'yellow');
-    }
-  }
-}
-
-function createBackup(pathsToBackup, cwd) {
-  cleanupOldBackup();
-  
-  const backupDir = getBackupDir();
-  const actualFiles = [];
-  
-  pathsToBackup.forEach(targetPath => {
-    const fullPath = path.join(cwd, targetPath);
-    if (fs.existsSync(fullPath)) {
-      actualFiles.push({ targetPath, fullPath });
-    }
-  });
-  
-  if (actualFiles.length === 0) {
-    return;
-  }
-  
-  try {
-    fs.mkdirSync(backupDir, { recursive: true });
-    
-    const metadata = {
-      timestamp: new Date().toISOString(),
-      cwd: cwd,
-      files: actualFiles.map(f => f.targetPath)
-    };
-    
-    fs.writeFileSync(getBackupMetadataPath(), JSON.stringify(metadata, null, 2));
-    
-    actualFiles.forEach(({ targetPath, fullPath }) => {
-      const backupPath = path.join(backupDir, targetPath);
-      const backupParentDir = path.dirname(backupPath);
-      
-      if (!fs.existsSync(backupParentDir)) {
-        fs.mkdirSync(backupParentDir, { recursive: true });
-      }
-      
-      const stats = fs.statSync(fullPath);
-      if (stats.isDirectory()) {
-        execSync(`cp -r "${fullPath}" "${backupPath}"`, { stdio: 'ignore' });
-      } else {
-        fs.copyFileSync(fullPath, backupPath);
-      }
-    });
-    
-  } catch (error) {
-    log(`⚠ Warning: Could not create backup: ${error.message}`, 'yellow');
-  }
-}
-
-function performRevert() {
-  cleanupExpiredBackup();
-  
-  const backupDir = getBackupDir();
-  const metadataPath = getBackupMetadataPath();
-  
-  if (!fs.existsSync(backupDir) || !fs.existsSync(metadataPath)) {
-    log('\n⚠ No backup available to restore.', 'yellow');
-    log('Backups expire after 15 minutes.\n', 'gray');
-    return;
-  }
-  
-  if (isBackupExpired()) {
-    log('\n⚠ Backup has expired (older than 15 minutes).', 'yellow');
-    cleanupExpiredBackup();
-    return;
-  }
-  
-  try {
-    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-    const backupDate = new Date(metadata.timestamp);
-    const timeAgo = Math.floor((Date.now() - backupDate.getTime()) / 1000 / 60);
-    
-    log('\n🔄 Backup found!\n', 'cyan');
-    log(`Created: ${backupDate.toLocaleString()} (${timeAgo} minutes ago)`, 'gray');
-    log(`Original directory: ${metadata.cwd}`, 'gray');
-    log(`\nFiles to restore (${metadata.files.length}):`, 'yellow');
-    metadata.files.forEach(file => {
-      log(`  • ${file}`, 'gray');
-    });
-    
-    log('\n⚠ This will restore the above files/directories to the current location.', 'yellow');
-    process.stdout.write(colorize('\nContinue? (y/N): ', 'bright'));
-    
-    const readline = require('readline').createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-    
-    readline.question('', (answer) => {
-      readline.close();
-      
-      if (answer.toLowerCase() !== 'y') {
-        log('\nRevert cancelled.', 'yellow');
-        return;
-      }
-      
-      log('\n🔄 Restoring from backup...\n', 'cyan');
-      
-      const cwd = process.cwd();
-      let restoredCount = 0;
-      
-      metadata.files.forEach(file => {
-        const backupPath = path.join(backupDir, file);
-        const targetPath = path.join(cwd, file);
-        
-        if (fs.existsSync(backupPath)) {
-          try {
-            const targetParentDir = path.dirname(targetPath);
-            if (!fs.existsSync(targetParentDir)) {
-              fs.mkdirSync(targetParentDir, { recursive: true });
-            }
-            
-            const stats = fs.statSync(backupPath);
-            if (stats.isDirectory()) {
-              execSync(`cp -r "${backupPath}" "${targetPath}"`, { stdio: 'inherit' });
-            } else {
-              fs.copyFileSync(backupPath, targetPath);
-            }
-            
-            log(`✓ Restored: ${file}`, 'green');
-            restoredCount++;
-          } catch (error) {
-            log(`✗ Failed to restore ${file}: ${error.message}`, 'red');
-          }
-        }
-      });
-      
-      log('\n' + colorize('='.repeat(50), 'gray'));
-      log(`✓ Successfully restored: ${restoredCount}/${metadata.files.length}`, 'green');
-      log(colorize('='.repeat(50), 'gray'));
-      log('\n✨ Revert completed!\n', 'green');
-    });
-    
-  } catch (error) {
-    log(`\n✗ Failed to restore backup: ${error.message}`, 'red');
-  }
-}
 
 function removePath(fullPath, targetPath, options) {
   const stats = fs.statSync(fullPath);
@@ -516,17 +319,10 @@ function runInstall(packageManager) {
 }
 
 function clean() {
-  cleanupExpiredBackup();
-  
   const options = parseArgs();
 
   if (options.help) {
     showHelp();
-    return;
-  }
-  
-  if (options.revert) {
-    performRevert();
     return;
   }
 
@@ -556,10 +352,6 @@ function clean() {
   if (existingPaths.length === 0) {
     log('✨ Project is already clean! Nothing to remove.\n', 'green');
     return;
-  }
-  
-  if (!options.dry) {
-    createBackup(pathsToRemove, cwd);
   }
 
   pathsToRemove.forEach(targetPath => {

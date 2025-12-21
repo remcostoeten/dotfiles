@@ -1,11 +1,11 @@
 #!/usr/bin/env fish
 
-# DOCSTRING: drizzle kit  
-alias dk='drizzle-kit'
-alias drizzle='drizzle-kit'
+# DOCSTRING: drizzle kit
+alias dk='bunx drizzle-kit'
+alias drizzle='bunx drizzle-kit'
 
 # DOCSTRING: generate schema
-alias gen='drizzle-kit generate'
+alias gen='bunx drizzle-kit generate'
 
 # DOCSTRING: run studio
-alias studio='drizzle-kit studio'
+alias studio='bunx drizzle-kit studio'
