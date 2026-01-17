@@ -1,0 +1,67 @@
+# Ghostty Terminal Configuration
+# Minimalistic Dark Theme with 90% opacity
+
+# Theme & Appearance
+theme = 12-bit Rainbow
+background-opacity = 0.83
+# border-width = 0
+window-decoration = false
+window-padding-x = 10
+window-padding-y = 10
+
+# Font & Typography
+# font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
+# font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
+ font-family = "Inter"
+font-size = 16
+
+# Custom Color Scheme (overriding theme)
+foreground = #f0f0f0
+background = #0a0a0a
+
+# Cursor & Input
+cursor-color = #61dafb
+# cursor-style-block = true
+cursor-style-blink =  true
+
+# Selection
+selection-background = #264f78
+
+# Bell
+# bell = none
+
+# Key Bindings
+keybind = ctrl+shift+c=copy_to_clipboard
+keybind = ctrl+shift+v=paste_from_clipboard
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+w=close_tab
+keybind = ctrl+shift+n=new_window
+keybind = ctrl+equal=increase_font_size
+keybind = ctrl+Minus=decrease_font_size
+keybind = ctrl+0=reset_font_size
+# Split operations - Ghostty handles direction automatically
+keybind = ctrl+enter=new_split
+keybind = ctrl+backquote=goto_split:next
+
+# Mouse
+mouse-hide-while-typing = true
+copy-on-select = true
+
+# Terminal Options
+confirm-close-surface = false
+
+# Window Behavior
+window-width = 120
+window-height = 40
+window-save-state = always
+
+# Performance
+gpu-acceleration = true
+
+# Shell Integration
+shell-integration = detect
+
+# GTK-specific tweaks
+gtk-wide-tabs = true
+gtk-custom-css = gtk.css
+# Custom GTK styling lives in gtk.css alongside this config (see GTK CSS docs)

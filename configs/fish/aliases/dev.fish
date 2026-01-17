@@ -30,7 +30,7 @@ alias b "bun run build"
 alias tauri="bun tauri dev"
 
 # DOCSTRING: Run tauri dev via bun 
-alias t="bun tauri dev"
+alias t="ports 1420 && bun tauri dev"
 
 # DOCSTRING: Run tauri dev via pnpm
 alias rt='pnpm tauri dev'
