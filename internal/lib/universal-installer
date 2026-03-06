@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * Universal installer primitives reused by vendor installers.
+ */
+DOC
+
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$LIB_DIR/log"
+source "$LIB_DIR/os"
+source "$LIB_DIR/packages"
+source "$LIB_DIR/vendor"
+
+vendor_install_by_id() {
+  local root="$1"
+  local id="$2"
+  local mode="$3"
+  local row _id aliases check_cmd mac_pkg linux_pkg pkg
+
+  row="$(vendor_lookup "$root" "$id")" || { log_err "unknown vendor: $id"; return 1; }
+  IFS='|' read -r _id aliases check_cmd mac_pkg linux_pkg <<< "$row"
+
+  os_detect
+
+  if command -v "$check_cmd" >/dev/null 2>&1; then
+    log_ok "already installed: $_id"
+    return 0
+  fi
+
+  if [[ "$OS" == "macos" ]]; then
+    pkg="$mac_pkg"
+  else
+    pkg="$linux_pkg"
+  fi
+
+  [[ -n "$pkg" ]] || { log_err "no package mapping for $_id on os=$OS"; return 1; }
+  pkg_install_one "$pkg" "$mode"
+}

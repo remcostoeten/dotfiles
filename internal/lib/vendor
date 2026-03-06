@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * Vendor registry resolver.
+ * Registry format: id|aliases_csv|check_cmd|mac_pkg|linux_pkg
+ */
+DOC
+
+vendor_registry_file() {
+  local root="$1"
+  printf "%s/internal/registry/vendors\n" "$root"
+}
+
+vendor_lookup() {
+  local root="$1"
+  local query="$2"
+  local registry id aliases check_cmd mac_pkg linux_pkg alias
+
+  registry="$(vendor_registry_file "$root")"
+  [[ -f "$registry" ]] || return 1
+
+  while IFS='|' read -r id aliases check_cmd mac_pkg linux_pkg || [[ -n "${id:-}" ]]; do
+    [[ -z "${id:-}" ]] && continue
+    [[ "$id" =~ ^[[:space:]]*# ]] && continue
+
+    if [[ "$query" == "$id" ]]; then
+      printf "%s|%s|%s|%s|%s\n" "$id" "$aliases" "$check_cmd" "$mac_pkg" "$linux_pkg"
+      return 0
+    fi
+
+    IFS=',' read -r -a alias_list <<< "$aliases"
+    for alias in "${alias_list[@]}"; do
+      if [[ "$query" == "$alias" ]]; then
+        printf "%s|%s|%s|%s|%s\n" "$id" "$aliases" "$check_cmd" "$mac_pkg" "$linux_pkg"
+        return 0
+      fi
+    done
+  done < "$registry"
+
+  return 1
+}
+
+vendor_installer_path() {
+  local root="$1"
+  local id="$2"
+  printf "%s/internal/installers/vendors/%s/run\n" "$root" "$id"
+}

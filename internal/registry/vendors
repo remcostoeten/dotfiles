@@ -1,0 +1,2 @@
+# Format: id|aliases_csv|check_cmd|mac_pkg|linux_pkg
+golang|go,golang|go|go|golang-go

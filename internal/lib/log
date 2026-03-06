@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * Logging helpers.
+ */
+DOC
+c() { printf "\033[%sm%s\033[0m" "$1" "$2"; }
+log_info() { printf "%s %s\n" "$(c 34 '[info]')" "$*"; }
+log_ok() { printf "%s %s\n" "$(c 32 '[ok]')" "$*"; }
+log_warn() { printf "%s %s\n" "$(c 33 '[warn]')" "$*"; }
+log_err() { printf "%s %s\n" "$(c 31 '[err]')" "$*" >&2; }

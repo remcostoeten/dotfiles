@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+if command -v readlink >/dev/null 2>&1; then
+  RESOLVED="$(readlink -f "$SCRIPT_PATH" 2>/dev/null || true)"
+  if [[ -n "${RESOLVED:-}" ]]; then
+    SCRIPT_PATH="$RESOLVED"
+  fi
+fi
+ROOT="$(cd "$(dirname "$SCRIPT_PATH")/../.." && pwd)"
+
+# shellcheck source=../../internal/lib/os
+source "$ROOT/internal/lib/os"
+os_detect
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  set-sudo enable [--yes] [--user <name>]
+  set-sudo disable [--yes] [--user <name>]
+  set-sudo status  [--user <name>]
+  set-sudo help
+
+What it does:
+  Writes/removes a sudoers drop-in with:
+    <user> ALL=(ALL) NOPASSWD: ALL
+
+Notes:
+  - Persistent across reboots.
+  - Affects all sudo commands for that user.
+USAGE
+}
+
+color() {
+  local code="$1"
+  shift
+  printf "\033[%sm%s\033[0m" "$code" "$*"
+}
+
+log_info() { printf "%s %s\n" "$(color 34 '[INFO]')" "$*"; }
+log_ok() { printf "%s %s\n" "$(color 32 '[OK]')" "$*"; }
+log_warn() { printf "%s %s\n" "$(color 33 '[WARN]')" "$*"; }
+log_err() { printf "%s %s\n" "$(color 31 '[ERR]')" "$*" >&2; }
+
+sudoers_dir() {
+  if [[ -n "${DOTFILES_SUDOERS_DIR:-}" ]]; then
+    printf "%s\n" "$DOTFILES_SUDOERS_DIR"
+    return 0
+  fi
+  case "$OS" in
+    linux|macos) printf "/etc/sudoers.d\n" ;;
+    *) return 1 ;;
+  esac
+}
+
+sudoers_file_for_user() {
+  local user="$1"
+  printf "%s/99-dotfiles-nopasswd-all-%s\n" "$(sudoers_dir)" "$user"
+}
+
+validate_user() {
+  local user="$1"
+  [[ "$user" =~ ^[a-z_][a-z0-9_-]*$ ]]
+}
+
+ensure_prereqs() {
+  command -v sudo >/dev/null 2>&1 || { log_err "sudo is required"; exit 1; }
+  command -v visudo >/dev/null 2>&1 || { log_err "visudo is required"; exit 1; }
+}
+
+confirm() {
+  local prompt="$1"
+  local auto_yes="$2"
+  local answer
+  if [[ "$auto_yes" == "1" ]]; then
+    return 0
+  fi
+  printf "%s [y/N]: " "$prompt"
+  read -r answer || true
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+cmd_status() {
+  local user="$1"
+  local file line
+  file="$(sudoers_file_for_user "$user")"
+  line="${user} ALL=(ALL) NOPASSWD: ALL"
+
+  if sudo test -f "$file" 2>/dev/null && sudo grep -Fqx "$line" "$file" 2>/dev/null; then
+    log_ok "enabled for user=$user ($file)"
+    return 0
+  fi
+
+  log_info "not enabled for user=$user"
+  return 1
+}
+
+cmd_enable() {
+  local user="$1"
+  local auto_yes="$2"
+  local dir file line tmp
+
+  validate_user "$user" || { log_err "invalid username: $user"; exit 1; }
+  dir="$(sudoers_dir)"
+  file="$(sudoers_file_for_user "$user")"
+  line="${user} ALL=(ALL) NOPASSWD: ALL"
+
+  log_warn "This disables sudo password prompts for ALL commands for user '$user'."
+  if ! confirm "Continue and persist this change?" "$auto_yes"; then
+    log_info "aborted"
+    exit 0
+  fi
+
+  tmp="$(mktemp)"
+  printf "%s\n" "$line" > "$tmp"
+
+  sudo mkdir -p "$dir"
+  sudo cp "$tmp" "$file"
+  sudo chmod 440 "$file"
+  rm -f "$tmp"
+
+  sudo visudo -cf "$file" >/dev/null
+  log_ok "enabled passwordless sudo for user=$user"
+  log_info "sudoers: $file"
+}
+
+cmd_disable() {
+  local user="$1"
+  local auto_yes="$2"
+  local file
+
+  validate_user "$user" || { log_err "invalid username: $user"; exit 1; }
+  file="$(sudoers_file_for_user "$user")"
+
+  if ! sudo test -f "$file"; then
+    log_info "nothing to remove ($file not found)"
+    exit 0
+  fi
+
+  if ! confirm "Remove passwordless sudo for user '$user'?" "$auto_yes"; then
+    log_info "aborted"
+    exit 0
+  fi
+
+  sudo rm -f "$file"
+  log_ok "disabled passwordless sudo for user=$user"
+}
+
+main() {
+  ensure_prereqs
+
+  local cmd="${1:-help}"
+  shift || true
+
+  local user="${SUDO_USER:-${USER:-}}"
+  local auto_yes=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --yes|-y)
+        auto_yes=1
+        ;;
+      --user)
+        shift
+        [[ $# -gt 0 ]] || { log_err "missing value for --user"; exit 1; }
+        user="$1"
+        ;;
+      help|-h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        log_err "unknown option: $1"
+        usage
+        exit 1
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n "${user:-}" ]] || { log_err "unable to detect current user"; exit 1; }
+
+  case "$cmd" in
+    enable) cmd_enable "$user" "$auto_yes" ;;
+    disable) cmd_disable "$user" "$auto_yes" ;;
+    status) cmd_status "$user" ;;
+    help|-h|--help)
+      usage
+      ;;
+    *)
+      log_err "unknown command: $cmd"
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

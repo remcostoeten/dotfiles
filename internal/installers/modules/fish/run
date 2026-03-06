@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * Fish module installer.
+ */
+DOC
+if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "help" ]]; then
+  cat <<'USAGE'
+fish module:
+  dotfiles install fish [--dry-run]
+USAGE
+  exit 0
+fi
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+MODE="${1:-apply}"
+TARGET="$HOME/.config/fish"
+mkdir -p "$TARGET/conf.d" "$TARGET/functions"
+
+link_file() {
+  local src="$1"
+  local dst="$2"
+  if [[ "$MODE" == "dry-run" ]]; then
+    printf "[dry-run] ln -sfn %s %s\n" "$src" "$dst"
+    return 0
+  fi
+  ln -sfn "$src" "$dst"
+}
+
+link_file "$ROOT/modules/fish/config.fish" "$TARGET/config.fish"
+for f in "$ROOT/modules/fish/conf.d"/*; do
+  [[ -e "$f" ]] || continue
+  link_file "$f" "$TARGET/conf.d/$(basename "$f")"
+done
+for f in "$ROOT/modules/fish/functions"/*; do
+  [[ -e "$f" ]] || continue
+  link_file "$f" "$TARGET/functions/$(basename "$f")"
+done

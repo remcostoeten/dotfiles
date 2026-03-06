@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * Golang vendor installer.
+ */
+DOC
+if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "help" ]]; then
+  cat <<'USAGE'
+golang vendor:
+  dotfiles install go [--dry-run]
+  dotfiles install golang [--dry-run]
+USAGE
+  exit 0
+fi
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+source "$ROOT/internal/lib/universal-installer"
+MODE="${1:-apply}"
+vendor_install_by_id "$ROOT" "golang" "$MODE"

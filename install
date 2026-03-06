@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * Main installer and command router.
+ * Executes public commands while delegating build/install logic to internal/*.
+ */
+DOC
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$ROOT/internal/lib/log"
+source "$ROOT/internal/lib/os"
+source "$ROOT/internal/lib/packages"
+source "$ROOT/internal/lib/vendor"
+
+normalize_target() {
+  printf "%s" "$1" | tr '[:upper:]' '[:lower:]' | tr -d '()[:space:]'
+}
+
+module_installer_path() {
+  local module="$1"
+  printf "%s/internal/installers/modules/%s/run\n" "$ROOT" "$module"
+}
+
+list_modules() {
+  find "$ROOT/internal/installers/modules" -type f -name run | \
+    sed "s#^$ROOT/internal/installers/modules/##" | sed 's#/run$##' | sort
+}
+
+list_vendors() {
+  local registry id aliases check_cmd mac_pkg linux_pkg
+  registry="$(vendor_registry_file "$ROOT")"
+  [[ -f "$registry" ]] || return 0
+  while IFS='|' read -r id aliases check_cmd mac_pkg linux_pkg || [[ -n "${id:-}" ]]; do
+    [[ -z "${id:-}" ]] && continue
+    [[ "$id" =~ ^[[:space:]]*# ]] && continue
+    printf "%s (%s)\n" "$id" "$aliases"
+  done < "$registry"
+}
+
+usage() {
+  cat <<USAGE
+Usage:
+  dotfiles install [--dry-run]
+  dotfiles install [--dry-run] <module_or_vendor> [...]
+  dotfiles list
+  dotfiles help [modules|vendors|<target>]
+USAGE
+}
+
+help_overview() {
+  usage
+  printf "\nModules:\n"
+  list_modules | sed 's/^/  - /'
+  printf "\nVendors:\n"
+  list_vendors | sed 's/^/  - /'
+}
+
+run_module() {
+  local module="$1"
+  local mode="$2"
+  local installer
+  installer="$(module_installer_path "$module")"
+  [[ -x "$installer" ]] || return 1
+  log_info "module=$module"
+  "$installer" "$mode"
+}
+
+run_module_help() {
+  local module="$1"
+  local installer
+  installer="$(module_installer_path "$module")"
+  [[ -x "$installer" ]] || return 1
+  "$installer" --help
+}
+
+run_vendor() {
+  local target="$1"
+  local mode="$2"
+  local row id aliases check_cmd mac_pkg linux_pkg script
+
+  row="$(vendor_lookup "$ROOT" "$target")" || return 1
+  IFS='|' read -r id aliases check_cmd mac_pkg linux_pkg <<< "$row"
+  script="$(vendor_installer_path "$ROOT" "$id")"
+  [[ -x "$script" ]] || { log_warn "vendor installer missing: $script"; return 1; }
+
+  log_info "vendor=$id"
+  "$script" "$mode"
+}
+
+run_vendor_help() {
+  local target="$1"
+  local row id aliases check_cmd mac_pkg linux_pkg script
+
+  row="$(vendor_lookup "$ROOT" "$target")" || return 1
+  IFS='|' read -r id aliases check_cmd mac_pkg linux_pkg <<< "$row"
+  script="$(vendor_installer_path "$ROOT" "$id")"
+  [[ -x "$script" ]] || return 1
+  "$script" --help
+}
+
+run_full_install() {
+  local mode="$1"
+  os_detect
+  log_info "os=$OS mode=$mode"
+
+  pkg_update "$mode"
+  pkg_install_file "$ROOT/manifest/packages.common" "$mode"
+  if [[ "$OS" == "macos" ]]; then
+    pkg_install_file "$ROOT/manifest/packages.macos" "$mode"
+  else
+    pkg_install_file "$ROOT/manifest/packages.linux" "$mode"
+  fi
+
+  while IFS= read -r module || [[ -n "$module" ]]; do
+    [[ -z "$module" ]] && continue
+    [[ "$module" =~ ^[[:space:]]*# ]] && continue
+    if ! run_module "$module" "$mode"; then
+      log_warn "skip module=$module (missing installer)"
+    fi
+  done < "$ROOT/manifest/modules.enabled"
+
+  log_ok "done"
+}
+
+MODE="apply"
+POSITIONAL=()
+for arg in "$@"; do
+  if [[ "$arg" == "--dry-run" ]]; then
+    MODE="dry-run"
+  else
+    POSITIONAL+=("$arg")
+  fi
+done
+
+CMD="install"
+REST=()
+if [[ ${#POSITIONAL[@]} -gt 0 ]]; then
+  case "${POSITIONAL[0]}" in
+    install|help|list)
+      CMD="${POSITIONAL[0]}"
+      REST=("${POSITIONAL[@]:1}")
+      ;;
+    -h|--help)
+      CMD="help"
+      ;;
+    *)
+      CMD="install"
+      REST=("${POSITIONAL[@]}")
+      ;;
+  esac
+fi
+
+case "$CMD" in
+  list)
+    printf "Modules:\n"
+    list_modules | sed 's/^/  - /'
+    printf "\nVendors:\n"
+    list_vendors | sed 's/^/  - /'
+    exit 0
+    ;;
+  help)
+    if [[ ${#REST[@]} -eq 0 ]]; then
+      help_overview
+      exit 0
+    fi
+    topic="$(normalize_target "${REST[0]}")"
+    case "$topic" in
+      modules)
+        printf "Modules:\n"
+        list_modules | sed 's/^/  - /'
+        exit 0
+        ;;
+      vendors)
+        printf "Vendors:\n"
+        list_vendors | sed 's/^/  - /'
+        exit 0
+        ;;
+    esac
+
+    if run_module_help "$topic"; then
+      exit 0
+    fi
+    if run_vendor_help "$topic"; then
+      exit 0
+    fi
+
+    log_err "unknown help topic: ${REST[0]}"
+    usage
+    exit 1
+    ;;
+  install)
+    if [[ ${#REST[@]} -eq 0 ]]; then
+      run_full_install "$MODE"
+      exit 0
+    fi
+
+    for raw in "${REST[@]}"; do
+      target="$(normalize_target "$raw")"
+
+      if run_module "$target" "$MODE"; then
+        continue
+      fi
+      if run_vendor "$target" "$MODE"; then
+        continue
+      fi
+
+      log_err "unknown target: $raw"
+      printf "Run 'dotfiles list' to see available modules and vendors.\n" >&2
+      exit 1
+    done
+
+    log_ok "done"
+    exit 0
+    ;;
+esac
+
+usage
+exit 1

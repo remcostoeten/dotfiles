@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * GUI module placeholder.
+ */
+DOC
+if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "help" ]]; then
+  cat <<'USAGE'
+ui/gui module:
+  dotfiles install ui/gui [--dry-run]
+USAGE
+  exit 0
+fi
+mode="${1:-apply}"
+printf "gui module (%s)\n" "$mode"

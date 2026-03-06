@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * Bootstrap entrypoint.
+ * Ensures local bin exists and runs install.
+ */
+DOC
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+mkdir -p "$HOME/.local/bin"
+exec "$ROOT/install" "$@"

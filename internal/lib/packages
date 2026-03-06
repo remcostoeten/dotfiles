@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * Package abstraction for macOS and Linux.
+ */
+DOC
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$LIB_DIR/log"
+source "$LIB_DIR/os"
+
+DOTFILES_ARCH_SUDO_PROMPT_DONE=0
+
+run_cmd() {
+  local mode="$1"
+  shift
+  if [[ "$mode" == "dry-run" ]]; then
+    printf "[dry-run] %s\n" "$*"
+    return 0
+  fi
+  "$@"
+}
+
+has_arch_pkg_manager() {
+  command -v yay >/dev/null 2>&1 || command -v pacman >/dev/null 2>&1
+}
+
+sudo_nopasswd_all_enabled() {
+  command -v sudo >/dev/null 2>&1 || return 1
+
+  # Force a fresh check so cached sudo credentials do not mask config state.
+  sudo -k >/dev/null 2>&1 || true
+  sudo -n true >/dev/null 2>&1
+}
+
+enable_sudo_nopasswd_all_for_user() {
+  local user="$1"
+  local dropin line
+
+  if [[ ! "$user" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+    log_warn "refuse invalid username for sudoers: $user"
+    return 0
+  fi
+
+  command -v sudo >/dev/null 2>&1 || { log_warn "sudo missing"; return 0; }
+
+  dropin="/etc/sudoers.d/99-dotfiles-nopasswd-all-${user}"
+  line="${user} ALL=(ALL) NOPASSWD: ALL"
+
+  if ! printf "%s\n" "$line" | sudo tee "$dropin" >/dev/null; then
+    log_warn "failed to write sudoers drop-in: $dropin"
+    return 0
+  fi
+  if ! sudo chmod 440 "$dropin"; then
+    log_warn "failed chmod on sudoers drop-in: $dropin"
+    return 0
+  fi
+
+  if command -v visudo >/dev/null 2>&1; then
+    if ! sudo visudo -cf "$dropin" >/dev/null; then
+      log_warn "invalid sudoers file generated; removing $dropin"
+      sudo rm -f "$dropin" >/dev/null 2>&1 || true
+      return 0
+    fi
+  fi
+
+  log_ok "enabled passwordless sudo for all commands user=$user"
+}
+
+maybe_offer_arch_sudo_nopasswd() {
+  local mode="$1"
+  local user reply
+
+  [[ "$mode" == "apply" ]] || return 0
+  [[ "${DOTFILES_ARCH_SUDO_PROMPT_DONE:-0}" == "1" ]] && return 0
+  DOTFILES_ARCH_SUDO_PROMPT_DONE=1
+
+  has_arch_pkg_manager || return 0
+  [[ -t 0 && -t 1 ]] || return 0
+
+  if sudo_nopasswd_all_enabled; then
+    return 0
+  fi
+
+  user="${SUDO_USER:-${USER:-}}"
+  [[ -n "$user" ]] || return 0
+
+  printf "Enable passwordless sudo for ALL commands for user '%s'? [y/N]: " "$user"
+  read -r reply || true
+  case "$reply" in
+    y|Y|yes|YES)
+      enable_sudo_nopasswd_all_for_user "$user"
+      ;;
+    *)
+      log_info "keeping sudo password prompts enabled"
+      ;;
+  esac
+}
+
+pkg_update() {
+  local mode="$1"
+  if [[ "$OS" == "macos" ]]; then
+    command -v brew >/dev/null 2>&1 || { log_warn "brew missing"; return 0; }
+    run_cmd "$mode" brew update
+    return 0
+  fi
+  if command -v apt-get >/dev/null 2>&1; then
+    run_cmd "$mode" sudo apt-get update
+    return 0
+  fi
+  maybe_offer_arch_sudo_nopasswd "$mode"
+  if command -v yay >/dev/null 2>&1; then
+    run_cmd "$mode" yay -Sy --noconfirm
+    return 0
+  fi
+  if command -v pacman >/dev/null 2>&1; then
+    run_cmd "$mode" sudo pacman -Sy --noconfirm
+    return 0
+  fi
+  log_warn "no supported package manager found"
+}
+
+pkg_install_one() {
+  local name="$1"
+  local mode="$2"
+  local arch_name="$name"
+
+  # Debian uses golang-go; Arch uses go.
+  if [[ "$name" == "golang-go" ]]; then
+    arch_name="go"
+  fi
+  if command -v "$name" >/dev/null 2>&1; then
+    log_ok "already installed: $name"
+    return 0
+  fi
+
+  if [[ "$OS" == "macos" ]]; then
+    command -v brew >/dev/null 2>&1 || { log_warn "skip $name (brew missing)"; return 0; }
+    run_cmd "$mode" brew install "$name" || log_warn "failed install: $name"
+    return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    run_cmd "$mode" sudo apt-get install -y "$name" || log_warn "failed install: $name"
+    return 0
+  fi
+
+  maybe_offer_arch_sudo_nopasswd "$mode"
+  if command -v yay >/dev/null 2>&1; then
+    run_cmd "$mode" yay -S --noconfirm --needed "$arch_name" || log_warn "failed install: $name"
+    return 0
+  fi
+
+  if command -v pacman >/dev/null 2>&1; then
+    run_cmd "$mode" sudo pacman -S --noconfirm --needed "$arch_name" || log_warn "failed install: $name"
+    return 0
+  fi
+
+  log_warn "skip $name (no package manager)"
+}
+
+pkg_install_file() {
+  local file="$1"
+  local mode="$2"
+  [[ -f "$file" ]] || return 0
+  while IFS= read -r name || [[ -n "$name" ]]; do
+    [[ -z "$name" ]] && continue
+    [[ "$name" =~ ^[[:space:]]*# ]] && continue
+    pkg_install_one "$name" "$mode"
+  done < "$file"
+}

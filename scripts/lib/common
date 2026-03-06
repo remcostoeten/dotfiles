@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+color() {
+  local code="$1"
+  shift
+  printf "\033[%sm%s\033[0m" "$code" "$*"
+}
+
+log_info() { printf "%s %s\n" "$(color 34 '[INFO]')" "$*"; }
+log_ok() { printf "%s %s\n" "$(color 32 '[OK]')" "$*"; }
+log_warn() { printf "%s %s\n" "$(color 33 '[WARN]')" "$*"; }
+log_err() { printf "%s %s\n" "$(color 31 '[ERR]')" "$*" >&2; }
+
+require_cmd() {
+  local cmd="$1"
+  command -v "$cmd" >/dev/null 2>&1 || {
+    log_err "Missing required command: $cmd"
+    return 1
+  }
+}
+
+copy_clipboard() {
+  local content="$1"
+  if command -v wl-copy >/dev/null 2>&1; then
+    printf "%s" "$content" | wl-copy
+    return 0
+  fi
+  if command -v xclip >/dev/null 2>&1; then
+    printf "%s" "$content" | xclip -selection clipboard
+    return 0
+  fi
+  if command -v pbcopy >/dev/null 2>&1; then
+    printf "%s" "$content" | pbcopy
+    return 0
+  fi
+  log_err "No clipboard backend found (wl-copy, xclip, pbcopy)"
+  return 1
+}

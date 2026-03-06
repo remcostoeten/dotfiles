@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * OS detection.
+ */
+DOC
+OS=""
+os_detect() {
+  local uname_out
+  uname_out="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "$uname_out" in
+    darwin*) OS="macos" ;;
+    linux*) OS="linux" ;;
+    *) printf "unsupported os: %s\n" "$uname_out" >&2; return 1 ;;
+  esac
+}

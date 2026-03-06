@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * TUI module placeholder.
+ */
+DOC
+if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "help" ]]; then
+  cat <<'USAGE'
+ui/tui module:
+  dotfiles install ui/tui [--dry-run]
+USAGE
+  exit 0
+fi
+mode="${1:-apply}"
+printf "tui module (%s)\n" "$mode"

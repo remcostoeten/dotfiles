@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+if command -v readlink >/dev/null 2>&1; then
+  RESOLVED="$(readlink -f "$SCRIPT_PATH" 2>/dev/null || true)"
+  if [[ -n "${RESOLVED:-}" ]]; then
+    SCRIPT_PATH="$RESOLVED"
+  fi
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+# shellcheck source=../lib/common
+source "$SCRIPT_DIR/../lib/common"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  copy file <path>        Copy file contents
+  copy pwd [path]         Copy resolved path (default: cwd)
+  copy remote             Copy git origin URL
+  copy tree [path]        Copy tree output (default: cwd)
+  copy output <command>   Run command and copy stdout+stderr
+  copy help
+
+Shortcuts:
+  copy <existing-file>    Same as: copy file <existing-file>
+USAGE
+}
+
+copy_and_echo() {
+  local title="$1"
+  local content="$2"
+  copy_clipboard "$content"
+  printf "\n%s\n%s\n%s\n\n" "$(color 36 "== $title ==")" "$content" "$(color 36 "== end ==")"
+  log_ok "Copied to clipboard"
+}
+
+cmd_file() {
+  local path="$1"
+  [[ -f "$path" ]] || { log_err "File not found: $path"; return 1; }
+  [[ -r "$path" ]] || { log_err "File is not readable: $path"; return 1; }
+  local content
+  content="$(cat "$path")"
+  copy_and_echo "file: $path" "$content"
+}
+
+cmd_pwd() {
+  local path="${1:-.}"
+  local resolved
+  resolved="$(realpath "$path")" || { log_err "Invalid path: $path"; return 1; }
+  copy_and_echo "path" "$resolved"
+}
+
+cmd_remote() {
+  git rev-parse --git-dir >/dev/null 2>&1 || { log_err "Not in a git repository"; return 1; }
+  local url
+  url="$(git remote get-url origin 2>/dev/null || true)"
+  [[ -n "$url" ]] || { log_err "No origin remote configured"; return 1; }
+  copy_and_echo "git origin" "$url"
+}
+
+cmd_tree() {
+  local path="${1:-.}"
+  require_cmd tree || return 1
+  [[ -d "$path" ]] || { log_err "Directory not found: $path"; return 1; }
+
+  local output
+  output="$(tree -I 'node_modules|.git|dist|build|.next|coverage|target|tmp|.cache' "$path")"
+  copy_and_echo "tree: $(realpath "$path")" "$output"
+}
+
+cmd_output() {
+  shift
+  [[ $# -gt 0 ]] || { log_err "No command provided"; return 1; }
+  local tmp
+  tmp="$(mktemp)"
+  "$@" >"$tmp" 2>&1 || true
+  local output
+  output="$(cat "$tmp")"
+  rm -f "$tmp"
+  copy_and_echo "output: $*" "$output"
+}
+
+main() {
+  local sub="${1:-help}"
+
+  if [[ -f "$sub" ]]; then
+    cmd_file "$sub"
+    return
+  fi
+
+  case "$sub" in
+    file)
+      [[ $# -ge 2 ]] || { log_err "Missing file path"; usage; return 1; }
+      cmd_file "$2"
+      ;;
+    pwd)
+      cmd_pwd "${2:-.}"
+      ;;
+    remote)
+      cmd_remote
+      ;;
+    tree)
+      cmd_tree "${2:-.}"
+      ;;
+    output)
+      cmd_output "$@"
+      ;;
+    help|-h|--help)
+      usage
+      ;;
+    *)
+      log_err "Unknown command: $sub"
+      usage
+      return 1
+      ;;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: <<'DOC'
+/**
+ * Scripts module installer.
+ */
+DOC
+if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "help" ]]; then
+  cat <<'USAGE'
+scripts module:
+  dotfiles install scripts [--dry-run]
+USAGE
+  exit 0
+fi
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+MODE="${1:-apply}"
+REGISTRY="$ROOT/manifest/scripts.enabled"
+BIN_DIR="$HOME/.local/bin"
+mkdir -p "$BIN_DIR"
+
+link_script() {
+  local src="$1"
+  local name="$2"
+  if [[ "$MODE" == "dry-run" ]]; then
+    printf "[dry-run] chmod +x %s\n" "$src"
+    printf "[dry-run] ln -sfn %s %s\n" "$src" "$BIN_DIR/$name"
+    return 0
+  fi
+  chmod +x "$src"
+  ln -sfn "$src" "$BIN_DIR/$name"
+}
+
+while IFS= read -r rel || [[ -n "$rel" ]]; do
+  [[ -z "$rel" ]] && continue
+  [[ "$rel" =~ ^[[:space:]]*# ]] && continue
+  src="$ROOT/$rel"
+  [[ -f "$src" ]] || continue
+  name="$(basename "$src")"
+  link_script "$src" "$name"
+done < "$REGISTRY"
