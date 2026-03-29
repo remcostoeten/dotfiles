@@ -1,220 +1,22 @@
 #!/usr/bin/env fish
 
-# Guard against multiple sourcing
+# Guard against multiple sourcing.
 if set -q __DOTFILES_CFG_LOADED
     return 0
 end
 set -g __DOTFILES_CFG_LOADED 1
 
-# Helper function to add paths without duplicates
-function add_to_path
-    for dir in $argv
-        if test -d "$dir"
-            if not contains "$dir" $PATH
-                set -gx PATH "$dir" $PATH
-            end
-        end
-    end
-end
+source ~/.config/dotfiles/loaders/fish/core.fish
+source ~/.config/dotfiles/loaders/fish/paths.fish
 
-# Function to deduplicate PATH
-function dedupe_path
-    set -l new_path
-    for dir in $PATH
-        if not contains "$dir" $new_path
-            set new_path $new_path "$dir"
-        end
-    end
-    set -gx PATH $new_path
-end
-
-# Add dotfiles bin to PATH and make executables available
-if test -d ~/.config/dotfiles/bin
-    contains ~/.config/dotfiles/bin $PATH; or set -gx PATH ~/.config/dotfiles/bin $PATH
-
-    # Ensure all files are executable
-    for file in ~/.config/dotfiles/bin/*
-        if test -f $file
-            chmod +x $file
-        end
-    end
-end
-
-# Source functions from configs/fish/functions directory
-# Fish automatically loads functions from ~/.config/fish/functions/
-# We symlink configs/fish/functions/ → ~/.config/fish/functions/ in setup.sh
+# Fish auto-loads functions from ~/.config/fish/functions/ via setup symlink.
 if test -d ~/.config/fish/functions
-    # Functions are auto-loaded by fish from ~/.config/fish/functions/
-    # No need to manually source or add to fish_function_path
+    # No explicit sourcing required here.
 end
 
-# Add scripts directory to PATH
-if test -d ~/.config/dotfiles/scripts
-    contains ~/.config/dotfiles/scripts $PATH; or set -gx PATH ~/.config/dotfiles/scripts $PATH
-
-    # Ensure all files are executable
-    for file in ~/.config/dotfiles/scripts/*
-        if test -f $file
-            chmod +x $file
-        end
-    end
-end
-
-# Simple directory preservation solution
 if status is-interactive
-    # Set a preferred directory for new terminals
-    # Change this to whatever directory you want as default
-    set -gx PREFERRED_HOME_DIR ~
-
-    # Function to override the automatic directory reset
-    function _override_dir_reset --on-event fish_prompt
-        # Remove this function so it only runs once per session
-        functions --erase _override_dir_reset
-
-        # Check if we're stuck in dotfiles and change to preferred directory
-        if test (pwd) = ~/.config/dotfiles; and test -d "$PREFERRED_HOME_DIR"
-            cd "$PREFERRED_HOME_DIR"
-        end
-    end
-
-    # Commands to run in interactive sessions can go here
-    # Editor
-    set -gx EDITOR nvim
-    set -gx SUDO_EDITOR $EDITOR
-
     source ~/.config/dotfiles/loaders/fish/vendor.fish
     source ~/.config/dotfiles/loaders/fish/aliases.fish
-
-    # Custom package initializers
-    set -l nvm_script (__dotfiles_vendor_init nvm sh)
-
-    set -l nvm_has_fish 0
-    if test -n "$nvm_script"
-        set -g DOTFILES_NVM_PACKAGE $nvm_script
-        if string match -q '*.fish' $nvm_script
-            source $nvm_script
-            set nvm_has_fish 1
-        end
-    end
-
-    function __dotfiles_import_env --argument tmpfile
-        if not test -f $tmpfile
-            return
-        end
-
-        while read --null line
-            set -l kv (string split -m 1 "=" $line)
-            set -l key $kv[1]
-            set -l value ""
-            if test (count $kv) -gt 1
-                set value $kv[2]
-            end
-
-            switch $key
-                case "" _ PWD OLDPWD SHLVL
-                    continue
-            end
-
-            if test $key = PATH
-                # Import PATH from bash, but dedupe it
-                for p in (string split ":" $value)
-                    if test -d "$p"; and not contains "$p" $PATH
-                        set -gx PATH $PATH "$p"
-                    end
-                end
-            else
-                set -gx $key "$value"
-            end
-        end <$tmpfile
-    end
-
-    if test $nvm_has_fish -eq 0
-        if not functions -q nvm
-            function nvm --description "Node Version Manager (bash wrapper)"
-                set -l script ""
-                if set -q DOTFILES_NVM_PACKAGE
-                    set script $DOTFILES_NVM_PACKAGE
-                end
-
-                if not test -f "$script"
-                    set script (__dotfiles_vendor_init nvm sh)
-                end
-
-                if not test -f $script
-                    echo "nvm: initializer not found at $script" >&2
-                    return 1
-                end
-
-                set -l tmpfile (mktemp)
-                if test -z "$tmpfile"
-                    echo "nvm: failed to create temp file" >&2
-                    return 1
-                end
-
-                set -l escaped_script (string escape -- $script)
-                set -l escaped_tmp (string escape -- $tmpfile)
-                set -l escaped_args (string escape -- $argv)
-                set -l cmd (string join ' ' -- nvm $escaped_args)
-                set -l bash_cmd "source $escaped_script; $cmd; set exit_status=\$?; env -0 > $escaped_tmp; exit \$exit_status"
-
-                command bash -lc "$bash_cmd"
-                set -l cmd_status $status
-
-                if test $cmd_status -eq 0
-                    __dotfiles_import_env $tmpfile
-                end
-
-                rm -f $tmpfile
-                return $cmd_status
-            end
-        end
-    end
-
-    # Load secrets
-    if test -f $HOME/.secrets
-        source $HOME/.secrets
-    end
-
-    # No greeting
-    set fish_greeting
-
-    # Show welcome banner on startup (only once per session)
-    function _show_welcome_banner --on-event fish_prompt
-        # Remove this function so it only runs once per session
-        functions --erase _show_welcome_banner
-        
-        # Show welcome banner with ASCII art
-        if functions -q welcome_banner
-            welcome_banner
-        end
-    end
-
-    # Use starship
-    starship init fish | source
-    if test -f ~/.local/state/quickshell/user/generated/terminal/sequences.txt
-        cat ~/.local/state/quickshell/user/generated/terminal/sequences.txt
-    end
-
-    # Initialize zoxide
-    zoxide init fish | source
-
-    # Local bin env
-    if test -d $HOME/.local/bin
-        add_to_path $HOME/.local/bin
-    end
-    if test -d $HOME/bin
-        add_to_path $HOME/bin
-    end
-
-    # Interactive Media Converter alias (replaces ImageMagick convert)
-    # Note: img-convert script is already in ~/.config/dotfiles/bin which is in PATH
-    # This alias ensures `convert` uses our media converter instead of ImageMagick
-    #  ?????
-    #if command -v img-convert >/dev/null 2>&1
-    #alias convert img-convert
-    #        echo "🎬 Media Converter: `convert` aliased to `img-convert` (README Showcase, GIF creator, etc.)" >&2
-    #end
-    #?????
-    # Final deduplication at the end of config
-    # dedupe_path
+    source ~/.config/dotfiles/loaders/fish/nvm.fish
+    source ~/.config/dotfiles/loaders/fish/session.fish
 end
