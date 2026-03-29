@@ -70,12 +70,32 @@ bun run setup --dry-run-section cli-utils
 
 The repository is structured as follows:
 
-* `bin/`: Executable scripts and tools (globally available)
+* `bin/`: User-facing entrypoints on `PATH`
 * `configs/fish/`: Fish shell configuration
-  * `aliases/`: Shell aliases organized by category
-  * `functions/`: Custom Fish functions
-* `scripts/`: Utility scripts and tools
+  * `functions/`: Fish-native runtime functions
+* `functions/`: Internal framework helpers for setup, sourcing, and dotfiles wiring
+* `aliases/`: Top-level shell aliases and interactive command modules
+* `loaders/`: Shell-specific module loaders that wire aliases and vendor connectors into the active shell
+* `packages/_vendor/`: Third-party runtime connectors with per-tool `init.sh` / `init.fish` entrypoints
+* `scripts/`: Tool implementations, intended to stay isolated from framework internals
+* `setup/`: Bootstrap and installation logic
 * `env-private/`: Private environment variables (see [Private Files Guide](docs/PRIVATE-FILES.md))
+
+### Architecture Boundary
+
+This repo uses a strict separation between framework internals and runtime tools:
+
+* `functions/` is for building and wiring the dotfiles framework itself
+* `setup/` may use `functions/`
+* `packages/_vendor/` wires installed third-party tools into the shell session
+* `packages/_vendor/<tool>/init.sh` is the shared POSIX entrypoint for Bash/Zsh-style shells
+* `packages/_vendor/<tool>/init.fish` is optional and exists only when Fish needs its own syntax or adapter
+* `aliases/` contains first-class alias and shell command modules, loaded by `loaders/fish/aliases.fish`
+* `loaders/` contains shell-specific orchestration logic so `cfg` stays thin
+* `bin/` exposes stable user-facing commands
+* `scripts/` contains tool implementations behind those commands
+* `bin/` and `scripts/` should not depend on `functions/`
+* `configs/fish/functions/` is separate from `functions/` and contains Fish runtime behavior only
 
 ## Private Files & Secrets
 

@@ -21,6 +21,10 @@ function help --description "Show comprehensive help for dotfiles and aliases"
                 set show_category "fzf"
             case --drizzle -z drizzle
                 set show_category "drizzle"
+            case --apps apps
+                set show_category "apps"
+            case --gnome gnome
+                set show_category "gnome"
             case --scripts -t scripts
                 _show_scripts_help
                 return 0
@@ -74,6 +78,8 @@ function _show_help_usage
     printf "  %-20s %s\n" "git, --git, -g" "Show git aliases"
     printf "  %-20s %s\n" "fzf, --fzf, -f" "Show fzf aliases"
     printf "  %-20s %s\n" "drizzle, --drizzle, -z" "Show drizzle aliases"
+    printf "  %-20s %s\n" "apps, --apps" "Show app launcher commands"
+    printf "  %-20s %s\n" "gnome, --gnome" "Show GNOME commands"
     printf "  %-20s %s\n" "scripts, --scripts, -t" "Show available scripts and tools"
     printf "  %-20s %s\n" "overview, --overview, -o" "Show dotfiles structure and overview"
     printf "  %-20s %s\n" "help, --help, -h" "Show this help message"
@@ -83,6 +89,8 @@ function _show_help_usage
     echo "  help all         # Show all available aliases"
     echo "  help dev         # Show only development aliases"
     echo "  help system      # Show only system aliases"
+    echo "  help apps        # Show desktop app launchers"
+    echo "  help gnome       # Show GNOME commands"
     echo "  help scripts     # Show available scripts and tools"
     echo "  help overview    # Show dotfiles structure and setup"
     echo ""
@@ -136,7 +144,7 @@ function _show_general_help
 end
 
 function _show_all_categories
-    set -l categories system dev git fzf drizzle
+    set -l categories system dev git fzf drizzle apps gnome
     
     for category in $categories
         _show_category_help $category
@@ -146,7 +154,7 @@ end
 
 function _show_category_help
     set -l category $argv[1]
-    set -l alias_file ~/.config/dotfiles/configs/fish/aliases/$category.fish
+    set -l alias_file ~/.config/dotfiles/aliases/$category.fish
     
     if not test -f $alias_file
         echo "Category '$category' not found."
@@ -175,6 +183,14 @@ function _show_category_help
             printf "%s%s\n" "$fish_color_yellow$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
             printf "%s│  💧 %-52s │%s\n" "$fish_color_yellow$fish_color_bold" "DRIZZLE ALIASES" "$fish_color_reset"
             printf "%s%s\n" "$fish_color_yellow$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
+        case apps
+            printf "%s%s\n" "$fish_color_cyan$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
+            printf "%s│  📱 %-52s │%s\n" "$fish_color_cyan$fish_color_bold" "APP LAUNCHERS" "$fish_color_reset"
+            printf "%s%s\n" "$fish_color_cyan$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
+        case gnome
+            printf "%s%s\n" "$fish_color_white$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
+            printf "%s│  🖥️  %-52s │%s\n" "$fish_color_white$fish_color_bold" "GNOME COMMANDS" "$fish_color_reset"
+            printf "%s%s\n" "$fish_color_white$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
     end
     echo ""
     
@@ -369,7 +385,7 @@ function _show_dotfiles_overview
     g "Directory Structure:"
     echo "  ~/.config/dotfiles/"
     echo "  ├── fish/                    # Fish shell configuration"
-    echo "  │   ├── aliases/             # Organized alias files"
+    echo "  │   ├── aliases/             # Top-level alias modules"
     echo "  │   ├── functions/           # Custom fish functions"
     echo "  │   ├── core/               # Core configuration (colors, env)"
     echo "  │   └── config.fish         # Main fish config"
@@ -391,7 +407,7 @@ function _show_dotfiles_overview
     echo "  • Main Config: ~/.config/dotfiles/fish/config.fish"
     echo "  • Colors:      ~/.config/dotfiles/fish/core/colors.fish"
     echo "  • Environment: ~/.config/dotfiles/fish/core/env.fish"
-    echo "  • Aliases:     ~/.config/dotfiles/fish/aliases/*.fish"
+    echo "  • Aliases:     ~/.config/dotfiles/aliases/*.fish"
     echo ""
     
     p "Package Managers:"
@@ -416,7 +432,7 @@ function _show_dotfiles_overview
     echo ""
     
     g "Customization:"
-    echo "  • Add aliases to appropriate files in fish/aliases/"
+    echo "  • Add aliases to appropriate files in aliases/"
     echo "  • Use DOCSTRING comments for automatic help integration"
     echo "  • New scripts go in bin/ (executable) or scripts/ (utility)"
     echo "  • Run 'reload' after making changes"

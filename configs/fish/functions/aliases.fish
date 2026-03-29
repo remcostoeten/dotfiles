@@ -19,12 +19,12 @@ function aliases --description "Show and manage aliases with comprehensive help"
             return 0
         case --category -c category
             if test (count $argv) -lt 2
-                echo "Available categories: system, dev, git, fzf, drizzle"
+                echo "Available categories: system, dev, git, fzf, drizzle, apps, gnome"
                 return 1
             end
             help $argv[2]
             return 0
-        case system dev git fzf drizzle
+        case system dev git fzf drizzle apps gnome
             # Direct category access
             help $argv[1]
             return 0
@@ -62,6 +62,8 @@ function _show_aliases_help
     printf "  %-20s %s\n" "git" "Show git workflow aliases"
     printf "  %-20s %s\n" "fzf" "Show fuzzy finder aliases"
     printf "  %-20s %s\n" "drizzle" "Show database ORM aliases"
+    printf "  %-20s %s\n" "apps" "Show desktop app launchers"
+    printf "  %-20s %s\n" "gnome" "Show GNOME workflow commands"
     echo ""
     
     c "Examples:"
@@ -98,10 +100,10 @@ function _list_all_aliases
     c "All Custom Aliases by Category:"
     echo ""
     
-    set -l categories system dev git fzf drizzle
+    set -l categories system dev git fzf drizzle apps gnome
     
     for category in $categories
-        set -l alias_file ~/.config/dotfiles/configs/fish/aliases/$category.fish
+        set -l alias_file ~/.config/dotfiles/aliases/$category.fish
         if test -f $alias_file
             help --$category 2>/dev/null
             echo ""
@@ -116,10 +118,10 @@ function _search_aliases
     y "Searching for aliases containing: '$search_term'"
     echo ""
     
-    set -l categories system dev git fzf drizzle
+    set -l categories system dev git fzf drizzle apps gnome
     
     for category in $categories
-        set -l alias_file ~/.config/dotfiles/configs/fish/aliases/$category.fish
+        set -l alias_file ~/.config/dotfiles/aliases/$category.fish
         if test -f $alias_file
             set -l matches (grep -i "$search_term" $alias_file | grep -E "(alias |function )")
             if test -n "$matches"

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
-FUNCTIONS_BRIDGE="$HOME/.config/dotfiles/functions/functions"
-if [ -f "$FUNCTIONS_BRIDGE" ]; then
-  . "$FUNCTIONS_BRIDGE" 2>/dev/null || source "$FUNCTIONS_BRIDGE" 2>/dev/null || true
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+DATA_DIR_LIB="$SCRIPT_DIR/lib/data-dir.sh"
+if [ -f "$DATA_DIR_LIB" ]; then
+  . "$DATA_DIR_LIB"
 fi
 
-if command -v ensure-script-data-dir >/dev/null 2>&1; then
-  CLIP_DATA_DIR="$(ensure-script-data-dir "clip")"
-  HISTORY_DIR="$(ensure-script-data-dir "clip" "logs")"
+if command -v ensure_script_data_dir >/dev/null 2>&1; then
+  CLIP_DATA_DIR="$(ensure_script_data_dir "clip")"
+  HISTORY_DIR="$(ensure_script_data_dir "clip" "logs")"
 else
   DOTFILES_DATA_DIR="${DOTFILES_DATA_DIR:-$HOME/.dotfiles}"
   CLIP_DATA_DIR="$DOTFILES_DATA_DIR/clip"
@@ -175,8 +176,8 @@ function show_clipboard() {
   fi
 
   local output_dir
-  if command -v ensure-script-data-dir >/dev/null 2>&1; then
-    output_dir="$(ensure-script-data-dir "clip" "tmp")"
+  if command -v ensure_script_data_dir >/dev/null 2>&1; then
+    output_dir="$(ensure_script_data_dir "clip" "tmp")"
   else
     output_dir="$CLIP_DATA_DIR/tmp"
     mkdir -p "$output_dir"

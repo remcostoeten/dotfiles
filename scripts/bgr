@@ -1,13 +1,14 @@
 #!/bin/bash
 
-FUNCTIONS_BRIDGE="$HOME/.config/dotfiles/functions/functions"
-if [ -f "$FUNCTIONS_BRIDGE" ]; then
-  . "$FUNCTIONS_BRIDGE" 2>/dev/null || source "$FUNCTIONS_BRIDGE" 2>/dev/null || true
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+DATA_DIR_LIB="$SCRIPT_DIR/lib/data-dir.sh"
+if [ -f "$DATA_DIR_LIB" ]; then
+  . "$DATA_DIR_LIB"
 fi
 
-if command -v ensure-script-data-dir >/dev/null 2>&1; then
-  BG_DIR="$(ensure-script-data-dir "bgr")"
-  BG_LOG_DIR="$(ensure-script-data-dir "bgr" "logs")"
+if command -v ensure_script_data_dir >/dev/null 2>&1; then
+  BG_DIR="$(ensure_script_data_dir "bgr")"
+  BG_LOG_DIR="$(ensure_script_data_dir "bgr" "logs")"
 else
   DOTFILES_DATA_DIR="${DOTFILES_DATA_DIR:-$HOME/.dotfiles}"
   BG_DIR="$DOTFILES_DATA_DIR/bgr"

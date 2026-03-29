@@ -40,15 +40,6 @@ if test -d ~/.config/dotfiles/bin
     end
 end
 
-# Source aliases
-if test -d ~/.config/dotfiles/configs/fish/aliases
-    for alias_file in ~/.config/dotfiles/configs/fish/aliases/*.fish
-        if test -f $alias_file
-            source $alias_file
-        end
-    end
-end
-
 # Source functions from configs/fish/functions directory
 # Fish automatically loads functions from ~/.config/fish/functions/
 # We symlink configs/fish/functions/ → ~/.config/fish/functions/ in setup.sh
@@ -91,19 +82,11 @@ if status is-interactive
     set -gx EDITOR nvim
     set -gx SUDO_EDITOR $EDITOR
 
-    # bun
-    set -gx BUN_INSTALL $HOME/.bun
-    add_to_path $BUN_INSTALL/bin
+    source ~/.config/dotfiles/loaders/fish/vendor.fish
+    source ~/.config/dotfiles/loaders/fish/aliases.fish
 
     # Custom package initializers
-    set -l nvm_candidates nvm.fish nvm nvm.sh
-    set -l nvm_script ""
-    for candidate in $nvm_candidates
-        if test -f ~/.config/dotfiles/packages/$candidate
-            set nvm_script ~/.config/dotfiles/packages/$candidate
-            break
-        end
-    end
+    set -l nvm_script (__dotfiles_vendor_init nvm sh)
 
     set -l nvm_has_fish 0
     if test -n "$nvm_script"
@@ -154,11 +137,7 @@ if status is-interactive
                 end
 
                 if not test -f "$script"
-                    if test -f ~/.config/dotfiles/packages/nvm
-                        set script ~/.config/dotfiles/packages/nvm
-                    else if test -f ~/.config/dotfiles/packages/nvm.sh
-                        set script ~/.config/dotfiles/packages/nvm.sh
-                    end
+                    set script (__dotfiles_vendor_init nvm sh)
                 end
 
                 if not test -f $script
@@ -191,11 +170,6 @@ if status is-interactive
         end
     end
 
-    # Golang package
-    if test -f ~/.config/dotfiles/packages/golang
-        source ~/.config/dotfiles/packages/golang
-    end
-
     # Load secrets
     if test -f $HOME/.secrets
         source $HOME/.secrets
@@ -223,51 +197,6 @@ if status is-interactive
 
     # Initialize zoxide
     zoxide init fish | source
-
-    # Aliases
-    alias pamcan pacman
-    alias ls 'eza --icons'
-    alias clear "printf '\033[2J\033[3J\033[1;1H'"
-    alias q 'qs -c ii'
-    alias c clear
-    alias dot 'cd ~/.config/dotfiles'
-    # Function to launch dotfiles menu (takes precedence over df -h alias)
-    function df
-        if test (count $argv) -eq 0
-            # No arguments - show dotfiles menu
-            dotfiles
-        else
-            # Arguments passed - delegate to original df command
-            command df $argv
-        end
-    end
-    alias x exit
-    alias rm 'rm -rf'
-    alias p pnpm
-    alias r 'bun run dev'
-    alias b 'bun run build'
-    alias i 'bun install'
-    alias t 'bun run tauri dev'
-
-    # Claude CLI aliases with dangerous permission skip
-    alias cl 'claude --dangerously-skip-permissions'
-    alias claude 'claude --dangerously-skip-permissions'
-
-    # Modern CLI tool aliases (only the useful ones)
-    alias find fd # Better find replacement
-    alias grep rg # Faster grep replacement
-    alias top bottom # Modern system monitor
-
-    # Quick navigation
-    alias .. 'cd ..'
-    alias ... 'cd ../..'
-    alias .... 'cd ../../..'
-
-    # Cargo
-    if test -f $HOME/.cargo/env
-        # Add cargo bin to PATH if not already present
-        add_to_path $HOME/.cargo/bin
-    end
 
     # Local bin env
     if test -d $HOME/.local/bin

@@ -1,7 +1,7 @@
 # Dotfiles Architecture Rules for AI Assistants
 
 ## Overview
-This dotfiles repository follows a modular architecture pattern with clear separation between executables, implementations, and reusable functions.
+This dotfiles repository follows a modular architecture pattern with clear separation between framework internals, executables, and implementations.
 
 ---
 
@@ -12,6 +12,10 @@ This dotfiles repository follows a modular architecture pattern with clear separ
 **Directory Structure:**
 - `bin/` - Executable wrappers on system PATH (thin wrappers)
 - `scripts/` - Implementation logic (actual functionality)
+- `functions/` - Framework-internal helpers only
+- `aliases/` - Top-level alias and shell command modules
+- `loaders/` - Shell-specific orchestration for loading modules
+- `packages/_vendor/` - Third-party runtime connectors and shell integration
 
 ### Rules:
 
@@ -41,6 +45,9 @@ This dotfiles repository follows a modular architecture pattern with clear separ
    - Scripts in `bin/` must be executable (`chmod +x`)
    - TypeScript scripts use `#!/usr/bin/env bun` shebang
    - Shell scripts use appropriate shebang (`#!/usr/bin/env bash`, `#!/usr/bin/env fish`, etc.)
+   - Scripts in `bin/` and `scripts/` must not source `functions/`
+   - If multiple tools need a runtime helper, place it in a dedicated tool/runtime layer such as `scripts/lib/`, not `functions/`
+   - Third-party shell startup glue belongs in `packages/_vendor/`, not in `cfg` or `configs/fish/config.fish`
 
 4. **Discovery:**
    - The `dotfiles` menu (`scripts/dotfiles.ts`) automatically discovers executables in `bin/`
@@ -48,9 +55,10 @@ This dotfiles repository follows a modular architecture pattern with clear separ
    - DOCSTRING comments are extracted and shown in the menu
 
 5. **Aliases:**
-   - Add aliases to `configs/fish/aliases/system.fish` or appropriate alias file
+   - Add aliases to `aliases/system.fish` or the appropriate top-level alias module
    - Format: `alias mytool '$HOME/.config/dotfiles/bin/my-tool'`
    - Include DOCSTRING comment: `# DOCSTRING: Description`
+   - Let `loaders/fish/aliases.fish` source alias modules instead of sourcing them directly in `cfg`
 
 ---
 
@@ -58,13 +66,53 @@ This dotfiles repository follows a modular architecture pattern with clear separ
 
 ### Directory: `functions/`
 
-The functions directory contains reusable shell functions that can be sourced and used across the dotfiles system.
+The functions directory is reserved for building and wiring the dotfiles framework itself.
+
+It is not a general-purpose helper layer for runtime tools in `bin/` or `scripts/`.
 
 ### Structure:
 
 1. **`functions/safe-source`** - Safely source directories or files with filters
 2. **`functions/functions.higher-order`** - Higher-order function registry (interactive menu)
 3. **`functions/functions`** - Bridge file that loads the registry system
+
+### Allowed Consumers:
+
+- `setup/`
+- framework bootstrap code
+- internal sourcing/orchestration flows
+
+### Disallowed Consumers:
+
+- `bin/`
+- `scripts/`
+- user-facing runtime tools
+
+## Vendor Runtime Layer
+
+### Directory: `packages/_vendor/`
+
+This directory contains runtime connectors for installed third-party tools.
+
+### Layout:
+
+- `packages/_vendor/<tool>/init.sh` for POSIX-compatible shells
+- `packages/_vendor/<tool>/init.fish` for Fish-specific startup behavior
+- Prefer `init.sh` as the shared entrypoint when possible
+
+### Allowed Contents:
+
+- shell init snippets
+- PATH/export setup for installed tools
+- shell integration hooks
+- Fish-native or POSIX tool-specific startup glue
+
+### Disallowed Contents:
+
+- installation logic
+- framework helpers
+- general-purpose script libraries
+- app config files
 
 ### Creating New Functions:
 
@@ -81,6 +129,7 @@ The functions directory contains reusable shell functions that can be sourced an
    - Use POSIX-compliant syntax when possible
    - Include error handling
    - Make executable: `chmod +x functions/my-function`
+   - Must support framework/bootstrap behavior, not end-user tool behavior
 
 3. **Register Function:**
    - Add sourcing to `functions/functions` bridge file:
@@ -99,7 +148,7 @@ The functions directory contains reusable shell functions that can be sourced an
 
 ### Safe Source Usage:
 
-**ALWAYS use `safe-source` when sourcing files in functions or scripts:**
+**ALWAYS use `safe-source` when sourcing files in framework code:**
 
 ```bash
 # Instead of: source "$file"
@@ -136,18 +185,31 @@ safe-source "$directory" --include "sh,fish" --exclude "test.sh"
    - Register it in `functions/functions`
    - Use `safe-source` for any sourcing operations
    - Make function executable
+   - Only do this for framework/internal helpers
 
 3. **When sourcing files:**
    - **NEVER** use direct `source` or `.` commands
    - **ALWAYS** use `safe-source` function
-   - Example: `safe-source "$DOTFILES_PATH/configs/fish/aliases"`
+   - Example: `safe-source "$DOTFILES_PATH/aliases"`
 
-4. **Documentation:**
+4. **When building user-facing tools:**
+   - Keep `bin/` as thin wrappers
+   - Keep `scripts/` self-contained
+   - Do not source `functions/functions`
+    - Put shared runtime helpers in a tool-side location such as `scripts/lib/`
+
+5. **When wiring installed tools into the shell:**
+   - Put third-party runtime glue in `packages/_vendor/`
+   - Keep `cfg` as the orchestrator that sources vendor snippets
+   - Do not hardcode vendor-specific initialization in `configs/fish/config.fish`
+   - Organize connectors as `packages/_vendor/<tool>/init.sh` and optional `init.fish`
+
+6. **Documentation:**
    - Add DOCSTRING comments to all scripts and functions
    - Update relevant README files if creating major features
    - Follow existing patterns in the codebase
 
-5. **Testing:**
+7. **Testing:**
    - Ensure scripts work in Fish shell (primary shell)
    - Test cross-shell compatibility when possible
    - Verify executables are on PATH
@@ -170,12 +232,12 @@ exec bun "$HOME/.config/dotfiles/scripts/my-tool.ts" "$@"
 chmod +x bin/my-tool scripts/my-tool.ts
 
 # 4. Add alias (optional)
-# File: configs/fish/aliases/system.fish
+# File: aliases/system.fish
 # DOCSTRING: My new tool
 alias mytool '$HOME/.config/dotfiles/bin/my-tool'
 ```
 
-### Example: Creating a New Function
+### Example: Creating a New Framework Function
 
 ```bash
 # 1. Create function
@@ -204,8 +266,8 @@ chmod +x functions/my-function
 
 ## Key Principles
 
-1. **Separation of Concerns:** bin/ = interface, scripts/ = implementation
-2. **Modularity:** Each script/function should be independently usable
+1. **Separation of Concerns:** `functions/` = framework internals, `packages/_vendor/` = runtime connectors, `bin/` = interface, `scripts/` = implementation
+2. **Isolation:** Runtime tools should not depend on framework internals
 3. **Discoverability:** DOCSTRING comments enable auto-discovery
 4. **Safety:** Always use `safe-source` for sourcing operations
 5. **Cross-shell Compatibility:** Functions should work in Fish, Bash, and Zsh
@@ -217,9 +279,13 @@ chmod +x functions/my-function
 
 - **Executables:** `bin/`
 - **Implementations:** `scripts/`
-- **Functions:** `functions/`
+- **Framework Internals:** `functions/`
+- **Alias Modules:** `aliases/`
+- **Shell Loaders:** `loaders/`
+- **Vendor Runtime Layer:** `packages/_vendor/`
 - **Fish Config:** `configs/fish/`
-- **Aliases:** `configs/fish/aliases/`
+- **Fish Runtime Functions:** `configs/fish/functions/`
+- **Aliases:** `aliases/`
 - **Dotfiles Root:** `$HOME/.config/dotfiles` or `$DOTFILES_PATH`
 
 ---
@@ -251,7 +317,7 @@ const SCRIPT_DATA_DIR = join(DOTFILES_DATA_DIR, 'SCRIPT_NAME');
 DOTFILES_DATA_DIR="${DOTFILES_DATA_DIR:-$HOME/.dotfiles}"
 SCRIPT_DATA_DIR="$DOTFILES_DATA_DIR/SCRIPT_NAME"
 
-# Shell scripts - Option 2: Use helper function (recommended)
+# Shell scripts - Option 2: Use helper function in framework/bootstrap code only
 # First source: source $HOME/.config/dotfiles/functions/functions
 SCRIPT_DATA_DIR=$(ensure-script-data-dir "SCRIPT_NAME")
 ```
@@ -314,7 +380,7 @@ SCRIPT_DATA_DIR=$(ensure-script-data-dir "SCRIPT_NAME")
 - `ensure-script-data-dir <script> [subpath]` → creates directories and returns path
 - `script-data-file <script> <relative-path>` → combines helper with relative file
 
-**Always source the functions bridge before using helpers:**
+**Only framework/bootstrap code should source the functions bridge before using helpers:**
 
 ```bash
 source "$HOME/.config/dotfiles/functions/functions"
@@ -333,5 +399,4 @@ Set the environment variable `DOTFILES_DATA_DIR` if you need a custom storage ro
 - Always use `safe-source` instead of direct sourcing
 - DOCSTRING comments are required for discoverability
 - All executables must have execute permissions
-- **Always use the storage pattern:** `$HOME/.config/dotfiles/$SCRIPT_NAME/` for data files
-
+- **Always use the storage pattern:** `$HOME/.dotfiles/$SCRIPT_NAME/` for data files

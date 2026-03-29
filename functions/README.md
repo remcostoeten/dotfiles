@@ -1,6 +1,8 @@
 # Functions Architecture
 
-This directory contains reusable shell functions that can be sourced and used across the dotfiles system.
+This directory contains internal shell helpers for the dotfiles framework itself.
+
+It is not the general-purpose runtime helper layer for `bin/` and `scripts/`. User-facing tools should remain isolated from this directory and use local helpers or a dedicated runtime library instead.
 
 ## Structure
 
@@ -10,11 +12,21 @@ This directory contains reusable shell functions that can be sourced and used ac
 - **`get-script-data-dir`** - Helper function to get script-specific data directory path
 - **`ensure-script-data-dir`** - Ensures script data directory exists and returns path
 
+## Boundary
+
+- `functions/` is for framework bootstrapping, setup, sourcing, and internal orchestration
+- `setup/` may source files from `functions/`
+- `bin/` and `scripts/` should not source `functions/`
+- `packages/_vendor/` is the runtime connector layer for third-party shell integration
+- `configs/fish/functions/` is a separate Fish-native runtime layer
+
+If a helper exists primarily to support an end-user tool, it should live with that tool or in a dedicated runtime helper directory such as `scripts/lib/`, not here.
+
 ## Usage
 
 ### Loading Functions
 
-Source the bridge file in your shell config:
+Source the bridge file only from framework/bootstrap code that needs the internal registry:
 
 ```fish
 # In config.fish
@@ -58,6 +70,8 @@ functions.help
    chmod +x functions/my-function
    ```
 
+Only add a new file here if it supports the dotfiles framework itself. Do not add tool-specific runtime helpers for `scripts/` or `bin/`.
+
 ## Safe Source Usage
 
 **Always use `safe-source` when sourcing files:**
@@ -72,7 +86,7 @@ safe-source "$directory" --include "sh,fish" --exclude "test.sh"
 
 ## Data Storage Helper
 
-**Use data helper functions to work with script-specific data directories:**
+**Framework code may use data helper functions to work with script-specific data directories:**
 
 ```bash
 # Get data directory for your script
@@ -97,4 +111,3 @@ This follows the pattern: `$HOME/.dotfiles/$SCRIPT_NAME/*.{json,log,md,txt}`
 - Include error handling
 - Make files executable
 - Data helpers default to storing files in `$HOME/.dotfiles` (override with `DOTFILES_DATA_DIR`)
-
