@@ -1,22 +1,7 @@
 #!/usr/bin/env fish
 
-# Guard against multiple sourcing.
-if set -q __DOTFILES_CFG_LOADED
-    return 0
-end
-set -g __DOTFILES_CFG_LOADED 1
+source ~/.config/dotfiles/vendor/fish/bootstrap.fish
+source ~/.config/dotfiles/loaders/bin-loader.fish
+dotfiles_load_all_recursive ~/.config/dotfiles/aliases source
 
-source ~/.config/dotfiles/loaders/fish/core.fish
-source ~/.config/dotfiles/loaders/fish/paths.fish
-
-# Fish auto-loads functions from ~/.config/fish/functions/ via setup symlink.
-if test -d ~/.config/fish/functions
-    # No explicit sourcing required here.
-end
-
-if status is-interactive
-    source ~/.config/dotfiles/loaders/fish/vendor.fish
-    source ~/.config/dotfiles/loaders/fish/aliases.fish
-    source ~/.config/dotfiles/loaders/fish/nvm.fish
-    source ~/.config/dotfiles/loaders/fish/session.fish
-end
+source ~/.config/dotfiles/loaders/tools-loader.fish

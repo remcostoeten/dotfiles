@@ -22,10 +22,9 @@ Run `dotfiles --help` or `df --help` for complete usage guide.
 ### Interactive Setup
 
 ```bash
-cd ~/.config/dotfiles/setup
-bun run setup     # Full interactive TUI
-
-bun run cli       # Non-interactive (headless) mode
+cd ~/.config/dotfiles
+./setup/setup.sh --dry-run
+./setup/setup.sh --category curl-tools
 ```
 
 ### Command Line Arguments
@@ -34,34 +33,23 @@ The setup script supports various command-line arguments for fine-grained contro
 
 | Argument | Description |
 |----------|-------------|
-| `--dry-run` | Preview all installations without making changes |
-| `--dry-run-section <NAME>` | Preview a specific section only |
-| `--dry-run-interactive` | Interactive dry-run mode (alias: `--dry-run-i`) |
-| `--skip-system-update` | Skip apt update/upgrade step |
-| `--skip-fonts` | Skip Nerd Fonts installation |
-| `--verbose`, `-v` | Show detailed installation output |
-| `--quiet`, `-q` | Minimal output, errors only |
-| `--install <NAME>` | Install a specific section non-interactively |
-| `--install-interactive` | Select sections to install interactively (alias: `--install-i`) |
-| `--skip <NAME>` | Skip a specific section during installation |
-| `--skip-interactive` | Select sections to skip interactively (alias: `--skip-i`) |
-| `--list` | List all available packages by category |
-| `--all`, `--yes`, `-y` | Non-interactive mode. Installs all categories without prompts |
+| `--dry-run` | Preview installations without making changes |
+| `--verbose` | Show detailed installer output |
+| `--category <NAME>` | Install one category such as `essential`, `tools`, or `curl-tools` |
+| `--package <NAME>` | Install one package such as `fnm` or `starship` |
+| `-h`, `--help` | Show usage help |
 
 **Examples:**
 
 ```bash
 # Preview what would be installed
-bun run setup --dry-run
+./setup/setup.sh --dry-run
 
-# Install everything without prompts
-bun run setup --all --skip-fonts
+# Install one category
+./setup/setup.sh --category curl-tools
 
-# Install only essential packages
-bun run setup --install essential --verbose
-
-# Preview specific category
-bun run setup --dry-run-section cli-utils
+# Install one package with verbose output
+./setup/setup.sh --package fnm --verbose
 ```
 
 > **Note**: Generate the demo GIF by running `./scripts/generate-demo-gif.sh` (requires `terminalizer` or `asciinema` + `agg`)
@@ -73,10 +61,8 @@ The repository is structured as follows:
 * `bin/`: User-facing entrypoints on `PATH`
 * `configs/fish/`: Fish shell configuration
   * `functions/`: Fish-native runtime functions
-* `functions/`: Internal framework helpers for setup, sourcing, and dotfiles wiring
-* `aliases/`: Top-level shell aliases and interactive command modules
-* `loaders/`: Shell-specific module loaders that wire aliases and vendor connectors into the active shell
-* `packages/_vendor/`: Third-party runtime connectors with per-tool `init.sh` / `init.fish` entrypoints
+* `vendor/`: Bootstrapping framework code and shell helpers
+* `tools/`: Tool-specific runtime modules (`fnm`, `bun`, `rust`, `starship`, `docker`, `gnome`, etc.)
 * `scripts/`: Tool implementations, intended to stay isolated from framework internals
 * `setup/`: Bootstrap and installation logic
 * `env-private/`: Private environment variables (see [Private Files Guide](docs/PRIVATE-FILES.md))
@@ -85,17 +71,14 @@ The repository is structured as follows:
 
 This repo uses a strict separation between framework internals and runtime tools:
 
-* `functions/` is for building and wiring the dotfiles framework itself
-* `setup/` may use `functions/`
-* `packages/_vendor/` wires installed third-party tools into the shell session
-* `packages/_vendor/<tool>/init.sh` is the shared POSIX entrypoint for Bash/Zsh-style shells
-* `packages/_vendor/<tool>/init.fish` is optional and exists only when Fish needs its own syntax or adapter
-* `aliases/` contains first-class alias and shell command modules, loaded by `loaders/fish/aliases.fish`
-* `loaders/` contains shell-specific orchestration logic so `cfg` stays thin
+* `setup/setup.sh` installs tools and creates symlinks, but shell startup now loads from `tools/`
+* `vendor/fish/bootstrap.fish` and `vendor/sh/bootstrap.sh` are the only startup entrypoints
+* `vendor/` holds bootstrap helpers, shared defaults, PATH setup, and session-only startup behavior
+* `tools/<name>.fish` and `tools/<name>.sh` define shell integration, aliases, and workflows by tool or domain
+* `cfg` stays logic-free and only sources a loader entrypoint
 * `bin/` exposes stable user-facing commands
 * `scripts/` contains tool implementations behind those commands
-* `bin/` and `scripts/` should not depend on `functions/`
-* `configs/fish/functions/` is separate from `functions/` and contains Fish runtime behavior only
+* `configs/fish/functions/` contains Fish runtime behavior only
 
 ## Private Files & Secrets
 
@@ -113,9 +96,9 @@ See **[docs/PRIVATE-FILES.md](docs/PRIVATE-FILES.md)** for a complete guide on:
 
 ## Installation
 
-### Fresh Machine Setup (Bootstrap)
+### Fresh Machine Setup
 
-For a completely fresh machine, use the bootstrap script to handle initial setup.
+For a completely fresh machine, clone the repository and run the shell installer.
 
 **Prerequisites (Required Before Running):**
 
@@ -136,45 +119,29 @@ For a completely fresh machine, use the bootstrap script to handle initial setup
 **Note:** The main dotfiles repository is **public** and requires no authentication. Only `env-private` needs authentication.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/remcostoeten/dotfiles/main/bootstrap.sh | bash
-```
-
-Or download and run manually:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/remcostoeten/dotfiles/main/bootstrap.sh -o /tmp/bootstrap.sh
-chmod +x /tmp/bootstrap.sh
-bash /tmp/bootstrap.sh
-```
-
-**What the bootstrap script does:**
-
-1. ✅ Checks prerequisites (internet, GitHub auth)
-2. ✅ Installs Git (if needed)
-3. ✅ Clones the dotfiles repository to `~/.config/dotfiles`
-4. ✅ Initializes git submodules (env-private, nvim config, etc.)
-5. ✅ Restores SSH keys from `env-private/.ssh/` to `~/.ssh/`
-6. ✅ Installs essential tools (Bun runtime)
-7. ✅ Makes all scripts executable
-8. ✅ Prompts to run the main setup script
-
-See [Bootstrap Guide](docs/BOOTSTRAP.md) for detailed troubleshooting and alternative authentication methods.
-
-### Quick Setup (If dotfiles already cloned)
-
-1. Clone this repository:
-
-```bash
 git clone https://github.com/remcostoeten/dotfiles ~/.config/dotfiles
 ```
 
-2. Run the setup script:
+Then run setup:
 
 ```bash
-cd ~/.config/dotfiles/setup;
-bun install;
-bun run setup
+cd ~/.config/dotfiles
+./setup/setup.sh
 ```
+
+The installer can also be scoped:
+
+```bash
+./setup/setup.sh --dry-run
+./setup/setup.sh --category curl-tools
+./setup/setup.sh --package fnm
+```
+
+### Shell Entrypoints
+
+- Fish: symlink `~/.config/fish/config.fish` to [`configs/fish/config.fish`](/home/remco/.config/dotfiles/configs/fish/config.fish)
+- Bash: source or symlink [`configs/bash/.bashrc`](/home/remco/.config/dotfiles/configs/bash/.bashrc)
+- Zsh / Oh My Zsh: source [`configs/zsh/.zshrc`](/home/remco/.config/dotfiles/configs/zsh/.zshrc) from your `.zshrc` or `custom/*.zsh`
 
 The setup script will:
 

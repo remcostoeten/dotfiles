@@ -1,0 +1,380 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_NAME="${0##*/}"
+
+# Edit these patterns to change the always-ignored set.
+# These are shell globs matched against normalized relative paths.
+ALWAYS_IGNORE_PATTERNS=(
+  "node_modules"
+  "node_modules/*"
+  "*/node_modules"
+  "*/node_modules/*"
+  "dist"
+  "dist/*"
+  "*/dist"
+  "*/dist/*"
+  "build"
+  "build/*"
+  "*/build"
+  "*/build/*"
+  ".env"
+  ".env.*"
+  "*/.env"
+  "*/.env.*"
+  "plans.md"
+  "*/plans.md"
+)
+
+print_help() {
+  cat <<'EOF'
+gc: stage files and commit with an unquoted message
+
+Usage:
+  gc [options] MESSAGE...
+  gc [options] MESSAGE... -- FILE...
+
+Examples:
+  gc fix navbar spacing
+  gc fix navbar spacing card.tsx another-file.py awesome.rs .
+  gc --all refactor git helper
+  gc improve parser -- bin/gc .zshrc
+  gc -n test parser bin/gc
+
+How parsing works:
+  - By default, gc reads arguments from right to left.
+  - Any trailing arguments that look like real git pathspecs are treated as files.
+  - Everything before that becomes the commit message.
+  - For ambiguous cases, use -- to separate message from files explicitly.
+
+Behavior:
+  - With no file arguments, gc stages all changes in the repo.
+  - With file arguments, gc stages only those paths.
+  - It always ignores these paths unless you edit the script:
+    node_modules, dist, build, .env*, plans.md
+  - Exception: env example files are allowed, for example:
+    .env.example, .env.local.example, apps/web/.env.example
+
+Options:
+  -h, --help       Show this help text
+  -n, --dry-run    Print what gc would do without changing git state
+  -v, --verbose    Print extra debug output
+  --all            Force "stage all" mode and treat the rest as message text
+  --no-verify      Pass --no-verify to git commit
+
+Notes:
+  - If your message ends with something that also looks like a file path,
+    gc may treat it as a file. In that case use:
+      gc your message here -- path/to/file
+  - gc requires at least one message word.
+EOF
+}
+
+die() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+log() {
+  if [[ "${VERBOSE:-0}" -eq 1 ]]; then
+    printf '[gc] %s\n' "$*" >&2
+  fi
+}
+
+is_git_repo() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+git_repo_root() {
+  git rev-parse --show-toplevel
+}
+
+normalize_rel_path() {
+  local raw="$1"
+
+  if [[ "$raw" == "." ]]; then
+    printf '.\n'
+    return
+  fi
+
+  raw="${raw#./}"
+  raw="${raw%/}"
+  printf '%s\n' "$raw"
+}
+
+is_env_example_path() {
+  local path
+  path="$(normalize_rel_path "$1")"
+
+  case "$path" in
+    *.env.example|*.env.*.example|.env.example|.env.*.example)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_ignored_path() {
+  local path
+  path="$(normalize_rel_path "$1")"
+
+  if is_env_example_path "$path"; then
+    return 1
+  fi
+
+  local pattern
+  for pattern in "${ALWAYS_IGNORE_PATTERNS[@]}"; do
+    case "$path" in
+      $pattern)
+        return 0
+        ;;
+    esac
+  done
+
+  return 1
+}
+
+pathspec_exists_in_git() {
+  local token="$1"
+
+  if [[ "$token" == "." || "$token" == ".." ]]; then
+    return 0
+  fi
+
+  if [[ -e "$token" ]]; then
+    return 0
+  fi
+
+  git ls-files --error-unmatch -- "$token" >/dev/null 2>&1 && return 0
+  git ls-files --others --exclude-standard -- "$token" | grep -q . && return 0
+  git diff --name-only -- "$token" | grep -q . && return 0
+
+  return 1
+}
+
+looks_like_pathspec() {
+  local token="$1"
+
+  [[ -n "$token" ]] || return 1
+  [[ "$token" == -* ]] && return 1
+
+  pathspec_exists_in_git "$token" && return 0
+
+  case "$token" in
+    */*|*.*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+join_by_space() {
+  local first=1
+  local item
+  for item in "$@"; do
+    if (( first )); then
+      printf '%s' "$item"
+      first=0
+    else
+      printf ' %s' "$item"
+    fi
+  done
+  printf '\n'
+}
+
+DRY_RUN=0
+VERBOSE=0
+FORCE_ALL=0
+COMMIT_NO_VERIFY=0
+
+declare -a POSITIONAL=()
+
+while (($#)); do
+  case "$1" in
+    -h|--help)
+      print_help
+      exit 0
+      ;;
+    -n|--dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -v|--verbose)
+      VERBOSE=1
+      shift
+      ;;
+    --all)
+      FORCE_ALL=1
+      shift
+      ;;
+    --no-verify)
+      COMMIT_NO_VERIFY=1
+      shift
+      ;;
+    --)
+      POSITIONAL+=("$@")
+      break
+      ;;
+    -*)
+      die "Unknown option: $1"
+      ;;
+    *)
+      POSITIONAL+=("$1")
+      shift
+      ;;
+  esac
+done
+
+((${#POSITIONAL[@]})) || {
+  print_help >&2
+  exit 1
+}
+
+is_git_repo || die "Not inside a git repository."
+
+REPO_ROOT="$(git_repo_root)"
+cd "$REPO_ROOT"
+
+declare -a MESSAGE_WORDS=()
+declare -a FILE_ARGS=()
+EXPLICIT_FILE_MODE=0
+
+if [[ "${POSITIONAL[*]}" == *" -- "* ]]; then
+  # Defensive fallback. In normal parsing, -- stays as its own item.
+  :
+fi
+
+separator_index=-1
+for i in "${!POSITIONAL[@]}"; do
+  if [[ "${POSITIONAL[$i]}" == "--" ]]; then
+    separator_index="$i"
+    break
+  fi
+done
+
+if (( FORCE_ALL == 1 )); then
+  MESSAGE_WORDS=("${POSITIONAL[@]}")
+elif (( separator_index >= 0 )); then
+  MESSAGE_WORDS=("${POSITIONAL[@]:0:separator_index}")
+  FILE_ARGS=("${POSITIONAL[@]:separator_index+1}")
+  EXPLICIT_FILE_MODE=1
+else
+  MESSAGE_WORDS=("${POSITIONAL[@]}")
+
+  for (( i=${#POSITIONAL[@]}-1; i>=0; i-- )); do
+    token="${POSITIONAL[$i]}"
+
+    if looks_like_pathspec "$token"; then
+      FILE_ARGS=("$token" "${FILE_ARGS[@]}")
+      unset 'MESSAGE_WORDS[$i]'
+      EXPLICIT_FILE_MODE=1
+      continue
+    fi
+
+    break
+  done
+
+  MESSAGE_WORDS=("${MESSAGE_WORDS[@]}")
+fi
+
+((${#MESSAGE_WORDS[@]})) || die "Missing commit message."
+
+COMMIT_MESSAGE="$(join_by_space "${MESSAGE_WORDS[@]}")"
+COMMIT_MESSAGE="${COMMIT_MESSAGE%$'\n'}"
+
+declare -a FILTERED_FILE_ARGS=()
+if ((${#FILE_ARGS[@]})); then
+  for token in "${FILE_ARGS[@]}"; do
+    if is_ignored_path "$token"; then
+      log "ignoring protected path: $token"
+      continue
+    fi
+    FILTERED_FILE_ARGS+=("$token")
+  done
+fi
+
+if (( EXPLICIT_FILE_MODE == 1 && ${#FILTERED_FILE_ARGS[@]} == 0 )); then
+  die "Only protected paths were provided. Nothing eligible to stage."
+fi
+
+declare -a ADD_CMD=(git add --all --)
+declare -a ADD_EXAMPLE_ENV_CMD=()
+
+if ((${#FILTERED_FILE_ARGS[@]})); then
+  ADD_CMD+=("${FILTERED_FILE_ARGS[@]}")
+else
+  ADD_CMD+=(
+    .
+    ":(exclude,glob)**/node_modules"
+    ":(exclude,glob)**/node_modules/**"
+    ":(exclude,glob)**/dist"
+    ":(exclude,glob)**/dist/**"
+    ":(exclude,glob)**/build"
+    ":(exclude,glob)**/build/**"
+    ":(exclude,glob)**/.env"
+    ":(exclude,glob)**/.env.*"
+    ":(exclude,glob)**/plans.md"
+  )
+
+  while IFS= read -r env_example_path; do
+    [[ -n "$env_example_path" ]] || continue
+    ADD_EXAMPLE_ENV_CMD+=( "$env_example_path" )
+  done < <(
+    find . -type f \
+      \( -name '.env.example' -o -name '.env.*.example' \) \
+      -print 2>/dev/null | sed 's#^\./##'
+  )
+fi
+
+declare -a COMMIT_CMD=(git commit -m "$COMMIT_MESSAGE")
+if (( COMMIT_NO_VERIFY == 1 )); then
+  COMMIT_CMD+=(--no-verify)
+fi
+
+log "repo root: $REPO_ROOT"
+log "message: $COMMIT_MESSAGE"
+if ((${#FILTERED_FILE_ARGS[@]})); then
+  log "mode: selected paths"
+  log "paths: ${FILTERED_FILE_ARGS[*]}"
+else
+  log "mode: stage all eligible changes"
+fi
+
+if (( DRY_RUN == 1 )); then
+  printf 'Commit message: %s\n' "$COMMIT_MESSAGE"
+  if ((${#FILTERED_FILE_ARGS[@]})); then
+    printf 'Selected paths:\n'
+    printf '  %s\n' "${FILTERED_FILE_ARGS[@]}"
+  else
+    printf 'Selected paths: all eligible changes\n'
+  fi
+  printf 'Add command:\n'
+  printf '  '
+  printf '%q ' "${ADD_CMD[@]}"
+  printf '\n'
+  if ((${#ADD_EXAMPLE_ENV_CMD[@]})); then
+    printf 'Extra allowed env example paths:\n'
+    printf '  %s\n' "${ADD_EXAMPLE_ENV_CMD[@]}"
+  fi
+  printf 'Commit command:\n'
+  printf '  '
+  printf '%q ' "${COMMIT_CMD[@]}"
+  printf '\n'
+  exit 0
+fi
+
+"${ADD_CMD[@]}"
+
+if ((${#ADD_EXAMPLE_ENV_CMD[@]})); then
+  git add --all -- "${ADD_EXAMPLE_ENV_CMD[@]}"
+fi
+
+if git diff --cached --quiet; then
+  die "No staged changes to commit after applying gc rules."
+fi
+
+"${COMMIT_CMD[@]}"

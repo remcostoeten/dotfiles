@@ -1,0 +1,173 @@
+format = """
+[](fg:mauve)$directory[](fg:mauve bg:teal)$git_branch$git_status[](fg:teal)
+$character"""
+
+right_format = """
+[](fg:lavender)$cmd_duration[](fg:lavender bg:mauve)$time[](fg:mauve)"""
+
+palette = 'catppuccin_mocha'
+
+add_newline = true
+
+[directory]
+style = "bg:mauve fg:crust"
+format = '[ $path ]($style)'
+truncation_length = 4
+truncate_to_repo = true
+
+[git_branch]
+symbol = "󰘬 "
+style = "bg:teal fg:crust"
+format = '[ $symbol$branch ]($style)'
+
+[git_status]
+style = "bg:teal fg:crust"
+format = '[ $all_status$ahead_behind]($style)'
+conflicted = "⚔️"
+ahead = "⇡${count}"
+behind = "⇣${count}"
+diverged = "⇕⇡${ahead_count}⇣${behind_count}"
+untracked = "?"
+stashed = "S"
+modified = "M"
+staged = '[++\($count\)](green)'
+renamed = "R"
+deleted = "D"
+
+[character]
+success_symbol = '[❯](bold fg:green)'
+error_symbol = '[❯](bold fg:red)'
+vimcmd_symbol = '[❮](bold fg:green)'
+vimcmd_replace_one_symbol = '[❮](bold fg:lavender)'
+vimcmd_replace_symbol = '[❮](bold fg:lavender)'
+vimcmd_visual_symbol = '[❮](bold fg:yellow)'
+
+[cmd_duration]
+show_milliseconds = true
+style = "bg:lavender fg:crust"
+format = '[ 󱆃 $duration ]($style)'
+disabled = false
+
+[time]
+disabled = false
+time_format = "%H:%M"
+style = "bg:mauve fg:crust"
+format = '[ 󱑃 $time ]($style)'
+
+[username]
+show_always = true
+style_root = "bg:mauve fg:crust"
+style_user = "bg:mauve fg:crust"
+format = '[ $user ]'
+
+[python]
+symbol = " 󰌠 "
+style = "bg:lavender fg:crust"
+format = '[ $symbol($version) ]'
+
+[rust]
+symbol = " 󱘗 "
+style = "bg:lavender fg:crust"
+format = '[ $symbol($version) ]'
+
+[nodejs]
+symbol = " 󰌞 "
+style = "bg:lavender fg:crust"
+format = '[ $symbol($version) ]'
+
+[palettes.catppuccin_mocha]
+rosewater = "#f5e0dc"
+flamingo = "#f2cdcd"
+pink = "#f5c2e7"
+mauve = "#cba6f7"
+red = "#f38ba8"
+maroon = "#eba0ac"
+peach = "#fab387"
+yellow = "#f9e2af"
+green = "#a6e3a1"
+teal = "#94e2d5"
+sky = "#89dceb"
+sapphire = "#74c7ec"
+blue = "#89b4fa"
+lavender = "#b4befe"
+text = "#cdd6f4"
+subtext1 = "#bac2de"
+subtext0 = "#a6adc8"
+overlay2 = "#9399b2"
+overlay1 = "#7f849c"
+overlay0 = "#6c7086"
+surface2 = "#585b70"
+surface1 = "#45475a"
+surface0 = "#313244"
+base = "#1e1e2e"
+mantle = "#181825"
+crust = "#11111b"
+
+[aws]
+disabled = true
+
+[buf]
+disabled = true
+
+[cobol]
+disabled = true
+
+[conda]
+disabled = true
+
+[docker_context]
+disabled = true
+
+[dotnet]
+disabled = true
+
+[elixir]
+disabled = true
+
+[elm]
+disabled = true
+
+[git_metrics]
+disabled = true
+
+[golang]
+disabled = true
+
+[helm]
+disabled = true
+
+[java]
+disabled = true
+
+[julia]
+disabled = true
+
+[kotlin]
+disabled = true
+
+[kubernetes]
+disabled = true
+
+[ocaml]
+disabled = true
+
+[package]
+disabled = true
+
+[perl]
+disabled = true
+
+[php]
+disabled = true
+
+[pulumi]
+disabled = true
+
+[ruby]
+disabled = true
+
+[scala]
+disabled = true
+
+[swift]
+disabled = true

@@ -1,21 +1,68 @@
-[alias]
-	co = checkout
-	br = branch
-	ci = commit
-	st = status
+[user]
+	name = Remco Stoeten
+	email = stoetenremco.rs@gmail.com
+	signingkey = D26BCD9FA0F3D253
+
+[init]
+	defaultBranch = master
+
+[core]
+	editor = nvim
+	autocrlf = input
+	whitespace = fix
+
 [pull]
-	rebase = true
+	rebase = false
+
 [push]
 	autoSetupRemote = true
 	default = simple
-[user]
-	name = Remco Stoeten
-	email = remcostoeten@hotmail.com
+	followTags = true
+
+[fetch]
+	prune = true
+	pruneTags = true
+
+[rebase]
+	autoStash = true
+
+[commit]
+	gpgsign = true
+
+[tag]
+	sort = version:refname
+
+[color]
+	ui = auto
+
+[color "branch"]
+	current = yellow reverse
+	local = green
+	remote = cyan
+
+[color "status"]
+	added = green
+	changed = yellow
+	untracked = red
+
+[diff]
+	color = auto
+	wordDiff = color
+
+[merge]
+	conflictstyle = diff3
+	tool = nvim
+
+[credential]
+	helper = store
+[url "git@gitlab.com:"]
+	insteadOf = https://gitlab.com/
+
+[url "git@bitbucket.org:"]
+	insteadOf = https://bitbucket.org/
 [credential "https://github.com"]
 	helper = 
 	helper = !/usr/bin/gh auth git-credential
 [credential "https://gist.github.com"]
 	helper = 
 	helper = !/usr/bin/gh auth git-credential
-[init]
-	defaultBranch = master

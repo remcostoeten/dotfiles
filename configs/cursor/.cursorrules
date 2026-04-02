@@ -14,6 +14,7 @@ This dotfiles repository follows a modular architecture pattern with clear separ
 - `scripts/` - Implementation logic (actual functionality)
 - `functions/` - Framework-internal helpers only
 - `aliases/` - Top-level alias and shell command modules
+- `commands/` - Top-level workflow command modules
 - `loaders/` - Shell-specific orchestration for loading modules
 - `packages/_vendor/` - Third-party runtime connectors and shell integration
 
@@ -59,6 +60,11 @@ This dotfiles repository follows a modular architecture pattern with clear separ
    - Format: `alias mytool '$HOME/.config/dotfiles/bin/my-tool'`
    - Include DOCSTRING comment: `# DOCSTRING: Description`
    - Let `loaders/fish/aliases.fish` source alias modules instead of sourcing them directly in `cfg`
+
+6. **Commands:**
+   - Put richer shell workflows in `commands/`, not `aliases/`
+   - Use this for app launchers, GNOME workflows, or multi-step shell-native commands
+   - Let `loaders/fish/commands.fish` source command modules
 
 ---
 
@@ -281,6 +287,7 @@ chmod +x functions/my-function
 - **Implementations:** `scripts/`
 - **Framework Internals:** `functions/`
 - **Alias Modules:** `aliases/`
+- **Command Modules:** `commands/`
 - **Shell Loaders:** `loaders/`
 - **Vendor Runtime Layer:** `packages/_vendor/`
 - **Fish Config:** `configs/fish/`

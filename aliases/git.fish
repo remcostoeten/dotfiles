@@ -20,8 +20,10 @@ alias add=' git add .'
 # DOCSTRING: Commit with message
 alias commit='git commit -m'
 
-# DOCSTRING: Stage and commit in one command
-alias gc='git add . ; git commit -m'
+# DOCSTRING: Smart stage-and-commit helper from dotfiles/bin
+function gc --description "Smart stage-and-commit helper"
+    command ~/.config/dotfiles/bin/gc $argv
+end
 
 # DOCSTRING: Open repository in browser
 alias repo='gh repo view -w'
@@ -40,4 +42,3 @@ alias reset='git reset --hard'
 
 # DOCSTRING: Short git command
 alias g='git'
-

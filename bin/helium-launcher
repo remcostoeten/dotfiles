@@ -1,0 +1,33 @@
+#!/bin/sh
+
+set -eu
+
+downloads_dir="${HOME}/Downloads"
+
+app=$(
+  find "$downloads_dir" -maxdepth 3 -type f \
+    \( -iname '*helium*.AppImage' -o -iname 'Helium*.AppImage' -o -iname '*helium*' -o -iname 'Helium*' \) \
+    | head -n 1
+)
+
+if [ -z "$app" ]; then
+  printf 'Helium not found in %s\n' "$downloads_dir" >&2
+  exit 1
+fi
+
+case "$app" in
+  *.AppImage)
+    chmod +x "$app" 2>/dev/null || true
+    ;;
+esac
+
+if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
+  exec env -u WAYLAND_DISPLAY \
+    "$app" \
+    --ozone-platform=x11 \
+    --use-gl=desktop \
+    --ignore-gpu-blocklist \
+    "$@"
+fi
+
+exec "$app" "$@"

@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
 
-# DOCSTRING: Show help for dotfiles configuration and aliases
-function help --description "Show comprehensive help for dotfiles and aliases"
+# DOCSTRING: Show help for dotfiles configuration and tool helpers
+function help --description "Show comprehensive help for dotfiles tool helpers"
     # Parse arguments
     set -l show_category ""
     set -l show_all false
@@ -11,6 +11,12 @@ function help --description "Show comprehensive help for dotfiles and aliases"
         switch $arg
             case --all -a all
                 set show_all true
+            case --dotfiles dotfiles
+                set show_category "dotfiles"
+            case --navigation navigation
+                set show_category "navigation"
+            case --shell-utils shell-utils
+                set show_category "shell-utils"
             case --system -s system
                 set show_category "system"
             case --dev -d dev
@@ -72,25 +78,30 @@ function _show_help_usage
     echo ""
     
     g "Options (supports both formats):"
-    printf "  %-20s %s\n" "all, --all, -a" "Show all aliases and functions"
-    printf "  %-20s %s\n" "system, --system, -s" "Show system aliases"
-    printf "  %-20s %s\n" "dev, --dev, -d" "Show development aliases"
-    printf "  %-20s %s\n" "git, --git, -g" "Show git aliases"
-    printf "  %-20s %s\n" "fzf, --fzf, -f" "Show fzf aliases"
-    printf "  %-20s %s\n" "drizzle, --drizzle, -z" "Show drizzle aliases"
-    printf "  %-20s %s\n" "apps, --apps" "Show app launcher commands"
-    printf "  %-20s %s\n" "gnome, --gnome" "Show GNOME commands"
+    printf "  %-20s %s\n" "all, --all, -a" "Show all tool helper categories"
+    printf "  %-20s %s\n" "dotfiles, --dotfiles" "Show dotfiles command helpers"
+    printf "  %-20s %s\n" "navigation, --navigation" "Show navigation and file browsing helpers"
+    printf "  %-20s %s\n" "shell-utils, --shell-utils" "Show general shell shortcuts and overrides"
+    printf "  %-20s %s\n" "system, --system, -s" "Show privileged machine control helpers"
+    printf "  %-20s %s\n" "dev, --dev, -d" "Show development helpers"
+    printf "  %-20s %s\n" "git, --git, -g" "Show git helpers"
+    printf "  %-20s %s\n" "fzf, --fzf, -f" "Show fzf helpers"
+    printf "  %-20s %s\n" "drizzle, --drizzle, -z" "Show drizzle helpers"
+    printf "  %-20s %s\n" "apps, --apps" "Show app launcher helpers"
+    printf "  %-20s %s\n" "gnome, --gnome" "Show GNOME helpers"
     printf "  %-20s %s\n" "scripts, --scripts, -t" "Show available scripts and tools"
     printf "  %-20s %s\n" "overview, --overview, -o" "Show dotfiles structure and overview"
     printf "  %-20s %s\n" "help, --help, -h" "Show this help message"
     echo ""
     
     bl "Examples:"
-    echo "  help all         # Show all available aliases"
-    echo "  help dev         # Show only development aliases"
-    echo "  help system      # Show only system aliases"
+    echo "  help all         # Show all available tool helpers"
+    echo "  help dotfiles    # Show dotfiles command helpers"
+    echo "  help navigation  # Show navigation helpers"
+    echo "  help dev         # Show development helpers"
+    echo "  help system      # Show system admin helpers"
     echo "  help apps        # Show desktop app launchers"
-    echo "  help gnome       # Show GNOME commands"
+    echo "  help gnome       # Show GNOME helpers"
     echo "  help scripts     # Show available scripts and tools"
     echo "  help overview    # Show dotfiles structure and setup"
     echo ""
@@ -104,11 +115,11 @@ function _show_general_help
     
     # System & Navigation section
     printf "%s%s\n" "$fish_color_green$fish_color_bold" "🖥️  System & Navigation:"
+    printf "  %-12s %s\n" "df" "$fish_color_bright_blackOpen the dotfiles menu$fish_color_reset"
     printf "  %-12s %s\n" "c" "$fish_color_bright_blackClear terminal$fish_color_reset"
-    printf "  %-12s %s\n" "x" "$fish_color_bright_blackExit terminal$fish_color_reset"
     printf "  %-12s %s\n" "." "$fish_color_bright_blackOpen current directory in file manager$fish_color_reset"
     printf "  %-12s %s\n" "reload" "$fish_color_bright_blackReload fish configuration$fish_color_reset"
-    printf "  %-12s %s\n" "dotfiles" "$fish_color_bright_blackGo to dotfiles directory$fish_color_reset"
+    printf "  %-12s %s\n" "dot" "$fish_color_bright_blackJump to the dotfiles directory$fish_color_reset"
     echo ""
     
     # Development section
@@ -135,16 +146,16 @@ function _show_general_help
     
     # Create a nice grid layout for help options
     printf "%s  %-15s %-15s %s%s\n" "$fish_color_yellow" "help all" "help system" "help dev" "$fish_color_reset"
-    printf "%s  %-15s %-15s %s%s\n" "$fish_color_yellow" "help scripts" "help overview" "aliases --help" "$fish_color_reset"
+    printf "%s  %-15s %-15s %s%s\n" "$fish_color_yellow" "help scripts" "help overview" "modules --help" "$fish_color_reset"
     echo ""
     
     # Quick tip
-    printf "%s%s%s\n" "$fish_color_bright_black" "💡 Tip: All commands support both formats: 'help dev' and 'help --dev'" "$fish_color_reset"
+    printf "%s%s%s\n" "$fish_color_bright_black" "💡 Tip: All categories support both formats: 'help dev' and 'help --dev'" "$fish_color_reset"
     echo ""
 end
 
 function _show_all_categories
-    set -l categories system dev git fzf drizzle apps gnome
+    set -l categories dotfiles navigation shell-utils system dev git fzf drizzle apps gnome
     
     for category in $categories
         _show_category_help $category
@@ -154,34 +165,46 @@ end
 
 function _show_category_help
     set -l category $argv[1]
-    set -l alias_file ~/.config/dotfiles/aliases/$category.fish
-    
-    if not test -f $alias_file
+    set -l category_file ~/.config/dotfiles/tools/$category.fish
+
+    if not test -f $category_file
         echo "Category '$category' not found."
         return 1
     end
     
     # Set category color and title with enhanced styling
     switch $category
-        case system
+        case dotfiles
+            printf "%s%s\n" "$fish_color_cyan$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
+            printf "%s│  🧰 %-52s │%s\n" "$fish_color_cyan$fish_color_bold" "DOTFILES HELPERS" "$fish_color_reset"
+            printf "%s%s\n" "$fish_color_cyan$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
+        case navigation
+            printf "%s%s\n" "$fish_color_blue$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
+            printf "%s│  🧭 %-52s │%s\n" "$fish_color_blue$fish_color_bold" "NAVIGATION HELPERS" "$fish_color_reset"
+            printf "%s%s\n" "$fish_color_blue$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
+        case shell-utils
             printf "%s%s\n" "$fish_color_red$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
-            printf "%s│  🖥️  %-52s │%s\n" "$fish_color_red$fish_color_bold" "SYSTEM ALIASES" "$fish_color_reset"
+            printf "%s│  🖥️  %-52s │%s\n" "$fish_color_red$fish_color_bold" "SHELL UTILS" "$fish_color_reset"
             printf "%s%s\n" "$fish_color_red$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
+        case system
+            printf "%s%s\n" "$fish_color_white$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
+            printf "%s│  🔒 %-52s │%s\n" "$fish_color_white$fish_color_bold" "SYSTEM ADMIN HELPERS" "$fish_color_reset"
+            printf "%s%s\n" "$fish_color_white$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
         case dev
             printf "%s%s\n" "$fish_color_blue$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
-            printf "%s│  ⚡ %-52s │%s\n" "$fish_color_blue$fish_color_bold" "DEVELOPMENT ALIASES" "$fish_color_reset"
+            printf "%s│  ⚡ %-52s │%s\n" "$fish_color_blue$fish_color_bold" "DEVELOPMENT HELPERS" "$fish_color_reset"
             printf "%s%s\n" "$fish_color_blue$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
         case git
             printf "%s%s\n" "$fish_color_green$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
-            printf "%s│  📝 %-52s │%s\n" "$fish_color_green$fish_color_bold" "GIT ALIASES" "$fish_color_reset"
+            printf "%s│  📝 %-52s │%s\n" "$fish_color_green$fish_color_bold" "GIT HELPERS" "$fish_color_reset"
             printf "%s%s\n" "$fish_color_green$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
         case fzf
             printf "%s%s\n" "$fish_color_magenta$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
-            printf "%s│  🔍 %-52s │%s\n" "$fish_color_magenta$fish_color_bold" "FZF ALIASES" "$fish_color_reset"
+            printf "%s│  🔍 %-52s │%s\n" "$fish_color_magenta$fish_color_bold" "FZF HELPERS" "$fish_color_reset"
             printf "%s%s\n" "$fish_color_magenta$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
         case drizzle
             printf "%s%s\n" "$fish_color_yellow$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
-            printf "%s│  💧 %-52s │%s\n" "$fish_color_yellow$fish_color_bold" "DRIZZLE ALIASES" "$fish_color_reset"
+            printf "%s│  💧 %-52s │%s\n" "$fish_color_yellow$fish_color_bold" "DRIZZLE HELPERS" "$fish_color_reset"
             printf "%s%s\n" "$fish_color_yellow$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
         case apps
             printf "%s%s\n" "$fish_color_cyan$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
@@ -189,13 +212,13 @@ function _show_category_help
             printf "%s%s\n" "$fish_color_cyan$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
         case gnome
             printf "%s%s\n" "$fish_color_white$fish_color_bold" "╭───────────────────────────────────────────────────────────╮"
-            printf "%s│  🖥️  %-52s │%s\n" "$fish_color_white$fish_color_bold" "GNOME COMMANDS" "$fish_color_reset"
+            printf "%s│  🖥️  %-52s │%s\n" "$fish_color_white$fish_color_bold" "GNOME HELPERS" "$fish_color_reset"
             printf "%s%s\n" "$fish_color_white$fish_color_bold" "╰───────────────────────────────────────────────────────────╯"
     end
     echo ""
     
     # Parse the file for aliases and functions
-    _parse_aliases_from_file $alias_file
+    _parse_aliases_from_file $category_file
 end
 
 function _parse_aliases_from_file
@@ -210,7 +233,7 @@ function _parse_aliases_from_file
     set -l in_function false
     set -l function_name ""
     
-    # Arrays to store grouped aliases: docstring -> list of aliases
+    # Arrays to store grouped helper names: docstring -> list of names
     set -l grouped_docstrings
     set -l grouped_aliases
     
@@ -351,8 +374,8 @@ function _show_scripts_help
     echo ""
     
     c "CLI & Interactive Tools:"
-    echo "  dotfiles       - Interactive dotfiles menu (TypeScript/React)"
-    echo "                   Main dotfiles management interface"
+    echo "  dotfiles       - Interactive Bun-powered dotfiles menu"
+    echo "                   Main indexed interface for tools and helper commands"
     echo "  simple-menu.ts - TypeScript CLI menu system"
     echo "                   Base for interactive command-line tools"
     echo "                   Advanced terminal user interfaces"
@@ -384,30 +407,29 @@ function _show_dotfiles_overview
     
     g "Directory Structure:"
     echo "  ~/.config/dotfiles/"
-    echo "  ├── fish/                    # Fish shell configuration"
-    echo "  │   ├── aliases/             # Top-level alias modules"
-    echo "  │   ├── functions/           # Custom fish functions"
-    echo "  │   ├── core/               # Core configuration (colors, env)"
-    echo "  │   └── config.fish         # Main fish config"
-    echo "  ├── bin/                    # Executable scripts (in PATH)"
-    echo "  ├── scripts/                # Python & utility scripts"
-    echo "  └── README.md              # Documentation"
+    echo "  ├── cfg                     # Shell orchestrator"
+    echo "  ├── vendor/                 # Bootstrap and framework helpers"
+    echo "  ├── tools/                  # Tool-specific runtime modules and helpers"
+    echo "  ├── configs/fish/           # Fish entrypoint and autoloaded functions"
+    echo "  ├── bin/                    # Stable user-facing commands"
+    echo "  ├── scripts/                # Tool implementations"
+    echo "  └── README.md               # Documentation"
     echo ""
     
     bl "Key Features:"
-    echo "  • Modular Configuration     - Organized by function and purpose"
-    echo "  • Automatic Help System     - Self-documenting aliases and functions"
-    echo "  • Cross-shell Compatibility - Primarily Fish, with fallbacks"
-    echo "  • Developer Tools           - Database, Docker, file management"
-    echo "  • Package Manager Support   - Both pnpm and bun workflows"
-    echo "  • Git Integration           - Comprehensive git aliases and functions"
+    echo "  • Thin Shell Orchestration  - cfg delegates loading to vendor bootstrap"
+    echo "  • Tool-first Runtime        - Shell behavior lives in tools/"
+    echo "  • Vendor Runtime Layer      - Bootstrap helpers stay in vendor/"
+    echo "  • Automatic Help System     - Self-documenting helpers and functions"
+    echo "  • Cross-shell Direction     - POSIX vendor entrypoints are ready for Bash/Zsh"
+    echo "  • Tooling Separation        - bin is interface, scripts are implementation"
     echo ""
     
     y "Configuration Files:"
-    echo "  • Main Config: ~/.config/dotfiles/fish/config.fish"
-    echo "  • Colors:      ~/.config/dotfiles/fish/core/colors.fish"
-    echo "  • Environment: ~/.config/dotfiles/fish/core/env.fish"
-    echo "  • Aliases:     ~/.config/dotfiles/aliases/*.fish"
+    echo "  • Shell Entrypoint: ~/.config/dotfiles/configs/fish/config.fish"
+    echo "  • Orchestrator:     ~/.config/dotfiles/cfg"
+    echo "  • Tool Modules:     ~/.config/dotfiles/tools/*.fish"
+    echo "  • Vendor Helpers:   ~/.config/dotfiles/vendor/**/*"
     echo ""
     
     p "Package Managers:"
@@ -417,22 +439,23 @@ function _show_dotfiles_overview
     echo ""
     
     c "Editor & Tools:"
-    echo "  Editor:    Neovim  (v, vi, vim aliases)"
-    echo "  Terminal:  Fish    (with custom functions)"
+    echo "  Editor:    Neovim  (v, vi, vim helper functions)"
+    echo "  Terminal:  Fish    (current shell entrypoint)"
     echo "  File Mgr:  exa     (enhanced ls replacement)"
     echo "  Finder:    fzf     (fuzzy finding everywhere)"
     echo ""
     
     w "Getting Started:"
-    echo "  1. help --all        # See all available commands"
-    echo "  2. aliases --list    # Browse all aliases by category"
+    echo "  1. help --all        # See all available helpers and functions"
+    echo "  2. modules --list    # Browse runtime categories"
     echo "  3. help --scripts    # Explore available tools"
-    echo "  4. dotfiles          # Navigate to dotfiles directory"
+    echo "  4. dotfiles list     # Explore indexed tools"
     echo "  5. reload            # Apply configuration changes"
     echo ""
     
     g "Customization:"
-    echo "  • Add aliases to appropriate files in aliases/"
+    echo "  • Add shell helpers to tools/"
+    echo "  • Keep bootstrap logic in vendor/"
     echo "  • Use DOCSTRING comments for automatic help integration"
     echo "  • New scripts go in bin/ (executable) or scripts/ (utility)"
     echo "  • Run 'reload' after making changes"
@@ -440,7 +463,7 @@ function _show_dotfiles_overview
     
     y "Documentation:"
     echo "  • README.md          - Basic setup and structure"
-    echo "  • HELP.md            - Comprehensive help documentation"
+    echo "  • modules --help     - Shell module discovery"
     echo "  • help --help        - This help system usage"
     echo ""
 end
