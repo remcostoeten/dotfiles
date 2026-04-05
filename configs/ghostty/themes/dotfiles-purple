@@ -1,0 +1,24 @@
+# Dotfiles - dark (purple-ish)
+palette = 0=#1a1623
+palette = 1=#f08aa4
+palette = 2=#9ad3c3
+palette = 3=#f0d9a4
+palette = 4=#9a96ff
+palette = 5=#d4a6ff
+palette = 6=#94e2d5
+palette = 7=#efe8ff
+palette = 8=#6b6580
+palette = 9=#ff9bb0
+palette = 10=#b8f2dd
+palette = 11=#ffe4b8
+palette = 12=#b3b0ff
+palette = 13=#e3b1ff
+palette = 14=#a8fff0
+palette = 15=#fbf7ff
+
+background = #120f1a
+foreground = #e8defc
+cursor-color = #d4a6ff
+selection-background = #2a1f3b
+selection-foreground = #fbf7ff
+split-divider-color = #3b2f52

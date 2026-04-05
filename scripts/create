@@ -6,8 +6,8 @@
 # ============================================================================
 
 # History directory
-# Store history in current working directory
-HISTORY_DIR="./.create"
+# Store history in temp directory to avoid polluting working directory
+HISTORY_DIR="${TMPDIR:-/tmp}/dotfiles-create"
 HISTORY_FILE="$HISTORY_DIR/history.log"
 
 # Color codes (only if terminal supports colors)

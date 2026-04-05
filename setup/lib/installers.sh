@@ -139,6 +139,18 @@ setup_config_symlinks() {
             ln -sf "$src_path" "$dst_path" 2>/dev/null || true
         fi
     done
+
+    # Ghostty loads themes from ~/.config/ghostty/themes (not from the main config file path).
+    local ghostty_themes_src="$configs_dir/ghostty/themes"
+    local ghostty_themes_dst="$home_config_dir/ghostty/themes"
+    if [[ -d "$ghostty_themes_src" ]]; then
+        mkdir -p "$home_config_dir/ghostty"
+        if [[ ! -e "$ghostty_themes_dst" || -L "$ghostty_themes_dst" ]]; then
+            ln -sf "$ghostty_themes_src" "$ghostty_themes_dst" 2>/dev/null || true
+        else
+            cp -n "$ghostty_themes_src"/* "$ghostty_themes_dst"/ 2>/dev/null || true
+        fi
+    fi
     
     local git_src="$configs_dir/git/.gitconfig"
     local git_dst="$HOME/.gitconfig"

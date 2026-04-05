@@ -1,6 +1,14 @@
 #!/usr/bin/env fish
 
 source ~/.config/dotfiles/vendor/fish/bootstrap.fish
+
+set -l dotfiles_fish_completions ~/.config/dotfiles/configs/fish/completions
+if test -d "$dotfiles_fish_completions"
+    if not contains "$dotfiles_fish_completions" $fish_complete_path
+        set -g fish_complete_path "$dotfiles_fish_completions" $fish_complete_path
+    end
+end
+
 source ~/.config/dotfiles/loaders/bin-loader.fish
 dotfiles_load_all_recursive ~/.config/dotfiles/aliases source
 

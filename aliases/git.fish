@@ -18,7 +18,7 @@ alias pull='git pull'
 alias add=' git add .'
 
 # DOCSTRING: Commit with message
-alias commit='git commit -m'
+# alias commit='git commit -m'
 
 # DOCSTRING: Smart stage-and-commit helper from dotfiles/bin
 function gc --description "Smart stage-and-commit helper"

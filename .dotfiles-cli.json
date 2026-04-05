@@ -9,6 +9,8 @@
   "showDescriptions": true,
   "enableCategories": true,
   "recentItems": [
+    "bin::utility::wallpaper::/home/remco/.config/dotfiles/bin/wallpaper",
+    "script::system::bgr::/home/remco/.config/dotfiles/scripts/bgr",
     "function::l",
     "alias::checkimports",
     "script::database::postgres::/home/remco/.config/dotfiles/scripts/postgres",

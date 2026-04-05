@@ -1,45 +1,23 @@
-
 background-opacity = 0.92
 background-opacity-cells = true
-background-blur = 28
+background-blur = 40
 
-palette = 0=#1d2021
-palette = 1=#c4746e
-palette = 2=#8a9a7b
-palette = 3=#c4b28a
-palette = 4=#7a8ca3
-palette = 5=#a292a3
-palette = 6=#7f9b97
-palette = 7=#d7d0c7
-palette = 8=#5a5f61
-palette = 9=#d08770
-palette = 10=#98a885
-palette = 11=#d1bf97
-palette = 12=#8b9eb7
-palette = 13=#b2a0b3
-palette = 14=#8ba7a2
-palette = 15=#f2ece4
-
-background = #141617
-foreground = #ddd6cd
-cursor-color = #d1bf97
-selection-background = #2a2e30
-selection-foreground = #f2ece4
-split-divider-color = #34393b
+theme = dotfiles-purple
 window-decoration = none
 gtk-titlebar = false
+window-show-tab-bar = never
 gtk-tabs-location = hidden
 gtk-toolbar-style = flat
 gtk-custom-css = /home/remco/.config/dotfiles/configs/ghostty/gtk.css
 window-padding-x = 18
-window-padding-y = 16
+window-padding-y = 18
 
 # Font & Typography
 # font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
 # font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
-font-family = Ubuntu Sans Mono Medium
+font-family = "Geist Mono"
 
-font-size = 15
+font-size = 16.5
 
 # Terminal Options
 confirm-close-surface = false
@@ -55,14 +33,16 @@ split-inherit-working-directory = true
 # Key Bindings
 keybind = ctrl+shift+c=copy_to_clipboard
 keybind = ctrl+shift+v=paste_from_clipboard
-keybind = ctrl+shift+t=new_window
-keybind = ctrl+shift+w=close_surface
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+w=close_tab:this
 keybind = ctrl+shift+n=new_window
-keybind = ctrl+equal=increase_font_size
-keybind = ctrl+Minus=decrease_font_size
+keybind = ctrl+tab=next_tab
+keybind = ctrl+shift+tab=previous_tab
+keybind = ctrl+==increase_font_size:1
+keybind = ctrl+-=decrease_font_size:1
 keybind = ctrl+0=reset_font_size
 # Split operations - Ghostty handles direction automatically
-keybind = ctrl+enter=new_split
+keybind = ctrl+enter=toggle_fullscreen
 keybind = ctrl+backquote=goto_split:next
 
 keybind = ctrl+d=new_split:right
