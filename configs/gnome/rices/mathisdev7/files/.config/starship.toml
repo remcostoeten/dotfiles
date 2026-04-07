@@ -1,0 +1,37 @@
+format = """
+$directory\
+$git_branch\
+$git_status\
+$character"""
+
+[directory]
+style = "bold #e8944a"
+truncation_length = 3
+truncate_to_repo = true
+
+[git_branch]
+symbol = " "
+style = "bold #b065a0"
+
+[git_status]
+style = "bold #e85c3a"
+
+[character]
+success_symbol = "[❯](#c77dba)"
+error_symbol = "[❯](#e85c3a)"
+
+[cmd_duration]
+disabled = true
+
+[package]
+disabled = true
+
+[nodejs]
+disabled = true
+
+[python]
+disabled = true
+
+[rust]
+disabled = true
+
