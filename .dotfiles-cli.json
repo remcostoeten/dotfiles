@@ -1,17 +1,26 @@
 {
   "layout": "categories",
   "banner": "classic",
-  "includeAliases": false,
-  "includeFunctions": false,
+  "includeAliases": true,
+  "includeFunctions": true,
   "groupAliases": false,
   "preferBinOverScripts": true,
   "fzfHeight": "85%",
   "showDescriptions": true,
   "enableCategories": true,
   "recentItems": [
-    "script::database::postgres::/home/remco-stoeten/.config/dotfiles/scripts/postgres",
-    "script::database::db::/home/remco-stoeten/.config/dotfiles/scripts/db",
-    "bin::utility::todo::/home/remco-stoeten/.config/dotfiles/bin/todo",
-    "bin::utility::scripts::/home/remco-stoeten/.config/dotfiles/bin/scripts"
+    "bin::utility::wallpaper::/home/remco/.config/dotfiles/bin/wallpaper",
+    "script::system::bgr::/home/remco/.config/dotfiles/scripts/bgr",
+    "function::l",
+    "alias::checkimports",
+    "script::database::postgres::/home/remco/.config/dotfiles/scripts/postgres",
+    "alias::gen",
+    "function::impress",
+    "function::firefox",
+    "function::chrome",
+    "function::writer"
+  ],
+  "excludeCategories": [
+    "apps"
   ]
 }

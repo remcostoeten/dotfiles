@@ -1,0 +1,90 @@
+# Ghostty Terminal Configuration
+# Refined dark theme with restrained contrast
+
+# Theme & Appearance
+# theme = Apple Classic 
+
+background-opacity = 0.92
+# border-width = 0
+window-decoration = false
+window-padding-x = 18
+window-padding-y = 16
+
+# Font & Typography
+# font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
+# font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
+font-family = "Ubuntu Sans Mono Medium"
+font-size = 15
+
+# Custom color scheme
+background-blur = 28
+foreground = #ddd6cd
+background = #141617
+palette = 0=#1d2021
+palette = 1=#c4746e
+palette = 2=#8a9a7b
+palette = 3=#c4b28a
+palette = 4=#7a8ca3
+palette = 5=#a292a3
+palette = 6=#7f9b97
+palette = 7=#d7d0c7
+palette = 8=#5a5f61
+palette = 9=#d08770
+palette = 10=#98a885
+palette = 11=#d1bf97
+palette = 12=#8b9eb7
+palette = 13=#b2a0b3
+palette = 14=#8ba7a2
+palette = 15=#f2ece4
+
+# Cursor & Input
+cursor-color = #d1bf97
+# cursor-style-block = true
+cursor-style-blink =  true
+
+# Selection
+selection-background = #2a2e30
+selection-foreground = #f2ece4
+
+# Bell
+# bell = none
+
+# Key Bindings
+keybind = ctrl+shift+c=copy_to_clipboard
+keybind = ctrl+shift+v=paste_from_clipboard
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+w=close_tab
+keybind = ctrl+shift+n=new_window
+keybind = ctrl+equal=increase_font_size
+keybind = ctrl+Minus=decrease_font_size
+keybind = ctrl+0=reset_font_size
+# Split operations - Ghostty handles direction automatically
+keybind = ctrl+enter=new_split
+keybind = ctrl+backquote=goto_split:next
+
+# Mouse
+mouse-hide-while-typing = true
+copy-on-select = true
+
+# Terminal Options
+confirm-close-surface = false
+
+# Window Behavior
+window-width = 120
+window-height = 40
+window-save-state = always
+window-inherit-working-directory = true
+tab-inherit-working-directory = true
+split-inherit-working-directory = true
+
+# Performance
+#gpu-acceleration = true
+
+# Shell Integration
+shell-integration = detect
+
+# GTK-specific tweaks
+gtk-wide-tabs = true
+gtk-custom-css = /home/remco/.config/dotfiles/configs/ghostty/gtk.css
+# Custom GTK styling lives in gtk.css alongside this config (see GTK CSS docs)
+keybind = shift+enter=text:\x1b\r

@@ -1,51 +1,23 @@
-# Ghostty Terminal Configuration
-# Minimalistic Dark Theme with 90% opacity
+background-opacity = 0.92
+background-opacity-cells = true
+background-blur = 40
 
-# Theme & Appearance
-theme = 12-bit Rainbow
-background-opacity = 0.83
-# border-width = 0
-window-decoration = false
-window-padding-x = 10
-window-padding-y = 10
+theme = dotfiles-purple
+window-decoration = none
+gtk-titlebar = false
+window-show-tab-bar = never
+gtk-tabs-location = hidden
+gtk-toolbar-style = flat
+gtk-custom-css = /home/remco/.config/dotfiles/configs/ghostty/gtk.css
+window-padding-x = 18
+window-padding-y = 18
 
 # Font & Typography
 # font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
 # font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
- font-family = "Inter"
-font-size = 16
+font-family = "Geist Mono"
 
-# Custom Color Scheme (overriding theme)
-foreground = #f0f0f0
-background = #0a0a0a
-
-# Cursor & Input
-cursor-color = #61dafb
-# cursor-style-block = true
-cursor-style-blink =  true
-
-# Selection
-selection-background = #264f78
-
-# Bell
-# bell = none
-
-# Key Bindings
-keybind = ctrl+shift+c=copy_to_clipboard
-keybind = ctrl+shift+v=paste_from_clipboard
-keybind = ctrl+shift+t=new_tab
-keybind = ctrl+shift+w=close_tab
-keybind = ctrl+shift+n=new_window
-keybind = ctrl+equal=increase_font_size
-keybind = ctrl+Minus=decrease_font_size
-keybind = ctrl+0=reset_font_size
-# Split operations - Ghostty handles direction automatically
-keybind = ctrl+enter=new_split
-keybind = ctrl+backquote=goto_split:next
-
-# Mouse
-mouse-hide-while-typing = true
-copy-on-select = true
+font-size = 16.5
 
 # Terminal Options
 confirm-close-surface = false
@@ -54,15 +26,27 @@ confirm-close-surface = false
 window-width = 120
 window-height = 40
 window-save-state = always
+window-inherit-working-directory = true
+tab-inherit-working-directory = true
+split-inherit-working-directory = true
 
-# Performance
-gpu-acceleration = true
+# Key Bindings
+keybind = ctrl+shift+c=copy_to_clipboard
+keybind = ctrl+shift+v=paste_from_clipboard
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+w=close_tab:this
+keybind = ctrl+shift+n=new_window
+keybind = ctrl+tab=next_tab
+keybind = ctrl+shift+tab=previous_tab
+keybind = ctrl+==increase_font_size:1
+keybind = ctrl+-=decrease_font_size:1
+keybind = ctrl+0=reset_font_size
+# Split operations - Ghostty handles direction automatically
+keybind = ctrl+enter=toggle_fullscreen
+keybind = ctrl+backquote=goto_split:next
 
-# Shell Integration
-shell-integration = detect
+keybind = ctrl+d=new_split:right
 
-# GTK-specific tweaks
-gtk-wide-tabs = true
-gtk-custom-css = gtk.css
-# Custom GTK styling lives in gtk.css alongside this config (see GTK CSS docs)
-keybind = shift+enter=text:\x1b\r
+# Mouse
+mouse-hide-while-typing = true
+copy-on-select = true

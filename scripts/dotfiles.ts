@@ -29,6 +29,7 @@ type TConfig = {
     showDescriptions: boolean;
     enableCategories: boolean;
     recentItems: string[];
+    excludeCategories: string[];
 };
 
 type TExecResult = {
@@ -37,13 +38,28 @@ type TExecResult = {
     stderr: string;
 };
 
+type TRow = {
+    kind: 'alias' | 'function';
+    category: string;
+    name: string;
+    doc?: string;
+    prog?: string;
+};
+
 const CATEGORIES = {
+    dotfiles: { name: 'Dotfiles', icon: '🧰', color: '\x1b[38;5;111m' },
+    navigation: { name: 'Navigation', icon: '🧭', color: '\x1b[38;5;117m' },
+    'shell-utils': { name: 'Shell Utils', icon: '🖥️', color: '\x1b[38;5;208m' },
     dev: { name: 'Development', icon: '💻', color: '\x1b[38;5;219m' },      // Pink
     system: { name: 'System', icon: '⚙️', color: '\x1b[38;5;208m' },      // Peach
     docker: { name: 'Docker', icon: '🐳', color: '\x1b[38;5;116m' },       // Teal
     wezterm: { name: 'Wezterm', icon: '🖥️', color: '\x1b[38;5;147m' },      // Mauve
     utility: { name: 'Utilities', icon: '🔧', color: '\x1b[38;5;183m' },    // Lavender
     git: { name: 'Git', icon: '📦', color: '\x1b[38;5;166m' },            // Green
+    fzf: { name: 'FZF', icon: '🔎', color: '\x1b[38;5;117m' },
+    drizzle: { name: 'Drizzle', icon: '💧', color: '\x1b[38;5;221m' },
+    apps: { name: 'Apps', icon: '📱', color: '\x1b[38;5;81m' },
+    gnome: { name: 'GNOME', icon: '🖥️', color: '\x1b[38;5;252m' },
     database: { name: 'Database', icon: '🗄️', color: '\x1b[38;5;203m' },    // Red
     config: { name: 'Configuration', icon: '⚡', color: '\x1b[38;5;150m' }   // Sky
 };
@@ -60,7 +76,8 @@ function loadConfig(dotfilesRoot: string): TConfig {
         fzfHeight: '90%',
         showDescriptions: true,
         enableCategories: true,
-        recentItems: []
+        recentItems: [],
+        excludeCategories: ['apps']
     };
     if (!existsSync(cfgPath)) return defaults;
     try {
@@ -127,7 +144,13 @@ function isUtilityFile(name: string): boolean {
     return ['.', '..', '..', '....'].includes(name) ||
            name.startsWith('.') && !['env-manager'].includes(name) ||
            name.includes('debug') || name.includes('test') ||
-           name.includes('example') || name.includes('sample');
+           name.includes('example') || name.includes('sample') ||
+           name === 'postgres' || name === 'click' || name === 'clip' ||
+           name === 'screenshot' || name === 'screen' || name === 'cat' ||
+           name === 'connection_manager' || name.includes('generate-demo-gif') ||
+           name === 'setup-android-emulator' || name === 'version-manager' ||
+           name === 'generate-turso-db' || name === 'typo-detector' ||
+           name === 'remove-unused-files' || name === 'license-generator';
 }
 
 function isUnwantedAliasOrFunction(name: string): boolean {
@@ -307,10 +330,11 @@ function safeReadDir(dir: string): string[] {
 function collectFishFiles(dotfilesRoot: string, subDirs: string[]): string[] {
     const paths: string[] = [];
     for (const subDir of subDirs) {
-        const dir = join(dotfilesRoot, 'configs', 'fish', subDir);
+        const dir = join(dotfilesRoot, subDir);
+        const configDir = join(dotfilesRoot, 'configs', 'fish', subDir);
         const altDir = join(dotfilesRoot, 'fish', subDir);
 
-        for (const checkDir of [dir, altDir]) {
+        for (const checkDir of [dir, configDir, altDir]) {
             if (existsSync(checkDir)) {
                 const files = safeReadDir(checkDir).filter(x => x.endsWith('.fish'));
                 paths.push(...files.map(f => join(checkDir, f)));
@@ -320,11 +344,18 @@ function collectFishFiles(dotfilesRoot: string, subDirs: string[]): string[] {
     return paths;
 }
 
+function detectModuleCategory(filePath: string): string {
+    const category = basename(filePath, extname(filePath));
+    if (category in CATEGORIES) return category;
+    return 'utility';
+}
+
 // Helper function to parse fish file content (consolidates alias and function parsing)
 function parseFishFile(filePath: string): { aliasRows: TRow[], fnRows: TRow[] } {
     const aliasRows: TRow[] = [];
     const fnRows: TRow[] = [];
     const lines = readLines(filePath);
+    const category = detectModuleCategory(filePath);
 
     let currentDoc = '';
     let inFn = false;
@@ -339,7 +370,7 @@ function parseFishFile(filePath: string): { aliasRows: TRow[], fnRows: TRow[] } 
             const parsed = parseAliasLine(line);
             if (parsed) {
                 const prog = primaryToken(parsed.target);
-                aliasRows.push({ kind: 'alias', name: parsed.name, doc: currentDoc || undefined, prog });
+                aliasRows.push({ kind: 'alias', category, name: parsed.name, doc: currentDoc || undefined, prog });
                 currentDoc = '';
             }
             continue;
@@ -357,7 +388,7 @@ function parseFishFile(filePath: string): { aliasRows: TRow[], fnRows: TRow[] } 
                 const prog = primaryToken(detectFunctionTarget(body));
                 const isInternal = fnName.startsWith('_') || fnName === 'fish_prompt';
                 if (!isInternal) {
-                    fnRows.push({ kind: 'function', name: fnName, doc: currentDoc || undefined, prog });
+                    fnRows.push({ kind: 'function', category, name: fnName, doc: currentDoc || undefined, prog });
                 }
                 inFn = false; fnName = ''; currentDoc = '';
                 continue;
@@ -384,8 +415,8 @@ function itemMatches(item: TItem, searchTerm: string): boolean {
     return item.name === searchTerm || item.name.split(',').includes(searchTerm);
 }
 
-function collectFishAliasFiles(dotfilesRoot: string): string[] {
-    return collectFishFiles(dotfilesRoot, ['aliases']);
+function collectFishToolFiles(dotfilesRoot: string): string[] {
+    return collectFishFiles(dotfilesRoot, ['tools']);
 }
 
 function collectFishFunctionFiles(dotfilesRoot: string): string[] {
@@ -431,6 +462,15 @@ function isBuiltinFishTarget(cmd: string | undefined): boolean {
     return builtins.has(cmd);
 }
 
+function commandExists(cmd: string): boolean {
+    try {
+        const result = spawnSync('command', ['-v', cmd], { encoding: 'utf8', shell: false });
+        return result.status === 0;
+    } catch {
+        return false;
+    }
+}
+
 function primaryToken(s: string | undefined): string | undefined {
     if (!s) return undefined;
     const t = s.trim().split(/\s+/)[0] || '';
@@ -438,13 +478,12 @@ function primaryToken(s: string | undefined): string | undefined {
 }
 
 function collectAliasesAndFunctions(dotfilesRoot: string, cfg: TConfig): TItem[] {
-    type TRow = { kind: 'alias' | 'function'; name: string; doc?: string; prog?: string };
     const aliasRows: TRow[] = [];
     const fnRows: TRow[] = [];
 
     if (cfg.includeAliases) {
-        const aliasFiles = collectFishAliasFiles(dotfilesRoot);
-        for (const file of aliasFiles) {
+        const toolFiles = collectFishToolFiles(dotfilesRoot);
+        for (const file of toolFiles) {
             const { aliasRows: fileAliasRows, fnRows: fileFnRows } = parseFishFile(file);
             aliasRows.push(...fileAliasRows);
             fnRows.push(...fileFnRows);
@@ -463,31 +502,34 @@ function collectAliasesAndFunctions(dotfilesRoot: string, cfg: TConfig): TItem[]
     const items: TItem[] = [];
 
     if (cfg.groupAliases) {
-        const byProg = new Map<string, { names: Set<string>; doc?: string }>();
+        const byProg = new Map<string, { category: string; names: Set<string>; doc?: string }>();
         function addToGroup(row: TRow) {
             if (!row.prog || isBuiltinFishTarget(row.prog)) return;
             if (row.prog.startsWith('_')) return;
             if (row.prog.startsWith('$')) return;
-            const g = byProg.get(row.prog) || { names: new Set<string>(), doc: undefined };
+            if (!commandExists(row.prog)) return;
+            const groupKey = `${row.category}::${row.prog}`;
+            const g = byProg.get(groupKey) || { category: row.category, names: new Set<string>(), doc: undefined };
             g.names.add(row.name);
             if (!g.doc && row.doc) g.doc = row.doc;
-            byProg.set(row.prog, g);
+            byProg.set(groupKey, g);
         }
         for (const r of aliasRows) addToGroup(r);
         for (const r of fnRows) addToGroup(r);
-        function toItem(prog: string, g: { names: Set<string>; doc?: string }): TItem {
+        function toItem(prog: string, g: { category: string; names: Set<string>; doc?: string }): TItem {
             const names = Array.from(g.names).sort(function compare(a, b) { return a.localeCompare(b); });
             const filteredNames = names.filter(name => !isUnwantedAliasOrFunction(name));
             if (filteredNames.length === 0) return null as any;
             const nameJoined = filteredNames.join(',');
-            let category = 'utility';
+            let category = g.category || 'utility';
             if (prog === 'git') category = 'git';
             else if (['bun', 'npm', 'pnpm', 'node'].includes(prog)) category = 'dev';
             else if (['sudo'].includes(prog)) category = 'system';
 
             return { id: uniqueId(['alias-group', nameJoined, prog]), type: 'alias', category, name: nameJoined, target: prog, doc: g.doc };
         }
-        for (const [prog, g] of byProg.entries()) {
+        for (const [groupKey, g] of byProg.entries()) {
+            const prog = groupKey.split('::').slice(1).join('::');
             const item = toItem(prog, g);
             if (item) items.push(item);
         }
@@ -495,26 +537,30 @@ function collectAliasesAndFunctions(dotfilesRoot: string, cfg: TConfig): TItem[]
         for (const r of fnRows) {
             if (!r.prog || isBuiltinFishTarget(r.prog)) {
                 if (!isUnwantedAliasOrFunction(r.name)) {
-                    items.push({ id: uniqueId(['function', r.name]), type: 'function', category: 'utility', name: r.name, doc: r.doc });
+                    items.push({ id: uniqueId(['function', r.name]), type: 'function', category: r.category || 'utility', name: r.name, doc: r.doc });
                 }
             }
         }
         for (const r of aliasRows) {
             if (!r.prog || isBuiltinFishTarget(r.prog)) {
                 if (!isUnwantedAliasOrFunction(r.name)) {
-                    items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: 'utility', name: r.name, doc: r.doc });
+                    if (!r.prog || commandExists(r.prog)) {
+                        items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: r.category || 'utility', name: r.name, doc: r.doc });
+                    }
                 }
             }
         }
     } else {
         for (const r of aliasRows) {
             if (!isUnwantedAliasOrFunction(r.name)) {
-                items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: 'utility', name: r.name, target: r.prog, doc: r.doc });
+                if (!r.prog || commandExists(r.prog)) {
+                    items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: r.category || 'utility', name: r.name, target: r.prog, doc: r.doc });
+                }
             }
         }
         for (const r of fnRows) {
             if (!isUnwantedAliasOrFunction(r.name)) {
-                items.push({ id: uniqueId(['function', r.name]), type: 'function', category: 'utility', name: r.name, target: r.prog, doc: r.doc });
+                items.push({ id: uniqueId(['function', r.name]), type: 'function', category: r.category || 'utility', name: r.name, target: r.prog, doc: r.doc });
             }
         }
     }
@@ -852,18 +898,21 @@ function printUsage() {
 
 function buildIndex(dotfilesRoot: string, cfg: TConfig): TItem[] {
     const execs = collectAllExecutables(dotfilesRoot, cfg);
-    const aliasFn = collectAliasesAndFunctions(dotfilesRoot, cfg);
-    const all = [...execs, ...aliasFn];
+    const all = execs;
+
+    // Filter out excluded categories
+    const excludeCats = cfg.excludeCategories || [];
+    const filtered = all.filter(item => !excludeCats.includes(item.category));
 
     // Sort by category first, then by name
-    all.sort((a, b) => {
+    filtered.sort((a, b) => {
         if (a.category !== b.category) {
             return a.category.localeCompare(b.category);
         }
         return a.name.localeCompare(b.name);
     });
 
-    return all;
+    return filtered;
 }
 
 function printCategories(items: TItem[]) {
