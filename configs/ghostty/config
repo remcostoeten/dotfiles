@@ -20,9 +20,11 @@ font-family = "Geist Mono"
 font-size = 16.5
 
 # Terminal Options
+shell-integration-features = clipboard,sudo,ssh-env,title
 confirm-close-surface = false
 
 # Window Behavior
+working-directory = inherit
 window-width = 120
 window-height = 40
 window-save-state = always
@@ -45,7 +47,8 @@ keybind = ctrl+0=reset_font_size
 keybind = ctrl+enter=toggle_fullscreen
 keybind = ctrl+backquote=goto_split:next
 
-keybind = ctrl+d=new_split:right
+keybind = ctrl+key_b=new_split:right
+keybind = ctrl+shift+key_b=new_split:down
 
 # Mouse
 mouse-hide-while-typing = true

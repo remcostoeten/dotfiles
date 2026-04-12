@@ -1,0 +1,134 @@
+#!/usr/bin/env sh
+
+set -eu
+
+usage() {
+    cat <<'EOF'
+Usage: codexc [-i] [-l LANG] [PROMPT...]
+
+Compress prompt text with caveman-compression's NLP mode, then run Codex.
+
+Options:
+  -i        Start interactive `codex` instead of `codex exec`
+  -l LANG   spaCy language code passed to caveman compression (default: en)
+  -h        Show this help
+
+Environment:
+  CAVEMAN_COMPRESSION_DIR  Path to a caveman-compression checkout
+  CODEXC_PYTHON            Python executable to use (default: python3)
+
+Examples:
+  codexc "Fix flaky auth refresh test"
+  cat prompt.txt | codexc
+  codexc -i "Review this repo's session middleware"
+EOF
+}
+
+interactive=0
+language="${CODEXC_LANG:-en}"
+
+while getopts "hil:" opt; do
+    case "$opt" in
+        i) interactive=1 ;;
+        l) language="$OPTARG" ;;
+        h)
+            usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+if ! command -v codex >/dev/null 2>&1; then
+    echo "codexc: codex command not found in PATH" >&2
+    exit 1
+fi
+
+resolve_compressor_dir() {
+    if [ -n "${CAVEMAN_COMPRESSION_DIR:-}" ] && [ -f "${CAVEMAN_COMPRESSION_DIR}/caveman_compress_nlp.py" ]; then
+        printf '%s\n' "$CAVEMAN_COMPRESSION_DIR"
+        return 0
+    fi
+
+    for dir in \
+        "$HOME/.local/share/caveman-compression" \
+        "$HOME/.config/caveman-compression" \
+        "$HOME/src/caveman-compression" \
+        "$HOME/code/caveman-compression" \
+        "$HOME/dev/caveman-compression"
+    do
+        if [ -f "$dir/caveman_compress_nlp.py" ]; then
+            printf '%s\n' "$dir"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+compressor_dir="$(resolve_compressor_dir || true)"
+if [ -z "$compressor_dir" ]; then
+    cat >&2 <<'EOF'
+codexc: could not find caveman-compression.
+
+Set CAVEMAN_COMPRESSION_DIR to a checkout that contains `caveman_compress_nlp.py`.
+Example:
+  export CAVEMAN_COMPRESSION_DIR="$HOME/src/caveman-compression"
+EOF
+    exit 1
+fi
+
+compressor_script="$compressor_dir/caveman_compress_nlp.py"
+
+if [ -x "$compressor_dir/.venv/bin/python" ]; then
+    python_bin="$compressor_dir/.venv/bin/python"
+else
+    python_bin="${CODEXC_PYTHON:-python3}"
+fi
+
+if ! command -v "$python_bin" >/dev/null 2>&1; then
+    echo "codexc: python executable '$python_bin' not found" >&2
+    exit 1
+fi
+
+prompt_file="$(mktemp)"
+compressed_file="$(mktemp)"
+cleanup() {
+    rm -f "$prompt_file" "$compressed_file"
+}
+trap cleanup EXIT INT TERM
+
+if [ "$#" -gt 0 ]; then
+    printf '%s' "$1" >"$prompt_file"
+    shift
+    while [ "$#" -gt 0 ]; do
+        printf ' %s' "$1" >>"$prompt_file"
+        shift
+    done
+fi
+
+if [ ! -t 0 ]; then
+    if [ -s "$prompt_file" ]; then
+        printf '\n\n' >>"$prompt_file"
+    fi
+    cat >>"$prompt_file"
+fi
+
+if [ ! -s "$prompt_file" ]; then
+    echo "codexc: no prompt provided" >&2
+    usage >&2
+    exit 1
+fi
+
+"$python_bin" "$compressor_script" compress -f "$prompt_file" -o "$compressed_file" -l "$language" >/dev/null
+
+if [ "$interactive" -eq 1 ]; then
+    compressed_prompt="$(cat "$compressed_file")"
+    exec codex "$compressed_prompt"
+fi
+
+exec codex exec - <"$compressed_file"
