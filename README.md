@@ -129,6 +129,8 @@ cd ~/.config/dotfiles
 ./setup/setup.sh
 ```
 
+The setup script supports both `apt` (Debian/Ubuntu) and `pacman` (Arch-based) package managers.
+
 The installer can also be scoped:
 
 ```bash
