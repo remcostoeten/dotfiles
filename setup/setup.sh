@@ -138,10 +138,14 @@ configure_icons() {
     if fc-list | grep -qi "Papirus"; then
         log_success "Papirus icons already installed"
     else
-        sudo rm -f /etc/apt/sources.list.d/thopiekar* 2>/dev/null || true
-        sudo add-apt-repository -y ppa:papirus/papirus 2>&1 | grep -v "^Hit:" | grep -v "^Get:" | grep -v "^Ign:" | grep -v "^Reading" || true
-        sudo apt update -qq 2>&1 | grep -v "^Hit:" | grep -v "^Get:" | grep -v "^Reading" || true
-        sudo apt install -y -qq papirus-icon-theme 2>&1 | grep -v "^Selecting" | grep -v "^Preparing" | grep -v "^Unpacking" | grep -v "^Setting up" || true
+        if command -v apt >/dev/null 2>&1; then
+            sudo rm -f /etc/apt/sources.list.d/thopiekar* 2>/dev/null || true
+            sudo add-apt-repository -y ppa:papirus/papirus 2>&1 | grep -v "^Hit:" | grep -v "^Get:" | grep -v "^Ign:" | grep -v "^Reading" || true
+            sudo apt update -qq 2>&1 | grep -v "^Hit:" | grep -v "^Get:" | grep -v "^Reading" || true
+            sudo apt install -y -qq papirus-icon-theme 2>&1 | grep -v "^Selecting" | grep -v "^Preparing" | grep -v "^Unpacking" | grep -v "^Setting up" || true
+        elif command -v pacman >/dev/null 2>&1; then
+            sudo pacman -S --noconfirm --needed papirus-icon-theme >/dev/null 2>&1 || true
+        fi
     fi
     gsettings set org.gnome.desktop.interface icon-theme 'Papirus-Dark' 2>/dev/null || true
     log_success "Icon theme configured"

@@ -1,22 +1,94 @@
 #!/bin/bash
 set -euo pipefail
 
+detect_package_manager() {
+    if command -v apt >/dev/null 2>&1; then
+        echo "apt"
+        return 0
+    fi
+
+    if command -v pacman >/dev/null 2>&1; then
+        echo "pacman"
+        return 0
+    fi
+
+    echo "unknown"
+}
+
+map_pacman_package_name() {
+    local pkg="$1"
+
+    case "$pkg" in
+        build-essential) echo "base-devel" ;;
+        python3) echo "python" ;;
+        python3-pip) echo "python-pip" ;;
+        python3-venv) echo "__skip__" ;;
+        software-properties-common) echo "__skip__" ;;
+        fd-find) echo "fd" ;;
+        gh) echo "github-cli" ;;
+        docker.io) echo "docker" ;;
+        *) echo "$pkg" ;;
+    esac
+}
+
+is_installed_apt() {
+    local pkg="$1"
+    dpkg -l 2>/dev/null | grep -q "^ii  $pkg "
+}
+
+is_installed_pacman() {
+    local pkg="$1"
+    pacman -Q "$pkg" >/dev/null 2>&1
+}
+
 install_apt() {
     local pkg="$1"
     local name="${2:-$pkg}"
-    
-    if dpkg -l 2>/dev/null | grep -q "^ii  $pkg "; then
-        log_success "$name already installed"
-        return 0
-    fi
-    
-    log_step "Installing $name..."
-    if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would run: sudo apt install -y $pkg"
-    else
-        sudo apt install -y -qq "$pkg" 2>&1 | grep -v "^Reading" | grep -v "^Building" | grep -v "^0 upgraded" | grep -v "already the newest" | grep -v "set to manually" | grep -v "no longer required" | grep -v "autoremove" | grep -v "WARNING" | grep -v "nvidia-firmware" | grep -v "ocl-icd" || true
-    fi
-    log_success "$name installed"
+    local package_manager
+    package_manager="$(detect_package_manager)"
+
+    case "$package_manager" in
+        apt)
+            if is_installed_apt "$pkg"; then
+                log_success "$name already installed"
+                return 0
+            fi
+
+            log_step "Installing $name..."
+            if [[ "$DRY_RUN" == "true" ]]; then
+                echo -e "\033[0;36m[DRY RUN]\033[0m Would run: sudo apt install -y $pkg"
+            else
+                sudo apt install -y -qq "$pkg" 2>&1 | grep -v "^Reading" | grep -v "^Building" | grep -v "^0 upgraded" | grep -v "already the newest" | grep -v "set to manually" | grep -v "no longer required" | grep -v "autoremove" | grep -v "WARNING" | grep -v "nvidia-firmware" | grep -v "ocl-icd" || true
+            fi
+            log_success "$name installed"
+            ;;
+        pacman)
+            local mapped_pkg
+            mapped_pkg="$(map_pacman_package_name "$pkg")"
+
+            if [[ "$mapped_pkg" == "__skip__" ]]; then
+                log_info "Skipping $name on pacman-based systems"
+                return 0
+            fi
+
+            if is_installed_pacman "$mapped_pkg"; then
+                log_success "$name already installed"
+                return 0
+            fi
+
+            log_step "Installing $name..."
+            if [[ "$DRY_RUN" == "true" ]]; then
+                echo -e "\033[0;36m[DRY RUN]\033[0m Would run: sudo pacman -S --noconfirm --needed $mapped_pkg"
+            else
+                sudo pacman -S --noconfirm --needed "$mapped_pkg" >/dev/null 2>&1 || log_warn "Failed to install $name ($mapped_pkg) via pacman"
+            fi
+            log_success "$name installed"
+            ;;
+        *)
+            log_error "No supported package manager found (apt/pacman)"
+            return 1
+            ;;
+    esac
 }
 
 install_snap() {
