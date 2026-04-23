@@ -3,9 +3,13 @@
 # DOCSTRING: Quick access to the interactive dotfiles menu
 function df
     if test (count $argv) -eq 0
-        dotfiles interactive
+        if test -t 1; and status --is-interactive
+            command bun ~/.config/dotfiles/scripts/dotfiles.ts interactive
+        else
+            command bun ~/.config/dotfiles/scripts/dotfiles.ts --help
+        end
     else
-        dotfiles $argv
+        command bun ~/.config/dotfiles/scripts/dotfiles.ts $argv
     end
 end
 

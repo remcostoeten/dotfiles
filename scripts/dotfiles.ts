@@ -61,7 +61,8 @@ const CATEGORIES = {
     apps: { name: 'Apps', icon: '📱', color: '\x1b[38;5;81m' },
     gnome: { name: 'GNOME', icon: '🖥️', color: '\x1b[38;5;252m' },
     database: { name: 'Database', icon: '🗄️', color: '\x1b[38;5;203m' },    // Red
-    config: { name: 'Configuration', icon: '⚡', color: '\x1b[38;5;150m' }   // Sky
+    config: { name: 'Configuration', icon: '⚡', color: '\x1b[38;5;150m' },  // Sky
+    wallpaper: { name: 'Wallpaper', icon: '🖼️', color: '\x1b[38;5;225m' }   // Pastel pink
 };
 
 function loadConfig(dotfilesRoot: string): TConfig {
@@ -171,6 +172,7 @@ function isUnwantedExecutable(name: string): boolean {
         '.', '..', '..', '....',
         'fish_variables', 'scripts', 'ui-import-transformer',
         'setup-env', 'minimal-fish-config', 'welcome_banner',
+        'wallpaper',
         'stop_alarm', 'screen', 'screenshot', 'cat'
     ];
     return unwanted.includes(name) ||
@@ -213,6 +215,7 @@ function getScriptDescription(filePath: string): string | undefined {
 }
 
 function categorizeItem(name: string, path: string): { type: TItemType; category: string } {
+    if (name.includes('wallpaper') || path.includes('wallpaper')) return { type: 'bin', category: 'wallpaper' };
     if (path.includes('docker')) return { type: 'docker', category: 'docker' };
     if (path.includes('wezterm')) return { type: 'wezterm', category: 'wezterm' };
     if (name.includes('postgres') || name.includes('db') || name.includes('database')) return { type: 'script', category: 'database' };

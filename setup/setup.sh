@@ -73,6 +73,7 @@ configure_desktop() {
     configure_cursor
     configure_top_bar
     configure_fonts
+    setup_wallpaper_rotation
     
     log_success "Desktop aesthetics configured"
 }
@@ -187,6 +188,44 @@ configure_fonts() {
     log_success "Fonts configured"
 }
 
+setup_wallpaper_rotation() {
+    log_step "Setting up wallpaper rotation service..."
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo -e "${YELLOW}[DRY RUN]${NC} Would set up wallpaper rotation timer"
+        return 0
+    fi
+
+    local systemd_dir="$HOME/.config/systemd/user"
+    mkdir -p "$systemd_dir"
+
+    cat > "$systemd_dir/wallpaper-rotate.service" << EOF
+[Unit]
+Description=Wallpaper random rotation
+
+[Service]
+Type=oneshot
+ExecStart=$HOME/.config/dotfiles/bin/wallpaper random
+EOF
+
+    cat > "$systemd_dir/wallpaper-rotate.timer" << 'EOF'
+[Unit]
+Description=Wallpaper random rotation every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now wallpaper-rotate.timer 2>/dev/null || true
+
+    log_success "Wallpaper rotation enabled"
+}
+
 set_default_terminal() {
     local terminal="$1"
     log_info "Setting $terminal as default terminal..."
@@ -197,6 +236,41 @@ set_default_terminal() {
     fi
     
     log_success "$terminal set as default terminal"
+}
+
+detect_desktop() {
+    if [[ -n "$XDG_CURRENT_DESKTOP" ]]; then
+        echo "$XDG_CURRENT_DESKTOP"
+    elif [[ -n "$DESKTOP_SESSION" ]]; then
+        echo "$DESKTOP_SESSION"
+    elif [[ "$(tty)" == /dev/tty* ]] && command -v hyprctl &>/dev/null; then
+        echo "hyprland"
+    else
+        echo "none"
+    fi
+}
+
+install_hyprland() {
+    log_info "Installing Hyprland and configs..."
+    
+    local pkg_manager=""
+    if command -v pacman &>/dev/null; then
+        pkg_manager="pacman"
+    elif command -v apt &>/dev/null; then
+        pkg_manager="apt"
+    fi
+    
+    if [[ -n "$pkg_manager" ]]; then
+        if [[ "$pkg_manager" == "pacman" ]]; then
+            sudo pacman -S --noconfirm hyprland waybar wofi dunst brightnessctl playerctl polkit-gnome 2>/dev/null || true
+        else
+            sudo apt install -y hyprland waybar wofi dunst 2>/dev/null || true
+        fi
+    fi
+    
+    setup_config_symlinks
+    
+    log_success "Hyprland configured"
 }
 
 install_category() {
@@ -219,9 +293,10 @@ install_category() {
             install_apt "python3-pip"
             install_apt "python3-venv"
             install_apt "nodejs"
+            install_apt "npm"
             install_curl "https://get.pnpm.io/install.sh" "pnpm" "sh"
             install_curl "https://bun.sh/install" "bun" "bash"
-            install_curl "https://sh.rustup.rs" "rustup" "bash" "-s -y"
+            install_curl "https://sh.rustup.rs" "rustup" "bash" "-y"
             install_dotnet
             ;;
         tools)
@@ -247,7 +322,6 @@ install_category() {
             install_curl "https://fnm.vercel.app/install" "fnm" "bash"
             install_curl "https://sh.rustup.rs" "rustup" "bash" "-y"
             install_curl "https://astral.sh/uv/install.sh" "uv" "sh"
-            install_curl "https://get.tur.so/install.sh" "turso" "sh"
             ;;
         npm-tools)
             install_npm "vercel" "vercel"
@@ -268,7 +342,7 @@ install_category() {
             install_apt "docker-compose"
             ;;
         system)
-            install_apt "neofetch" "Neofetch"
+            install_apt "fastfetch" "Fastfetch"
             install_apt "btop" "Btop"
             ;;
         hardware)
@@ -283,7 +357,22 @@ install_category() {
             install_all_fonts
             ;;
         desktop)
-            configure_desktop
+            local desktop_type
+            desktop_type=$(detect_desktop)
+            case "$desktop_type" in
+                hyprland|Hyprland)
+                    install_hyprland
+                    ;;
+                gnome*|GNOME|*ubuntu*)
+                    configure_desktop
+                    ;;
+                *)
+                    log_warn "No desktop environment detected, skipping desktop config"
+                    ;;
+            esac
+            ;;
+        hyprland)
+            install_hyprland
             ;;
         *)
             log_error "Unknown category: $category"

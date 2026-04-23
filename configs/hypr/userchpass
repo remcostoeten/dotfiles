@@ -1,0 +1,8 @@
+#!/bin/bash
+# Hyprland autostart script
+
+# Set wallpaper
+swww img "$HOME/.config/dotfiles/wallpapers/catppuccin-mocha.png" --transition-type any --transition-duration 2 2>/dev/null || true
+
+# Try to set wallpaper with hyprpaper, otherwise just set with swww
+pidof hyprpaper || hyprpaper &

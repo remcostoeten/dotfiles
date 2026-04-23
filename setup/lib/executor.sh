@@ -10,5 +10,14 @@ run() {
 }
 
 exists() {
-    command -v "$1" &>/dev/null
+    local name="$1"
+
+    case "$name" in
+        rustup)
+            command -v rustup >/dev/null 2>&1 || command -v cargo >/dev/null 2>&1
+            ;;
+        *)
+            command -v "$name" >/dev/null 2>&1
+            ;;
+    esac
 }

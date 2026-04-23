@@ -47,7 +47,7 @@ function dotfiles_load_all_recursive --argument dir mode extension
         set file_extension fish
     end
 
-    find "$dir" -type f -name "*.$file_extension" | sort | while read -l entry
+    command find "$dir" -type f -name "*.$file_extension" | sort | while read -l entry
         switch "$mode_name"
             case source
                 source "$entry"

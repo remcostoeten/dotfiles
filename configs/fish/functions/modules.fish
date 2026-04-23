@@ -87,6 +87,7 @@ function _show_modules_quick_help
     echo ""
     echo "Most used runtime helpers:"
     echo "  df, dotfiles, reload (dotfiles)"
+    echo "  hypr-wallpaper (wallpaper manager)"
     echo "  c, x, q (shell-utils)"
     echo "  ., .., l, tree (navigation)"
     echo "  r, rr, i, pi, v, vi, vim (development)"

@@ -1,7 +1,7 @@
 [user]
 	name = Remco Stoeten
-	email = stoetenremco.rs@gmail.com
-	signingkey = D26BCD9FA0F3D253
+	email = remcostoeten@hotmail.com
+    signingkey = D26BCD9FA0F3D253
 
 [init]
 	defaultBranch = master
@@ -61,8 +61,8 @@
 [url "git@bitbucket.org:"]
 	insteadOf = https://bitbucket.org/
 [credential "https://github.com"]
-	helper = 
+	helper =
 	helper = !/usr/bin/gh auth git-credential
 [credential "https://gist.github.com"]
-	helper = 
+	helper =
 	helper = !/usr/bin/gh auth git-credential

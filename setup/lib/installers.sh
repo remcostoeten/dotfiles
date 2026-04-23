@@ -271,6 +271,7 @@ setup_config_symlinks() {
     local configs=(
         "nvim:$home_config_dir/nvim"
         "starship/starship.toml:$home_config_dir/starship.toml"
+        "fastfetch:$home_config_dir/fastfetch"
         "ghostty:$home_config_dir/ghostty"
         "fish/config.fish:$home_config_dir/fish/config.fish"
         "fish/conf.d:$home_config_dir/fish/conf.d"
@@ -282,6 +283,7 @@ setup_config_symlinks() {
         "waybar:$home_config_dir/waybar"
         "wofi:$home_config_dir/wofi"
         "dunst:$home_config_dir/dunst"
+        "git/ignore:$home_config_dir/git/ignore"
     )
     
     for item in "${configs[@]}"; do
@@ -301,9 +303,106 @@ setup_config_symlinks() {
         ensure_symlink "$git_src" "$git_dst" "$SETUP_BACKUP_ROOT"
     fi
 
+    link_editor_configs_recursive "$configs_dir" "$home_config_dir"
+
     setup_runtime_permissions
     
     log_success "Config symlinks created"
+
+install_editor_extensions
+    
+}
+
+link_editor_configs_recursive() {
+    local configs_dir="$1"
+    local home_config_dir="$2"
+    local vscode_config="$configs_dir/vscode"
+    local ide_config="$configs_dir/ide"
+
+    SETUP_BACKUP_ROOT="${SETUP_BACKUP_ROOT:-$HOME/.config/dotfiles/setup_backup}"
+
+    if [[ ! -d "$vscode_config" ]]; then
+        return
+    fi
+
+    mkdir -p "$ide_config"
+
+    local all_editors_dir="$ide_config/all-editors"
+    mkdir -p "$all_editors_dir"
+
+    for file in "$vscode_config"/*; do
+        if [[ -f "$file" ]]; then
+            local filename=$(basename "$file")
+            ensure_symlink "$file" "$all_editors_dir/$filename" "$SETUP_BACKUP_ROOT"
+        fi
+    done
+
+    local editors=("cursor:$home_config_dir/Cursor" "windsurf:$home_config_dir/Windsurf" "zed:$home_config_dir/zed")
+
+    for item in "${editors[@]}"; do
+        local editor="${item%%:*}"
+        local dst_dir="${item##*:}"
+        local editor_config_dir="$ide_config/$editor"
+
+        mkdir -p "$dst_dir"
+        mkdir -p "$editor_config_dir"
+
+        for file in "$all_editors_dir"/*; do
+            if [[ -f "$file" ]]; then
+                local filename=$(basename "$file")
+                ensure_symlink "$file" "$editor_config_dir/$filename" "$SETUP_BACKUP_ROOT"
+                ensure_symlink "$file" "$dst_dir/$filename" "$SETUP_BACKUP_ROOT"
+            fi
+        done
+    done
+}
+
+install_editor_extensions() {
+    local script_dir="${SCRIPT_DIR:-$HOME/.config/dotfiles/setup}"
+    local vscode_config="$script_dir/configs/vscode"
+    local ide_config="$script_dir/configs/ide"
+    local extensions_file="$vscode_config/extensions.json"
+    local antigravity_extensions="$ide_config/antigravity/extensions.json"
+
+    install_extensions_for_editors() {
+        local file="$1"
+        local editors="$2"
+
+        [[ ! -f "$file" ]] && return
+
+        local ext_ids=()
+        while IFS= read -r line; do
+            line=$(echo "$line" | tr -d '", ' | xargs)
+            [[ -n "$line" ]] && ext_ids+=("$line")
+        done < <(grep -v '^\[' "$file" | grep -v '\]')
+
+        for ext_id in "${ext_ids[@]}"; do
+            [[ -z "$ext_id" ]] && continue
+            
+            for editor in $editors; do
+                local install_cmd=""
+                case "$editor" in
+                    code) install_cmd="code --install-extension" ;;
+                    cursor) install_cmd="cursor --install-extension" ;;
+                    windsurf) install_cmd="windsurf --install-extension" ;;
+                esac
+
+                if command -v "$editor" &>/dev/null; then
+                    if [[ "$DRY_RUN" == "true" ]]; then
+                        log_info "[DRY RUN] Would install: $ext_id for $editor"
+                    else
+                        $install_cmd "$ext_id" 2>/dev/null || true
+                    fi
+                fi
+            done
+        done
+    }
+
+    install_extensions_for_editors "$extensions_file" "code cursor windsurf"
+
+    if [[ -f "$antigravity_extensions" ]] && command -v code &>/dev/null; then
+        install_extensions_for_editors "$antigravity_extensions" "code"
+    fi
 }
 
 install_github() {

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FASTFETCH_CONFIG="${FASTFETCH_CONFIG:-$HOME/.config/dotfiles/configs/fastfetch/config.jsonc}"
+FASTFETCH_LOGO="${FASTFETCH_LOGO:-$HOME/.config/dotfiles/configs/fastfetch/logos/asciify.png}"
+
+if command -v fastfetch >/dev/null 2>&1; then
+    logo_type="chafa"
+
+    case "${TERM_PROGRAM:-}" in
+        ghostty)
+            logo_type="kitty-direct"
+            ;;
+    esac
+
+    if [[ -f "$FASTFETCH_LOGO" ]]; then
+        exec fastfetch --config "$FASTFETCH_CONFIG" --logo-type "$logo_type" --logo "$FASTFETCH_LOGO" "$@"
+    fi
+
+    exec fastfetch --config "$FASTFETCH_CONFIG" "$@"
+fi
+
+exit 0
+r

@@ -9,16 +9,16 @@
   "showDescriptions": true,
   "enableCategories": true,
   "recentItems": [
+    "bin::utility::spellcheck::/home/remcostoeten/.config/dotfiles/bin/spellcheck",
+    "bin::utility::kitty-cinematic::/home/remcostoeten/.config/dotfiles/bin/kitty-cinematic",
+    "bin::utility::ascii-gen::/home/remcostoeten/.config/dotfiles/bin/ascii-gen",
+    "bin::wallpaper::hypr-wallpaper::/home/remcostoeten/.config/dotfiles/bin/hypr-wallpaper",
     "bin::utility::wallpaper::/home/remco/.config/dotfiles/bin/wallpaper",
     "script::system::bgr::/home/remco/.config/dotfiles/scripts/bgr",
     "function::l",
     "alias::checkimports",
     "script::database::postgres::/home/remco/.config/dotfiles/scripts/postgres",
-    "alias::gen",
-    "function::impress",
-    "function::firefox",
-    "function::chrome",
-    "function::writer"
+    "alias::gen"
   ],
   "excludeCategories": [
     "apps"

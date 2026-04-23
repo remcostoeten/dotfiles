@@ -120,6 +120,7 @@ function _show_general_help
     printf "  %-12s %s\n" "." "$fish_color_bright_blackOpen current directory in file manager$fish_color_reset"
     printf "  %-12s %s\n" "reload" "$fish_color_bright_blackReload fish configuration$fish_color_reset"
     printf "  %-12s %s\n" "dot" "$fish_color_bright_blackJump to the dotfiles directory$fish_color_reset"
+    printf "  %-12s %s\n" "hypr-wallpaper" "$fish_color_bright_blackSet or cycle Hyprland wallpapers$fish_color_reset"
     echo ""
     
     # Development section
@@ -375,6 +376,7 @@ function _show_scripts_help
     
     c "CLI & Interactive Tools:"
     echo "  dotfiles       - Interactive Bun-powered dotfiles menu"
+    echo "  hypr-wallpaper - Name-based Hyprland wallpaper manager"
     echo "                   Main indexed interface for tools and helper commands"
     echo "  simple-menu.ts - TypeScript CLI menu system"
     echo "                   Base for interactive command-line tools"
@@ -391,7 +393,7 @@ function _show_scripts_help
     w "Quick Access:"
     echo "  All scripts in bin/ are in PATH and executable anywhere"
     echo "  Most scripts support --help for detailed usage"
-    echo "  Interactive tools: ui (unified dev), db (unified database), postgres, docker-manager, dotfiles"
+    echo "  Interactive tools: ui (unified dev), db (unified database), postgres, docker-manager, dotfiles, hypr-wallpaper"
     echo "  Automation tools: click, kill-ports"
     echo "  Direct CLI flags: ui --migrate, ui --analyze (skip interactive menu)"
     echo ""

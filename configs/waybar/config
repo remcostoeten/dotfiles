@@ -1,0 +1,87 @@
+{
+  "layer": "top",
+  "position": "top",
+  "height": 34,
+  "margin-top": 8,
+  "margin-left": 12,
+  "margin-right": 12,
+  "spacing": 8,
+  "exclusive": true,
+  "gtk-layer-shell": true,
+  "modules-left": ["hyprland/workspaces", "hyprland/window"],
+  "modules-center": ["clock"],
+  "modules-right": ["cpu", "memory", "disk", "pulseaudio", "network", "tray"],
+
+  "hyprland/workspaces": {
+    "disable-scroll": false,
+    "all-outputs": true,
+    "sort-by": "number",
+    "format": "{windows}",
+    "format-window-separator": "  ",
+    "window-rewrite-default": "{title}",
+    "window-rewrite": {
+      "class<ghostty>": "Ghostty",
+      "class<Alacritty>": "Alacritty",
+      "class<firefox>": "Firefox",
+      "class<brave-browser>": "Brave",
+      "class<code>": "Code",
+      "class<Cursor>": "Cursor",
+      "class<discord>": "Discord",
+      "class<spotify>": "Spotify"
+    }
+  },
+
+  "hyprland/window": {
+    "format": "{}",
+    "max-length": 64,
+    "separate-outputs": true
+  },
+
+  "clock": {
+    "timezone": "Europe/Amsterdam",
+    "format": "{:%H:%M}",
+    "format-alt": "{:%a %d %b  %H:%M}",
+    "tooltip-format": "<big>{:%A, %d %B %Y}</big>"
+  },
+
+  "cpu": {
+    "interval": 3,
+    "format": "cpu {usage}%",
+    "tooltip": true
+  },
+
+  "memory": {
+    "interval": 5,
+    "format": "mem {percentage}%",
+    "tooltip-format": "{used:0.1f}G used / {total:0.1f}G"
+  },
+
+  "disk": {
+    "path": "/",
+    "interval": 30,
+    "format": "disk {percentage_used}%",
+    "tooltip-format": "{used} used / {total}"
+  },
+
+  "network": {
+    "interval": 5,
+    "format-wifi": "wifi {signalStrength}%",
+    "format-ethernet": "eth up",
+    "format-linked": "{ifname}",
+    "format-disconnected": "net down",
+    "tooltip-format": "{ifname} {ipaddr}/{cidr}",
+    "on-click": "nm-connection-editor"
+  },
+
+  "pulseaudio": {
+    "format": "vol {volume}%",
+    "format-muted": "muted",
+    "scroll-step": 5,
+    "on-click": "pavucontrol"
+  },
+
+  "tray": {
+    "spacing": 8,
+    "icon-size": 15
+  }
+}

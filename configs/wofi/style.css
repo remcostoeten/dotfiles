@@ -1,0 +1,49 @@
+window {
+    background-color: rgba(16, 19, 23, 0.94);
+    border: 1px solid rgba(110, 231, 216, 0.28);
+    border-radius: 10px;
+    font-family: "Iosevka Nerd Font Propo", "JetBrainsMono Nerd Font", monospace;
+    font-size: 14px;
+}
+
+#outer-box {
+    padding: 10px;
+}
+
+#input {
+    background-color: rgba(36, 43, 51, 0.88);
+    color: #d7dde8;
+    border: 1px solid rgba(242, 193, 78, 0.28);
+    border-radius: 8px;
+    margin: 6px;
+    padding: 10px 12px;
+}
+
+#input:focus {
+    border-color: rgba(110, 231, 216, 0.7);
+}
+
+#scroll {
+    margin: 6px;
+}
+
+#entry {
+    background-color: transparent;
+    color: #d7dde8;
+    border-radius: 7px;
+    padding: 7px 9px;
+    margin: 2px 0;
+}
+
+#entry:selected {
+    background: linear-gradient(135deg, rgba(110, 231, 216, 0.9), rgba(242, 193, 78, 0.9));
+    color: #101317;
+}
+
+#text {
+    margin: 4px 8px;
+}
+
+#image {
+    margin-right: 8px;
+}

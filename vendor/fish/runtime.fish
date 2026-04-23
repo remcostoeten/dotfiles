@@ -31,9 +31,6 @@ if dotfiles_shell_is_interactive
         source $HOME/.secrets
     end
 
-    dotfiles_source_fish_function show_todos_startup
-    dotfiles_source_fish_function welcome_banner
-
     function _override_dir_reset --on-event fish_prompt
         functions --erase _override_dir_reset
 
@@ -42,14 +39,10 @@ if dotfiles_shell_is_interactive
         end
     end
 
-    function _show_welcome_banner --on-event fish_prompt
-        functions --erase _show_welcome_banner
-
-        if functions -q welcome_banner
-            welcome_banner
-        else if functions -q show_todos_startup
-            show_todos_startup
-        end
+    if command -v fastfetch-startup >/dev/null 2>&1
+        fastfetch-startup
+    else if command -v fastfetch >/dev/null 2>&1
+        fastfetch
     end
 
     if test -f ~/.local/state/quickshell/user/generated/terminal/sequences.txt
