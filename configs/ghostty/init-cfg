@@ -85,6 +85,6 @@ shell-integration = detect
 
 # GTK-specific tweaks
 gtk-wide-tabs = true
-gtk-custom-css = /home/remco/.config/dotfiles/configs/ghostty/gtk.css
+gtk-custom-css = gtk.css
 # Custom GTK styling lives in gtk.css alongside this config (see GTK CSS docs)
 keybind = shift+enter=text:\x1b\r

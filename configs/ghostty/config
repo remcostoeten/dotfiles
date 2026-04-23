@@ -1,23 +1,25 @@
+command = /usr/bin/fish
+
 background-opacity = 0.92
 background-opacity-cells = true
-background-blur = 40
+background-blur = 24
 
-theme = dotfiles-purple
+theme = dotfiles-dark
 window-decoration = none
 gtk-titlebar = false
 window-show-tab-bar = never
 gtk-tabs-location = hidden
 gtk-toolbar-style = flat
-gtk-custom-css = /home/remco/.config/dotfiles/configs/ghostty/gtk.css
-window-padding-x = 18
-window-padding-y = 18
+gtk-custom-css = gtk.css
+window-padding-x = 14
+window-padding-y = 14
 
 # Font & Typography
 # font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
 # font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
-font-family = "Geist Mono"
+font-family = "Iosevka Nerd Font Propo"
 
-font-size = 16.5
+font-size = 14.5
 
 # Terminal Options
 confirm-close-surface = false
