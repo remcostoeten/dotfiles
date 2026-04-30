@@ -1,7 +1,7 @@
 [user]
 	name = Remco Stoeten
 	email = remcostoeten@hotmail.com
-    signingkey = D26BCD9FA0F3D253
+	signingkey = F3528E6579A3C46C4CFD71CB35D91CA1D5A8AAE6
 
 [init]
 	defaultBranch = master

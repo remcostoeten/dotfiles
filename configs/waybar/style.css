@@ -19,7 +19,9 @@ window#waybar {
 #disk,
 #pulseaudio,
 #network,
-#tray {
+#custom-bluetooth-panel,
+#tray,
+#custom-power {
     background: rgba(26, 30, 38, 0.34);
     border: 1px solid rgba(230, 236, 245, 0.16);
     border-radius: 14px;
@@ -42,9 +44,10 @@ window#waybar {
 }
 
 #workspaces button.active {
-    color: #253040;
-    background: linear-gradient(135deg, rgba(166, 216, 255, 0.95), rgba(247, 199, 168, 0.95));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    color: #a6d8ff; /* Clean light blue accent for text */
+    background: transparent;
+    font-weight: 900;
+    box-shadow: none;
 }
 
 #workspaces button:hover {
@@ -83,10 +86,26 @@ window#waybar {
 }
 
 #pulseaudio.muted,
-#network.disconnected {
+#network.disconnected,
+#custom-bluetooth-panel.off {
     color: #ffb0bc;
+}
+
+#custom-bluetooth-panel {
+    color: #a6d8ff;
+    min-width: 24px;
+}
+
+#custom-bluetooth-panel.connected {
+    color: #c6e7be;
 }
 
 #tray {
     padding: 0 10px;
+}
+
+#custom-power {
+    color: #ffb0bc;
+    font-size: 15px;
+    padding-right: 15px;
 }

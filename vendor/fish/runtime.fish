@@ -45,6 +45,11 @@ if dotfiles_shell_is_interactive
         fastfetch
     end
 
+    dotfiles_source_fish_function show_todos_startup
+    if functions -q show_todos_startup
+        show_todos_startup
+    end
+
     if test -f ~/.local/state/quickshell/user/generated/terminal/sequences.txt
         cat ~/.local/state/quickshell/user/generated/terminal/sequences.txt
     end

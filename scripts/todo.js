@@ -608,7 +608,7 @@ function displayTasksForShell(tasks) {
   const displayTasks = pending.slice(0, 5);
   const hasMore = pending.length > 5;
 
-  console.log(`${COLORS.BRIGHT}${COLORS.MAUVE}📋 Tasks (${pending.length})${COLORS.RESET}`);
+  console.log(`${COLORS.BRIGHT}${COLORS.MAUVE}Tasks (${pending.length})${COLORS.RESET}`);
 
   for (const task of displayTasks) {
     const createdDate = new Date(task.createdAt);

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+# Define the menu options with Nerd Font icons and a stable action token
+entries="⏻ Power Off\tpoweroff\n󰜉 Restart\treboot\n󰒓 Go to BIOS\tbios\n󰤄 Sleep\tsleep\n󰗼 Logout / Change User\tlogout"
+
+selected=$(printf '%b\n' "$entries" | rofi -dmenu \
+  -theme "$HOME/.config/rofi/raycast.rasi" \
+  -sep '\t' \
+  -display-columns 1 \
+  -l 5 \
+  -i \
+  -no-custom \
+  -p "System")
+
+# Execute the corresponding action
+case $selected in
+  poweroff)
+    systemctl poweroff
+    ;;
+  reboot)
+    systemctl reboot
+    ;;
+  bios)
+    systemctl reboot --firmware-setup
+    ;;
+  sleep)
+    systemctl suspend
+    ;;
+  logout)
+    hyprctl dispatch exit
+    ;;
+esac

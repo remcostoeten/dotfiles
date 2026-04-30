@@ -3,6 +3,7 @@
   "position": "top",
   "height": 34,
   "margin-top": 8,
+  "margin-bottom": 8,
   "margin-left": 12,
   "margin-right": 12,
   "spacing": 8,
@@ -10,7 +11,7 @@
   "gtk-layer-shell": true,
   "modules-left": ["hyprland/workspaces", "hyprland/window"],
   "modules-center": ["clock"],
-  "modules-right": ["cpu", "memory", "disk", "pulseaudio", "network", "tray"],
+  "modules-right": ["cpu", "memory", "disk", "pulseaudio", "network", "custom/bluetooth-panel", "tray", "custom/power"],
 
   "hyprland/workspaces": {
     "disable-scroll": false,
@@ -46,38 +47,54 @@
 
   "cpu": {
     "interval": 3,
-    "format": "cpu {usage}%",
+    "format": "  {usage}%",
     "tooltip": true
   },
 
   "memory": {
     "interval": 5,
-    "format": "mem {percentage}%",
+    "format": "  {percentage}%",
     "tooltip-format": "{used:0.1f}G used / {total:0.1f}G"
   },
 
   "disk": {
     "path": "/",
     "interval": 30,
-    "format": "disk {percentage_used}%",
+    "format": "󰋊  {percentage_used}%",
     "tooltip-format": "{used} used / {total}"
   },
 
   "network": {
     "interval": 5,
-    "format-wifi": "wifi {signalStrength}%",
-    "format-ethernet": "eth up",
-    "format-linked": "{ifname}",
-    "format-disconnected": "net down",
+    "format-wifi": "  {signalStrength}%",
+    "format-ethernet": "󰈀  {ipaddr}",
+    "format-linked": "󰈀  {ifname}",
+    "format-disconnected": "󰤮  Offline",
     "tooltip-format": "{ifname} {ipaddr}/{cidr}",
     "on-click": "nm-connection-editor"
   },
 
   "pulseaudio": {
-    "format": "vol {volume}%",
-    "format-muted": "muted",
+    "format": "󰕾  {volume}%",
+    "format-muted": "󰖁  Muted",
     "scroll-step": 5,
     "on-click": "pavucontrol"
+  },
+
+  "custom/bluetooth-panel": {
+    "exec": "~/.local/bin/bluetooth-waybar",
+    "return-type": "json",
+    "interval": 5,
+    "format": "{}",
+    "tooltip": true,
+    "on-click": "bluetooth-panel",
+    "on-click-right": "bluetooth-panel-menu"
+  },
+
+  "custom/power": {
+    "format": "⏻",
+    "tooltip": false,
+    "on-click": "~/.config/dotfiles/bin/powermenu"
   },
 
   "tray": {

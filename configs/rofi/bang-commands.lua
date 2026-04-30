@@ -1,0 +1,35 @@
+-- Rofi launcher bang commands.
+--
+-- Type "!example text" in the launcher and press Enter. The launcher matches
+-- the bang, replaces "{query}" with the remaining text, and runs the action.
+--
+-- Supported types:
+--   url      Opens the URL with xdg-open. "{query}" is URL-encoded.
+--   shell    Runs the command with sh -lc. "{query}" is shell-quoted.
+--   terminal Runs the command in $TERMINAL or ghostty. "{query}" is shell-quoted.
+
+return {
+  -- Examples are intentionally disabled. Copy one and remove the leading "--"
+  -- to enable it.
+  --
+  -- {
+  --   bang = "!web",
+  --   type = "url",
+  --   template = "https://www.google.com/search?q={query}",
+  --   description = "Search the web",
+  -- },
+  --
+  -- {
+  --   bang = "!top",
+  --   type = "terminal",
+  --   template = "htop",
+  --   description = "Open htop in a terminal",
+  -- },
+  --
+  -- {
+  --   bang = "!open",
+  --   type = "shell",
+  --   template = "xdg-open {query}",
+  --   description = "Open a path or URL",
+  -- },
+}

@@ -1,0 +1,8 @@
+[server]
+style = "/home/remcostoeten/.config/swayosd/style.css"
+top_margin = 0.82
+show_percentage = true
+keyboard_backlight = true
+min_brightness = 5
+
+[client]

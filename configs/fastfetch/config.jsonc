@@ -12,18 +12,7 @@
         }
     },
     "display": {
-        "separator": " ➜  ",
-        "color": {
-            "keys": "green"
-        },
-        "size": {
-            "ndigits": 0,
-            "maxPrefix": "MB"
-        },
-        "key": {
-            "type": "icon",
-            "width": 14
-        }
+        "separator": " "
     },
     "modules": [
         "break",
@@ -36,79 +25,32 @@
             }
         },
         {
-            "type": "custom",
-            "format": "───────────────────────────────────────",
-            "outputColor": "black"
-        },
-        {
             "type": "os",
-            "key": "  os",
-            "keyColor": "blue"
-        },
-        {
-            "type": "kernel",
-            "key": "  kernel",
-            "keyColor": "blue"
+            "keyColor": "cyan"
         },
         {
             "type": "uptime",
-            "key": "󰔟  uptime",
-            "keyColor": "blue"
+            "keyColor": "cyan"
         },
         {
-            "type": "packages",
-            "key": "󰏖  packages",
-            "keyColor": "blue"
+            "type": "command",
+            "key": "Cooling",
+            "keyColor": "magenta",
+            "text": "sensors 2>/dev/null | awk -F: '/Pump speed/ {gsub(/^ +| +$/, \"\", $2); pump=$2} /pwm1/ {gsub(/^ +| +$/, \"\", $2); pwm=$2} END { if (pump != \"\") { printf \"%s\", pump; if (pwm != \"\") printf \" · %s\", pwm; printf \"\\n\"; exit 0 } if (pwm != \"\") { print pwm; exit 0 } exit 1 }'"
         },
         {
-            "type": "custom",
-            "format": "───────────────────────────────────────",
-            "outputColor": "black"
-        },
-        {
-            "type": "shell",
-            "key": "  shell",
-            "keyColor": "yellow"
-        },
-        {
-            "type": "terminal",
-            "key": "  terminal",
-            "keyColor": "yellow"
-        },
-        {
-            "type": "wm",
-            "key": "  wm",
-            "keyColor": "yellow"
-        },
-        {
-            "type": "custom",
-            "format": "───────────────────────────────────────",
-            "outputColor": "black"
-        },
-        {
-            "type": "cpu",
-            "key": "  cpu",
-            "keyColor": "magenta"
-        },
-        {
-            "type": "gpu",
-            "key": "󰢮  gpu",
-            "keyColor": "magenta"
+            "type": "command",
+            "key": "Ports",
+            "keyColor": "cyan",
+            "text": "ss -lntuH 2>/dev/null | awk '{print $5}' | sed 's/.*://g' | awk '/^[0-9]+$/' | sort -n | uniq | awk 'BEGIN { limit = 6 } { ports[count++] = $1 } END { if (count == 0) { print \"none\"; exit 0 } shown = count < limit ? count : limit; for (i = 0; i < shown; i++) { printf \"%s%s\", ports[i], (i + 1 < shown ? \", \" : \"\") } if (count > limit) printf \" +%d more\", count - limit; printf \"\\n\" }'"
         },
         {
             "type": "memory",
-            "key": "  memory",
             "keyColor": "magenta"
         },
         {
             "type": "disk",
-            "key": "󰋊  disk",
-            "keyColor": "magenta"
-        },
-        "break",
-        {
-            "type": "colors",
-            "symbol": "circle"
+            "keyColor": "cyan"
         }
     ]
 }

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 import os
 import sys
 import subprocess
@@ -7,7 +7,6 @@ from pathlib import Path
 import curses
 from typing import List, Dict, Optional, Tuple
 import platform
-import subprocess
 import psycopg2
 import datetime
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT

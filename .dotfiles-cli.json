@@ -1,13 +1,13 @@
 {
   "layout": "categories",
   "banner": "classic",
-  "includeAliases": true,
+  "includeAliases": false,
   "includeFunctions": true,
   "groupAliases": false,
   "preferBinOverScripts": true,
   "fzfHeight": "85%",
-  "showDescriptions": true,
-  "enableCategories": true,
+  "showDescriptions": false,
+  "enableCategories": false,
   "recentItems": [
     "bin::utility::spellcheck::/home/remcostoeten/.config/dotfiles/bin/spellcheck",
     "bin::utility::kitty-cinematic::/home/remcostoeten/.config/dotfiles/bin/kitty-cinematic",
@@ -20,7 +20,5 @@
     "script::database::postgres::/home/remco/.config/dotfiles/scripts/postgres",
     "alias::gen"
   ],
-  "excludeCategories": [
-    "apps"
-  ]
+  "excludeCategories": ["apps"]
 }

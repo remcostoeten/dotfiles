@@ -58,7 +58,14 @@ install_apt() {
             if [[ "$DRY_RUN" == "true" ]]; then
                 echo -e "\033[0;36m[DRY RUN]\033[0m Would run: sudo apt install -y $pkg"
             else
-                sudo apt install -y -qq "$pkg" 2>&1 | grep -v "^Reading" | grep -v "^Building" | grep -v "^0 upgraded" | grep -v "already the newest" | grep -v "set to manually" | grep -v "no longer required" | grep -v "autoremove" | grep -v "WARNING" | grep -v "nvidia-firmware" | grep -v "ocl-icd" || true
+                set +e
+                sudo apt install -y -qq "$pkg" 2>&1 | grep -v "^Reading" | grep -v "^Building" | grep -v "^0 upgraded" | grep -v "already the newest" | grep -v "set to manually" | grep -v "no longer required" | grep -v "autoremove" | grep -v "WARNING" | grep -v "nvidia-firmware" | grep -v "ocl-icd"
+                local install_status=${PIPESTATUS[0]}
+                set -e
+                if ((install_status != 0)); then
+                    log_error "Failed to install $name ($pkg) via apt"
+                    return 1
+                fi
             fi
             log_success "$name installed"
             ;;
@@ -80,7 +87,10 @@ install_apt() {
             if [[ "$DRY_RUN" == "true" ]]; then
                 echo -e "\033[0;36m[DRY RUN]\033[0m Would run: sudo pacman -S --noconfirm --needed $mapped_pkg"
             else
-                sudo pacman -S --noconfirm --needed "$mapped_pkg" >/dev/null 2>&1 || log_warn "Failed to install $name ($mapped_pkg) via pacman"
+                sudo pacman -S --noconfirm --needed "$mapped_pkg" >/dev/null 2>&1 || {
+                    log_error "Failed to install $name ($mapped_pkg) via pacman"
+                    return 1
+                }
             fi
             log_success "$name installed"
             ;;
@@ -105,7 +115,14 @@ install_snap() {
     if [[ "$DRY_RUN" == "true" ]]; then
         echo -e "\033[0;36m[DRY RUN]\033[0m Would run: sudo snap install $flags $pkg"
     else
-        sudo snap install $flags "$pkg" 2>&1 | grep -v "Spawned" || true
+        set +e
+        sudo snap install $flags "$pkg" 2>&1 | grep -v "Spawned"
+        local install_status=${PIPESTATUS[0]}
+        set -e
+        if ((install_status != 0)); then
+            log_error "Failed to install $name via snap"
+            return 1
+        fi
     fi
     log_success "$name installed"
 }
@@ -123,7 +140,14 @@ install_npm() {
     if [[ "$DRY_RUN" == "true" ]]; then
         echo -e "\033[0;36m[DRY RUN]\033[0m Would run: npm install -g $pkg"
     else
-        sudo npm install -g "$pkg" --silent 2>&1 | grep -v "npm warn" || true
+        set +e
+        sudo npm install -g "$pkg" --silent 2>&1 | grep -v "npm warn"
+        local install_status=${PIPESTATUS[0]}
+        set -e
+        if ((install_status != 0)); then
+            log_error "Failed to install $name via npm"
+            return 1
+        fi
     fi
     log_success "$name installed"
 }
@@ -151,18 +175,31 @@ install_curl() {
         else
             echo -e "\033[0;36m[DRY RUN]\033[0m Would run: curl -fsSL $url | $shell"
         fi
+        return 0
     else
         if [[ "$VERBOSE" == "true" ]]; then
             if ((${#installer_args[@]})); then
-                curl -fsSL "$url" | "$shell" -s -- "${installer_args[@]}"
+                if ! curl -fsSL "$url" | "$shell" -s -- "${installer_args[@]}"; then
+                    log_error "Failed to install $name from $url"
+                    return 1
+                fi
             else
-                curl -fsSL "$url" | "$shell"
+                if ! curl -fsSL "$url" | "$shell"; then
+                    log_error "Failed to install $name from $url"
+                    return 1
+                fi
             fi
         else
             if ((${#installer_args[@]})); then
-                curl -fsSL "$url" 2>/dev/null | "$shell" -s -- "${installer_args[@]}" 2>/dev/null || true
+                if ! curl -fsSL "$url" 2>/dev/null | "$shell" -s -- "${installer_args[@]}" 2>/dev/null; then
+                    log_error "Failed to install $name from $url"
+                    return 1
+                fi
             else
-                curl -fsSL "$url" 2>/dev/null | "$shell" 2>/dev/null || true
+                if ! curl -fsSL "$url" 2>/dev/null | "$shell" 2>/dev/null; then
+                    log_error "Failed to install $name from $url"
+                    return 1
+                fi
             fi
         fi
     fi
@@ -254,7 +291,10 @@ ensure_symlink() {
         fi
     fi
 
-    ln -s "$src_path" "$dst_path" 2>/dev/null || true
+    ln -s "$src_path" "$dst_path" 2>/dev/null || {
+        log_error "Failed to link $dst_path -> $src_path"
+        return 1
+    }
 }
 
 setup_config_symlinks() {
@@ -273,6 +313,7 @@ setup_config_symlinks() {
         "starship/starship.toml:$home_config_dir/starship.toml"
         "fastfetch:$home_config_dir/fastfetch"
         "ghostty:$home_config_dir/ghostty"
+        "rofi:$home_config_dir/rofi"
         "fish/config.fish:$home_config_dir/fish/config.fish"
         "fish/conf.d:$home_config_dir/fish/conf.d"
         "zsh:$HOME/.config/zsh"
@@ -281,8 +322,8 @@ setup_config_symlinks() {
         "cursor:$HOME/.config/cursor"
         "hypr:$home_config_dir/hypr"
         "waybar:$home_config_dir/waybar"
-        "wofi:$home_config_dir/wofi"
         "dunst:$home_config_dir/dunst"
+        "swayosd:$home_config_dir/swayosd"
         "git/ignore:$home_config_dir/git/ignore"
     )
     
@@ -358,9 +399,9 @@ link_editor_configs_recursive() {
 }
 
 install_editor_extensions() {
-    local script_dir="${SCRIPT_DIR:-$HOME/.config/dotfiles/setup}"
-    local vscode_config="$script_dir/configs/vscode"
-    local ide_config="$script_dir/configs/ide"
+    local repo_root="${SCRIPT_DIR:-$HOME/.config/dotfiles/setup}/.."
+    local vscode_config="$repo_root/configs/vscode"
+    local ide_config="$repo_root/configs/ide"
     local extensions_file="$vscode_config/extensions.json"
     local antigravity_extensions="$ide_config/antigravity/extensions.json"
 
@@ -418,8 +459,16 @@ install_github() {
     log_step "Installing $name..."
     if [[ "$DRY_RUN" == "true" ]]; then
         echo -e "\033[0;36m[DRY RUN]\033[0m Would run: gh repo clone $repo $target_dir"
+        return 0
     else
-        gh repo clone "$repo" "$target_dir" 2>&1 | grep -v "Cloning" | grep -v "warning:" || true
+        set +e
+        gh repo clone "$repo" "$target_dir" 2>&1 | grep -v "Cloning" | grep -v "warning:"
+        local install_status=${PIPESTATUS[0]}
+        set -e
+        if ((install_status != 0)); then
+            log_error "Failed to install $name from GitHub repo $repo"
+            return 1
+        fi
     fi
     log_success "$name installed"
 }
@@ -604,15 +653,65 @@ install_all_fonts() {
         rm -f "$zip_path"
     ) &
     pids+=($!)
-    
+
     for pid in "${pids[@]}"; do
         wait "$pid" 2>/dev/null || true
     done
-    
+
     spinner_stop
     fc-cache -f 2>/dev/null
-    
+
+    install_emoji_fonts
+
     log_success "All fonts installed"
+}
+
+install_emoji_fonts() {
+    local font_dir="$HOME/.local/share/fonts"
+    mkdir -p "$font_dir"
+
+    log_step "Installing emoji fonts..."
+
+    if fc-list | grep -qi "noto"; then
+        log_success "Noto emoji fonts already installed"
+    else
+        if command -v apt &>/dev/null; then
+            sudo apt install -y -qq fonts-noto-color-emoji 2>/dev/null || true
+        elif command -v pacman &>/dev/null; then
+            sudo pacman -S --noconfirm --needed noto-fonts-emoji 2>/dev/null || true
+        fi
+    fi
+
+    local emoji_config_dir="$HOME/.config/fontconfig"
+    mkdir -p "$emoji_config_dir/conf.d"
+
+    if [[ ! -f "$emoji_config_dir/conf.d/01-emoji.conf" ]]; then
+        cat > "$emoji_config_dir/conf.d/01-emoji.conf" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+    <match target="scan">
+        <test name="family">
+            <string>Segoe UI Emoji</string>
+        </test>
+        <edit name="antialias">
+            <bool>true</bool>
+        </edit>
+    </match>
+    <alias binding="strong">
+        <family>emoji</family>
+        <prefer>
+            <family>Noto Color Emoji</family>
+            <family>Segoe UI Emoji</family>
+            <family>Apple Color Emoji</family>
+        </prefer>
+    </alias>
+</fontconfig>
+EOF
+        log_success "Emoji font config created"
+    fi
+
+    fc-cache -f 2>/dev/null
 }
 
 install_ghostty() {

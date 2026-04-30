@@ -12,6 +12,9 @@ METADATA_FILE="$WALLPAPERS_DIR/.metadata.tsv"
 USER_DATA_DIR="$HOME/.dotfiles/wallpaper"
 UI_STATE_FILE="$USER_DATA_DIR/ui-state"
 UI_MARKS_FILE="$USER_DATA_DIR/marks"
+ROTATION_PID_FILE="$USER_DATA_DIR/rotation.pid"
+ROTATION_INFO_FILE="$USER_DATA_DIR/rotation.info"
+ROTATION_LOG_FILE="$USER_DATA_DIR/rotation.log"
 
 SORT_MODE_DEFAULT="name"
 
@@ -25,6 +28,107 @@ WALLPAPER_LICENSES=()
 
 ensure_user_data_dir() {
     mkdir -p "$USER_DATA_DIR"
+}
+
+script_path() {
+    readlink -f "${BASH_SOURCE[0]}"
+}
+
+rotation_pid() {
+    [[ -f "$ROTATION_PID_FILE" ]] || return 1
+    local pid
+    pid="$(<"$ROTATION_PID_FILE")"
+    [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "$pid"
+}
+
+rotation_process_matches() {
+    local pid="$1"
+    local cmdline=""
+
+    if [[ -r "/proc/$pid/cmdline" ]]; then
+        cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline")"
+    else
+        cmdline="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+    fi
+
+    [[ "$cmdline" == *"__rotate-loop"* ]]
+}
+
+rotation_is_running() {
+    local pid
+    pid="$(rotation_pid)" || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    rotation_process_matches "$pid" || return 1
+}
+
+cleanup_rotation_state_if_stale() {
+    rotation_is_running && return 0
+    rm -f "$ROTATION_PID_FILE" "$ROTATION_INFO_FILE"
+}
+
+write_rotation_info() {
+    local pid="$1"
+    local duration="$2"
+    local scope="$3"
+
+    {
+        printf 'pid=%s\n' "$pid"
+        printf 'duration=%s\n' "$duration"
+        printf 'scope=%s\n' "$scope"
+        printf 'started_at=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+    } > "$ROTATION_INFO_FILE"
+}
+
+rotation_info_value() {
+    local key="$1"
+    [[ -f "$ROTATION_INFO_FILE" ]] || return 1
+    awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$ROTATION_INFO_FILE"
+}
+
+rotation_status() {
+    local pid duration scope started current
+    if rotation_is_running; then
+        pid="$(rotation_pid)"
+        duration="$(rotation_info_value duration || printf '?')"
+        scope="$(rotation_info_value scope || printf 'all')"
+        started="$(rotation_info_value started_at || printf '?')"
+        current="$(current_wallpaper_name || true)"
+        printf 'rotation running\n'
+        printf 'pid: %s\n' "$pid"
+        printf 'interval: %ss\n' "$duration"
+        printf 'scope: %s\n' "$scope"
+        printf 'started: %s\n' "$started"
+        [[ -n "$current" ]] && printf 'current: %s\n' "$current"
+    else
+        cleanup_rotation_state_if_stale
+        printf 'rotation stopped\n'
+    fi
+}
+
+stop_rotation() {
+    local pid
+    if ! rotation_is_running; then
+        cleanup_rotation_state_if_stale
+        printf 'rotation is not running\n'
+        return 0
+    fi
+
+    pid="$(rotation_pid)"
+    kill "$pid" 2>/dev/null || true
+
+    local waited=0
+    while kill -0 "$pid" 2>/dev/null && (( waited < 30 )); do
+        sleep 0.1
+        ((waited += 1))
+    done
+
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -KILL "$pid" 2>/dev/null || true
+    fi
+
+    rm -f "$ROTATION_PID_FILE" "$ROTATION_INFO_FILE"
+    printf 'stopped wallpaper rotation\n'
 }
 
 restore_terminal() {
@@ -652,8 +756,10 @@ random_rotation_loop() {
     local -a pool=("$@")
     local current next count=0
     local last=""
+    local sleep_pid=""
 
     (( duration > 0 )) || die "duration must be greater than 0"
+    trap '[[ -n "${sleep_pid:-}" ]] && kill "$sleep_pid" 2>/dev/null || true; rm -f "$ROTATION_PID_FILE" "$ROTATION_INFO_FILE"; exit 0' INT TERM
     while true; do
         next="$(pick_random_from_names "${pool[@]}")" || die "no wallpapers available for the selected scope"
         if [[ "${#pool[@]}" -gt 1 ]]; then
@@ -665,8 +771,37 @@ random_rotation_loop() {
         last="$next"
         ((count += 1))
         printf 'rotation %s in %s seconds (Ctrl-C to stop)\n' "$count" "$duration"
-        sleep "$duration"
+        sleep "$duration" &
+        sleep_pid="$!"
+        wait "$sleep_pid"
+        sleep_pid=""
     done
+}
+
+start_rotation_daemon() {
+    local duration="$1"
+    local scope="$2"
+    shift 2
+    local -a pool=("$@")
+    local pid
+
+    cleanup_rotation_state_if_stale
+    if rotation_is_running; then
+        pid="$(rotation_pid)"
+        die "rotation already running with pid $pid. Use 'wallpaper stop' first"
+    fi
+
+    : > "$ROTATION_LOG_FILE"
+    nohup "$(script_path)" __rotate-loop "$duration" "${pool[@]}" >> "$ROTATION_LOG_FILE" 2>&1 < /dev/null &
+    pid="$!"
+    printf '%s\n' "$pid" > "$ROTATION_PID_FILE"
+    write_rotation_info "$pid" "$duration" "$scope"
+
+    printf 'started wallpaper rotation\n'
+    printf 'pid: %s\n' "$pid"
+    printf 'interval: %ss\n' "$duration"
+    printf 'scope: %s\n' "$scope"
+    printf 'log: %s\n' "$ROTATION_LOG_FILE"
 }
 
 prompt_radio_choice() {
@@ -711,7 +846,7 @@ prompt_radio_choice() {
 }
 
 random_wallpaper_interactive() {
-    local scope folder duration scope_choice
+    local scope folder duration scope_choice rotation_scope
     local -a names=()
 
     scope_choice="$(prompt_radio_choice "Random Wallpaper" "Choose what the randomizer should use." \
@@ -721,11 +856,13 @@ random_wallpaper_interactive() {
 
     case "$scope_choice" in
         "All wallpapers")
+            rotation_scope="all"
             while IFS= read -r scope; do
                 [[ -n "$scope" ]] && names+=("$scope")
             done < <(printf '%s\n' "${WALLPAPER_NAMES[@]}")
             ;;
         "Current selection / marks")
+            rotation_scope="selection"
             while IFS= read -r scope; do
                 [[ -n "$scope" ]] && names+=("$scope")
             done < <(marked_or_selected_names)
@@ -733,6 +870,7 @@ random_wallpaper_interactive() {
         "A folder")
             folder="$(prompt_select_folder "Choose Random Folder" "$UI_LAST_FOLDER")" || return 0
             folder="$(normalize_relative_dir "$folder")" || return 0
+            rotation_scope="${folder:-root}"
             while IFS= read -r scope; do
                 [[ -n "$scope" ]] && names+=("$scope")
             done < <(wallpaper_names_for_folder "$folder")
@@ -754,12 +892,14 @@ random_wallpaper_interactive() {
         return 0
     }
 
-    prompt_message "Random Wallpaper" "Starting random rotation.\n\nScope: $scope_choice\nCount: ${#names[@]}\nInterval: ${duration}s\n\nStop with Ctrl-C."
-    restore_terminal
-    clear
-    trap 'restore_terminal; stty sane 2>/dev/null || true; exit 130' INT TERM
-    random_rotation_loop "$duration" "${names[@]}"
-    trap - INT TERM
+    cleanup_rotation_state_if_stale
+    if rotation_is_running; then
+        prompt_message "Random Wallpaper" "Rotation is already running.\n\nUse wallpaper stop, wallpaper --stop, or wallpaper -s to stop it first."
+        return 0
+    fi
+
+    start_rotation_daemon "$duration" "$rotation_scope" "${names[@]}" >/dev/null
+    prompt_message "Random Wallpaper" "Started random rotation in the background.\n\nScope: $scope_choice\nCount: ${#names[@]}\nInterval: ${duration}s\n\nUse wallpaper status to check it.\nUse wallpaper stop, wallpaper --stop, or wallpaper -s to stop it."
 }
 
 next_wallpaper() {
@@ -2093,6 +2233,9 @@ usage() {
     printf '  \033[36mnext\033[0m                    Switch to next wallpaper\n'
     printf '  \033[36mprev\033[0m                    Switch to previous wallpaper\n'
     printf '  \033[36mrandom\033[0m                  Set a random wallpaper\n'
+    printf '  \033[36mrotate\033[0m [seconds] [--folder dir]  Start random rotation in the background\n'
+    printf '  \033[36mstatus\033[0m                  Show random rotation status\n'
+    printf '  \033[36mstop\033[0m                    Stop random rotation\n'
     printf '  \033[36mopen\033[0m                    Open wallpapers directory\n'
     printf '  \033[36medit\033[0m                    Edit manifest in $EDITOR\n'
     printf '  \033[36mmkdir\033[0m <dir>            Create a wallpaper folder\n'
@@ -2123,6 +2266,9 @@ usage() {
     printf '  \033[32mwallpaper rename alpha evening-fuji --file evening-fuji.png --folder archive/cozy\033[0m\n'
     printf '  \033[32mwallpaper delete archive/cozy/alpha\033[0m\n'
     printf '  \033[32mwallpaper download https://example.com/wall.png --folder anime --name sunset\033[0m\n\n'
+    printf '  \033[32mwallpaper rotate 300 --folder fuji\033[0m\n'
+    printf '  \033[32mwallpaper status\033[0m\n'
+    printf '  \033[32mwallpaper stop\033[0m\n\n'
 }
 
 main() {
@@ -2137,6 +2283,10 @@ main() {
             interactive_select
             ;;
         set|--set|-s)
+            if [[ "$cmd" == "-s" && $# -eq 0 ]]; then
+                stop_rotation
+                return
+            fi
             [[ $# -ge 1 ]] || die "set needs wallpaper name"
             set_wallpaper "$1"
             ;;
@@ -2179,9 +2329,23 @@ main() {
         random|--random|-r)
             random_wallpaper
             ;;
+        status|--status)
+            rotation_status
+            ;;
+        stop|--stop)
+            stop_rotation
+            ;;
+        __rotate-loop)
+            local duration="${1:-60}"
+            shift || true
+            [[ "$duration" =~ ^[0-9]+$ ]] || die "duration must be a number"
+            [[ $# -gt 0 ]] || die "no wallpapers available"
+            random_rotation_loop "$duration" "$@"
+            ;;
         rotate|--rotate)
             local duration="${1:-60}"
             local folder=""
+            local scope="all"
             while (($#)); do
                 case "$1" in
                     --duration)
@@ -2203,15 +2367,17 @@ main() {
             local -a pool=()
             if [[ -n "$folder" ]]; then
                 folder="$(normalize_relative_dir "$folder")" || die "invalid folder"
-                while IFS= read -r scope; do
-                    [[ -n "$scope" ]] && pool+=("$scope")
+                scope="${folder:-root}"
+                local name
+                while IFS= read -r name; do
+                    [[ -n "$name" ]] && pool+=("$name")
                 done < <(wallpaper_names_for_folder "$folder")
             else
                 pool=("${WALLPAPER_NAMES[@]}")
             fi
             [[ ${#pool[@]} -gt 0 ]] || die "no wallpapers available"
 
-            random_rotation_loop "$duration" "${pool[@]}"
+            start_rotation_daemon "$duration" "$scope" "${pool[@]}"
             ;;
         open|--open|-o)
             open_wallpapers_dir

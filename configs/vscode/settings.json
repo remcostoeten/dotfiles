@@ -1,4 +1,42 @@
 {
+  "lsp": {
+    "vtsls": {
+      "settings": {
+        "typescript": {
+          "updateImportsOnFileMove": {
+            "enabled": "always"
+          }
+        },
+        "javascript": {
+          "updateImportsOnFileMove": {
+            "enabled": "always"
+          }
+        }
+      },
+      "enable_lsp_tasks": true
+    }
+  },
+  "vim_mode": true,
+  "agent_servers": {
+    "opencode": {
+      "type": "registry"
+    },
+    "gemini": {
+      "type": "registry"
+    },
+    "codex-acp": {
+      "type": "registry"
+    },
+    "claude-acp": {
+      "type": "registry"
+    }
+  },
+  "icon_theme": "Zed (Default)",
+  "theme": {
+    "mode": "dark",
+    "light": "One Light",
+    "dark": "Gruvbox Dark Soft"
+  },
   "window.commandCenter": true,
   "workbench.settings.openDefaultKeybindings": true,
   "editor.fontSize": 19,
@@ -29,7 +67,7 @@
     "editor.defaultFormatter": "vscode.typescript-language-features"
   },
   "workbench.sideBar.location": "right",
-  "workbench.colorTheme": "Best Themes - Gruvbox NvChad",
+  "workbench.colorTheme": "Ayu Mirage Bordered",
   "explorer.fileNesting.patterns": {
     "*.ts": "${capture}.js",
     "*.js": "${capture}.js.map, ${capture}.min.js, ${capture}.d.ts",

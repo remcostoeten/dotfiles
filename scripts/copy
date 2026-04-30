@@ -30,12 +30,24 @@ info() { blue "[INFO]" && printf " %s" "$@"; }
 function copy_to_clipboard_backend() {
     local content="$1"
 
-    if command -v xclip >/dev/null 2>&1; then
-        printf "%s" "$content" | xclip -selection clipboard
-    elif command -v wl-copy >/dev/null 2>&1; then
-        printf "%s" "$content" | wl-copy
+    if command -v wl-copy >/dev/null 2>&1; then
+        if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+            printf "%s" "$content" | timeout 2 wl-copy || printf "%s" "$content" | wl-copy
+        elif command -v xclip >/dev/null 2>&1 && [[ -n "${DISPLAY:-}" ]]; then
+            printf "%s" "$content" | timeout 2 xclip -selection clipboard || printf "%s" "$content" | xclip -selection clipboard
+        elif command -v xsel >/dev/null 2>&1 && [[ -n "${DISPLAY:-}" ]]; then
+            printf "%s" "$content" | timeout 2 xsel --clipboard --input || printf "%s" "$content" | xsel --clipboard --input
+        else
+            printf "%s" "$content" | wl-copy
+        fi
+    elif command -v xsel >/dev/null 2>&1 && [[ -n "${DISPLAY:-}" ]]; then
+        printf "%s" "$content" | timeout 2 xsel --clipboard --input || printf "%s" "$content" | xsel --clipboard --input
+    elif command -v xclip >/dev/null 2>&1 && [[ -n "${DISPLAY:-}" ]]; then
+        printf "%s" "$content" | timeout 2 xclip -selection clipboard || printf "%s" "$content" | xclip -selection clipboard
+    elif command -v xclip >/dev/null 2>&1; then
+        printf "%s" "$content" | timeout 2 xclip -selection clipboard || printf "%s" "$content" | xclip -selection clipboard
     else
-        echo "ERROR: Neither xclip nor wl-copy found. Please install one of them."
+        printf "%s No clipboard tool found. Install one of: wl-copy (Wayland), xclip (X11), xsel (X11)\n" "$(error)"
         return 1
     fi
 }

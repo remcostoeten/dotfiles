@@ -1,7 +1,7 @@
 [global]
     monitor = 0
     follow = mouse
-    width = 360
+    width = 380
     height = (0, 120)
     origin = top-right
     offset = (14, 52)
@@ -11,17 +11,17 @@
     progress_bar_height = 7
     progress_bar_frame_width = 0
     indicate_hidden = yes
-    transparency = 4
+    transparency = 8
     separator_height = 2
-    padding = 14
-    horizontal_padding = 14
+    padding = 16
+    horizontal_padding = 16
     text_icon_padding = 10
     frame_width = 1
     frame_color = "#6ee7d8"
     separator_color = frame
     sort = yes
     idle_threshold = 120
-    font = Iosevka Nerd Font Propo 11
+    font = Iosevka Nerd Font Propo 12
     line_height = 3
     markup = full
     format = "<b>%s</b>\n%b"
@@ -42,7 +42,7 @@
     always_run_script = true
     title = Dunst
     class = Dunst
-    corner_radius = 9
+    corner_radius = 12
     ignore_dbusclose = false
     force_xwayland = false
     mouse_left_click = close_current

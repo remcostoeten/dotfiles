@@ -9,10 +9,7 @@ alias clear "printf '\033[2J\033[3J\033[1;1H'"
 # DOCSTRING: Exit terminal/shell
 alias x 'exit'
 
-# DOCSTRING: Use python3 as python
-alias python 'python3'
-
-# DOCSTRING: Use python3 as py
+# Use python3 as py
 alias py 'python3'
 
 # DOCSTRING: Use pip3 as pip

@@ -80,6 +80,25 @@ This repo uses a strict separation between framework internals and runtime tools
 * `scripts/` contains tool implementations behind those commands
 * `configs/fish/functions/` contains Fish runtime behavior only
 
+## Rofi launcher
+
+The rofi launcher lives in `bin/launcher` and uses the files under
+`configs/rofi/` as the source templates.
+
+- [Launcher script](/home/remcostoeten/.config/dotfiles/bin/launcher)
+- [Rofi docs](/home/remcostoeten/.config/dotfiles/configs/rofi/README.md)
+- [Rofi theme](/home/remcostoeten/.config/dotfiles/configs/rofi/raycast.rasi)
+- [Pinned apps template](/home/remcostoeten/.config/dotfiles/configs/rofi/pinned-apps)
+- [Bang commands template](/home/remcostoeten/.config/dotfiles/configs/rofi/bang-commands.lua)
+- [Rofi config template](/home/remcostoeten/.config/dotfiles/configs/rofi/launcher.conf)
+
+The live files rofi reads are in `~/.config/rofi/`:
+
+- `~/.config/rofi/raycast.rasi`
+- `~/.config/rofi/pinned-apps`
+- `~/.config/rofi/bang-commands.lua`
+- `~/.config/rofi/launcher.conf`
+
 ## Private Files & Secrets
 
 This repository is open source, but some files contain sensitive information and are kept private:

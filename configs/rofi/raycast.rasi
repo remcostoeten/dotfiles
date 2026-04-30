@@ -1,0 +1,106 @@
+* {
+    background-color: transparent;
+    text-color: #e9e6df;
+    border: 0px;
+    font: "Iosevka Nerd Font 14";
+}
+
+window {
+    width: 940px;
+    location: center;
+    anchor: center;
+    transparency: "real";
+    background-color: rgba(16, 17, 20, 0.97);
+    border: 1px;
+    border-color: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    spacing: 0px;
+    padding: 0px;
+}
+
+mainbox {
+    padding: 14px;
+    spacing: 10px;
+    children: [ inputbar, listview, message ];
+}
+
+inputbar {
+    padding: 14px 16px;
+    spacing: 10px;
+    border: 1px;
+    border-color: rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    background-color: rgba(24, 25, 29, 0.98);
+    children: [ prompt, entry, case-indicator ];
+}
+
+prompt {
+    text-color: #f2c299;
+    font: "Iosevka Nerd Font Bold 14";
+    margin: 0px 6px 0px 0px;
+}
+
+entry {
+    text-color: #f5f2ec;
+    placeholder: "Apps search live. Press Enter for prefixes: !bang args, : commands, / folders, *.md files, **text contents";
+    placeholder-color: #7c828d;
+    cursor: text;
+}
+
+case-indicator {
+    text-color: #7c828d;
+}
+
+listview {
+    lines: 10;
+    columns: 1;
+    spacing: 2px;
+    fixed-height: false;
+    dynamic: false;
+    border: 0px;
+    background-color: transparent;
+    scrollbar: false;
+}
+
+element {
+    padding: 10px 12px;
+    spacing: 12px;
+    border: 0px 0px 1px 0px;
+    border-color: rgba(255, 255, 255, 0.04);
+    border-radius: 4px;
+    background-color: transparent;
+    children: [ element-icon, element-text ];
+}
+
+element-text {
+    vertical-align: 0.5;
+    text-color: #e9e6df;
+}
+
+element-icon {
+    size: 1.7em;
+}
+
+element selected.normal {
+    background-color: rgba(255, 255, 255, 0.06);
+    text-color: #f7f4ee;
+}
+
+element selected.active {
+    background-color: rgba(242, 194, 153, 0.12);
+    text-color: #f7f4ee;
+}
+
+element normal.urgent {
+    background-color: rgba(216, 122, 114, 0.12);
+}
+
+message {
+    min-height: 58px;
+    padding: 10px 12px;
+    border: 1px;
+    border-color: rgba(242, 194, 153, 0.16);
+    border-radius: 4px;
+    background-color: rgba(242, 194, 153, 0.08);
+    text-color: #d8b48f;
+}

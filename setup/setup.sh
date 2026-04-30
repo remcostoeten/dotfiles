@@ -20,7 +20,7 @@ Usage: $(basename "$0") [OPTIONS]
 Options:
     --dry-run       Show what would be installed without installing
     --verbose       Show detailed output
-    --category C    Install only specific category (essential, langs, fonts, tools, terminals, curl-tools, npm-tools, git-tools, editors, docker, system, hardware, media, desktop)
+    --category C    Install only specific category (essential, langs, fonts, tools, terminals, curl-tools, npm-tools, git-tools, editors, docker, system, hardware, media, desktop, hyprland)
     --package P     Install specific package
     -h, --help      Show this help message
 
@@ -30,6 +30,30 @@ Examples:
     $(basename "$0") --package starship   # Install only starship
     $(basename "$0") --dry-run             # Show what would be installed
 EOF
+}
+
+preflight() {
+    local repo_root="$SCRIPT_DIR/.."
+
+    if [[ ! -d "$repo_root/configs" || ! -d "$repo_root/setup/lib" ]]; then
+        log_error "This setup script must run from a complete dotfiles checkout."
+        log_error "Expected repo layout under: $repo_root"
+        return 1
+    fi
+
+    if ! command -v sudo >/dev/null 2>&1; then
+        log_error "sudo is required before this setup can install packages."
+        return 1
+    fi
+
+    case "$(detect_package_manager)" in
+        apt|pacman)
+            ;;
+        *)
+            log_error "No supported package manager found. Supported: apt, pacman."
+            return 1
+            ;;
+    esac
 }
 
 setup_passwordless_sudo() {
@@ -229,6 +253,11 @@ EOF
 set_default_terminal() {
     local terminal="$1"
     log_info "Setting $terminal as default terminal..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo -e "${YELLOW}[DRY RUN]${NC} Would set $terminal as default terminal"
+        return 0
+    fi
     
     if command -v gsettings &> /dev/null; then
         gsettings set org.gnome.desktop.default-applications.terminal exec "$terminal"
@@ -252,20 +281,23 @@ detect_desktop() {
 
 install_hyprland() {
     log_info "Installing Hyprland and configs..."
-    
-    local pkg_manager=""
-    if command -v pacman &>/dev/null; then
-        pkg_manager="pacman"
-    elif command -v apt &>/dev/null; then
-        pkg_manager="apt"
+
+    install_apt "hyprland" "Hyprland"
+    install_apt "waybar" "Waybar"
+    install_apt "rofi" "Rofi"
+    install_apt "dunst" "Dunst"
+    install_apt "brightnessctl" "Brightness control"
+    install_apt "playerctl" "Media controls"
+
+    if [[ "$(detect_package_manager)" == "pacman" ]]; then
+        install_apt "swayosd" "SwayOSD"
+        install_apt "polkit-gnome" "Polkit GNOME"
     fi
-    
-    if [[ -n "$pkg_manager" ]]; then
-        if [[ "$pkg_manager" == "pacman" ]]; then
-            sudo pacman -S --noconfirm hyprland waybar wofi dunst brightnessctl playerctl polkit-gnome 2>/dev/null || true
-        else
-            sudo apt install -y hyprland waybar wofi dunst 2>/dev/null || true
-        fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY RUN] Would enable SwayOSD libinput backend if available"
+    elif command -v swayosd-client &>/dev/null; then
+        sudo systemctl enable --now swayosd-libinput-backend.service 2>/dev/null || true
     fi
     
     setup_config_symlinks
@@ -439,6 +471,7 @@ install_all() {
     install_category "terminals"
     install_category "docker"
     install_category "fonts"
+    install_category "hyprland"
 }
 
 category=""
@@ -455,10 +488,18 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --category)
+            if [[ $# -lt 2 ]]; then
+                log_error "--category requires a value"
+                exit 1
+            fi
             category="$2"
             shift 2
             ;;
         --package)
+            if [[ $# -lt 2 ]]; then
+                log_error "--package requires a value"
+                exit 1
+            fi
             package="$2"
             shift 2
             ;;
@@ -474,8 +515,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-setup_passwordless_sudo
-
 init_packages
 
 log_header "Setup - Shell Installer"
@@ -484,6 +523,9 @@ if [[ "$DRY_RUN" == "true" ]]; then
     echo -e "${YELLOW}━━━ DRY RUN MODE - No changes will be made ━━━${NC}"
     echo ""
 fi
+
+preflight
+setup_passwordless_sudo
 
 run_with_progress() {
     local cat="$1"
@@ -502,7 +544,7 @@ elif [[ -n "$package" ]]; then
     install_package "$package"
     update_progress "$package"
 else
-    init_progress 9
+    init_progress 10
     run_with_progress "essential"
     run_with_progress "langs"
     run_with_progress "tools"
@@ -512,6 +554,7 @@ else
     run_with_progress "terminals"
     run_with_progress "docker"
     run_with_progress "fonts"
+    run_with_progress "hyprland"
 fi
 
 echo ""
