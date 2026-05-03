@@ -15,6 +15,7 @@ end
 # Editor preferences
 set -gx EDITOR nvim
 set -gx VISUAL nvim
+set -gx GPG_TTY (tty)
 
 # Development paths
 # DOTFILES_DIR points to the root of our dotfiles repository

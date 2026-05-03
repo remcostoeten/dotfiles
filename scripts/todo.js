@@ -590,8 +590,11 @@ function formatTaskForDisplay(task, showId = false) {
 }
 function displayTasksForShell(tasks) {
   const pending = tasks.filter((t) => t.status === "pending");
-  if (pending.length === 0)
+  if (pending.length === 0) {
+    const completed = tasks.filter((t) => t.status === "completed").length;
+    console.log(`${COLORS.DIM}📋 No pending tasks${completed > 0 ? ` (${completed} completed)` : ""}${COLORS.RESET}`);
     return;
+  }
 
   // Sort by due date first, then creation date
   pending.sort((a, b) => {
@@ -608,7 +611,7 @@ function displayTasksForShell(tasks) {
   const displayTasks = pending.slice(0, 5);
   const hasMore = pending.length > 5;
 
-  console.log(`${COLORS.BRIGHT}${COLORS.MAUVE}Tasks (${pending.length})${COLORS.RESET}`);
+  console.log(`${COLORS.BRIGHT}${COLORS.MAUVE}📋 Tasks (${pending.length})${COLORS.RESET}`);
 
   for (const task of displayTasks) {
     const createdDate = new Date(task.createdAt);
@@ -646,7 +649,7 @@ function displayTasksForShell(tasks) {
     console.log(`  ${parts.join(" ")}`);
   }
 
-  if (hasMore) {
+   if (hasMore) {
     console.log(`  ${COLORS.DIM}... and ${pending.length - 5} more tasks${COLORS.RESET}`);
   }
 }

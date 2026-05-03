@@ -1,4 +1,46 @@
 {
+  "project_panel": {
+    "dock": "left"
+  },
+  "outline_panel": {
+    "dock": "left"
+  },
+  "collaboration_panel": {
+    "dock": "left"
+  },
+  "agent": {
+    "dock": "right",
+    "favorite_models": [],
+    "model_parameters": []
+  },
+  "git_panel": {
+    "dock": "left"
+  },
+  "session": {
+    "trust_all_worktrees": true
+  },
+  "terminal": {
+    "font_family": "monospace"
+  },
+  "base_keymap": "VSCode",
+  "minimap": {
+    "show": "never"
+  },
+  "cursor_blink": true,
+  "autosave": "on_focus_change",
+  "buffer_font_size": 19.0,
+  "buffer_font_fallbacks": [
+    "Comic Sans MS",
+    "Patrick Hand",
+    "Caveat"
+  ],
+  "buffer_font_family": "Comic Neue",
+  "colorize_brackets": true,
+  "linked_edits": true,
+  "show_whitespaces": "selection",
+  "soft_wrap": "editor_width",
+  "hard_tabs": false,
+  "tab_size": 4,
   "lsp": {
     "vtsls": {
       "settings": {
@@ -35,7 +77,7 @@
   "theme": {
     "mode": "dark",
     "light": "One Light",
-    "dark": "Gruvbox Dark Soft"
+    "dark": "Ayu Dark"
   },
   "window.commandCenter": true,
   "workbench.settings.openDefaultKeybindings": true,
@@ -107,5 +149,6 @@
   "update.mode": "silentlyApplyOnQuit",
 "claudeCode.preferredLocation": "panel",
 "workbench.iconTheme": "charmed-warm",
-"editor.minimap.enabled": false
+"editor.minimap.enabled": false,
+"git.autofetch": true
 }
