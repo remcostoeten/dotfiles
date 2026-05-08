@@ -15,6 +15,26 @@ detect_package_manager() {
     echo "unknown"
 }
 
+detect_os_family() {
+    if [[ -r /etc/os-release ]]; then
+        # shellcheck disable=SC1091
+        source /etc/os-release
+        case "${ID:-}" in
+            arch|manjaro|endeavouros|cachyos|artix)
+                echo "arch"
+                ;;
+            ubuntu|debian|linuxmint|pop|zorin|elementary)
+                echo "debian"
+                ;;
+            *)
+                echo "${ID_LIKE:-unknown}"
+                ;;
+        esac
+    else
+        echo "unknown"
+    fi
+}
+
 map_pacman_package_name() {
     local pkg="$1"
 
@@ -27,7 +47,52 @@ map_pacman_package_name() {
         fd-find) echo "fd" ;;
         gh) echo "github-cli" ;;
         docker.io) echo "docker" ;;
+        docker-compose) echo "docker-compose" ;;
+        fastfetch) echo "fastfetch" ;;
+        btop) echo "btop" ;;
+        vlc) echo "vlc" ;;
+        swayosd) echo "swayosd" ;;
+        polkit-gnome) echo "polkit-gnome" ;;
         *) echo "$pkg" ;;
+    esac
+}
+
+refresh_tool_path() {
+    local tool="$1"
+    case "$tool" in
+        starship|uv)
+            case ":$PATH:" in
+                *":$HOME/.local/bin:"*) ;;
+                *) export PATH="$HOME/.local/bin:$PATH" ;;
+            esac
+            ;;
+        pnpm)
+            export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
+            case ":$PATH:" in
+                *":$PNPM_HOME:"*) ;;
+                *) export PATH="$PNPM_HOME:$PATH" ;;
+            esac
+            ;;
+        bun)
+            export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+            case ":$PATH:" in
+                *":$BUN_INSTALL/bin:"*) ;;
+                *) export PATH="$BUN_INSTALL/bin:$PATH" ;;
+            esac
+            ;;
+        rustup)
+            case ":$PATH:" in
+                *":$HOME/.cargo/bin:"*) ;;
+                *) export PATH="$HOME/.cargo/bin:$PATH" ;;
+            esac
+            ;;
+        fnm)
+            local fnm_dir="${FNM_DIR:-$HOME/.local/share/fnm}"
+            case ":$PATH:" in
+                *":$fnm_dir:"*) ;;
+                *) export PATH="$fnm_dir:$PATH" ;;
+            esac
+            ;;
     esac
 }
 
@@ -162,6 +227,8 @@ install_curl() {
     if [[ -n "$shell_flags" ]]; then
         read -r -a installer_args <<< "$shell_flags"
     fi
+
+    refresh_tool_path "$name"
     
     if exists "$name"; then
         log_success "$name already installed"
@@ -204,6 +271,7 @@ install_curl() {
         fi
     fi
     
+    refresh_tool_path "$name"
     if exists "$name"; then
         log_success "$name installed"
     else
@@ -346,6 +414,15 @@ setup_config_symlinks() {
 
     link_editor_configs_recursive "$configs_dir" "$home_config_dir"
 
+    local gpg_sync_script="$SCRIPT_DIR/../scripts/gpg-sync.sh"
+    if [[ -x "$gpg_sync_script" && -d "$HOME/.config/dotfiles/env-private/.gnupg" ]]; then
+        if [[ "$DRY_RUN" == "true" ]]; then
+            echo -e "${YELLOW}[DRY RUN]${NC} Would restore GPG keys from env-private"
+        else
+            "$gpg_sync_script" restore >/dev/null 2>&1 || true
+        fi
+    fi
+
     setup_runtime_permissions
     
     log_success "Config symlinks created"
@@ -453,6 +530,17 @@ install_github() {
     
     if command -v "$name" &>/dev/null; then
         log_success "$name already installed"
+        return 0
+    fi
+    
+    if [[ -d "$target_dir" ]]; then
+        log_info "$name directory exists, pulling latest..."
+        if [[ "$DRY_RUN" == "true" ]]; then
+            echo -e "\033[0;36m[DRY RUN]\033[0m Would pull latest $name"
+        else
+            (cd "$target_dir" && git pull) 2>/dev/null || true
+            log_success "$name updated"
+        fi
         return 0
     fi
     
@@ -602,68 +690,114 @@ install_all_fonts() {
     mkdir -p "$font_dir"
     mkdir -p "$font_dir/NerdFonts"
     
+    local fonts_to_install=()
+    local fonts_skipped=()
+    
+    declare -A font_checks=(
+        ["ComicShannsMono"]="ComicShannsMono"
+        ["Geist"]="Geist"
+        ["Inter"]="Inter"
+        ["JetBrains Mono"]="JetBrainsMono"
+        ["IBM Plex Mono"]="ibm-plex-mono"
+        ["Hack"]="Hack"
+    )
+    
+    echo -e "${CYAN}━━━ Font Check ━━━${NC}"
+    
+    for font_name in "${!font_checks[@]}"; do
+        if fc-list | grep -qi "$font_name"; then
+            fonts_skipped+=("$font_name")
+            echo -e "  ${GREEN}✓${NC} $font_name (exists)"
+        else
+            fonts_to_install+=("$font_name")
+            echo -e "  ${YELLOW}↓${NC} $font_name (will install)"
+        fi
+    done
+    
+    if [[ ${#fonts_to_install[@]} -eq 0 ]]; then
+        echo ""
+        log_success "All fonts already installed"
+        install_emoji_fonts
+        return 0
+    fi
+    
+    echo ""
+    log_step "Installing ${#fonts_to_install[@]} missing font(s)..."
     spinner_start "Downloading fonts..."
     
     local pids=()
     
-    (
-        local zip_path="/tmp/ComicShannsMono.zip"
-        curl -fL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/ComicShannsMono.zip" -o "$zip_path" 2>/dev/null
-        unzip -o "$zip_path" -d "$font_dir/NerdFonts" 2>/dev/null
-        rm -f "$zip_path"
-    ) &
-    pids+=($!)
+    if ! fc-list | grep -qi "ComicShannsMono"; then
+        (
+            local zip_path="/tmp/ComicShannsMono.zip"
+            curl -fL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/ComicShannsMono.zip" -o "$zip_path" 2>/dev/null
+            unzip -o "$zip_path" -d "$font_dir/NerdFonts" 2>/dev/null
+            rm -f "$zip_path"
+        ) &
+        pids+=($!)
+    fi
     
-    (
-        local zip_path="/tmp/geist-font.zip"
-        curl -fL "https://github.com/vercel/geist-font/releases/download/1.8.0/geist-font-1.8.0.zip" -o "$zip_path" 2>/dev/null
-        unzip -o "$zip_path" -d "$font_dir" 2>/dev/null
-        rm -f "$zip_path"
-    ) &
-    pids+=($!)
+    if ! fc-list | grep -qi "Geist"; then
+        (
+            local zip_path="/tmp/geist-font.zip"
+            curl -fL "https://github.com/vercel/geist-font/releases/download/1.8.0/geist-font-1.8.0.zip" -o "$zip_path" 2>/dev/null
+            unzip -o "$zip_path" -d "$font_dir" 2>/dev/null
+            rm -f "$zip_path"
+        ) &
+        pids+=($!)
+    fi
     
-    (
-        local zip_path="/tmp/Inter.zip"
-        curl -fL "https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip" -o "$zip_path" 2>/dev/null
-        unzip -o "$zip_path" -d "$font_dir" 2>/dev/null
-        rm -f "$zip_path"
-    ) &
-    pids+=($!)
+    if ! fc-list | grep -qi "Inter"; then
+        (
+            local zip_path="/tmp/Inter.zip"
+            curl -fL "https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip" -o "$zip_path" 2>/dev/null
+            unzip -o "$zip_path" -d "$font_dir" 2>/dev/null
+            rm -f "$zip_path"
+        ) &
+        pids+=($!)
+    fi
     
-    (
-        local zip_path="/tmp/jetbrains-mono.zip"
-        curl -fL "https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip" -o "$zip_path" 2>/dev/null
-        unzip -o "$zip_path" -d "$font_dir" 2>/dev/null
-        rm -f "$zip_path"
-    ) &
-    pids+=($!)
+    if ! fc-list | grep -qi "JetBrains Mono"; then
+        (
+            local zip_path="/tmp/jetbrains-mono.zip"
+            curl -fL "https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip" -o "$zip_path" 2>/dev/null
+            unzip -o "$zip_path" -d "$font_dir" 2>/dev/null
+            rm -f "$zip_path"
+        ) &
+        pids+=($!)
+    fi
     
-    (
-        local zip_path="/tmp/ibm-plex-mono.zip"
-        curl -fL "https://github.com/IBM/plex/releases/download/%40ibm/plex-mono%401.1.0/ibm-plex-mono.zip" -o "$zip_path" 2>/dev/null
-        unzip -o "$zip_path" -d "$font_dir" 2>/dev/null
-        rm -f "$zip_path"
-    ) &
-    pids+=($!)
+    if ! fc-list | grep -qi "IBM Plex Mono"; then
+        (
+            local zip_path="/tmp/ibm-plex-mono.zip"
+            curl -fL "https://github.com/IBM/plex/releases/download/%40ibm/plex-mono%401.1.0/ibm-plex-mono.zip" -o "$zip_path" 2>/dev/null
+            unzip -o "$zip_path" -d "$font_dir" 2>/dev/null
+            rm -f "$zip_path"
+        ) &
+        pids+=($!)
+    fi
     
-    (
-        local zip_path="/tmp/Hack.zip"
-        curl -fL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.zip" -o "$zip_path" 2>/dev/null
-        unzip -o "$zip_path" -d "$font_dir/NerdFonts" 2>/dev/null
-        rm -f "$zip_path"
-    ) &
-    pids+=($!)
-
+    if ! fc-list | grep -qi "Hack"; then
+        (
+            local zip_path="/tmp/Hack.zip"
+            curl -fL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.zip" -o "$zip_path" 2>/dev/null
+            unzip -o "$zip_path" -d "$font_dir/NerdFonts" 2>/dev/null
+            rm -f "$zip_path"
+        ) &
+        pids+=($!)
+    fi
+    
     for pid in "${pids[@]}"; do
         wait "$pid" 2>/dev/null || true
     done
 
     spinner_stop
     fc-cache -f 2>/dev/null
-
+    
     install_emoji_fonts
-
-    log_success "All fonts installed"
+    
+    echo ""
+    log_success "Fonts installed (${#fonts_to_install[@]} new, ${#fonts_skipped[@]} skipped)"
 }
 
 install_emoji_fonts() {
@@ -901,4 +1035,99 @@ install_dotnet() {
     "$dotnet_install_script" --channel 9.0
     
     log_success ".NET SDK installed"
+}
+
+set_fish_default_shell() {
+    if [[ "$SHELL" == *"fish"* ]]; then
+        log_success "Fish is already the default shell"
+        return 0
+    fi
+    
+    if ! command -v fish &>/dev/null; then
+        log_warn "Fish is not installed, skipping default shell setup"
+        return 0
+    fi
+    
+    local fish_path
+    fish_path="$(which fish)"
+    
+    log_step "Setting fish as default shell..."
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo -e "\033[0;36m[DRY RUN]\033[0m Would set fish as default shell"
+        return 0
+    fi
+    
+    if grep -q "^$fish_path$" /etc/shells; then
+        chsh -s "$fish_path" 2>/dev/null || true
+        log_success "Fish set as default shell (restart terminal to apply)"
+    else
+        echo "$fish_path" | sudo tee -a /etc/shells >/dev/null
+        chsh -s "$fish_path" 2>/dev/null || true
+        log_success "Fish set as default shell (restart terminal to apply)"
+    fi
+}
+
+ensure_fish_config() {
+    local fish_config_dir="$HOME/.config/fish"
+    local fish_config_src="$SCRIPT_DIR/../configs/fish"
+    
+    mkdir -p "$fish_config_dir"
+    mkdir -p "$fish_config_dir/conf.d"
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo -e "\033[0;36m[DRY RUN]\033[0m Would ensure fish config is linked"
+        return 0
+    fi
+    
+    ensure_setup_backup_root
+    
+    if [[ -d "$fish_config_src" ]]; then
+        ensure_symlink "$fish_config_src/config.fish" "$fish_config_dir/config.fish" "$SETUP_BACKUP_ROOT"
+        ensure_symlink "$fish_config_src/conf.d" "$fish_config_dir/conf.d" "$SETUP_BACKUP_ROOT"
+        log_success "Fish config linked"
+    fi
+}
+
+install_arch_audio() {
+    local os_family
+    os_family="$(detect_os_family)"
+
+    if [[ "$os_family" != "arch" ]]; then
+        return 0
+    fi
+
+    log_info "Fixing audio stack for Arch (PipeWire migration)..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo -e "\033[0;36m[DRY RUN]\033[0m Would install PipeWire stack and fix audio"
+        return 0
+    fi
+
+    log_step "Installing PipeWire stack (replaces PulseAudio)..."
+    sudo pacman -S --noconfirm --needed \
+        pipewire pipewire-pulse wireplumber pavucontrol \
+        pipewire-alsa pipewire-jack 2>/dev/null || true
+
+    log_step "Installing browser codec packages..."
+    sudo pacman -S --noconfirm --needed \
+        ffmpeg gst-libav gst-plugins-good gst-plugins-bad gst-plugins-ugly 2>/dev/null || true
+
+    log_step "Disabling old PulseAudio..."
+    systemctl --user --disable --now pulseaudio.service pulseaudio.socket 2>/dev/null || true
+
+    log_step "Enabling PipeWire..."
+    systemctl --user enable --now pipewire pipewire-pulse wireplumber 2>/dev/null || true
+
+    log_step "Checking NVIDIA HDMI audio..."
+    if lsmod | grep -q nvidia; then
+        if ! lsmod | grep -q snd_hda_intel; then
+            log_info "Loading snd_hda_intel for NVIDIA HDMI audio..."
+            sudo modprobe snd_hda_intel 2>/dev/null || true
+        fi
+    fi
+
+    log_success "Audio stack fixed - please reboot to apply changes"
+    log_warn "After reboot, verify with: pactl info (should show 'PulseAudio (on PipeWire ...)')"
+    log_warn "Then run pavucontrol to select correct output device (not the NZXT mic!)"
 }

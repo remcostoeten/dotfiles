@@ -9,6 +9,7 @@ MAGENTA='\033[0;35m'
 BLUE='\033[0;34m'
 GRAY='\033[0;90m'
 NC='\033[0m'
+BOLD='\033[1m'
 
 PROGRESS_TOTAL=0
 PROGRESS_CURRENT=0
@@ -40,16 +41,26 @@ render_progress() {
     local status="$1"
     local elapsed=$(($(date +%s) - PROGRESS_START_TIME))
     local percent=$((PROGRESS_CURRENT * 100 / PROGRESS_TOTAL))
-    local bar_width=25
+    local bar_width=35
     local filled=$((bar_width * PROGRESS_CURRENT / PROGRESS_TOTAL))
     local empty=$((bar_width - filled))
-    
-    printf "\033[2K\r${GRAY}[${GREEN}%%${filled//=/█}${GRAY}%%${empty//-/-}${GRAY}]${NC} ${CYAN}%3d%%${NC} ${MAGENTA}▶${NC} ${BLUE}%s${NC} ${GRAY}│${NC} %s" \
-        "$percent" "$PROGRESS_CATEGORY" "$status"
-    
-    if [ $PROGRESS_CURRENT -ge $PROGRESS_TOTAL ]; then
-        echo ""
+
+    local bar=""
+    for ((i=0; i<filled; i++)); do bar+="━"; done
+    for ((i=0; i<empty; i++)); do bar+="─"; done
+
+    local time_display=""
+    if [ $elapsed -gt 60 ]; then
+        time_display="$((elapsed / 60))m $((elapsed % 60))s"
+    else
+        time_display="${elapsed}s"
     fi
+
+    printf '\r%b[%b%s%b]%b %3d%% %b(%s)%b %b▶%b %s' \
+        "$GRAY" "$GREEN" "$bar" "$GRAY" "$NC" \
+        "$percent" "$GRAY" "$time_display" "$NC" \
+        "$MAGENTA" "$NC" "${BLUE}${PROGRESS_CATEGORY}${NC}"
+    echo ""
 }
 
 set_progress_category() {
@@ -81,11 +92,18 @@ spinner_stop() {
 }
 
 log_header() {
-    local title="$1"
+    local title="${1:-}"
+    local term_width
+    term_width=$(tput cols 2>/dev/null || echo 42)
+    local inner_width=$((term_width - 4))
+    local line=$(printf '─%.0s' $(seq 1 "$inner_width"))
+    local title_len=${#title}
+    local padding=$(( (inner_width - title_len) / 2 ))
+
     echo ""
-    echo -e "${CYAN}╭──────────────────────────────────────────────────────╮${NC}"
-    echo -e "${CYAN}│${NC}    ${MAGENTA}▀█▀ █▀▀ █▀█ █▄▀ █ █▄ █ ▄▀█ █               ${CYAN}│${NC}"
-    echo -e "${CYAN}│${NC}     ▀▀▀ ▀▀▀ ▀▀▀ ▀ ▀ ▀▀ █▀█ █▀▀                ${CYAN}│${NC}"
-    echo -e "${CYAN}│${NC}    $title${NC}"
-    echo -e "${CYAN}╰──────────────────────────────────────────────────────╯${NC}"
+    printf '%b╭%s╮%b\n' "$CYAN" "$line" "$NC"
+    printf '│%b   ▀█▀ █▀▀ █▀█ █▄▀ █ █▄ █ ▄▀█ █   %b│\n' "$MAGENTA" "$NC"
+    printf '│%b    ▀▀▀ ▀▀▀ ▀▀▀ ▀ ▀ ▀▀ █▀█ █▀▀    %b│\n' "$MAGENTA" "$NC"
+    printf '│%b%*s%s%*s%b│\n' "$NC" $padding "" "$title" $((inner_width - padding - title_len)) "" "$NC"
+    printf '%b╰%s╯%b\n' "$CYAN" "$line" "$NC"
 }

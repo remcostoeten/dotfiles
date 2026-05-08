@@ -3,6 +3,7 @@ set -euo pipefail
 
 DRY_RUN=false
 VERBOSE=false
+START_TIME=$(date +%s)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
@@ -61,23 +62,33 @@ setup_passwordless_sudo() {
     current_user="$(whoami)"
     local sudoers_file="/etc/sudoers.d/99-${current_user}-nopasswd"
     local sudoers_entry="${current_user} ALL=(ALL) NOPASSWD:ALL"
-    
+
     if sudo test -f "$sudoers_file" 2>/dev/null; then
         if sudo grep -qF "$sudoers_entry" "$sudoers_file" 2>/dev/null; then
             return 0
         fi
     fi
-    
+
     log_info "Configuring passwordless sudo (requires password once)..."
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         echo -e "${YELLOW}[DRY RUN]${NC} Would configure passwordless sudo"
         return 0
     fi
-    
-    echo "$sudoers_entry" | sudo tee "$sudoers_file" > /dev/null
-    sudo chmod 440 "$sudoers_file" 2>/dev/null || true
-    
+
+    local tmp_sudoers
+    tmp_sudoers="$(mktemp)"
+    printf '%s\n' "$sudoers_entry" > "$tmp_sudoers"
+
+    if ! sudo visudo -cf "$tmp_sudoers" >/dev/null 2>&1; then
+        rm -f "$tmp_sudoers"
+        log_error "Generated sudoers entry failed validation."
+        return 1
+    fi
+
+    sudo install -o root -g root -m 0440 "$tmp_sudoers" "$sudoers_file"
+    rm -f "$tmp_sudoers"
+
     log_success "Passwordless sudo configured"
 }
 
@@ -268,15 +279,121 @@ set_default_terminal() {
 }
 
 detect_desktop() {
-    if [[ -n "$XDG_CURRENT_DESKTOP" ]]; then
-        echo "$XDG_CURRENT_DESKTOP"
-    elif [[ -n "$DESKTOP_SESSION" ]]; then
-        echo "$DESKTOP_SESSION"
-    elif [[ "$(tty)" == /dev/tty* ]] && command -v hyprctl &>/dev/null; then
+    local desktop="${XDG_CURRENT_DESKTOP:-}"
+    local session="${XDG_SESSION_DESKTOP:-${DESKTOP_SESSION:-}}"
+    local session_type="${XDG_SESSION_TYPE:-}"
+
+    if [[ "$desktop" =~ [Hh]yprland ]] || [[ "$session" =~ [Hh]yprland ]] || command -v hyprctl &>/dev/null; then
         echo "hyprland"
+    elif [[ "$desktop" =~ GNOME ]] || [[ "$session" =~ GNOME ]] || [[ "$desktop" =~ ubuntu ]] || [[ "$session" =~ ubuntu ]]; then
+        echo "gnome"
+    elif [[ -n "$desktop" ]]; then
+        echo "$desktop"
+    elif [[ -n "$session" ]]; then
+        echo "$session"
+    elif [[ "$session_type" == "wayland" ]]; then
+        echo "wayland"
     else
         echo "none"
     fi
+}
+
+detect_distro() {
+    if [[ -r /etc/os-release ]]; then
+        source /etc/os-release
+        echo "${PRETTY_NAME:-${ID:-unknown}}"
+    else
+        echo "unknown"
+    fi
+}
+
+_show_system_info_cached=0
+_cache_os_family=""
+_cache_distro=""
+_cache_desktop=""
+_cache_pm=""
+
+supports_emoji() {
+    if [[ "${TERM:-}" =~ linux ]]; then
+        return 1
+    fi
+    if [[ "${LC_ALL:-${LC_CTYPE:-$LANG}}" =~ (C|POSIX|ASCII) ]]; then
+        return 1
+    fi
+    return 0
+}
+
+show_system_info() {
+    if [[ $_show_system_info_cached -eq 0 ]]; then
+        _cache_os_family=$(detect_os_family)
+        _cache_distro=$(detect_distro)
+        _cache_desktop=$(detect_desktop)
+        _cache_pm=$(detect_package_manager)
+        _cache_arch=$(uname -m 2>/dev/null || echo "unknown")
+        _cache_kernel=$(uname -r 2>/dev/null | cut -d'-' -f1 || echo "unknown")
+        _cache_hostname=$(hostname 2>/dev/null || echo "unknown")
+        _cache_uptime=$(uptime -p 2>/dev/null | sed 's/^up //' || echo "unknown")
+        _show_system_info_cached=1
+    fi
+
+    local os_icon desktop_icon uptime_icon host_icon
+    if supports_emoji; then
+        case "$_cache_os_family" in
+            arch) os_icon="🦀" ;;
+            debian) os_icon="🌀" ;;
+            *) os_icon="🐧" ;;
+        esac
+        case "$_cache_desktop" in
+            gnome|GNOME) desktop_icon="🖥" ;;
+            hyprland|Hyprland) desktop_icon="🌊" ;;
+            none) desktop_icon="❌" ;;
+            *) desktop_icon="📱" ;;
+        esac
+        uptime_icon="⏱"
+        host_icon="🖥"
+    else
+        case "$_cache_os_family" in
+            arch) os_icon="(a)" ;;
+            debian) os_icon="(d)" ;;
+            *) os_icon="(*)" ;;
+        esac
+        case "$_cache_desktop" in
+            gnome|GNOME) desktop_icon="[gnome]" ;;
+            hyprland|Hyprland) desktop_icon="[hypr]" ;;
+            none) desktop_icon="[none]" ;;
+            *) desktop_icon="[?]" ;;
+        esac
+        uptime_icon="T"
+        host_icon="H"
+    fi
+
+    local term_width
+    term_width=$(tput cols 2>/dev/null || echo 50)
+    local line_len=$((term_width - 4))
+    [[ $line_len -lt 20 ]] && line_len=20
+    local line=$(printf '─%.0s' $(seq 1 "$line_len"))
+
+    local timestamp
+    timestamp=$(date '+%H:%M:%S')
+
+    printf '\n%b╭%s╮%b\n' "$CYAN" "$line" "$NC"
+    printf '│ %b%s %s%b %-14s  %b%s %s%b │\n' \
+        "$GREEN" "$os_icon" "$_cache_os_family" "$NC" \
+        "$_cache_distro" \
+        "$BLUE" "$desktop_icon" "$_cache_desktop" "$NC"
+    printf '│ %b%s %s %b%s %s %b│\n' \
+        "$GRAY" "$uptime_icon" "$_cache_uptime" "$NC" "$host_icon" "$_cache_hostname" "$NC"
+    printf '│ %b%-10s%b %-14s %b%-10s%b %-8s │\n' \
+        "$GRAY" "Arch:" "$NC" "$_cache_arch" \
+        "$GRAY" "Kernel:" "$NC" "$_cache_kernel"
+    printf '│ %b%-10s%b %-14s %b%-10s%b %-8s │\n' \
+        "$GRAY" "Package:" "$NC" "$_cache_pm" \
+        "$GRAY" "Shell:" "$NC" "${SHELL##*/}"
+    printf '│ %b%-10s%b %-14s %b%-10s%b %-8s │\n' \
+        "$GRAY" "Time:" "$NC" "$timestamp" \
+        "$GRAY" "Host:" "$NC" "$_cache_hostname"
+    printf '%b╰%s╯%b\n' "$CYAN" "$line" "$NC"
+    echo ""
 }
 
 install_hyprland() {
@@ -288,11 +405,8 @@ install_hyprland() {
     install_apt "dunst" "Dunst"
     install_apt "brightnessctl" "Brightness control"
     install_apt "playerctl" "Media controls"
-
-    if [[ "$(detect_package_manager)" == "pacman" ]]; then
-        install_apt "swayosd" "SwayOSD"
-        install_apt "polkit-gnome" "Polkit GNOME"
-    fi
+    install_apt "polkit-gnome" "Polkit GNOME"
+    install_apt "swayosd" "SwayOSD"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would enable SwayOSD libinput backend if available"
@@ -395,7 +509,7 @@ install_category() {
                 hyprland|Hyprland)
                     install_hyprland
                     ;;
-                gnome*|GNOME|*ubuntu*)
+                gnome|GNOME|ubuntu|Ubuntu)
                     configure_desktop
                     ;;
                 *)
@@ -519,6 +633,8 @@ init_packages
 
 log_header "Setup - Shell Installer"
 
+show_system_info
+
 if [[ "$DRY_RUN" == "true" ]]; then
     echo -e "${YELLOW}━━━ DRY RUN MODE - No changes will be made ━━━${NC}"
     echo ""
@@ -526,6 +642,9 @@ fi
 
 preflight
 setup_passwordless_sudo
+install_arch_audio
+ensure_fish_config
+set_fish_default_shell
 
 run_with_progress() {
     local cat="$1"
@@ -562,5 +681,23 @@ if [[ "$DRY_RUN" == "true" ]]; then
     echo -e "${YELLOW}━━━ DRY RUN COMPLETE ━━━${NC}"
     echo "Run without --dry-run to apply changes"
 else
-    log_success "Setup complete!"
+    end_time=$(date +%s)
+    elapsed=$((end_time - START_TIME))
+    color="${GREEN}"
+    [[ $elapsed -gt 60 ]] && color="${YELLOW}"
+    [[ $elapsed -gt 300 ]] && color="${RED}"
+
+    term_width=$(tput cols 2>/dev/null || echo 50)
+    line=$(printf '═%.0s' $(seq 1 $((term_width - 2))))
+
+    printf '\n%b╔%s╗%b\n' "$GREEN" "$line" "$NC"
+    printf '║%*s%b ✓ Setup complete in %s%s%b %*s║\n' \
+        $(( (term_width - 25) / 2 )) "" "$NC" "$color" "${elapsed}s" "$NC" \
+        $(( (term_width - 25) / 2 )) ""
+    printf '%b╚%s╝%b\n' "$GREEN" "$line" "$NC"
+
+    if command -v fastfetch &>/dev/null; then
+        echo ""
+        fastfetch --logo none --structure os arch kernel de uptime theme 2>/dev/null || true
+    fi
 fi
