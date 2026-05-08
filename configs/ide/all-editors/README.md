@@ -1,1 +1,1 @@
-/home/remcostoeten/.config/dotfiles/setup/../configs/vscode/README.md
+/home/remco/.config/dotfiles/setup/../configs/vscode/README.md

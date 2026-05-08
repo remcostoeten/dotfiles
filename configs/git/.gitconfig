@@ -1,7 +1,7 @@
 [user]
 	name = Remco Stoeten
 	email = remcostoeten@hotmail.com
-	signingkey = F3528E6579A3C46C4CFD71CB35D91CA1D5A8AAE6
+	signingkey = D280AE96E2D747D4893AB9D79296FB6A02A3E6F9
 
 [init]
 	defaultBranch = master
@@ -30,7 +30,11 @@
 	gpgsign = true
 
 [tag]
+	gpgsign = true
 	sort = version:refname
+
+[gpg]
+	format = openpgp
 
 [color]
 	ui = auto
