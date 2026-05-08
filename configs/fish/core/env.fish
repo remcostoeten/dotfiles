@@ -5,7 +5,7 @@
 # Source custom env variables from ~/.config/dotfiles/env-private/env FIRST
 if test -f "$HOME/.config/dotfiles/env-private/env"
     for line in (cat "$HOME/.config/dotfiles/env-private/env" | grep -v "^#" | grep -v '^\s*$')
-        set -l parts (string match -r '^export ([^=]+)="?([^"]*)"?$' $line)
+        set -l parts (string match -r '^export ([^=]+)="?([^"]*)"?(?:\s*#.*)?$' $line)
         if test (count $parts) -ge 3
             set -gx $parts[2] $parts[3]
         end

@@ -1,0 +1,314 @@
+#!/usr/bin/env fish
+
+set R (set_color normal)
+set B (set_color --bold)
+set D (set_color --dim)
+set RED (set_color red)
+set GR (set_color green)
+set YL (set_color yellow)
+set BL (set_color blue)
+set MG (set_color magenta)
+set CY (set_color cyan)
+set GY (set_color brblack)
+
+set ENV_FILE "$HOME/.config/dotfiles/env-private/env"
+mkdir -p (dirname "$ENV_FILE")
+touch "$ENV_FILE"
+
+function __raw_read
+    set prompt $argv[1]
+    set back_mode $argv[2]
+
+    set stty_save (stty -g 2>/dev/null)
+    stty raw -echo 2>/dev/null
+
+    printf "%s" "$prompt" >&2
+    set line ""
+
+    while true
+        set byte (dd bs=1 count=1 status=none 2>/dev/null </dev/tty | od -An -tuC | tr -d ' \n')
+
+        if test -z "$byte"
+            stty $stty_save 2>/dev/null
+            return 1
+        end
+
+        switch "$byte"
+            case "10" "13"
+                printf "\r\n" >&2
+                set -g __raw_line "$line"
+                stty $stty_save 2>/dev/null
+                return 0
+
+            case "127"
+                if test -n "$line"
+                    set line (string sub -l (math (string length $line) - 1) -- "$line")
+                    printf "\b \b" >&2
+                end
+
+            case "8"
+                if test "$back_mode" = "back"
+                    printf "\r\n" >&2
+                    stty $stty_save 2>/dev/null
+                    return 2
+                else
+                    if test -n "$line"
+                        set line (string sub -l (math (string length $line) - 1) -- "$line")
+                        printf "\b \b" >&2
+                    end
+                end
+
+            case "3" "4"
+                printf "\r\n" >&2
+                stty $stty_save 2>/dev/null
+                return 1
+
+            case "27"
+                dd bs=1 count=2 status=none 2>/dev/null </dev/tty >/dev/null
+
+            case '*'
+                set hx (printf "%x" $byte)
+                set char (printf "\x$hx")
+                set line "$line$char"
+                printf "%s" "$char" >&2
+        end
+    end
+end
+
+function __help
+    echo -e "$CY$B╭──────────────────────────────────────────────╮$R"
+    echo -e "$CY$B│  $MG🔑 Key Manager$CY$B                              │$R"
+    echo -e "$CY$B╰──────────────────────────────────────────────╯$R"
+    echo
+    echo -e " "$YL$B"Usage:"$R" key "(set_color brblack)"[command]"$R
+    echo
+    echo " Commands:"
+    echo -e "   "$GR"add"$R"          Add an env var interactively"
+    echo -e "   "$GR"remove"$R"       Remove an env var"
+    echo -e "   "$GR"show"$R"         List exported env vars "(set_color brblack)"(A-Z)"$R
+    echo -e "   "$GR"show -r"$R"      List env vars reversed "(set_color brblack)"(Z-A)"$R
+    echo -e "   "$GR"search"$R"       Fuzzy-search env vars via fzf"
+    echo -e "   "$GR"-h, --help"$R"   Show this help"
+    echo
+    echo -e " "(set_color brblack)(set_color --dim)"Without args → interactive fzf menu"$R
+    echo
+end
+
+function __show
+    if contains -- -r $argv; or contains -- --reverse $argv
+        set reverse_flag -r
+    end
+
+    echo
+    echo -e "$CY$B╭──────────────────────────────────────────────╮$R"
+    echo -e "$CY$B│  $MG🌐 Exported Environment Variables$CY$B               │$R"
+    echo -e "$CY$B╰──────────────────────────────────────────────╯$R"
+    echo
+
+    set sorted (env | sort -t= -k1,1 $reverse_flag)
+    set count 0
+
+    for ln in $sorted
+        set parts (string split -m 1 "=" -- "$ln")
+        set key $parts[1]
+        set val $parts[2]
+
+        if test -z "$val"
+            set val ""
+        end
+
+        set display (string sub -l 100 -- "$val")
+        if test (string length -- "$val") -gt 100
+            set display "$display$GY…$R"
+        end
+
+        echo -e "  $GR$B$key$R $GY=$R $YL$display$R"
+        set count (math $count + 1)
+    end
+
+    echo
+    echo -e " $GY$D$count variables  "
+    if set -q reverse_flag
+        echo -e (set_color brblack)(set_color --dim)"(sorted Z-A)"$R
+    else
+        echo -e (set_color brblack)(set_color --dim)"(sorted A-Z)"$R
+    end
+    echo
+end
+
+function __add
+    echo
+    echo -e "$CY$B╭──────────────────────────────────────────────╮$R"
+    echo -e "$CY$B│  $GR➕ Add Environment Variable$CY$B                        │$R"
+    echo -e "$CY$B╰──────────────────────────────────────────────╯$R"
+    echo
+
+    while true
+        while true
+            __raw_read "  $GR$BName:$R " "noback"
+            set st $status
+
+            switch $st
+                case 1
+                    return 1
+                case 2
+                    continue
+                case 0
+                    set name $__raw_line
+                    if test -z "$name"
+                        echo -e "  $RED✗ Name cannot be empty$R"
+                        continue
+                    end
+                    if not string match -qr '^[a-zA-Z_][a-zA-Z0-9_]*$' -- "$name"
+                        echo -e "  $RED✗ Use only letters, numbers, underscores$R"
+                        continue
+                    end
+                    break
+            end
+        end
+
+        __raw_read "  $YL$BValue$R for $GR$B$name$R ($GY^H to go back$R): " "back"
+        set st $status
+
+        switch $st
+            case 1
+                return 1
+            case 2
+                echo -e "  $GY↩ Back to name…$R"
+                continue
+            case 0
+                set value $__raw_line
+                
+                # Persist to file
+                set -l temp_file (mktemp)
+                set -l timestamp (date "+%Y-%m-%d %H:%M")
+                grep -v "^export $name=" "$ENV_FILE" > "$temp_file" || true
+                echo "export $name=\"$value\" # $timestamp" >> "$temp_file"
+                mv "$temp_file" "$ENV_FILE"
+
+                # Set in current session
+                set -gx "$name" "$value"
+
+                echo
+                echo -e "  $GR✔ $GR$B$name$R $GY=$R $YL$value$R"
+                echo
+                return 0
+        end
+    end
+end
+
+function __remove
+    set -l name $argv[1]
+    
+    if test -z "$name"
+        echo
+        echo -e "$CY$B╭──────────────────────────────────────────────╮$R"
+        echo -e "$CY$B│  $RED➖ Remove Environment Variable$CY$B                     │$R"
+        echo -e "$CY$B╰──────────────────────────────────────────────╯$R"
+        echo
+        
+        # Interactive selection via fzf if no name provided
+        set -l selection (cat "$ENV_FILE" | grep "^export " | fzf --prompt="➖ Select to remove > " --layout=reverse --height=40%)
+        if test -z "$selection"
+            return 1
+        end
+        set name (string match -r '^export ([^=]+)=' "$selection")[2]
+    end
+
+    if test -n "$name"
+        set -l temp_file (mktemp)
+        grep -v "^export $name=" "$ENV_FILE" > "$temp_file" || true
+        mv "$temp_file" "$ENV_FILE"
+        set -e "$name"
+        echo -e "  $GR✔ Removed $GR$B$name$R from system$R"
+        return 0
+    end
+end
+
+function __search
+    if not command -v fzf &>/dev/null
+        echo -e " $RED✗ fzf is required for search$R" >&2
+        return 1
+    end
+
+    set query (string join " " -- $argv)
+    set result (
+        env \
+        | fzf --prompt="🔍 Search env vars > " \
+            --header="ctrl-a: A-Z | ctrl-z: Z-A | ctrl-t: Newest (private)" \
+            --layout=reverse \
+            --height=60% \
+            --preview="echo {} | string split -m 1 = | tail -1" \
+            --preview-window=down:3:wrap \
+            --query="$query" \
+            --bind "ctrl-a:reload(env | sort)" \
+            --bind "ctrl-z:reload(env | sort -r)" \
+            --bind "ctrl-t:reload(grep '^export ' $ENV_FILE | tac)"
+    )
+
+    if test -n "$result"
+        echo
+        echo -e " $GR$B$result$R"
+        echo
+    end
+end
+
+function __interactive
+    if not command -v fzf &>/dev/null
+        echo -e " $RED✗ fzf is required for interactive mode$R" >&2
+        return 1
+    end
+
+    set choice (
+        printf "%s\t%s\n" \
+            "add"    "➕ Add new environment variable" \
+            "remove" "➖ Remove environment variable" \
+            "show"   "📋 View all exported variables" \
+            "search" "🔍 Search variables" \
+            "help"   "ℹ️  Show help" \
+        | fzf --prompt="🔑 key > " \
+            --with-nth=2.. \
+            --layout=reverse \
+            --height=50% \
+            --preview="echo {1}" \
+            --preview-window=down:1:wrap \
+        | string split \t \
+        | head -1
+    )
+
+    switch "$choice"
+        case add
+            __add
+        case remove
+            __remove
+        case show
+            __show
+        case search
+            __search
+        case help
+            __help
+        case '*'
+            if test -n "$choice"
+                echo -e " $RED✗ Unknown option: $choice$R"
+            end
+    end
+end
+
+switch "$argv[1]"
+    case "" interactive
+        __interactive
+    case add
+        __add $argv[2..-1]
+    case remove
+        __remove $argv[2..-1]
+    case show
+        __show $argv[2..-1]
+    case search
+        __search $argv[2..-1]
+    case -h --help
+        __help
+    case '*'
+        echo -e " $RED✗ Unknown command: $argv[1]$R"
+        __help
+        return 1
+end
