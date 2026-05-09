@@ -3,6 +3,8 @@
 export PREFERRED_HOME_DIR="${PREFERRED_HOME_DIR:-$HOME}"
 export EDITOR="${EDITOR:-nvim}"
 export SUDO_EDITOR="${SUDO_EDITOR:-$EDITOR}"
+export TERMINAL="${TERMINAL:-ghostty}"
+export TERM_PROGRAM="${TERM_PROGRAM:-ghostty}"
 
 dotfiles_add_to_path "$HOME/.config/dotfiles/bin"
 dotfiles_add_to_path "$HOME/.config/dotfiles/scripts"

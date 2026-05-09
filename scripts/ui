@@ -4,8 +4,8 @@
 # Handles both Python toolkit and import transformer functionality
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_SCRIPT="$SCRIPT_DIR/../scripts/ui-toolkit.py"
-IMPORT_TRANSFORMER="$SCRIPT_DIR/ui-import-transformer"
+PYTHON_SCRIPT="$SCRIPT_DIR/../scripts/lib/ui/toolkit.py"
+IMPORT_TRANSFORMER="$SCRIPT_DIR/lib/ui/import-transformer"
 
 # Colors for output
 RED='\033[0;31m'
@@ -47,7 +47,7 @@ handle_transform() {
     fi
 
     if [ ! -f "$IMPORT_TRANSFORMER" ]; then
-        echo -e "${RED}❌ Error: ui-import-transformer not found at: $IMPORT_TRANSFORMER${NC}"
+        echo -e "${RED}❌ Error: UI import transformer not found at: $IMPORT_TRANSFORMER${NC}"
         exit 1
     fi
 
@@ -83,7 +83,7 @@ case "$1" in
     "toolkit")
         shift
         if [ ! -f "$PYTHON_SCRIPT" ]; then
-            echo -e "${RED}❌ Error: ui-toolkit.py not found at: $PYTHON_SCRIPT${NC}"
+            echo -e "${RED}❌ Error: UI toolkit not found at: $PYTHON_SCRIPT${NC}"
             exit 1
         fi
         exec python3 "$PYTHON_SCRIPT" "$@"
@@ -94,7 +94,7 @@ case "$1" in
     *)
         # Default behavior: forward to Python toolkit for backward compatibility
         if [ ! -f "$PYTHON_SCRIPT" ]; then
-            echo -e "${RED}❌ Error: ui-toolkit.py not found at: $PYTHON_SCRIPT${NC}"
+            echo -e "${RED}❌ Error: UI toolkit not found at: $PYTHON_SCRIPT${NC}"
             echo -e "${YELLOW}💡 Did you mean 'ui transform' or 'ui toolkit'?${NC}"
             exit 1
         fi

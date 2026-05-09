@@ -21,7 +21,7 @@ Usage: $(basename "$0") [OPTIONS]
 Options:
     --dry-run       Show what would be installed without installing
     --verbose       Show detailed output
-    --category C    Install only specific category (essential, langs, fonts, tools, terminals, curl-tools, npm-tools, git-tools, editors, docker, system, hardware, media, desktop, hyprland)
+    --category C    Install only specific category (essential, langs, fonts, tools, terminals, curl-tools, npm-tools, git-tools, editors, docker, system, hardware, media, desktop, gnome, kde, hyprland)
     --package P     Install specific package
     -h, --help      Show this help message
 
@@ -72,7 +72,7 @@ setup_passwordless_sudo() {
     log_info "Configuring passwordless sudo (requires password once)..."
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would configure passwordless sudo"
+        log_dry_run "configure passwordless sudo"
         return 0
     fi
 
@@ -92,7 +92,7 @@ setup_passwordless_sudo() {
     log_success "Passwordless sudo configured"
 }
 
-configure_desktop() {
+configure_gnome_desktop() {
     log_info "Configuring GNOME desktop aesthetics..."
     
     if ! command -v gsettings &>/dev/null; then
@@ -113,10 +113,54 @@ configure_desktop() {
     log_success "Desktop aesthetics configured"
 }
 
+configure_desktop() {
+    configure_gnome_desktop
+}
+
+configure_kde_desktop() {
+    log_info "Configuring KDE Plasma desktop aesthetics..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "configure KDE Plasma theme, icons, fonts, and wallpaper rotation"
+        return 0
+    fi
+
+    install_apt "papirus-icon-theme" "Papirus icons"
+
+    local kwriteconfig=""
+    if command -v kwriteconfig6 &>/dev/null; then
+        kwriteconfig="kwriteconfig6"
+    elif command -v kwriteconfig5 &>/dev/null; then
+        kwriteconfig="kwriteconfig5"
+    else
+        log_warn "kwriteconfig not found - skipping KDE settings"
+        setup_wallpaper_rotation
+        return 0
+    fi
+
+    if command -v lookandfeeltool &>/dev/null; then
+        lookandfeeltool --apply org.kde.breezedark.desktop >/dev/null 2>&1 || true
+    fi
+
+    "$kwriteconfig" --file kdeglobals --group General --key ColorScheme "BreezeDark" 2>/dev/null || true
+    "$kwriteconfig" --file kdeglobals --group Icons --key Theme "Papirus-Dark" 2>/dev/null || true
+    "$kwriteconfig" --file kdeglobals --group General --key fixed "JetBrains Mono,11,-1,5,50,0,0,0,0,0" 2>/dev/null || true
+    "$kwriteconfig" --file kdeglobals --group General --key font "Inter,11,-1,5,50,0,0,0,0,0" 2>/dev/null || true
+
+    if command -v kbuildsycoca6 &>/dev/null; then
+        kbuildsycoca6 >/dev/null 2>&1 || true
+    elif command -v kbuildsycoca5 &>/dev/null; then
+        kbuildsycoca5 >/dev/null 2>&1 || true
+    fi
+
+    setup_wallpaper_rotation
+    log_success "KDE Plasma aesthetics configured"
+}
+
 configure_dark_theme() {
     log_step "Setting dark theme..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would set dark theme"
+        log_dry_run "set dark theme"
         return 0
     fi
     gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>/dev/null || true
@@ -129,7 +173,7 @@ configure_dark_theme() {
 configure_hide_dock() {
     log_step "Configuring dock (hide mode)..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would hide dock"
+        log_dry_run "hide dock"
         return 0
     fi
     gsettings set org.gnome.shell.extensions.dash-to-dock autohide true 2>/dev/null || true
@@ -146,7 +190,7 @@ configure_hide_dock() {
 configure_window_controls() {
     log_step "Configuring window controls..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would set window controls"
+        log_dry_run "set window controls"
         return 0
     fi
     gsettings set org.gnome.desktop.wm.preferences button-layout 'close,minimize,maximize:' 2>/dev/null || true
@@ -157,7 +201,7 @@ configure_window_controls() {
 configure_animations() {
     log_step "Configuring animations..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would configure animations"
+        log_dry_run "configure animations"
         return 0
     fi
     gsettings set org.gnome.desktop.interface reduce-motion true 2>/dev/null || true
@@ -168,7 +212,7 @@ configure_animations() {
 configure_icons() {
     log_step "Installing icon theme..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would install Papirus icons"
+        log_dry_run "install Papirus icons"
         return 0
     fi
     if fc-list | grep -qi "Papirus"; then
@@ -190,7 +234,7 @@ configure_icons() {
 configure_cursor() {
     log_step "Configuring cursor theme..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would configure cursor"
+        log_dry_run "configure cursor"
         return 0
     fi
     gsettings set org.gnome.desktop.interface cursor-theme 'Bibata-Modern-Classic' 2>/dev/null || true
@@ -200,7 +244,7 @@ configure_cursor() {
 configure_top_bar() {
     log_step "Configuring top bar..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would configure top bar"
+        log_dry_run "configure top bar"
         return 0
     fi
     gsettings set org.gnome.desktop.interface show-battery-percentage true 2>/dev/null || true
@@ -212,7 +256,7 @@ configure_top_bar() {
 configure_fonts() {
     log_step "Configuring fonts..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would configure fonts"
+        log_dry_run "configure fonts"
         return 0
     fi
     gsettings set org.gnome.desktop.interface font-antialiasing 'rgba' 2>/dev/null || true
@@ -226,7 +270,7 @@ configure_fonts() {
 setup_wallpaper_rotation() {
     log_step "Setting up wallpaper rotation service..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would set up wallpaper rotation timer"
+        log_dry_run "set up wallpaper rotation timer"
         return 0
     fi
 
@@ -266,15 +310,66 @@ set_default_terminal() {
     log_info "Setting $terminal as default terminal..."
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} Would set $terminal as default terminal"
+        log_dry_run "set $terminal as default terminal"
         return 0
     fi
-    
-    if command -v gsettings &> /dev/null; then
-        gsettings set org.gnome.desktop.default-applications.terminal exec "$terminal"
-        gsettings set org.gnome.desktop.default-applications.terminal exec-arg "-e"
-    fi
-    
+
+    local desktop_type
+    desktop_type="$(detect_desktop)"
+
+    case "$desktop_type" in
+        kde|KDE|plasma|Plasma)
+            local kwriteconfig=""
+            if command -v kwriteconfig6 &>/dev/null; then
+                kwriteconfig="kwriteconfig6"
+            elif command -v kwriteconfig5 &>/dev/null; then
+                kwriteconfig="kwriteconfig5"
+            fi
+
+            if [[ -n "$kwriteconfig" ]]; then
+                local terminal_service=""
+                local desktop_file=""
+                local app_dir
+                for app_dir in "$HOME/.local/share/applications" /usr/share/applications; do
+                    [[ -d "$app_dir" ]] || continue
+                    while IFS= read -r -d '' candidate; do
+                        case "$(basename "$candidate")" in
+                            ghostty.desktop|com.mitchellh.ghostty.desktop)
+                                desktop_file="$candidate"
+                                break 2
+                                ;;
+                        esac
+                    done < <(find "$app_dir" -maxdepth 1 -type f -name '*.desktop' -print0 2>/dev/null)
+                done
+                if [[ -n "$desktop_file" ]]; then
+                    terminal_service="$(basename "$desktop_file")"
+                fi
+
+                "$kwriteconfig" --file kdeglobals --group General --key TerminalApplication "$terminal" 2>/dev/null || true
+                if [[ -n "$terminal_service" ]]; then
+                    "$kwriteconfig" --file kdeglobals --group General --key TerminalService "$terminal_service" 2>/dev/null || true
+                fi
+                if command -v kbuildsycoca6 &>/dev/null; then
+                    kbuildsycoca6 >/dev/null 2>&1 || true
+                elif command -v kbuildsycoca5 &>/dev/null; then
+                    kbuildsycoca5 >/dev/null 2>&1 || true
+                fi
+                log_success "$terminal set as default terminal (KDE Plasma)"
+                return 0
+            fi
+
+            log_warn "kwriteconfig not found, falling back to shell env only"
+            ;;
+        gnome|GNOME|ubuntu|Ubuntu)
+            if command -v gsettings &> /dev/null; then
+                gsettings set org.gnome.desktop.default-applications.terminal exec "$terminal"
+                gsettings set org.gnome.desktop.default-applications.terminal exec-arg "-e"
+                log_success "$terminal set as default terminal (GNOME)"
+                return 0
+            fi
+            ;;
+    esac
+
     log_success "$terminal set as default terminal"
 }
 
@@ -282,11 +377,17 @@ detect_desktop() {
     local desktop="${XDG_CURRENT_DESKTOP:-}"
     local session="${XDG_SESSION_DESKTOP:-${DESKTOP_SESSION:-}}"
     local session_type="${XDG_SESSION_TYPE:-}"
+    local desktop_lc="${desktop,,}"
+    local session_lc="${session,,}"
 
-    if [[ "$desktop" =~ [Hh]yprland ]] || [[ "$session" =~ [Hh]yprland ]] || command -v hyprctl &>/dev/null; then
+    if [[ "$desktop_lc" == *hyprland* ]] || [[ "$session_lc" == *hyprland* ]] || [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
         echo "hyprland"
-    elif [[ "$desktop" =~ GNOME ]] || [[ "$session" =~ GNOME ]] || [[ "$desktop" =~ ubuntu ]] || [[ "$session" =~ ubuntu ]]; then
+    elif [[ "$desktop_lc" == *gnome* ]] || [[ "$session_lc" == *gnome* ]] || [[ "$desktop_lc" == *ubuntu* ]] || [[ "$session_lc" == *ubuntu* ]]; then
         echo "gnome"
+    elif [[ "$desktop_lc" == *kde* ]] || [[ "$session_lc" == *kde* ]] || [[ "$desktop_lc" == *plasma* ]] || [[ "$session_lc" == *plasma* ]]; then
+        echo "kde"
+    elif [[ -z "$desktop" && -z "$session" ]] && command -v hyprctl &>/dev/null; then
+        echo "hyprland"
     elif [[ -n "$desktop" ]]; then
         echo "$desktop"
     elif [[ -n "$session" ]]; then
@@ -345,6 +446,7 @@ show_system_info() {
         esac
         case "$_cache_desktop" in
             gnome|GNOME) desktop_icon="🖥" ;;
+            kde|KDE|plasma|Plasma) desktop_icon="🖥" ;;
             hyprland|Hyprland) desktop_icon="🌊" ;;
             none) desktop_icon="❌" ;;
             *) desktop_icon="📱" ;;
@@ -359,6 +461,7 @@ show_system_info() {
         esac
         case "$_cache_desktop" in
             gnome|GNOME) desktop_icon="[gnome]" ;;
+            kde|KDE|plasma|Plasma) desktop_icon="[kde]" ;;
             hyprland|Hyprland) desktop_icon="[hypr]" ;;
             none) desktop_icon="[none]" ;;
             *) desktop_icon="[?]" ;;
@@ -409,7 +512,7 @@ install_hyprland() {
     install_apt "swayosd" "SwayOSD"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY RUN] Would enable SwayOSD libinput backend if available"
+        log_dry_run "enable SwayOSD libinput backend if available"
     elif command -v swayosd-client &>/dev/null; then
         sudo systemctl enable --now swayosd-libinput-backend.service 2>/dev/null || true
     fi
@@ -417,6 +520,31 @@ install_hyprland() {
     setup_config_symlinks
     
     log_success "Hyprland configured"
+}
+
+install_detected_desktop() {
+    local desktop_type
+    desktop_type=$(detect_desktop)
+
+    log_info "Detected desktop: $desktop_type"
+
+    case "$desktop_type" in
+        hyprland|Hyprland)
+            install_hyprland
+            ;;
+        gnome|GNOME|ubuntu|Ubuntu)
+            configure_gnome_desktop
+            ;;
+        kde|KDE|plasma|Plasma)
+            configure_kde_desktop
+            ;;
+        none)
+            log_warn "No desktop environment detected, skipping desktop config"
+            ;;
+        *)
+            log_warn "Unsupported desktop '$desktop_type', skipping desktop-specific config"
+            ;;
+    esac
 }
 
 install_category() {
@@ -503,19 +631,13 @@ install_category() {
             install_all_fonts
             ;;
         desktop)
-            local desktop_type
-            desktop_type=$(detect_desktop)
-            case "$desktop_type" in
-                hyprland|Hyprland)
-                    install_hyprland
-                    ;;
-                gnome|GNOME|ubuntu|Ubuntu)
-                    configure_desktop
-                    ;;
-                *)
-                    log_warn "No desktop environment detected, skipping desktop config"
-                    ;;
-            esac
+            install_detected_desktop
+            ;;
+        gnome)
+            configure_gnome_desktop
+            ;;
+        kde|plasma)
+            configure_kde_desktop
             ;;
         hyprland)
             install_hyprland
@@ -562,6 +684,7 @@ install_package() {
             ;;
         script)
             case "$pkg" in
+                ghostty) install_ghostty ;;
                 zed) install_zed ;;
                 vscode) install_vscode ;;
                 opencode) install_opencode ;;
@@ -580,12 +703,16 @@ install_all() {
     install_category "langs"
     install_category "tools"
     install_category "curl-tools"
+    install_category "npm-tools"
     install_category "git-tools"
     install_category "editors"
     install_category "terminals"
     install_category "docker"
+    install_category "system"
+    install_category "hardware"
+    install_category "media"
     install_category "fonts"
-    install_category "hyprland"
+    install_category "desktop"
 }
 
 category=""
@@ -644,11 +771,11 @@ preflight
 setup_passwordless_sudo
 install_arch_audio
 ensure_fish_config
-set_fish_default_shell
 
 run_with_progress() {
     local cat="$1"
     set_progress_category "$cat"
+    log_section "$cat"
     install_category "$cat"
     update_progress "$cat"
 }
@@ -663,18 +790,24 @@ elif [[ -n "$package" ]]; then
     install_package "$package"
     update_progress "$package"
 else
-    init_progress 10
+    init_progress 14
     run_with_progress "essential"
     run_with_progress "langs"
     run_with_progress "tools"
     run_with_progress "curl-tools"
+    run_with_progress "npm-tools"
     run_with_progress "git-tools"
     run_with_progress "editors"
     run_with_progress "terminals"
     run_with_progress "docker"
+    run_with_progress "system"
+    run_with_progress "hardware"
+    run_with_progress "media"
     run_with_progress "fonts"
-    run_with_progress "hyprland"
+    run_with_progress "desktop"
 fi
+
+set_fish_default_shell
 
 echo ""
 if [[ "$DRY_RUN" == "true" ]]; then

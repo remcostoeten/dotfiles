@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Bin wrapper for scripts/remove-unused-files.py
+# Bin wrapper for scripts/lib/tools/remove-unused-files.py
 # This allows calling the script as 'unused' from anywhere when bin/ is in PATH
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTFILES_DIR="$(dirname "$SCRIPT_DIR")"
-PYTHON_SCRIPT="$DOTFILES_DIR/scripts/remove-unused-files.py"
+PYTHON_SCRIPT="$DOTFILES_DIR/scripts/lib/tools/remove-unused-files.py"
 
 # Check if Python script exists
 if [[ ! -f "$PYTHON_SCRIPT" ]]; then

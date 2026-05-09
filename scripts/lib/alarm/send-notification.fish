@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
 
 # Notification sender script that ensures proper environment
-# Usage: send_notification.fish "title" "message" [urgency]
+# Usage: send-notification.fish "title" "message" [urgency]
 
 set -l title $argv[1]
 set -l message $argv[2]

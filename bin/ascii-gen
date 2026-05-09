@@ -17,7 +17,7 @@ readonly NC='\033[0m' # No Color
 
 # Get script directory
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly ASCII_GENERATOR="${SCRIPT_DIR}/../scripts/ascii-generator.js"
+readonly ASCII_GENERATOR="${SCRIPT_DIR}/../scripts/lib/tools/ascii-generator.js"
 
 # Check if Node.js is available
 if ! command -v node >/dev/null 2>&1; then

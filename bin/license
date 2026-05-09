@@ -4,7 +4,7 @@
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")/scripts"
+SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")/scripts/lib/tools"
 
 # Check if the Python script exists
 if [ ! -f "$SCRIPTS_DIR/license-generator.py" ]; then

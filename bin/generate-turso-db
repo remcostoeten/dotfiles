@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
+# Clone or update the Turso DB creator and run the upstream generator.
+set -euo pipefail
 
-# Bin wrapper for scripts/generate-turso-db.py
-# This allows calling the script as 'generate-turso-db' from anywhere when bin/ is in PATH
+runner="$HOME/.config/dotfiles/scripts/lib/github-tool-runner.sh"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_DIR="$(dirname "$SCRIPT_DIR")"
-PYTHON_SCRIPT="$DOTFILES_DIR/scripts/generate-turso-db.py"
-
-# Check if Python script exists
-if [[ ! -f "$PYTHON_SCRIPT" ]]; then
-    echo "❌ Error: Cannot find generate-turso-db.py script at $PYTHON_SCRIPT"
-    exit 1
-fi
-
-# Execute the Python script with all arguments passed through
-exec python3 "$PYTHON_SCRIPT" "$@"
+exec "$runner" \
+    "https://github.com/remcostoeten/Turso-db-creator-auto-retrieve-env-credentials.git" \
+    "turso-db-creator" \
+    "generate-turso-db.py" \
+    "$@"

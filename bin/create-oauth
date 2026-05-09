@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Clone or update the OAuth app automator and run the selected provider.
+set -euo pipefail
+
+runner="$HOME/.config/dotfiles/scripts/lib/github-tool-runner.sh"
+
+if [[ "${1:-}" == "google" || "${1:-}" == "--google" ]]; then
+    shift
+    exec "$runner" \
+        "https://github.com/remcostoeten/oauth-app-automator.git" \
+        "oauth-app-automator" \
+        "google_oauth_automator.py" \
+        "$@"
+fi
+
+if [[ "${1:-}" == "github" || "${1:-}" == "--github" ]]; then
+    shift
+fi
+
+exec "$runner" \
+    "https://github.com/remcostoeten/oauth-app-automator.git" \
+    "oauth-app-automator" \
+    "run.sh" \
+    "$@"

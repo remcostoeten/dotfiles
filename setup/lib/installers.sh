@@ -121,7 +121,8 @@ install_apt() {
 
             log_step "Installing $name..."
             if [[ "$DRY_RUN" == "true" ]]; then
-                echo -e "\033[0;36m[DRY RUN]\033[0m Would run: sudo apt install -y $pkg"
+                log_dry_run "sudo apt install -y $pkg"
+                return 0
             else
                 set +e
                 sudo apt install -y -qq "$pkg" 2>&1 | grep -v "^Reading" | grep -v "^Building" | grep -v "^0 upgraded" | grep -v "already the newest" | grep -v "set to manually" | grep -v "no longer required" | grep -v "autoremove" | grep -v "WARNING" | grep -v "nvidia-firmware" | grep -v "ocl-icd"
@@ -150,7 +151,8 @@ install_apt() {
 
             log_step "Installing $name..."
             if [[ "$DRY_RUN" == "true" ]]; then
-                echo -e "\033[0;36m[DRY RUN]\033[0m Would run: sudo pacman -S --noconfirm --needed $mapped_pkg"
+                log_dry_run "sudo pacman -S --noconfirm --needed $mapped_pkg"
+                return 0
             else
                 sudo pacman -S --noconfirm --needed "$mapped_pkg" >/dev/null 2>&1 || {
                     log_error "Failed to install $name ($mapped_pkg) via pacman"
@@ -178,7 +180,8 @@ install_snap() {
     
     log_step "Installing $name..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would run: sudo snap install $flags $pkg"
+        log_dry_run "sudo snap install $flags $pkg"
+        return 0
     else
         set +e
         sudo snap install $flags "$pkg" 2>&1 | grep -v "Spawned"
@@ -203,7 +206,8 @@ install_npm() {
     
     log_step "Installing $name..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would run: npm install -g $pkg"
+        log_dry_run "npm install -g $pkg"
+        return 0
     else
         set +e
         sudo npm install -g "$pkg" --silent 2>&1 | grep -v "npm warn"
@@ -238,9 +242,9 @@ install_curl() {
     log_step "Installing $name..."
     if [[ "$DRY_RUN" == "true" ]]; then
         if ((${#installer_args[@]})); then
-            echo -e "\033[0;36m[DRY RUN]\033[0m Would run: curl -fsSL $url | $shell -s -- ${installer_args[*]}"
+            log_dry_run "curl -fsSL $url | $shell -s -- ${installer_args[*]}"
         else
-            echo -e "\033[0;36m[DRY RUN]\033[0m Would run: curl -fsSL $url | $shell"
+            log_dry_run "curl -fsSL $url | $shell"
         fi
         return 0
     else
@@ -284,7 +288,7 @@ setup_starship_config() {
     local starship_config_src="$SCRIPT_DIR/../configs/starship/starship.toml"
     local starship_config_dst="$HOME/.config/starship.toml"
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY RUN] Would link starship.toml from the repo"
+        log_dry_run "link starship.toml from the repo"
         return 0
     fi
     ensure_setup_backup_root
@@ -369,7 +373,7 @@ setup_config_symlinks() {
     local configs_dir="$SCRIPT_DIR/../configs"
     local home_config_dir="$HOME/.config"
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY RUN] Would link desktop and shell config directories from the repo"
+        log_dry_run "link desktop and shell config directories from the repo"
         return 0
     fi
     ensure_setup_backup_root
@@ -413,15 +417,6 @@ setup_config_symlinks() {
     fi
 
     link_editor_configs_recursive "$configs_dir" "$home_config_dir"
-
-    local gpg_sync_script="$SCRIPT_DIR/../scripts/gpg-sync.sh"
-    if [[ -x "$gpg_sync_script" && -d "$HOME/.config/dotfiles/env-private/.gnupg" ]]; then
-        if [[ "$DRY_RUN" == "true" ]]; then
-            echo -e "${YELLOW}[DRY RUN]${NC} Would restore GPG keys from env-private"
-        else
-            "$gpg_sync_script" restore >/dev/null 2>&1 || true
-        fi
-    fi
 
     setup_runtime_permissions
     
@@ -507,7 +502,7 @@ install_editor_extensions() {
 
                 if command -v "$editor" &>/dev/null; then
                     if [[ "$DRY_RUN" == "true" ]]; then
-                        log_info "[DRY RUN] Would install: $ext_id for $editor"
+                        log_dry_run "install $ext_id for $editor"
                     else
                         $install_cmd "$ext_id" 2>/dev/null || true
                     fi
@@ -536,7 +531,7 @@ install_github() {
     if [[ -d "$target_dir" ]]; then
         log_info "$name directory exists, pulling latest..."
         if [[ "$DRY_RUN" == "true" ]]; then
-            echo -e "\033[0;36m[DRY RUN]\033[0m Would pull latest $name"
+            log_dry_run "git pull in $target_dir"
         else
             (cd "$target_dir" && git pull) 2>/dev/null || true
             log_success "$name updated"
@@ -546,7 +541,7 @@ install_github() {
     
     log_step "Installing $name..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would run: gh repo clone $repo $target_dir"
+        log_dry_run "gh repo clone $repo $target_dir"
         return 0
     else
         set +e
@@ -573,7 +568,7 @@ install_nerd_font() {
     log_step "Installing Nerd Font: $font..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would download and install $font Nerd Font"
+        log_dry_run "download and install $font Nerd Font"
     else
         mkdir -p "$font_dir"
         local zip_path="/tmp/${font}.zip"
@@ -596,7 +591,7 @@ install_geist_all() {
     log_step "Installing Geist fonts..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would download and install Geist fonts"
+        log_dry_run "download and install Geist fonts"
         return 0
     fi
     
@@ -620,7 +615,7 @@ install_inter() {
     log_step "Installing Inter..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would download Inter font"
+        log_dry_run "download Inter font"
         return 0
     fi
     
@@ -642,7 +637,7 @@ install_jetbrains_mono() {
     log_step "Installing JetBrains Mono..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install JetBrains Mono"
+        log_dry_run "install JetBrains Mono"
         return 0
     fi
     
@@ -667,7 +662,7 @@ install_ibm_plex_mono() {
     log_step "Installing IBM Plex Mono..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install IBM Plex Mono"
+        log_dry_run "install IBM Plex Mono"
         return 0
     fi
     
@@ -682,7 +677,7 @@ install_ibm_plex_mono() {
 
 install_all_fonts() {
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install all fonts in parallel"
+        log_dry_run "install all fonts in parallel"
         return 0
     fi
     
@@ -854,37 +849,138 @@ install_ghostty() {
         return 0
     fi
     
-    log_step "Installing Ghostty terminal..."
+    log_step "Building Ghostty from source..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install Ghostty via .deb"
+        log_dry_run "install Ghostty build dependencies, Zig 0.15.2, then build and install to ~/.local"
         return 0
     fi
 
     local package_manager
     package_manager="$(detect_package_manager)"
 
-    case "$package_manager" in
-        apt)
-            local tmp_deb="/tmp/ghostty.deb"
-            local ubuntu_version
-            ubuntu_version=$(lsb_release -rs 2>/dev/null || echo "24.04")
-            local deb_name="ghostty_1.3.1-0.ppa1_amd64_${ubuntu_version}.deb"
-            local download_url="https://github.com/mkasberg/ghostty-ubuntu/releases/download/1.3.1-0-ppa1/${deb_name}"
-            curl -fsSL "$download_url" -o "$tmp_deb"
-            sudo apt install -y -qq "$tmp_deb" 2>/dev/null
-            rm -f "$tmp_deb"
-            ;;
-        pacman)
-            sudo pacman -S --noconfirm --needed ghostty >/dev/null 2>&1
-            ;;
-        *)
-            log_error "No supported package manager found for Ghostty installation"
+    local zig_version_required="0.15.2"
+    local ghostty_version="1.3.1"
+    local zig_home="$HOME/.local/share/zig/$zig_version_required"
+    local zig_bin="$zig_home/zig"
+
+    ensure_zig_for_ghostty() {
+        local current_zig_version=""
+
+        if command -v zig >/dev/null 2>&1; then
+            current_zig_version="$(zig version 2>/dev/null || true)"
+        fi
+
+        if [[ "$current_zig_version" == "$zig_version_required" ]]; then
+            return 0
+        fi
+
+        if [[ -x "$zig_bin" ]]; then
+            if "$zig_bin" version 2>/dev/null | grep -qx "$zig_version_required"; then
+                case ":$PATH:" in
+                    *":$zig_home:"*) ;;
+                    *) export PATH="$zig_home:$PATH" ;;
+                esac
+                return 0
+            fi
+        fi
+
+        log_step "Installing Zig $zig_version_required..."
+        mkdir -p "$zig_home"
+
+        local zig_archive="/tmp/zig-x86_64-linux-$zig_version_required.tar.xz"
+        local zig_url="https://ziglang.org/download/$zig_version_required/zig-x86_64-linux-$zig_version_required.tar.xz"
+        curl -fsSL "$zig_url" -o "$zig_archive"
+        tar -xf "$zig_archive" -C "$zig_home" --strip-components=1
+        rm -f "$zig_archive"
+
+        case ":$PATH:" in
+            *":$zig_home:"*) ;;
+            *) export PATH="$zig_home:$PATH" ;;
+        esac
+
+        if ! "$zig_bin" version 2>/dev/null | grep -qx "$zig_version_required"; then
+            log_error "Failed to install Zig $zig_version_required"
             return 1
-            ;;
-    esac
-    
-    log_success "Ghostty installed"
+        fi
+    }
+
+    ensure_ghostty_deps() {
+        case "$package_manager" in
+            apt)
+                install_apt "git" "git"
+                install_apt "curl" "curl"
+                install_apt "tar" "tar"
+                install_apt "xz-utils" "xz"
+                install_apt "build-essential" "build-essential"
+                install_apt "pkg-config" "pkg-config"
+                install_apt "gettext" "gettext"
+                install_apt "libgtk-4-dev" "gtk4"
+                install_apt "libgtk4-layer-shell-dev" "gtk4-layer-shell"
+                install_apt "libadwaita-1-dev" "libadwaita"
+                install_apt "libxml2-utils" "libxml2-utils"
+                ;;
+            pacman)
+                install_apt "git" "git"
+                install_apt "curl" "curl"
+                install_apt "tar" "tar"
+                install_apt "xz" "xz"
+                install_apt "base-devel" "build-essential"
+                install_apt "pkgconf" "pkg-config"
+                install_apt "gettext" "gettext"
+                install_apt "gtk4" "gtk4"
+                install_apt "gtk4-layer-shell" "gtk4-layer-shell"
+                install_apt "libadwaita" "libadwaita"
+                ;;
+            *)
+                log_error "No supported package manager found for Ghostty installation"
+                return 1
+                ;;
+        esac
+    }
+
+    ensure_ghostty_deps
+    ensure_zig_for_ghostty
+
+    local workdir
+    workdir="$(mktemp -d)"
+    local tarball="$workdir/ghostty-$ghostty_version.tar.gz"
+    local source_url="https://release.files.ghostty.org/$ghostty_version/ghostty-$ghostty_version.tar.gz"
+
+    log_step "Downloading Ghostty $ghostty_version source..."
+    curl -fsSL "$source_url" -o "$tarball"
+    tar -xf "$tarball" -C "$workdir"
+
+    local source_dir="$workdir/ghostty-$ghostty_version"
+    if [[ ! -d "$source_dir" ]]; then
+        log_error "Ghostty source directory not found after extraction"
+        rm -rf "$workdir"
+        return 1
+    fi
+
+    local build_flags=(-Doptimize=ReleaseFast -p "$HOME/.local")
+    if [[ "$package_manager" == "apt" ]]; then
+        if command -v lsb_release >/dev/null 2>&1; then
+            if [[ "$(lsb_release -rs 2>/dev/null || echo "")" =~ ^(12|24\.04|24\.10|25\.04)$ ]]; then
+                build_flags+=(-fno-sys=gtk4-layer-shell)
+            fi
+        fi
+    fi
+
+    log_step "Building Ghostty $ghostty_version..."
+    if ! (cd "$source_dir" && "$zig_bin" build "${build_flags[@]}"); then
+        log_error "Ghostty build failed"
+        rm -rf "$workdir"
+        return 1
+    fi
+
+    rm -rf "$workdir"
+
+    if command -v ghostty >/dev/null 2>&1; then
+        log_success "Ghostty built and installed"
+    else
+        log_warn "Ghostty build completed, but the binary is not on PATH yet"
+    fi
 }
 
 install_zed() {
@@ -896,7 +992,7 @@ install_zed() {
     log_step "Installing Zed editor..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install Zed editor"
+        log_dry_run "install Zed editor"
         return 0
     fi
     
@@ -914,7 +1010,7 @@ install_vscode() {
     log_step "Installing VS Code..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install VS Code"
+        log_dry_run "install VS Code"
         return 0
     fi
 
@@ -950,16 +1046,16 @@ install_opencode() {
     log_step "Installing OpenCode CLI..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install OpenCode CLI"
+        log_dry_run "install OpenCode CLI"
     else
         curl -fsSL https://opencode.ai/install | bash
+        log_success "OpenCode CLI installed"
     fi
-    log_success "OpenCode CLI installed"
     
     log_step "Installing OpenCode Desktop..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install OpenCode Desktop"
+        log_dry_run "install OpenCode Desktop"
     else
         local package_manager
         package_manager="$(detect_package_manager)"
@@ -978,15 +1074,15 @@ install_opencode() {
                 log_warn "Skipping OpenCode Desktop: unsupported package manager"
                 ;;
         esac
+        log_success "OpenCode Desktop installed"
     fi
-    log_success "OpenCode Desktop installed"
 }
 
 install_nvidia() {
     log_step "Installing NVIDIA drivers..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install NVIDIA drivers"
+        log_dry_run "install NVIDIA drivers"
         return 0
     fi
     
@@ -1004,7 +1100,7 @@ install_openrgb() {
     fi
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install OpenRGB"
+        log_dry_run "install OpenRGB"
         return 0
     fi
     
@@ -1024,7 +1120,7 @@ install_dotnet() {
     log_step "Installing .NET SDK..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install .NET SDK"
+        log_dry_run "install .NET SDK"
         return 0
     fi
     
@@ -1054,17 +1150,23 @@ set_fish_default_shell() {
     log_step "Setting fish as default shell..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would set fish as default shell"
+        log_dry_run "set fish as default shell"
         return 0
     fi
     
     if grep -q "^$fish_path$" /etc/shells; then
-        chsh -s "$fish_path" 2>/dev/null || true
-        log_success "Fish set as default shell (restart terminal to apply)"
+        if chsh -s "$fish_path"; then
+            log_success "Fish set as default shell (restart terminal to apply)"
+        else
+            log_warn "Could not set fish as default shell automatically. Run: chsh -s $fish_path"
+        fi
     else
         echo "$fish_path" | sudo tee -a /etc/shells >/dev/null
-        chsh -s "$fish_path" 2>/dev/null || true
-        log_success "Fish set as default shell (restart terminal to apply)"
+        if chsh -s "$fish_path"; then
+            log_success "Fish set as default shell (restart terminal to apply)"
+        else
+            log_warn "Could not set fish as default shell automatically. Run: chsh -s $fish_path"
+        fi
     fi
 }
 
@@ -1076,7 +1178,7 @@ ensure_fish_config() {
     mkdir -p "$fish_config_dir/conf.d"
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would ensure fish config is linked"
+        log_dry_run "ensure fish config is linked"
         return 0
     fi
     
@@ -1100,7 +1202,7 @@ install_arch_audio() {
     log_info "Fixing audio stack for Arch (PipeWire migration)..."
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "\033[0;36m[DRY RUN]\033[0m Would install PipeWire stack and fix audio"
+        log_dry_run "install PipeWire stack and fix audio"
         return 0
     fi
 

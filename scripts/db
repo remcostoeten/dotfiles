@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, List, Tuple, Dict
 import shutil
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).parent / "lib" / "db"))
 try:
     from connection_manager import ConnectionManager
 except ImportError:
@@ -151,7 +151,7 @@ class DatabaseManager:
    • Secret management with reveal options
    • Environment file generation
    • Clipboard integration support
-   • Location: ~/.config/dotfiles/scripts/generate-turso-db.py
+   • Command: generate-turso-db
 
 {Colors.GREEN}3. Docker Manager{Colors.RESET}
    • Interactive Docker container management
@@ -195,7 +195,7 @@ class DatabaseManager:
    • Transaction support with rollback
 
 {Colors.BOLD}🚀 Turso Environment Generator{Colors.RESET}
-   Status: {self._get_tool_status('generate-turso-db.py')}
+   Status: {self._get_tool_status('generate-turso-db', is_bin=True)}
    Features:
    • Automated Turso database setup
    • Environment variable generation
@@ -269,7 +269,7 @@ class DatabaseManager:
         return True
     
     def run_turso_generator(self):
-        turso_script = self.scripts_path / "generate-turso-db.py"
+        turso_script = self.bin_path / "generate-turso-db"
         if not turso_script.exists():
             print(f"{Colors.RED}Error: Turso generator not found at {turso_script}{Colors.RESET}")
             return False
@@ -287,7 +287,7 @@ class DatabaseManager:
             print(f"{Colors.GREEN}✓ {message}{Colors.RESET}")
         
         try:
-            subprocess.run([sys.executable, str(turso_script)], check=True)
+            subprocess.run([str(turso_script)], check=True)
         except subprocess.CalledProcessError as e:
             print(f"{Colors.RED}Error running Turso generator: {e}{Colors.RESET}")
             return False

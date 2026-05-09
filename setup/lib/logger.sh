@@ -16,19 +16,42 @@ PROGRESS_CURRENT=0
 PROGRESS_START_TIME=0
 PROGRESS_CATEGORY=""
 SPINNER_PID=""
+SETUP_LOG_STYLE="${SETUP_LOG_STYLE:-compact}"
 
-log_info() { echo -e "${CYAN}ℹ${NC} $*"; }
-log_success() { echo -e "${GREEN}✓${NC} $*"; }
-log_warn() { echo -e "${YELLOW}⚠${NC} $*"; }
-log_error() { echo -e "${RED}✗${NC} $*" >&2; }
-log_step() { echo -e "${MAGENTA}▶${NC} $*"; }
+is_compact_log() {
+    [[ "$SETUP_LOG_STYLE" == "compact" && "${VERBOSE:-false}" != "true" ]]
+}
+
+log_info() { echo -e "${CYAN}i${NC} $*"; }
+log_warn() { echo -e "${YELLOW}!${NC} $*"; }
+log_error() { echo -e "${RED}x${NC} $*" >&2; }
+log_step() { echo -e "  ${MAGENTA}›${NC} $*"; }
+
+log_success() {
+    if is_compact_log && [[ "$*" == *" already installed" ]]; then
+        return 0
+    fi
+    echo -e "${GREEN}✓${NC} $*"
+}
+
+log_section() {
+    local title="$1"
+    echo ""
+    echo -e "${BOLD}${title}${NC}"
+}
+
+log_dry_run() {
+    echo -e "  ${CYAN}dry${NC} $*"
+}
 
 init_progress() {
     PROGRESS_TOTAL=$1
     PROGRESS_CURRENT=0
     PROGRESS_START_TIME=$(date +%s)
-    echo ""
-    render_progress "Starting setup..."
+    if [[ -t 1 ]]; then
+        echo ""
+        render_progress "Starting setup..."
+    fi
 }
 
 update_progress() {
@@ -39,6 +62,13 @@ update_progress() {
 
 render_progress() {
     local status="$1"
+    if [[ ! -t 1 ]]; then
+        if [[ "$PROGRESS_CURRENT" -gt 0 ]]; then
+            echo -e "${GRAY}${PROGRESS_CURRENT}/${PROGRESS_TOTAL}${NC} $status"
+        fi
+        return 0
+    fi
+
     local elapsed=$(($(date +%s) - PROGRESS_START_TIME))
     local percent=$((PROGRESS_CURRENT * 100 / PROGRESS_TOTAL))
     local bar_width=35
@@ -96,14 +126,12 @@ log_header() {
     local term_width
     term_width=$(tput cols 2>/dev/null || echo 42)
     local inner_width=$((term_width - 4))
-    local line=$(printf '─%.0s' $(seq 1 "$inner_width"))
-    local title_len=${#title}
-    local padding=$(( (inner_width - title_len) / 2 ))
+    [[ $inner_width -gt 72 ]] && inner_width=72
+    local line
+    line=$(printf '─%.0s' $(seq 1 "$inner_width"))
 
     echo ""
-    printf '%b╭%s╮%b\n' "$CYAN" "$line" "$NC"
-    printf '│%b   ▀█▀ █▀▀ █▀█ █▄▀ █ █▄ █ ▄▀█ █   %b│\n' "$MAGENTA" "$NC"
-    printf '│%b    ▀▀▀ ▀▀▀ ▀▀▀ ▀ ▀ ▀▀ █▀█ █▀▀    %b│\n' "$MAGENTA" "$NC"
-    printf '│%b%*s%s%*s%b│\n' "$NC" $padding "" "$title" $((inner_width - padding - title_len)) "" "$NC"
-    printf '%b╰%s╯%b\n' "$CYAN" "$line" "$NC"
+    printf '%b%s%b\n' "$CYAN" "$line" "$NC"
+    printf '%b%s%b\n' "$BOLD" "$title" "$NC"
+    printf '%b%s%b\n' "$CYAN" "$line" "$NC"
 }

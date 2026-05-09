@@ -44,7 +44,7 @@ get_method() {
         lazygit|lazydocker)
             echo "github" ;;
         ghostty)
-            echo "snap" ;;
+            echo "script" ;;
         zed|vscode|opencode)
             echo "script" ;;
         *)
@@ -83,7 +83,6 @@ get_shell() {
 get_flags() {
     local pkg="$1"
     case "$pkg" in
-        ghostty) echo "--classic" ;;
         spotify) echo "--classic" ;;
         *) echo "" ;;
     esac

@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { readdirSync, statSync, lstatSync, existsSync, readFileSync, writeFileSync } from 'fs';
+import { readdirSync, statSync, lstatSync, existsSync, readFileSync, writeFileSync, readlinkSync } from 'fs';
 import { join, basename, resolve, dirname, extname } from 'path';
 import { spawnSync, spawn } from 'child_process';
 import readline from 'readline';
@@ -16,6 +16,12 @@ type TItem = {
     doc?: string;
     description?: string;
     usageCount?: number;
+};
+
+type TSymlinkEntry = {
+    name: string;
+    source: string;
+    target: string;
 };
 
 type TConfig = {
@@ -95,6 +101,80 @@ function saveConfig(dotfilesRoot: string, cfg: TConfig) {
     writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
 }
 
+function managedSymlinks(dotfilesRoot: string): TSymlinkEntry[] {
+    const home = process.env.HOME!;
+    const configRoot = join(home, '.config');
+    const entries: TSymlinkEntry[] = [
+        { name: 'nvim', source: join(dotfilesRoot, 'configs/nvim'), target: join(configRoot, 'nvim') },
+        { name: 'starship', source: join(dotfilesRoot, 'configs/starship/starship.toml'), target: join(configRoot, 'starship.toml') },
+        { name: 'fastfetch', source: join(dotfilesRoot, 'configs/fastfetch'), target: join(configRoot, 'fastfetch') },
+        { name: 'ghostty', source: join(dotfilesRoot, 'configs/ghostty'), target: join(configRoot, 'ghostty') },
+        { name: 'rofi', source: join(dotfilesRoot, 'configs/rofi'), target: join(configRoot, 'rofi') },
+        { name: 'fish config', source: join(dotfilesRoot, 'configs/fish/config.fish'), target: join(home, '.config/fish/config.fish') },
+        { name: 'fish conf.d', source: join(dotfilesRoot, 'configs/fish/conf.d'), target: join(home, '.config/fish/conf.d') },
+        { name: 'zsh', source: join(dotfilesRoot, 'configs/zsh'), target: join(configRoot, 'zsh') },
+        { name: 'bash', source: join(dotfilesRoot, 'configs/bash'), target: join(configRoot, 'bash') },
+        { name: 'zed', source: join(dotfilesRoot, 'configs/zed'), target: join(configRoot, 'zed') },
+        { name: 'cursor', source: join(dotfilesRoot, 'configs/cursor'), target: join(configRoot, 'cursor') },
+        { name: 'hypr', source: join(dotfilesRoot, 'configs/hypr'), target: join(configRoot, 'hypr') },
+        { name: 'waybar', source: join(dotfilesRoot, 'configs/waybar'), target: join(configRoot, 'waybar') },
+        { name: 'dunst', source: join(dotfilesRoot, 'configs/dunst'), target: join(configRoot, 'dunst') },
+        { name: 'swayosd', source: join(dotfilesRoot, 'configs/swayosd'), target: join(configRoot, 'swayosd') },
+        { name: 'git ignore', source: join(dotfilesRoot, 'configs/git/ignore'), target: join(configRoot, 'git/ignore') },
+        { name: '.gitconfig', source: join(dotfilesRoot, 'configs/git/.gitconfig'), target: join(home, '.gitconfig') }
+    ];
+
+    return entries.filter(entry => existsSync(entry.source));
+}
+
+function reportSymlinks(dotfilesRoot: string) {
+    const c = colors();
+    const links = managedSymlinks(dotfilesRoot);
+    let present = 0;
+    let missing = 0;
+    let broken = 0;
+
+    console.log('');
+    console.log(`${c.bright}${c.cyan}Managed Symlinks:${c.reset} ${c.dim}(${links.length} configured)${c.reset}`);
+    console.log('');
+
+    for (const link of links) {
+        if (!existsSync(link.target)) {
+            missing++;
+            console.log(`  ${c.yellow}!${c.reset} ${link.name} ${c.dim}->${c.reset} ${link.target}`);
+            console.log(`    ${c.dim}source${c.reset} ${link.source}`);
+            continue;
+        }
+
+        const stats = lstatSync(link.target);
+        if (!stats.isSymbolicLink()) {
+            broken++;
+            console.log(`  ${c.red}x${c.reset} ${link.name} ${c.dim}->${c.reset} ${link.target}`);
+            console.log(`    ${c.dim}source${c.reset} ${link.source}`);
+            console.log(`    ${c.dim}status${c.reset} target exists but is not a symlink`);
+            continue;
+        }
+
+        const actual = readlinkSync(link.target);
+        const resolvedActual = resolve(dirname(link.target), actual);
+        const expected = resolve(link.source);
+
+        if (resolvedActual === expected) {
+            present++;
+            console.log(`  ${c.green}✓${c.reset} ${link.name} ${c.dim}->${c.reset} ${link.target}`);
+        } else {
+            broken++;
+            console.log(`  ${c.red}x${c.reset} ${link.name} ${c.dim}->${c.reset} ${link.target}`);
+            console.log(`    ${c.dim}source${c.reset} ${link.source}`);
+            console.log(`    ${c.dim}points to${c.reset} ${actual}`);
+        }
+    }
+
+    console.log('');
+    console.log(`${c.dim}present${c.reset} ${present}  ${c.dim}missing${c.reset} ${missing}  ${c.dim}broken${c.reset} ${broken}`);
+    console.log('');
+}
+
 function clearScreen() {
     process.stdout.write('\x1B[2J\x1B[0f');
 }
@@ -143,15 +223,12 @@ function isSourceFile(name: string): boolean {
 
 function isUtilityFile(name: string): boolean {
     return ['.', '..', '..', '....'].includes(name) ||
-           name.startsWith('.') && !['env-manager'].includes(name) ||
+           name.startsWith('.') ||
            name.includes('debug') || name.includes('test') ||
            name.includes('example') || name.includes('sample') ||
            name === 'postgres' || name === 'click' || name === 'clip' ||
-           name === 'screenshot' || name === 'screen' || name === 'cat' ||
-           name === 'connection_manager' || name.includes('generate-demo-gif') ||
-           name === 'setup-android-emulator' || name === 'version-manager' ||
-           name === 'generate-turso-db' || name === 'typo-detector' ||
-           name === 'remove-unused-files' || name === 'license-generator';
+           name === 'cat' ||
+           name === 'setup-android-emulator' || name === 'version-manager';
 }
 
 function isUnwantedAliasOrFunction(name: string): boolean {
@@ -173,18 +250,15 @@ function isUnwantedExecutable(name: string): boolean {
         'fish_variables', 'scripts', 'ui-import-transformer',
         'setup-env', 'minimal-fish-config', 'welcome_banner',
         'wallpaper',
-        'stop_alarm', 'screen', 'screenshot', 'cat'
+        'stop_alarm', 'cat'
     ];
     return unwanted.includes(name) ||
            name.startsWith('.') ||
            name.includes('internal') ||
            name.includes('config') ||
-           name.includes('manager') && !['env-manager'].includes(name) ||
+           name.includes('manager') ||
            name === '...' ||
-           name.startsWith('alarm') ||
-           name.includes('generate-turso-db') ||
-           name.includes('remove-unused-files') ||
-           name.includes('license-generator');
+           name.startsWith('alarm');
 }
 
 function uniqueId(parts: string[]): string {
@@ -886,6 +960,7 @@ function printUsage() {
     console.log(`  ${c.bright}${c.mauve}run${c.reset} ${c.sky}<name>${c.reset}            Execute tool by ${c.sky}<name>${c.reset}`);
     console.log(`  ${c.bright}${c.mauve}help${c.reset} ${c.sky}<name>${c.reset}           Show help for ${c.sky}<name>${c.reset}`);
     console.log(`  ${c.bright}${c.mauve}categories${c.reset}           Show all available categories`);
+    console.log(`  ${c.bright}${c.mauve}links${c.reset}, ${c.mauve}symlinks${c.reset}   Show managed symlinks and their status`);
     console.log(`  ${c.bright}${c.mauve}config${c.reset} ${c.sky}show${c.reset}           Display current configuration`);
     console.log(`  ${c.bright}${c.mauve}config set${c.reset} ${c.sky}<key> <val>${c.reset} Update config ${c.sky}<key>${c.reset} to ${c.sky}<val>${c.reset}`);
     console.log('');
@@ -1032,6 +1107,11 @@ async function main() {
         process.exit(0);
     }
 
+    if (args[0] === 'links' || args[0] === 'symlinks') {
+        reportSymlinks(dotfilesRoot);
+        process.exit(0);
+    }
+
     if (args[0] === 'search') {
         const c = colors();
         const q = args.slice(1).join(' ').toLowerCase();
@@ -1136,7 +1216,7 @@ async function main() {
             const value = args[3];
             if (!key || !value) {
                 console.log(`${c.red}Error: Both key and value required${c.reset}`);
-                console.log(`Usage: dotfiles config set <key> <value>`);
+            console.log(`Usage: dotfiles config set <key> <value>`);
                 process.exit(1);
             }
 
