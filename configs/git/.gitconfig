@@ -27,10 +27,10 @@
 	autoStash = true
 
 [commit]
-	gpgsign = true
+	gpgsign = false
 
 [tag]
-	gpgsign = true
+	gpgsign = false
 	sort = version:refname
 
 [gpg]
