@@ -69,8 +69,8 @@ refresh_tool_path() {
         pnpm)
             export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
             case ":$PATH:" in
-                *":$PNPM_HOME:"*) ;;
-                *) export PATH="$PNPM_HOME:$PATH" ;;
+                *":$PNPM_HOME/bin:"*) ;;
+                *) export PATH="$PNPM_HOME/bin:$PATH" ;;
             esac
             ;;
         bun)
@@ -94,6 +94,8 @@ refresh_tool_path() {
             esac
             ;;
     esac
+
+    hash -r 2>/dev/null || true
 }
 
 is_installed_apt() {
@@ -172,6 +174,17 @@ install_snap() {
     local pkg="$1"
     local name="${2:-$pkg}"
     local flags="${3:-}"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_step "Installing $name..."
+        log_dry_run "sudo snap install $flags $pkg"
+        return 0
+    fi
+
+    if ! command -v snap >/dev/null 2>&1; then
+        log_warn "Skipping $name: snap is not installed"
+        return 1
+    fi
     
     if snap list 2>/dev/null | grep -q "^$pkg "; then
         log_success "$name already installed"
@@ -179,18 +192,13 @@ install_snap() {
     fi
     
     log_step "Installing $name..."
-    if [[ "$DRY_RUN" == "true" ]]; then
-        log_dry_run "sudo snap install $flags $pkg"
-        return 0
-    else
-        set +e
-        sudo snap install $flags "$pkg" 2>&1 | grep -v "Spawned"
-        local install_status=${PIPESTATUS[0]}
-        set -e
-        if ((install_status != 0)); then
-            log_error "Failed to install $name via snap"
-            return 1
-        fi
+    set +e
+    sudo snap install $flags "$pkg" 2>&1 | grep -v "Spawned"
+    local install_status=${PIPESTATUS[0]}
+    set -e
+    if ((install_status != 0)); then
+        log_error "Failed to install $name via snap"
+        return 1
     fi
     log_success "$name installed"
 }
@@ -849,15 +857,24 @@ install_ghostty() {
         return 0
     fi
     
-    log_step "Building Ghostty from source..."
+    log_step "Installing Ghostty..."
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_dry_run "install Ghostty build dependencies, Zig 0.15.2, then build and install to ~/.local"
+        log_dry_run "install Ghostty from pacman when available; otherwise install build dependencies, Zig 0.15.2, then build and install to ~/.local"
         return 0
     fi
 
     local package_manager
     package_manager="$(detect_package_manager)"
+
+    if [[ "$package_manager" == "pacman" ]]; then
+        if pacman -Si ghostty >/dev/null 2>&1; then
+            install_apt "ghostty" "Ghostty"
+            return 0
+        fi
+    fi
+
+    log_step "Building Ghostty from source..."
 
     local zig_version_required="0.15.2"
     local ghostty_version="1.3.1"
@@ -1085,9 +1102,28 @@ install_nvidia() {
         log_dry_run "install NVIDIA drivers"
         return 0
     fi
-    
-    sudo apt install -y -qq nvidia-driver-535 nvidia-settings 2>/dev/null || sudo apt install -y -qq nvidia-driver-550 2>/dev/null || true
-    
+
+    case "$(detect_package_manager)" in
+        apt)
+            sudo apt install -y -qq nvidia-driver-535 nvidia-settings 2>/dev/null \
+                || sudo apt install -y -qq nvidia-driver-550 2>/dev/null \
+                || {
+                    log_error "Failed to install NVIDIA drivers via apt"
+                    return 1
+                }
+            ;;
+        pacman)
+            sudo pacman -S --noconfirm --needed nvidia nvidia-utils nvidia-settings >/dev/null 2>&1 || {
+                log_error "Failed to install NVIDIA drivers via pacman"
+                return 1
+            }
+            ;;
+        *)
+            log_warn "Skipping NVIDIA drivers: unsupported package manager"
+            return 1
+            ;;
+    esac
+
     log_success "NVIDIA drivers installed"
 }
 
@@ -1104,10 +1140,35 @@ install_openrgb() {
         return 0
     fi
     
-    sudo add-apt-repository -y ppa:thopiekar/openrgb 2>&1 | grep -v "^Hit:" | grep -v "^Get:" | grep -v "^Ign:" | grep -v "^Reading" || true
-    sudo apt update -qq 2>&1 | grep -v "^Hit:" | grep -v "^Get:" | grep -v "^Reading" || true
-    sudo apt install -y -qq openrgb 2>&1 | grep -v "^Selecting" | grep -v "^Preparing" | grep -v "^Unpacking" | grep -v "^Setting up" || true
-    
+    case "$(detect_package_manager)" in
+        apt)
+            if ! command -v add-apt-repository >/dev/null 2>&1; then
+                install_apt "software-properties-common" "software-properties-common" || return 1
+            fi
+
+            set +e
+            sudo add-apt-repository -y ppa:thopiekar/openrgb 2>&1 | grep -v "^Hit:" | grep -v "^Get:" | grep -v "^Ign:" | grep -v "^Reading"
+            local repo_status=${PIPESTATUS[0]}
+            sudo apt update -qq 2>&1 | grep -v "^Hit:" | grep -v "^Get:" | grep -v "^Reading"
+            local update_status=${PIPESTATUS[0]}
+            set -e
+
+            if ((repo_status != 0 || update_status != 0)); then
+                log_error "Failed to prepare OpenRGB apt repository"
+                return 1
+            fi
+
+            install_apt "openrgb" "OpenRGB" || return 1
+            ;;
+        pacman)
+            install_apt "openrgb" "OpenRGB" || return 1
+            ;;
+        *)
+            log_warn "Skipping OpenRGB: unsupported package manager"
+            return 1
+            ;;
+    esac
+
     log_success "OpenRGB installed"
 }
 

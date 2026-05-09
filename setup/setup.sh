@@ -3,7 +3,9 @@ set -euo pipefail
 
 DRY_RUN=false
 VERBOSE=false
+ENABLE_PASSWORDLESS_SUDO=false
 START_TIME=$(date +%s)
+SETUP_FAILURES=()
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
@@ -21,6 +23,8 @@ Usage: $(basename "$0") [OPTIONS]
 Options:
     --dry-run       Show what would be installed without installing
     --verbose       Show detailed output
+    --passwordless-sudo
+                    Configure passwordless sudo for the current user
     --category C    Install only specific category (essential, langs, fonts, tools, terminals, curl-tools, npm-tools, git-tools, editors, docker, system, hardware, media, desktop, gnome, kde, hyprland)
     --package P     Install specific package
     -h, --help      Show this help message
@@ -30,6 +34,7 @@ Examples:
     $(basename "$0") --category curl-tools # Install only curl-based tools
     $(basename "$0") --package starship   # Install only starship
     $(basename "$0") --dry-run             # Show what would be installed
+    $(basename "$0") --passwordless-sudo   # Opt in to passwordless sudo
 EOF
 }
 
@@ -59,12 +64,12 @@ preflight() {
 
 setup_passwordless_sudo() {
     local current_user
-    current_user="$(whoami)"
+    current_user="$(id -un)"
     local sudoers_file="/etc/sudoers.d/99-${current_user}-nopasswd"
     local sudoers_entry="${current_user} ALL=(ALL) NOPASSWD:ALL"
 
-    if sudo test -f "$sudoers_file" 2>/dev/null; then
-        if sudo grep -qF "$sudoers_entry" "$sudoers_file" 2>/dev/null; then
+    if sudo -n test -f "$sudoers_file" 2>/dev/null; then
+        if sudo -n grep -qF "$sudoers_entry" "$sudoers_file" 2>/dev/null; then
             return 0
         fi
     fi
@@ -76,17 +81,30 @@ setup_passwordless_sudo() {
         return 0
     fi
 
+    if ! sudo -v; then
+        log_error "Unable to authenticate with sudo. Passwordless sudo was not configured."
+        return 1
+    fi
+
     local tmp_sudoers
     tmp_sudoers="$(mktemp)"
     printf '%s\n' "$sudoers_entry" > "$tmp_sudoers"
 
-    if ! sudo visudo -cf "$tmp_sudoers" >/dev/null 2>&1; then
+    local validation_output
+    if ! validation_output="$(sudo visudo -cf "$tmp_sudoers" 2>&1)"; then
         rm -f "$tmp_sudoers"
         log_error "Generated sudoers entry failed validation."
+        if [[ -n "$validation_output" ]]; then
+            log_error "$validation_output"
+        fi
         return 1
     fi
 
-    sudo install -o root -g root -m 0440 "$tmp_sudoers" "$sudoers_file"
+    if ! sudo install -o root -g root -m 0440 "$tmp_sudoers" "$sudoers_file"; then
+        rm -f "$tmp_sudoers"
+        log_error "Failed to install $sudoers_file"
+        return 1
+    fi
     rm -f "$tmp_sudoers"
 
     log_success "Passwordless sudo configured"
@@ -728,6 +746,10 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
+        --passwordless-sudo)
+            ENABLE_PASSWORDLESS_SUDO=true
+            shift
+            ;;
         --category)
             if [[ $# -lt 2 ]]; then
                 log_error "--category requires a value"
@@ -768,7 +790,9 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 preflight
-setup_passwordless_sudo
+if [[ "$ENABLE_PASSWORDLESS_SUDO" == "true" ]]; then
+    setup_passwordless_sudo
+fi
 install_arch_audio
 ensure_fish_config
 
@@ -776,7 +800,10 @@ run_with_progress() {
     local cat="$1"
     set_progress_category "$cat"
     log_section "$cat"
-    install_category "$cat"
+    if ! ( install_category "$cat" ); then
+        SETUP_FAILURES+=("category:$cat")
+        log_warn "Category '$cat' had failures; continuing"
+    fi
     update_progress "$cat"
 }
 
@@ -787,7 +814,10 @@ if [[ -n "$category" ]]; then
 elif [[ -n "$package" ]]; then
     log_info "Installing package: $package"
     init_progress 1
-    install_package "$package"
+    if ! ( install_package "$package" ); then
+        SETUP_FAILURES+=("package:$package")
+        log_warn "Package '$package' failed; continuing"
+    fi
     update_progress "$package"
 else
     init_progress 14
@@ -833,4 +863,9 @@ else
         echo ""
         fastfetch --logo none --structure os arch kernel de uptime theme 2>/dev/null || true
     fi
+fi
+
+if ((${#SETUP_FAILURES[@]} > 0)); then
+    echo ""
+    log_warn "Completed with ${#SETUP_FAILURES[@]} failed item(s): ${SETUP_FAILURES[*]}"
 fi
