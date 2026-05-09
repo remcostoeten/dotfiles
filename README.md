@@ -8,6 +8,8 @@ It is primarily Fish-first, but Bash, Zsh, and POSIX shell startup still have a 
 
 ## Preview
 
+![Dotfiles CLI screenshot](cli.png)
+
 The setup script installs the desktop and shell baseline, while the repo also ships a set of daily terminal commands:
 
 | Area | Included |
