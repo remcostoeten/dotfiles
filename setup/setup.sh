@@ -126,6 +126,7 @@ configure_gnome_desktop() {
     configure_cursor
     configure_top_bar
     configure_fonts
+    configure_app_launcher_shortcut
     setup_wallpaper_rotation
     
     log_success "Desktop aesthetics configured"
@@ -283,6 +284,45 @@ configure_fonts() {
     gsettings set org.gnome.desktop.interface font-name 'Inter 11' 2>/dev/null || true
     gsettings set org.gnome.desktop.interface monospace-font-name 'JetBrains Mono 11' 2>/dev/null || true
     log_success "Fonts configured"
+}
+
+configure_app_launcher_shortcut() {
+    local shortcut_path="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/dotfiles-launcher/"
+    local launcher_cmd="$HOME/.config/dotfiles/bin/launcher"
+    local custom_keybindings
+
+    log_step "Configuring app launcher shortcut..."
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "bind Ctrl+Space to $launcher_cmd"
+        return 0
+    fi
+
+    if ! gsettings list-schemas 2>/dev/null | grep -qx 'org.gnome.settings-daemon.plugins.media-keys'; then
+        log_warn "GNOME media-key schema not found - skipping app launcher shortcut"
+        return 0
+    fi
+
+    if ! gsettings list-schemas 2>/dev/null | grep -qx 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding'; then
+        log_warn "GNOME custom keybinding schema not found - skipping app launcher shortcut"
+        return 0
+    fi
+
+    custom_keybindings="$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null || echo "@as []")"
+    if [[ "$custom_keybindings" != *"'$shortcut_path'"* && "$custom_keybindings" != *"\"$shortcut_path\""* ]]; then
+        if [[ "$custom_keybindings" == "@as []" || "$custom_keybindings" == "[]" ]]; then
+            custom_keybindings="['$shortcut_path']"
+        else
+            custom_keybindings="${custom_keybindings%]}"
+            custom_keybindings="${custom_keybindings}, '$shortcut_path']"
+        fi
+        gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$custom_keybindings" 2>/dev/null || true
+    fi
+
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$shortcut_path" name 'Dotfiles launcher' 2>/dev/null || true
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$shortcut_path" command "$launcher_cmd" 2>/dev/null || true
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$shortcut_path" binding '<Control>space' 2>/dev/null || true
+
+    log_success "App launcher shortcut configured (Ctrl+Space)"
 }
 
 setup_wallpaper_rotation() {
@@ -586,6 +626,7 @@ install_category() {
             install_apt "python3-venv"
             install_apt "nodejs"
             install_apt "npm"
+            install_wayland_clipboard_prereqs
             install_curl "https://get.pnpm.io/install.sh" "pnpm" "sh"
             install_curl "https://bun.sh/install" "bun" "bash"
             install_curl "https://sh.rustup.rs" "rustup" "bash" "-y"

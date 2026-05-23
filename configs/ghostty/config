@@ -8,7 +8,6 @@ theme = dotfiles-dark
 window-decoration = none
 gtk-titlebar = false
 window-show-tab-bar = never
-gtk-tabs-location = hidden
 gtk-toolbar-style = flat
 gtk-custom-css = gtk.css
 window-padding-x = 14

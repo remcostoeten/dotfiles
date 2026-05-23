@@ -1,4 +1,5 @@
 {
+  "cli_default_open_behavior": "existing_window",
   "project_panel": {
     "dock": "left"
   },
@@ -74,7 +75,7 @@
       "type": "registry"
     }
   },
-  "icon_theme": "Zed (Default)",
+  "icon_theme": "Warm Charmed Icons",
   "theme": {
     "mode": "dark",
     "light": "One Light",

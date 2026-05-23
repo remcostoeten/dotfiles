@@ -1,0 +1,24 @@
+{
+  "name": "bg-remove",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "bg-remove": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.4.0",
+    "@imgly/background-removal-node": "^1.4.5",
+    "picocolors": "^1.1.1",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

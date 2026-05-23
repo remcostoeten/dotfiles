@@ -229,6 +229,87 @@ install_npm() {
     log_success "$name installed"
 }
 
+install_paru() {
+    if command -v paru >/dev/null 2>&1; then
+        log_success "paru already installed"
+        return 0
+    fi
+
+    log_step "Installing paru..."
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "git clone https://aur.archlinux.org/paru.git <tmpdir>/paru && cd <tmpdir>/paru && makepkg -si --noconfirm"
+        return 0
+    fi
+
+    install_apt "git" "git" || return 1
+    install_apt "base-devel" "build-essential" || return 1
+
+    local workdir
+    workdir="$(mktemp -d)"
+
+    if ! git clone https://aur.archlinux.org/paru.git "$workdir/paru" >/dev/null 2>&1; then
+        rm -rf "$workdir"
+        log_error "Failed to clone paru from AUR"
+        return 1
+    fi
+
+    if ! (cd "$workdir/paru" && makepkg -si --noconfirm >/dev/null 2>&1); then
+        rm -rf "$workdir"
+        log_error "Failed to build and install paru"
+        return 1
+    fi
+
+    rm -rf "$workdir"
+
+    if ! command -v paru >/dev/null 2>&1; then
+        log_error "paru install completed, but the binary is not on PATH"
+        return 1
+    fi
+
+    log_success "paru installed"
+}
+
+install_wl_clipboard() {
+    local package_manager
+    package_manager="$(detect_package_manager)"
+
+    case "$package_manager" in
+        apt)
+            install_apt "wl-clipboard" "wl-clipboard"
+            ;;
+        pacman)
+            if is_installed_pacman "wl-clipboard"; then
+                log_success "wl-clipboard already installed"
+                return 0
+            fi
+
+            install_paru || return 1
+
+            log_step "Installing wl-clipboard..."
+            if [[ "$DRY_RUN" == "true" ]]; then
+                log_dry_run "paru -S --noconfirm --needed wl-clipboard"
+                return 0
+            fi
+
+            if ! paru -S --noconfirm --needed wl-clipboard >/dev/null 2>&1; then
+                log_error "Failed to install wl-clipboard via paru"
+                return 1
+            fi
+
+            log_success "wl-clipboard installed"
+            ;;
+        *)
+            log_error "No supported package manager found for wl-clipboard"
+            return 1
+            ;;
+    esac
+}
+
+install_wayland_clipboard_prereqs() {
+    install_npm "tsx" "tsx" || return 1
+    install_wl_clipboard || return 1
+}
+
 install_curl() {
     local url="$1"
     local name="$2"

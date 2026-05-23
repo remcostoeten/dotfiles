@@ -19,7 +19,7 @@ The setup script installs the desktop and shell baseline, while the repo also sh
 | Desktop | Auto-detected GNOME, KDE, or Hyprland configuration path |
 | Dev tools | GitHub CLI, lazygit, lazydocker, Docker, Node, pnpm, Bun, Rust, Python, uv |
 | Config links | Managed symlinks for Fish, Git, Ghostty, Rofi, Neovim, Zed, Cursor, Hyprland, Waybar, Dunst, and related configs |
-| User commands | `dotfiles`, `launcher`, `todo`, `copy`, `ports`, `db`, `wallpaper`, `spellcheck`, `license`, `create-oauth`, `generate-turso-db` |
+| User commands | `dotfiles`, `launcher`, `todo`, `copy`, `replace`, `ports`, `db`, `wallpaper`, `spellcheck`, `license`, `create-oauth`, `generate-turso-db` |
 
 Example command surface:
 
@@ -28,6 +28,7 @@ dotfiles symlinks
 launcher --mode
 todo list --upcoming
 copy tree -L 2
+replace ~/.config/nvim/init.lua
 ports 3000
 db turso
 create-oauth google
@@ -137,6 +138,7 @@ Most commands follow the same pattern: the implementation lives in `scripts/`, a
 | `dotfiles` | Browse repo tools, config, and managed symlinks | `-` | `dotfiles symlinks`<br>`dotfiles search ports` |
 | `todo` | Todo list and shell-display helpers | [scripts/todo.js](scripts/todo.js) | `todo list --upcoming`<br>`todo count`<br>`todo "Task" 15pm` |
 | `copy` | Clipboard helper for files, paths, git remotes, and trees | [scripts/copy](scripts/copy) | `copy pwd`<br>`copy remote`<br>`copy tree -L 2` |
+| `replace` | Replace a file with current clipboard contents | [scripts/replace.ts](scripts/replace.ts) | `replace ~/.config/nvim/init.lua`<br>`replace ./notes/todo.txt`<br>`replace --help` |
 | `timer` | Command execution timer | `-` | `timer bun run build`<br>`timer -r 5 "npm test"` |
 | `alarm` | Alarm launcher and alarm state helpers | `-` | `alarm --in 15m` |
 | `wallpaper` | Wallpaper selection and rotation | [scripts/wallpaper](scripts/wallpaper) | `wallpaper help`<br>`wallpaper r`<br>`wallpaper o` |
