@@ -51,6 +51,7 @@ map_pacman_package_name() {
         fastfetch) echo "fastfetch" ;;
         btop) echo "btop" ;;
         vlc) echo "vlc" ;;
+        keyd) echo "keyd" ;;
         swayosd) echo "swayosd" ;;
         polkit-gnome) echo "polkit-gnome" ;;
         *) echo "$pkg" ;;
@@ -305,6 +306,30 @@ install_wl_clipboard() {
     esac
 }
 
+install_keyd() {
+    log_info "Configuring keyd..."
+
+    install_apt "keyd" "keyd"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "install /etc/keyd/default.conf and enable keyd service"
+        return 0
+    fi
+
+    local keyd_config_src="$SCRIPT_DIR/../configs/keyd/default.conf"
+    if [[ ! -f "$keyd_config_src" ]]; then
+        log_warn "keyd config not found in dotfiles repo"
+        return 0
+    fi
+
+    sudo install -d -m 0755 /etc/keyd
+    sudo install -m 0644 "$keyd_config_src" /etc/keyd/default.conf
+    sudo systemctl enable --now keyd >/dev/null 2>&1 || true
+    sudo keyd reload >/dev/null 2>&1 || true
+
+    log_success "keyd configured"
+}
+
 install_wayland_clipboard_prereqs() {
     install_npm "tsx" "tsx" || return 1
     install_wl_clipboard || return 1
@@ -458,6 +483,65 @@ ensure_symlink() {
     }
 }
 
+# Window-management keybinds: sxhkd grabs the keys (see configs/sxhkd/sxhkdrc)
+# but only runs commands, so the actual tiling/workspace actions are delegated
+# to KWin via kglobalaccel. This installs sxhkd, frees the Alt+arrow keys KWin
+# claims by default, and makes sure there are 3 virtual desktops for the
+# Alt+{1,2,3} workspace binds. Safe to re-run; no-ops on non-KDE machines.
+setup_window_management() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "install sxhkd and configure KWin (3 desktops, free Alt+arrows)"
+        return 0
+    fi
+
+    install_apt "sxhkd" "sxhkd"
+
+    if ! command -v kwriteconfig6 >/dev/null 2>&1; then
+        log_info "kwriteconfig6 not found; skipping KWin window-management setup (non-KDE?)"
+        return 0
+    fi
+
+    # Free Alt+Left / Alt+Right (KWin's default "Window Pack") so sxhkd can grab
+    # them — two clients can't grab the same key, so KWin must release these.
+    kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Window Pack Left"  ",,Move Window Left"
+    kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Window Pack Right" ",,Move Window Right"
+
+    # Drop KWin's bare-arrow grabs (Up=maximize, Down=lower) so a naked arrow
+    # press does nothing; only Alt+arrow (sxhkd) should tile.
+    kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Window Maximize" "Meta+PgUp,Meta+PgUp,Maximize Window"
+    kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Window Lower"    ",,Lower Window"
+
+    # Ensure at least 3 virtual desktops (workspaces 1..3).
+    local count
+    count="$(kreadconfig6 --file kwinrc --group Desktops --key Number 2>/dev/null || echo 1)"
+    if [[ ! "$count" =~ ^[0-9]+$ ]] || (( count < 3 )); then
+        local id1
+        id1="$(kreadconfig6 --file kwinrc --group Desktops --key Id_1 2>/dev/null || true)"
+        [[ -z "$id1" ]] && id1="$(uuidgen)"
+        kwriteconfig6 --file kwinrc --group Desktops --key Rows 1
+        kwriteconfig6 --file kwinrc --group Desktops --key Number 3
+        kwriteconfig6 --file kwinrc --group Desktops --key Id_1 "$id1"
+        kwriteconfig6 --file kwinrc --group Desktops --key Id_2 "$(uuidgen)"
+        kwriteconfig6 --file kwinrc --group Desktops --key Id_3 "$(uuidgen)"
+        kwriteconfig6 --file kwinrc --group Desktops --key Name_2 "2"
+        kwriteconfig6 --file kwinrc --group Desktops --key Name_3 "3"
+    fi
+
+    # Apply live if a KWin session is already running (otherwise it lands on next login).
+    if command -v qdbus6 >/dev/null 2>&1 && qdbus6 org.kde.KWin >/dev/null 2>&1; then
+        local have
+        have="$(qdbus6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.count 2>/dev/null || echo 1)"
+        while [[ "$have" =~ ^[0-9]+$ ]] && (( have < 3 )); do
+            qdbus6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.createDesktop "$have" "$((have + 1))" >/dev/null 2>&1 || true
+            have=$((have + 1))
+        done
+        systemctl --user restart plasma-kglobalaccel.service >/dev/null 2>&1 || true
+        qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+    fi
+
+    log_success "Window-management keybinds configured (sxhkd + KWin)"
+}
+
 setup_config_symlinks() {
     local configs_dir="$SCRIPT_DIR/../configs"
     local home_config_dir="$HOME/.config"
@@ -474,7 +558,7 @@ setup_config_symlinks() {
         "starship/starship.toml:$home_config_dir/starship.toml"
         "fastfetch:$home_config_dir/fastfetch"
         "ghostty:$home_config_dir/ghostty"
-        "rofi:$home_config_dir/rofi"
+        "fuzzel:$home_config_dir/fuzzel"
         "fish/config.fish:$home_config_dir/fish/config.fish"
         "fish/conf.d:$home_config_dir/fish/conf.d"
         "zsh:$HOME/.config/zsh"
@@ -486,6 +570,8 @@ setup_config_symlinks() {
         "dunst:$home_config_dir/dunst"
         "swayosd:$home_config_dir/swayosd"
         "git/ignore:$home_config_dir/git/ignore"
+        "kxkbrc:$home_config_dir/kxkbrc"
+        "sxhkd:$home_config_dir/sxhkd"
     )
     
     for item in "${configs[@]}"; do
@@ -499,16 +585,33 @@ setup_config_symlinks() {
         fi
     done
 
+    # sxhkd autostart entry (KDE launches ~/.config/autostart on login)
+    local sxhkd_autostart_src="$configs_dir/sxhkd/plasma-sxhkd.desktop"
+    if [[ -f "$sxhkd_autostart_src" ]]; then
+        ensure_symlink "$sxhkd_autostart_src" "$home_config_dir/autostart/plasma-sxhkd.desktop" "$SETUP_BACKUP_ROOT"
+    fi
+
     local git_src="$configs_dir/git/.gitconfig"
     local git_dst="$HOME/.gitconfig"
     if [[ -f "$git_src" ]]; then
         ensure_symlink "$git_src" "$git_dst" "$SETUP_BACKUP_ROOT"
     fi
 
+    local vimrc_src="$configs_dir/.vimrc"
+    local vimrc_dst="$HOME/.vimrc"
+    if [[ -f "$vimrc_src" ]]; then
+        ensure_symlink "$vimrc_src" "$vimrc_dst" "$SETUP_BACKUP_ROOT"
+    fi
+
     link_editor_configs_recursive "$configs_dir" "$home_config_dir"
 
     setup_runtime_permissions
-    
+
+    # Input remaps: keyd (CapsLock -> Esc, works in TTY too) and the
+    # sxhkd -> KWin window-management binds.
+    install_keyd
+    setup_window_management
+
     log_success "Config symlinks created"
 
 install_editor_extensions

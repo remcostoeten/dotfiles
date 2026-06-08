@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=sxhkd
+Comment=Simple X Hotkey Daemon
+Exec=/usr/bin/sxhkd
+Terminal=false
+Type=Application
+Categories=Utility;
+X-KDE-autostart-phase=2
+NoDisplay=true
