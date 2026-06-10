@@ -3,3 +3,5 @@
 # All actual configuration is maintained in ~/.config/dotfiles/cfg
 
 source ~/.config/dotfiles/cfg
+# Added by tunnel installer
+fish_add_path /home/remcostoeten/.local/bin
