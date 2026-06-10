@@ -193,7 +193,11 @@ print_next_steps() {
   fi
 
   echo ""
-  echo -e "  While running: ${BOLD}q${NC}uit  ${BOLD}r${NC}estart  ${BOLD}c${NC}opy URL  ${BOLD}o${NC}pen in browser"
+  echo -e "  ${BOLD}Controls while running:${NC}"
+  echo -e "    ${BOLD}q${NC}  quit"
+  echo -e "    ${BOLD}r${NC}  restart tunnel (new URL)"
+  echo -e "    ${BOLD}c${NC}  copy URL to clipboard"
+  echo -e "    ${BOLD}o${NC}  open URL in browser"
 }
 
 local_tunnel() {
