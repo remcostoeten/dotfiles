@@ -283,7 +283,10 @@ read_key() {
   else
     read -rsn1 -t 0.1 key 2>/dev/null || true
   fi
-  [[ -n "$key" ]] && printf '%s' "$key"
+  if [[ -n "$key" ]]; then
+    printf '%s' "$key"
+  fi
+  return 0
 }
 
 check_deps
@@ -335,8 +338,10 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 start_tunnel() {
-  kill "$CF_PID" 2>/dev/null || true
-  wait "$CF_PID" 2>/dev/null || true
+  if [[ -n "$CF_PID" ]]; then
+    kill "$CF_PID" 2>/dev/null || true
+    wait "$CF_PID" 2>/dev/null || true
+  fi
   rm -f "$URL_FILE"
   last_line=0
   : > "$OUTPUT_FILE"
