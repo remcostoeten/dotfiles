@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
 
-# Define the menu options with Nerd Font icons and a stable action token
-entries="⏻ Power Off\tpoweroff\n󰜉 Restart\treboot\n󰒓 Go to BIOS\tbios\n󰤄 Sleep\tsleep\n󰗼 Logout / Change User\tlogout"
+entries="Power Off:poweroff
+Restart:reboot
+Go to BIOS:bios
+Sleep:sleep
+Logout / Change User:logout"
 
-selected=$(printf '%b\n' "$entries" | rofi -dmenu \
-  -theme "$HOME/.config/rofi/raycast.rasi" \
-  -sep '\t' \
-  -display-columns 1 \
-  -l 5 \
-  -i \
-  -no-custom \
-  -p "System")
+if command -v fuzzel >/dev/null 2>&1; then
+  selected=$(printf '%s\n' "$entries" | fuzzel --dmenu --prompt "System " --lines 5 | awk -F: '{print $2}')
+elif command -v kdialog >/dev/null 2>&1; then
+  selected=$(kdialog --menu "System" \
+    poweroff "Power Off" \
+    reboot "Restart" \
+    bios "Go to BIOS" \
+    sleep "Sleep" \
+    logout "Logout / Change User")
+else
+  printf '%s\n' "$entries" >&2
+  printf 'Select action: ' >&2
+  read -r selected
+fi
 
 # Execute the corresponding action
 case $selected in
@@ -27,6 +36,10 @@ case $selected in
     systemctl suspend
     ;;
   logout)
-    hyprctl dispatch exit
+    if command -v hyprctl >/dev/null 2>&1; then
+      hyprctl dispatch exit
+    else
+      loginctl terminate-user "$USER"
+    fi
     ;;
 esac

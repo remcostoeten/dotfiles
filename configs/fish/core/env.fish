@@ -21,11 +21,6 @@ if not set -q PROJECTS_DIR; and test -d "$HOME/projects"
     set -gx PROJECTS_DIR "$HOME/projects"
 end
 
-# Language-specific environment variables (use from env if set, otherwise use defaults)
-if not set -q NODE_ENV
-    set -gx NODE_ENV development
-end
-
 set -gx PYTHONDONTWRITEBYTECODE 1
 
 # History settings

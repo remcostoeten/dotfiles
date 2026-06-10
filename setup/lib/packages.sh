@@ -30,7 +30,7 @@ get_method() {
     local os_family
     os_family="$(detect_os_family)"
     case "$pkg" in
-        git|curl|wget|build-essential|ca-certificates|gnupg|software-properties-common|fish|python3|python3-pip|python3-venv|nodejs|npm|neovim|vim|ripgrep|fd-find|fzf|zoxide|eza|bat|htop|tree|jq|gh|docker.io|docker-compose|fastfetch|btop|vlc)
+        git|curl|wget|build-essential|ca-certificates|gnupg|software-properties-common|fish|python3|python3-pip|python3-venv|nodejs|npm|neovim|vim|ripgrep|fd-find|fzf|zoxide|eza|bat|htop|tree|jq|gh|docker.io|docker-compose|fastfetch|btop|vlc|keyd)
             if [[ "$os_family" == "arch" ]]; then
                 echo "pacman"
             else

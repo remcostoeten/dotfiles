@@ -109,7 +109,7 @@ function managedSymlinks(dotfilesRoot: string): TSymlinkEntry[] {
         { name: 'starship', source: join(dotfilesRoot, 'configs/starship/starship.toml'), target: join(configRoot, 'starship.toml') },
         { name: 'fastfetch', source: join(dotfilesRoot, 'configs/fastfetch'), target: join(configRoot, 'fastfetch') },
         { name: 'ghostty', source: join(dotfilesRoot, 'configs/ghostty'), target: join(configRoot, 'ghostty') },
-        { name: 'rofi', source: join(dotfilesRoot, 'configs/rofi'), target: join(configRoot, 'rofi') },
+        { name: 'fuzzel', source: join(dotfilesRoot, 'configs/fuzzel'), target: join(configRoot, 'fuzzel') },
         { name: 'fish config', source: join(dotfilesRoot, 'configs/fish/config.fish'), target: join(home, '.config/fish/config.fish') },
         { name: 'fish conf.d', source: join(dotfilesRoot, 'configs/fish/conf.d'), target: join(home, '.config/fish/conf.d') },
         { name: 'zsh', source: join(dotfilesRoot, 'configs/zsh'), target: join(configRoot, 'zsh') },
@@ -121,7 +121,8 @@ function managedSymlinks(dotfilesRoot: string): TSymlinkEntry[] {
         { name: 'dunst', source: join(dotfilesRoot, 'configs/dunst'), target: join(configRoot, 'dunst') },
         { name: 'swayosd', source: join(dotfilesRoot, 'configs/swayosd'), target: join(configRoot, 'swayosd') },
         { name: 'git ignore', source: join(dotfilesRoot, 'configs/git/ignore'), target: join(configRoot, 'git/ignore') },
-        { name: '.gitconfig', source: join(dotfilesRoot, 'configs/git/.gitconfig'), target: join(home, '.gitconfig') }
+        { name: '.gitconfig', source: join(dotfilesRoot, 'configs/git/.gitconfig'), target: join(home, '.gitconfig') },
+        { name: '.vimrc', source: join(dotfilesRoot, 'configs/.vimrc'), target: join(home, '.vimrc') }
     ];
 
     return entries.filter(entry => existsSync(entry.source));

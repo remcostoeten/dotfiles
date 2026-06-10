@@ -1,34 +1,27 @@
 # Dotfiles Studio implementation plan
 
 This plan describes the first useful build of Dotfiles Studio. It starts with
-the rofi configuration because the repository already contains a small but
+the fuzzel configuration because the repository already contains a small but
 complete local-first workflow: repository templates, live files, fallback
-behavior, a launcher script, and a Lua-backed command list.
+behavior, a launcher script, and a small INI config.
 
 ## Scope
 
 The first milestone is a working vertical slice, not full dotfiles coverage.
-The app must open, inspect, edit, save, watch, and diff rofi files before it
+The app must open, inspect, edit, save, watch, and diff fuzzel files before it
 adds profiles, sync, or plugin systems.
 
-The first module is `rofi`.
+The first module is `fuzzel`.
 
 Relevant repository files:
 
 - `bin/launcher`
-- `configs/rofi/README.md`
-- `configs/rofi/bang-commands.lua`
-- `configs/rofi/launcher.conf`
-- `configs/rofi/pinned-apps`
-- `configs/rofi/raycast.rasi`
+- `configs/fuzzel/fuzzel.ini`
 - `setup/lib/installers.sh`
 
 Relevant live files:
 
-- `~/.config/rofi/bang-commands.lua`
-- `~/.config/rofi/launcher.conf`
-- `~/.config/rofi/pinned-apps`
-- `~/.config/rofi/raycast.rasi`
+- `~/.config/fuzzel/fuzzel.ini`
 
 Existing setup conventions:
 
@@ -36,23 +29,22 @@ Existing setup conventions:
   replaces existing config targets.
 - Runtime state can live under `$HOME/.dotfiles` or
   `${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles`.
-- The rofi launcher writes recent launcher state to
-  `${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/rofi-launcher-recent`.
+- The launcher command delegates to `fuzzel` when available and KDE KRunner
+  otherwise.
 
 ## Product milestone
 
 The first milestone is complete when you can:
 
 1. Launch the desktop app.
-2. Select the `rofi` module.
+2. Select the `fuzzel` module.
 3. See repository files and live file bindings.
-4. Open `bang-commands.lua` in Monaco.
+4. Open `fuzzel.ini` in Monaco.
 5. Edit and save the file with conflict detection.
 6. Change the same file outside the app and see the UI update.
 7. View git status and a diff for the edited file.
 8. See tracked, modified, and untracked state before applying changes.
-9. See a dependency check for `rofi`, `lua`, `rg`, `fd` or `fdfind`,
-   `xdg-open`, and the configured terminal.
+9. See a dependency check for `fuzzel` or KDE KRunner.
 
 ## Phase 0: Scaffold the app
 
@@ -103,7 +95,7 @@ The scaffold must include:
 - A path policy that distinguishes repository roots, live config roots, backup
   roots, and generated state roots.
 
-## Phase 1: Model workspace and rofi bindings
+## Phase 1: Model workspace and fuzzel bindings
 
 Implement the data model that lets the app explain what exists on disk.
 
@@ -125,10 +117,10 @@ Binding modes:
 - `unbound`
 - `missing`
 
-For rofi, detect:
+For fuzzel, detect:
 
-- repository templates under `configs/rofi`
-- live files under `~/.config/rofi`
+- repository templates under `configs/fuzzel`
+- live files under `~/.config/fuzzel`
 - missing live files that fall back to repository templates
 - symlinks created by setup
 - normal copied files
@@ -199,15 +191,10 @@ The UI must show a dirty or untracked repository state before a user applies
 changes to live paths. It can warn without blocking during the PoC, but the
 state must be visible.
 
-## Phase 5: Add the rofi structured preview
+## Phase 5: Add the fuzzel structured preview
 
-Keep Monaco as the primary editor. Add a structured preview for
-`bang-commands.lua` after raw editing works.
-
-The preview reads the Lua table shape already used by `bin/launcher`:
-
-- `bang`
-- `type`
+Keep Monaco as the primary editor. Add a structured preview for `fuzzel.ini`
+after raw editing works.
 - `template`
 - `description`
 - `terminal`
@@ -246,7 +233,7 @@ Apply plans must include:
 
 ## Definition of done
 
-The first release candidate for the rofi slice must satisfy these checks:
+The first release candidate for the fuzzel slice must satisfy these checks:
 
 - Editing a file cannot silently clobber an external change.
 - Missing live files are shown clearly as fallback bindings.

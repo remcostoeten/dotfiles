@@ -35,8 +35,8 @@ Initial wrappers:
 - `dependencyCommands.status`
 - `applyCommands.createPlan`
 - `applyCommands.applyPlan`
-- `rofiCommands.validateConfig`
-- `rofiCommands.runLauncher`
+- `launcherCommands.validateConfig`
+- `launcherCommands.runLauncher`
 
 Leaf components must import these wrappers or feature hooks. They must not call
 Tauri `invoke` directly.
@@ -237,12 +237,12 @@ type ApplyPlan = {
 
 The UI must render the plan before enabling apply.
 
-## Rofi commands
+## Fuzzel commands
 
-Rofi-specific command execution must stay behind module commands.
+Fuzzel-specific command execution must stay behind module commands.
 
 ```ts
-type RofiValidationResult = {
+type FuzzelValidationResult = {
   files: ValidationIssue[];
   bangCommands: {
     bang: string;
@@ -254,5 +254,5 @@ type RofiValidationResult = {
 };
 ```
 
-`rofiCommands.runLauncher` can start `bin/launcher` for smoke testing. It must
+`launcherCommands.runLauncher` can start `bin/launcher` for smoke testing. It must
 return dependency errors instead of falling through to a generic shell runner.

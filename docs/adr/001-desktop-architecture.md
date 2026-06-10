@@ -14,8 +14,8 @@ history, and provide previews for selected configuration formats.
 This repository already has the boundaries the app must respect. User-facing
 commands live in `bin/`, source templates live in `configs/`, setup and symlink
 creation live in `setup/`, and private or machine-specific state lives outside
-the public repository. The rofi launcher is the first useful proof of concept:
-it reads templates from `configs/rofi`, live files from `~/.config/rofi`, and
+the public repository. The fuzzel launcher is the first useful proof of concept:
+it reads templates from `configs/fuzzel`, live files from `~/.config/fuzzel`, and
 falls back to repository files when live files are missing.
 
 Existing setup behavior is also part of the product model. The setup layer backs
@@ -130,7 +130,7 @@ remain on disk and git remains the durable history mechanism.
 The first implementation slice must prove these behaviors before broader module
 support starts:
 
-- Scan `configs/rofi` and `~/.config/rofi`.
+- Scan `configs/fuzzel` and `~/.config/fuzzel`.
 - Resolve repository files, live files, and fallback files.
 - Open a file in Monaco.
 - Save with an expected content hash.
@@ -138,8 +138,7 @@ support starts:
 - Show git status and a per-file diff.
 - Show whether files are tracked, modified, or untracked before applying
   changes.
-- Validate rofi dependencies such as `rofi`, `lua`, `rg`, `fd` or `fdfind`,
-  `xdg-open`, and the configured terminal.
+- Validate launcher dependencies such as `fuzzel` or KDE KRunner.
 
 ## Command boundary
 
@@ -181,12 +180,10 @@ Capabilities must stay narrow.
 
 Do not expose a generic shell command runner to the renderer.
 
-Rofi bang commands are executable configuration. The app can parse and preview
-`bang-commands.lua`, but running a bang command or the launcher must go through a
-module-specific command that can show the exact command, target paths, and risks
-before execution.
+Launcher execution must go through a module-specific command that can show the
+exact command, target paths, and risks before execution.
 
 ## Next steps
 
 Create the implementation plan in `docs/dotfiles-studio/implementation-plan.md`
-and use `configs/rofi` as the first vertical slice.
+and use `configs/fuzzel` as the first vertical slice.

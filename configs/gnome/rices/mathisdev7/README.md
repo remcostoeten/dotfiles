@@ -1,6 +1,6 @@
 # mathisdev7 GNOME rice (Ubuntu)
 
-Replicates the look-and-feel from `mathisdev7/dotfiles` (GNOME on Ubuntu 24.04): Ghostty palette, Conky clock widget, btop/cava/rofi/neofetch configs, wallpapers, and GNOME + extension settings.
+Replicates the look-and-feel from `mathisdev7/dotfiles` (GNOME on Ubuntu 24.04): Ghostty palette, Conky clock widget, btop/cava/fuzzel/neofetch configs, wallpapers, and GNOME + extension settings.
 
 ## Run
 

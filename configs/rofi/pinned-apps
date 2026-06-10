@@ -1,7 +1,0 @@
-# One desktop entry id or executable per line.
-# The first 3 valid entries appear in the launcher's Pinned section.
-# Open the launcher, type :, then choose "Pinned apps: edit top 3" to edit this file.
-brave-browser.desktop
-com.mitchellh.ghostty.desktop
-code.desktop
-dev.zed.Zed.desktop

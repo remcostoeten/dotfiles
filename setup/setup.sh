@@ -562,12 +562,13 @@ install_hyprland() {
 
     install_apt "hyprland" "Hyprland"
     install_apt "waybar" "Waybar"
-    install_apt "rofi" "Rofi"
+    install_apt "fuzzel" "Fuzzel"
     install_apt "dunst" "Dunst"
     install_apt "brightnessctl" "Brightness control"
     install_apt "playerctl" "Media controls"
     install_apt "polkit-gnome" "Polkit GNOME"
     install_apt "swayosd" "SwayOSD"
+    install_keyd
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_dry_run "enable SwayOSD libinput backend if available"
@@ -715,6 +716,11 @@ install_package() {
     local shell
     local flags
     
+    if [[ "$pkg" == "keyd" ]]; then
+        install_keyd
+        return
+    fi
+
     method=$(get_method "$pkg")
     extra=$(get_extra "$pkg")
     shell=$(get_shell "$pkg")
@@ -726,7 +732,8 @@ install_package() {
     fi
     
     case "$method" in
-        apt)
+        apt|pacman)
+            # install_apt detects the active package manager and maps names
             install_apt "$pkg" "$pkg"
             ;;
         curl)
@@ -834,8 +841,22 @@ preflight
 if [[ "$ENABLE_PASSWORDLESS_SUDO" == "true" ]]; then
     setup_passwordless_sudo
 fi
-install_arch_audio
-ensure_fish_config
+
+is_full_setup() {
+    [[ -z "$category" && -z "$package" ]]
+}
+
+should_configure_fish() {
+    is_full_setup || [[ "$category" == "essential" || "$package" == "fish" ]]
+}
+
+if is_full_setup; then
+    install_arch_audio
+fi
+
+if should_configure_fish; then
+    ensure_fish_config
+fi
 
 run_with_progress() {
     local cat="$1"
@@ -878,7 +899,9 @@ else
     run_with_progress "desktop"
 fi
 
-set_fish_default_shell
+if should_configure_fish; then
+    set_fish_default_shell
+fi
 
 echo ""
 if [[ "$DRY_RUN" == "true" ]]; then

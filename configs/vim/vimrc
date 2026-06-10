@@ -1,0 +1,5 @@
+" Personal Vim configuration.
+" Managed via dotfiles: ~/.config/dotfiles/configs/vim/vimrc
+ :q
+ 1
+" Hello from configs/vim/vimrc

@@ -1,0 +1,51 @@
+{
+  "positionX": "right",
+  "positionY": "top",
+  "layer": "overlay",
+  "control-center-margin-top": 8,
+  "control-center-margin-bottom": 8,
+  "control-center-margin-right": 12,
+  "control-center-margin-left": 0,
+  "notification-2fa-action": true,
+  "notification-inline-replies": false,
+  "notification-icon-size": 32,
+  "notification-body-image-height": 100,
+  "notification-body-image-width": 200,
+  "timeout": 6,
+  "timeout-low": 4,
+  "timeout-critical": 10,
+  "fit-to-screen": true,
+  "control-center-width": 380,
+  "control-center-height": 600,
+  "notification-window-width": 380,
+  "keyboard-shortcuts": true,
+  "image-visibility": "always",
+  "transition-time": 200,
+  "hide-on-clear": true,
+  "hide-on-action": true,
+  "script-fail-notify": true,
+  "widgets": ["inhibitors", "title", "dnd", "notifications", "mpris"],
+  "widget-config": {
+    "inhibitors": {
+      "text": "Inhibitors",
+      "button-text": "Clear All",
+      "clear-all-button": true
+    },
+    "title": {
+      "text": "Notifications",
+      "clear-all-button": true,
+      "button-text": "Clear All"
+    },
+    "dnd": {
+      "text": "Do Not Disturb"
+    },
+    "label": {
+      "max-lines": 1,
+      "text": "No notifications"
+    },
+    "mpris": {
+      "image-size": 36,
+      "image-radius": 6
+    }
+  }
+}

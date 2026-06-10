@@ -1,0 +1,366 @@
+#!/bin/bash
+#
+# start-dev / "work" — interactive dev launcher for the website-2022 monorepo.
+#
+# Brings the Docker Compose services for each site up/down and gives quick
+# shortcuts for opening the running sites, restarting, stopping, and opening
+# the repo in nvim / Cursor / the file manager.
+#
+#   Services run detached (docker compose up -d) so they keep running when you
+#   leave the launcher or jump between them.
+
+set -u
+
+# ----------------------------------------------------------------------------
+# Config
+# ----------------------------------------------------------------------------
+#
+# Cross-platform: tested on Arch/KDE and Ubuntu/GNOME. Everything that differs
+# per machine (file manager, url opener, compose command, IDE) is detected
+# below instead of hardcoded.
+
+# pick the first command that exists; prints it, or empty if none found.
+first_cmd() { local c; for c in "$@"; do command -v "$c" >/dev/null 2>&1 && { echo "$c"; return 0; }; done; return 1; }
+
+# Repo: $WORK_REPO wins, else the first of these that exists (handles the
+# hyphen/no-hyphen spelling), else the hyphenated default.
+if [ -n "${WORK_REPO:-}" ]; then
+  REPO="$WORK_REPO"
+else
+  for cand in "$HOME/dev/website-2022" "$HOME/dev/website2022"; do
+    [ -d "$cand" ] && { REPO="$cand"; break; }
+  done
+  REPO="${REPO:-$HOME/dev/website-2022}"
+fi
+PROJECT="${COMPOSE_PROJECT_NAME:-$(basename "$REPO")}"
+
+# IDE (-i): prefer Cursor, then VS Code / VSCodium / Zed.
+IDE_CMD="$(first_cmd cursor code codium zed)"
+# Editor (-v): nvim, then vim/vi.
+EDITOR_CMD="$(first_cmd nvim vim vi)"
+
+# url / file-manager opener: xdg-open (GNOME + KDE both honour it and open the
+# user's default file manager), then macOS `open`, WSL, then specific managers.
+OPENER="$(first_cmd xdg-open open wslview gio nautilus dolphin nemo thunar)"
+# `gio open` needs the subcommand; normalise so "$OPENER <target>" always works.
+[ "$OPENER" = "gio" ] && OPENER="gio open"
+EXPLORER_CMD="$OPENER"   # -e opens the repo dir with the same opener
+
+# Service registry. Each row in the menu maps to:
+#   LABEL       human name
+#   SERVICES    docker compose service names that make it up
+#   START       compose args to bring it up (detached)
+#   URL         url opened with 'o'
+KEYS=(regeljelease vanderwalvans studio)
+
+declare -A LABEL SERVICES START URL
+LABEL[regeljelease]="Regeljelease"
+SERVICES[regeljelease]="regeljelease-php regeljelease-js regeljelease-sanity"
+START[regeljelease]="--profile regeljelease up -d"
+URL[regeljelease]="http://localhost:8001"
+
+LABEL[vanderwalvans]="Van der Wal Vans"
+SERVICES[vanderwalvans]="vanderwalvans-php vanderwalvans-js vanderwalvans-sanity"
+START[vanderwalvans]="--profile vanderwalvans up -d"
+URL[vanderwalvans]="http://localhost:8002"
+
+LABEL[studio]="Sanity Studio (regeljelease)"
+SERVICES[studio]="regeljelease-sanity"
+START[studio]="--profile regeljelease up -d regeljelease-sanity"
+URL[studio]="http://localhost:8061"
+
+# ----------------------------------------------------------------------------
+# Colors
+# ----------------------------------------------------------------------------
+
+if [ -t 1 ]; then
+  C_RESET=$'\033[0m';  C_BOLD=$'\033[1m';   C_DIM=$'\033[2m'
+  C_RED=$'\033[31m';   C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'
+  C_BLUE=$'\033[34m';  C_MAGENTA=$'\033[35m'; C_CYAN=$'\033[36m'
+  C_GREY=$'\033[90m';  C_INV=$'\033[7m'
+else
+  C_RESET= C_BOLD= C_DIM= C_RED= C_GREEN= C_YELLOW= C_BLUE= C_MAGENTA= C_CYAN= C_GREY= C_INV=
+fi
+
+# ----------------------------------------------------------------------------
+# Docker helpers
+# ----------------------------------------------------------------------------
+
+# Use the v2 plugin (`docker compose`) when present, else legacy `docker-compose`.
+if docker compose version >/dev/null 2>&1; then
+  dc() { docker compose "$@"; }
+elif command -v docker-compose >/dev/null 2>&1; then
+  dc() { docker-compose "$@"; }
+else
+  dc() { docker compose "$@"; }   # let it error with a clear message
+fi
+
+# Snapshot of running container names, refreshed once per render (one docker
+# call instead of one-per-service — the old way made redraws slow and flickery).
+RUNNING_NAMES=""
+refresh_running() { RUNNING_NAMES="$(docker ps --format '{{.Names}}' 2>/dev/null)"; }
+
+# True if a single compose service's container is in the last snapshot.
+svc_up() {
+  case "
+$RUNNING_NAMES
+" in *"
+${PROJECT}-$1-1
+"*) return 0 ;; *) return 1 ;; esac
+}
+
+# Status of a menu key: running | partial | stopped
+key_status() {
+  local key="$1" up=0 total=0 s
+  for s in ${SERVICES[$key]}; do
+    total=$((total + 1))
+    svc_up "$s" && up=$((up + 1))
+  done
+  if [ "$up" -eq 0 ]; then echo stopped
+  elif [ "$up" -eq "$total" ]; then echo running
+  else echo partial; fi
+}
+
+# ----------------------------------------------------------------------------
+# Actions
+# ----------------------------------------------------------------------------
+
+MSG=""
+
+start_key() {
+  local key="$1"
+  MSG="${C_CYAN}Starting ${LABEL[$key]}…${C_RESET}"
+  render
+  # shellcheck disable=SC2086
+  if dc ${START[$key]} >/tmp/work-$$.log 2>&1; then
+    MSG="${C_GREEN}✓ ${LABEL[$key]} up${C_RESET}"
+  else
+    MSG="${C_RED}✗ ${LABEL[$key]} failed — see /tmp/work-$$.log${C_RESET}"
+  fi
+}
+
+stop_key() {
+  local key="$1"
+  MSG="${C_YELLOW}Stopping ${LABEL[$key]}…${C_RESET}"
+  render
+  # shellcheck disable=SC2086
+  dc stop ${SERVICES[$key]} >/dev/null 2>&1
+  MSG="${C_GREY}■ ${LABEL[$key]} stopped${C_RESET}"
+}
+
+restart_key() {
+  local key="$1"
+  MSG="${C_CYAN}Restarting ${LABEL[$key]}…${C_RESET}"
+  render
+  # shellcheck disable=SC2086
+  if dc restart ${SERVICES[$key]} >/dev/null 2>&1; then
+    MSG="${C_GREEN}↻ ${LABEL[$key]} restarted${C_RESET}"
+  else
+    # not running yet — start it instead
+    start_key "$key"
+  fi
+}
+
+open_key() {
+  local key="$1"
+  # shellcheck disable=SC2086
+  $OPENER "${URL[$key]}" >/dev/null 2>&1 &
+  MSG="${C_BLUE}↗ opened ${URL[$key]}${C_RESET}"
+}
+
+# ----------------------------------------------------------------------------
+# TUI
+# ----------------------------------------------------------------------------
+
+CURSOR=0
+declare -A SELECTED
+
+dot() {
+  case "$1" in
+    running) printf '%s●%s' "$C_GREEN" "$C_RESET" ;;
+    partial) printf '%s◐%s' "$C_YELLOW" "$C_RESET" ;;
+    *)       printf '%s○%s' "$C_GREY" "$C_RESET" ;;
+  esac
+}
+
+render() {
+  refresh_running                       # single docker call per frame
+  local E=$'\033[K'                     # erase to end of line (kills leftovers)
+  local nl=$'\n' out=""
+
+  out+="${C_CYAN}┌─────────────────────────────────────────────────────┐${C_RESET}${E}${nl}"
+  out+="${C_CYAN}│${C_RESET}  ${C_BOLD}${C_MAGENTA}work${C_RESET} — website-2022 dev launcher                   ${C_CYAN}│${C_RESET}${E}${nl}"
+  out+="${C_CYAN}└─────────────────────────────────────────────────────┘${C_RESET}${E}${nl}${E}${nl}"
+
+  local i key st mark pointer statetxt
+  for i in "${!KEYS[@]}"; do
+    key="${KEYS[$i]}"
+    st="$(key_status "$key")"
+    if [ "${SELECTED[$key]:-}" = 1 ]; then mark="${C_GREEN}[x]${C_RESET}"; else mark="[ ]"; fi
+    if [ "$i" -eq "$CURSOR" ]; then pointer="${C_CYAN}▸ ${C_RESET}"; else pointer="  "; fi
+    case "$st" in
+      running) statetxt="${C_GREEN}running${C_RESET}" ;;
+      partial) statetxt="${C_YELLOW}partial${C_RESET}" ;;
+      *)       statetxt="${C_GREY}stopped${C_RESET}" ;;
+    esac
+    out+="$(printf '%s%s %s  %s  %-28s %s   %s%s%s' \
+      "$pointer" "$mark" "$(dot "$st")" "$((i + 1))" \
+      "${LABEL[$key]}" "$statetxt" "$C_DIM" "${URL[$key]}" "$C_RESET")${E}${nl}"
+  done
+
+  out+="${E}${nl}"
+  out+="  ${C_BOLD}↑/↓${C_RESET} move  ${C_BOLD}space${C_RESET} select  ${C_BOLD}a${C_RESET} all  ${C_BOLD}enter${C_RESET} start  ${C_BOLD}o${C_RESET} open${E}${nl}"
+  out+="  ${C_BOLD}r${C_RESET} restart  ${C_BOLD}q${C_RESET} stop  ${C_BOLD}b${C_RESET} clear  ${C_BOLD}h${C_RESET} help  ${C_BOLD}Q${C_RESET} quit${E}${nl}"
+  out+="${E}${nl}"
+  [ -n "$MSG" ] && out+="  ${MSG}${E}${nl}"
+
+  # Home the cursor and paint in one write; erase anything below the frame.
+  printf '\033[H%s\033[J' "$out"
+}
+
+# Keys to act on: selected ones, or the row under the cursor if none selected.
+targets() {
+  local any=0 key
+  for key in "${KEYS[@]}"; do
+    [ "${SELECTED[$key]:-}" = 1 ] && { printf '%s\n' "$key"; any=1; }
+  done
+  [ "$any" -eq 0 ] && printf '%s\n' "${KEYS[$CURSOR]}"
+}
+
+help_overlay() {
+  clear
+  cat <<EOF
+${C_BOLD}${C_MAGENTA}work${C_RESET} — website-2022 dev launcher
+
+${C_BOLD}Navigation${C_RESET}
+  ↑ / k        move up
+  ↓ / j        move down
+  space        toggle selection of the current row
+  a            select all rows
+  b            clear selection
+  1 / 2 / 3    toggle a row by number
+
+${C_BOLD}Actions${C_RESET} (apply to selected rows, or the current row if none selected)
+  enter        start  (docker compose up -d, detached — keeps running)
+  o            open the site/studio URL in the browser
+  r            restart
+  q            stop
+
+  h            this help        Q / Esc   quit the launcher (services keep running)
+
+${C_BOLD}Services${C_RESET}
+  Regeljelease       site :8001   studio :8061
+  Van der Wal Vans   site :8002   studio :8062
+  Sanity Studio      regeljelease-sanity on :8061
+
+${C_BOLD}CLI flags${C_RESET} (skip the menu)
+  -a  --all          start both sites
+  -rjl --regeljelease
+  -vdw --vanderwall
+  -s  --studio
+  -v  --vim          nvim in the repo root
+  -i  --ide          open repo in $IDE_CMD
+  -e  --explorer     open repo in the file manager
+  -h  --help
+
+  Press any key to return…
+EOF
+  read -rsn1
+}
+
+tui() {
+  command -v docker >/dev/null 2>&1 || { echo "docker not found"; exit 1; }
+  cd "$REPO" 2>/dev/null || { echo "repo not found: $REPO"; exit 1; }
+  printf '\033[?25l'                       # hide cursor
+  clear                                    # one clean slate; render() homes after
+  trap 'printf "\033[?25h"; clear' EXIT
+  local key rest k
+  while :; do
+    render
+    IFS= read -rsn1 key
+    if [ "$key" = $'\033' ]; then
+      read -rsn2 -t 0.03 rest 2>/dev/null   # grab the rest of an arrow seq
+      key+="$rest"
+    fi
+    MSG=""
+    case "$key" in
+      $'\033[A'|k) CURSOR=$(((CURSOR - 1 + ${#KEYS[@]}) % ${#KEYS[@]})) ;;
+      $'\033[B'|j) CURSOR=$(((CURSOR + 1) % ${#KEYS[@]})) ;;
+      ' ')
+        k="${KEYS[$CURSOR]}"
+        if [ "${SELECTED[$k]:-}" = 1 ]; then unset 'SELECTED[$k]'; else SELECTED[$k]=1; fi ;;
+      a) for k in "${KEYS[@]}"; do SELECTED[$k]=1; done ;;
+      b) for k in "${KEYS[@]}"; do unset 'SELECTED[$k]'; done; MSG="${C_GREY}selection cleared${C_RESET}" ;;
+      1) k="${KEYS[0]}"; [ "${SELECTED[$k]:-}" = 1 ] && unset 'SELECTED[$k]' || SELECTED[$k]=1 ;;
+      2) k="${KEYS[1]}"; [ "${SELECTED[$k]:-}" = 1 ] && unset 'SELECTED[$k]' || SELECTED[$k]=1 ;;
+      3) k="${KEYS[2]}"; [ "${SELECTED[$k]:-}" = 1 ] && unset 'SELECTED[$k]' || SELECTED[$k]=1 ;;
+      ''|$'\n') for k in $(targets); do start_key "$k"; done ;;
+      o) for k in $(targets); do open_key "$k"; done ;;
+      r) for k in $(targets); do restart_key "$k"; done ;;
+      q) for k in $(targets); do stop_key "$k"; done ;;
+      h) help_overlay ;;
+      Q|$'\033') break ;;
+    esac
+  done
+}
+
+# ----------------------------------------------------------------------------
+# CLI (non-interactive)
+# ----------------------------------------------------------------------------
+
+cli_help() { help_overlay 2>/dev/null; printf '\033[?25h'; }
+
+run_cli() {
+  cd "$REPO" 2>/dev/null || { echo "repo not found: $REPO"; exit 1; }
+  local did=0 k
+  for arg in "$@"; do
+    case "$arg" in
+      -a|--all)
+        for k in regeljelease vanderwalvans; do
+          echo "Starting ${LABEL[$k]}…"; dc ${START[$k]}; done; did=1 ;;
+      -rjl|--regeljelease)
+        echo "Starting ${LABEL[regeljelease]}…"; dc ${START[regeljelease]}; did=1 ;;
+      -vdw|--vanderwall|--vanderwalvans)
+        echo "Starting ${LABEL[vanderwalvans]}…"; dc ${START[vanderwalvans]}; did=1 ;;
+      -s|--studio)
+        echo "Starting ${LABEL[studio]}…"; dc ${START[studio]}; did=1 ;;
+      -v|--vim)
+        [ -n "$EDITOR_CMD" ] || { echo "no editor (nvim/vim) found"; exit 1; }
+        exec "$EDITOR_CMD" "$REPO" ;;
+      -i|--ide)
+        [ -n "$IDE_CMD" ] || { echo "no IDE (cursor/code/codium/zed) found"; exit 1; }
+        "$IDE_CMD" "$REPO" >/dev/null 2>&1 & did=1 ;;
+      # shellcheck disable=SC2086
+      -e|--explorer)
+        [ -n "$EXPLORER_CMD" ] || { echo "no file manager / opener found"; exit 1; }
+        $EXPLORER_CMD "$REPO" >/dev/null 2>&1 & did=1 ;;
+      -h|--help)
+        cat <<EOF
+${C_BOLD}work${C_RESET} — website-2022 dev launcher
+
+  work                 open the interactive picker
+  work -a  --all       start both sites
+  work -rjl --regeljelease
+  work -vdw --vanderwall
+  work -s  --studio    start the Sanity studio (regeljelease-sanity)
+  work -v  --vim       nvim in the repo root
+  work -i  --ide       open repo in $IDE_CMD
+  work -e  --explorer  open repo in $EXPLORER_CMD
+  work -h  --help      this help
+EOF
+        did=1 ;;
+      *) echo "unknown option: $arg (try -h)"; exit 1 ;;
+    esac
+  done
+  [ "$did" -eq 1 ]
+}
+
+# ----------------------------------------------------------------------------
+# Entry
+# ----------------------------------------------------------------------------
+
+if [ "$#" -eq 0 ]; then
+  tui
+else
+  run_cli "$@"
+fi

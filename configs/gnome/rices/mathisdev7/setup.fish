@@ -199,7 +199,6 @@ function main
         _rice_copy_file $dry_run "$files_root/.config/cava/config" "$HOME/.config/cava/config" "$backup_root"
         _rice_copy_file $dry_run "$files_root/.config/btop/btop.conf" "$HOME/.config/btop/btop.conf" "$backup_root"
         _rice_copy_file $dry_run "$files_root/.config/btop/themes/catppuccin_mocha.theme" "$HOME/.config/btop/themes/catppuccin_mocha.theme" "$backup_root"
-        _rice_copy_file $dry_run "$files_root/.config/rofi/config.rasi" "$HOME/.config/rofi/config.rasi" "$backup_root"
         _rice_copy_file $dry_run "$files_root/.config/neofetch/config.conf" "$HOME/.config/neofetch/config.conf" "$backup_root"
         _rice_copy_file $dry_run "$files_root/.config/starship.toml" "$HOME/.config/starship.toml" "$backup_root"
 

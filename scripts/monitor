@@ -1,0 +1,335 @@
+#!/usr/bin/env bash
+#
+# monitor — interactive Hyprland monitor rotate & reposition tool
+#
+# Live-applies changes via `hyprctl keyword monitor ...` and can persist the
+# current layout to ~/.config/hypr/monitors.conf (which your hyprland.conf
+# already sources). Requires: hyprctl, jq, fzf.
+#
+# Usage:
+#   monitor              # interactive menu
+#   monitor list         # print current layout and exit
+#   monitor save         # write live layout to monitors.conf and exit
+#   monitor disable NAME # turn off a connected monitor
+#   monitor enable NAME  # turn on a disconnected monitor
+#   monitor -h|--help
+
+set -euo pipefail
+
+CONF="${HOME}/.config/hypr/monitors.conf"
+
+# ---- colors -----------------------------------------------------------------
+if [[ -t 1 ]]; then
+  R=$'\e[0m'; B=$'\e[1m'; DIM=$'\e[2m'
+  RED=$'\e[31m'; GRN=$'\e[32m'; YLW=$'\e[33m'; BLU=$'\e[34m'; CYN=$'\e[36m'
+else
+  R=""; B=""; DIM=""; RED=""; GRN=""; YLW=""; BLU=""; CYN=""
+fi
+
+die()  { printf '%s\n' "${RED}✗ $*${R}" >&2; exit 1; }
+info() { printf '%s\n' "${CYN}» $*${R}"; }
+ok()   { printf '%s\n' "${GRN}✓ $*${R}"; }
+
+# ---- deps -------------------------------------------------------------------
+for dep in hyprctl jq fzf; do
+  command -v "$dep" >/dev/null 2>&1 || die "missing dependency: $dep"
+done
+[[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || die "Hyprland is not running (no HYPRLAND_INSTANCE_SIGNATURE)."
+
+# ---- helpers ----------------------------------------------------------------
+
+mons_json() { hyprctl -j monitors; }
+
+# transform code -> human label
+transform_label() {
+  case "$1" in
+    0) echo "landscape" ;;
+    1) echo "portrait (90° CW)" ;;
+    2) echo "upside-down (180°)" ;;
+    3) echo "reverse portrait (90° CCW)" ;;
+    4) echo "landscape flipped" ;;
+    5) echo "portrait flipped" ;;
+    6) echo "upside-down flipped" ;;
+    7) echo "reverse portrait flipped" ;;
+    *) echo "transform $1" ;;
+  esac
+}
+
+# effective (logical) size after transform + scale, prints "W H"
+eff_size() {
+  local name="$1"
+  mons_json | jq -r --arg n "$name" '
+    .[] | select(.name==$n) |
+    (if (.transform % 2)==1 then .height else .width end) as $w |
+    (if (.transform % 2)==1 then .width  else .height end) as $h |
+    "\(($w/.scale)|floor) \(($h/.scale)|floor)"'
+}
+
+# build the resolution token "WxH@RR" for a monitor's current mode
+mode_token() {
+  mons_json | jq -r --arg n "$1" '
+    .[] | select(.name==$n) | "\(.width)x\(.height)@\(.refreshRate|.*100|round/100)"'
+}
+
+diag_inches() {
+  local name="$1"
+  mons_json | jq -r --arg n "$name" '
+    .[] | select(.name==$n) |
+    if (.physicalWidth > 0 and .physicalHeight > 0) then
+      (((((.physicalWidth / 25.4) * (.physicalWidth / 25.4)) + ((.physicalHeight / 25.4) * (.physicalHeight / 25.4))) | sqrt) * 10 | round / 10)
+    else
+      "?"
+    end'
+}
+
+monitor_label() {
+  local name="$1"
+  case "$name" in
+    HDMI-A-1) echo "A" ;;
+    HDMI-A-2) echo "B" ;;
+    *) echo "$name" ;;
+  esac
+}
+
+orientation_label() {
+  local tf="$1"
+  if (( tf % 2 == 1 )); then
+    echo "portrait"
+  else
+    echo "landscape"
+  fi
+}
+
+status_tags() {
+  local name="$1"
+  local tf focused res inches
+  tf="$(field "$name" '.transform')"
+  focused="$(field "$name" '.focused')"
+  res="$(field "$name" '.width')x$(field "$name" '.height')"
+  inches="$(diag_inches "$name")"
+
+  local tags=()
+  [[ "$focused" == "true" ]] && tags+=("focused")
+  tags+=("$(orientation_label "$tf")")
+  tags+=("${res}")
+  tags+=("${inches}in")
+
+  local out=""
+  local tag
+  for tag in "${tags[@]}"; do
+    if [[ -z "$out" ]]; then
+      out="$tag"
+    else
+      out="$out, $tag"
+    fi
+  done
+  echo "$out"
+}
+
+field() { # field <name> <jq-path>
+  mons_json | jq -r --arg n "$1" ".[] | select(.name==\$n) | $2"
+}
+
+# apply a full monitor line live; reuses current mode/scale/transform/pos
+# args: name x y transform
+apply() {
+  local name="$1" x="$2" y="$3" tf="$4"
+  local mode scale
+  mode="$(mode_token "$name")"
+  scale="$(field "$name" '.scale')"
+  hyprctl keyword monitor "${name},${mode},${x}x${y},${scale},transform,${tf}" >/dev/null
+}
+
+print_layout() {
+  printf '%s\n' "${B}Current monitors${R}"
+  mons_json | jq -r '
+    .[] |
+    "\(.name)\t\(.x)\t\(.y)\t\(.scale)\t\(.transform)"' \
+  | while IFS=$'\t' read -r n x y sc tf; do
+      local label status pos
+      label="$(monitor_label "$n")"
+      status="$(status_tags "$n")"
+      pos="pos ${x},${y}  scale ${sc}"
+      printf '  %s%-3s%s %s%-40s%s %s%s%s\n' \
+        "$CYN" "$label" "$R" "$DIM" "$status" "$R" "$YLW" "$pos" "$R"
+    done
+}
+
+# pick a monitor name via fzf
+pick_monitor() {
+  local prompt="${1:-monitor> }"
+  mons_json | jq -r '
+    .[] |
+    "\(.name)\t\(.width)x\(.height)  pos \(.x),\(.y)  transform \(.transform)"' \
+    | while IFS=$'\t' read -r n rest; do
+        printf '%s\t%s\t%s\n' "$(monitor_label "$n")" "$n" "$rest"
+      done \
+    | fzf --with-nth=1,3,4,5 --delimiter='\t' --prompt="$prompt" \
+          --header="Select a monitor (Esc to cancel)" --height=40% --reverse \
+    | cut -f2
+}
+
+# ---- actions ----------------------------------------------------------------
+
+action_rotate() {
+  local name; name="$(pick_monitor "rotate which> ")" || return 0
+  [[ -n "$name" ]] || return 0
+
+  local choice tf
+  choice="$(printf '%s\n' \
+    "0  landscape (normal)" \
+    "1  portrait — 90° clockwise" \
+    "3  reverse portrait — 90° counter-clockwise" \
+    "2  upside-down (180°)" \
+    "4  landscape — flipped (mirror)" \
+    "5  portrait — flipped" \
+    "7  reverse portrait — flipped" \
+    | fzf --prompt="orientation> " --header="Rotate ${name}" --height=40% --reverse)" || return 0
+  [[ -n "$choice" ]] || return 0
+  tf="${choice%% *}"
+
+  local x y; x="$(field "$name" '.x')"; y="$(field "$name" '.y')"
+  apply "$name" "$x" "$y" "$tf"
+  ok "$(monitor_label "$name") → $(transform_label "$tf")"
+  printf '%s\n' "${DIM}Tip: positions may now overlap — use 'reposition' or 'auto-arrange'.${R}"
+}
+
+action_reposition() {
+  local name; name="$(pick_monitor "move which> ")" || return 0
+  [[ -n "$name" ]] || return 0
+
+  local mode
+  mode="$(printf '%s\n' \
+    "relative to another monitor" \
+    "manual x,y coordinates" \
+    | fzf --prompt="how> " --header="Reposition $(monitor_label "$name")" --height=30% --reverse)" || return 0
+
+  local tf; tf="$(field "$name" '.transform')"
+
+  if [[ "$mode" == manual* ]]; then
+    read -rp "x position [$(field "$name" '.x')]: " x
+    read -rp "y position [$(field "$name" '.y')]: " y
+    x="${x:-$(field "$name" '.x')}"; y="${y:-$(field "$name" '.y')}"
+    apply "$name" "$x" "$y" "$tf"
+    ok "${name} → ${x}x${y}"
+    return 0
+  fi
+
+  # relative
+  local anchor
+  anchor="$(mons_json | jq -r --arg n "$name" '.[] | select(.name!=$n) | .name' \
+    | fzf --prompt="relative to> " --header="Place $(monitor_label "$name") relative to which monitor?" --height=40% --reverse)" || return 0
+  [[ -n "$anchor" ]] || return 0
+
+  local side
+  side="$(printf '%s\n' "right-of" "left-of" "above" "below" \
+    | fzf --prompt="side> " --header="Place $(monitor_label "$name") ___ $(monitor_label "$anchor")" --height=30% --reverse)" || return 0
+  [[ -n "$side" ]] || return 0
+
+  local ax ay; ax="$(field "$anchor" '.x')"; ay="$(field "$anchor" '.y')"
+  read -r aw ah < <(eff_size "$anchor")
+  read -r tw th < <(eff_size "$name")
+
+  local x y
+  case "$side" in
+    right-of) x=$((ax + aw)); y=$ay ;;
+    left-of)  x=$((ax - tw)); y=$ay ;;
+    below)    x=$ax;          y=$((ay + ah)) ;;
+    above)    x=$ax;          y=$((ay - th)) ;;
+  esac
+  apply "$name" "$x" "$y" "$tf"
+  ok "$(monitor_label "$name") placed ${side} $(monitor_label "$anchor") → ${x}x${y}"
+}
+
+# lay all monitors left-to-right, top-aligned, in their current x order
+action_disable() {
+  local name; name="$(pick_monitor "disable which> ")" || return 0
+  [[ -n "$name" ]] || return 0
+  hyprctl keyword monitor "${name},disable" >/dev/null
+  ok "$(monitor_label "$name") disabled"
+}
+
+action_enable() {
+  local name
+  name="$(hyprctl -j monitors all | jq -r '
+    .[] | select(.disabled == true or .width == 0) | .name' \
+    | fzf --prompt="enable which> " \
+          --header="Select a monitor to enable" --height=40% --reverse)" || return 0
+  [[ -n "$name" ]] || return 0
+  hyprctl keyword monitor "${name},preferred,auto,1" >/dev/null
+  ok "$(monitor_label "$name") enabled"
+}
+
+action_autoarrange() {
+  local names; names="$(mons_json | jq -r 'sort_by(.x) | .[].name')"
+  local cur=0 x tf
+  while read -r name; do
+    [[ -n "$name" ]] || continue
+    read -r w _h < <(eff_size "$name")
+    tf="$(field "$name" '.transform')"
+    apply "$name" "$cur" 0 "$tf"
+    cur=$((cur + w))
+  done <<< "$names"
+  ok "auto-arranged ${names//$'\n'/, } left-to-right"
+}
+
+action_save() {
+  local body
+  body="$(mons_json | jq -r '
+    sort_by(.x) | .[] |
+    "monitor = \(.name), \(.width)x\(.height)@\(.refreshRate|.*100|round/100), \(.x)x\(.y), \(.scale), transform, \(.transform)"')"
+
+  {
+    printf '\n'
+    printf '# █▀▄▀█ █▀█ █▄░█ █ ▀█▀ █▀█ █▀█ █▀\n'
+    printf '# █░▀░█ █▄█ █░▀█ █ ░█░ █▄█ █▀▄ ▄█\n\n'
+    printf '# Generated by `monitor save` on %s\n' "$(date '+%Y-%m-%d %H:%M')"
+    printf '# name, resolution@refresh, position, scale, transform\n'
+    printf '%s\n' "$body"
+  } > "$CONF"
+  ok "saved live layout → ${CONF}"
+  printf '%s\n' "$body"
+}
+
+# ---- menu -------------------------------------------------------------------
+
+menu() {
+  while true; do
+    echo
+    print_layout
+    echo
+    local pick
+    pick="$(printf '%s\n' \
+      "rotate        — change a monitor's orientation" \
+      "reposition    — move a monitor (relative or manual)" \
+      "auto-arrange  — lay all monitors left-to-right, no gaps" \
+      "disable       — turn off a connected monitor" \
+      "enable        — turn on a disconnected monitor" \
+      "save          — persist current layout to monitors.conf" \
+      "reload        — re-source monitors.conf" \
+      "quit" \
+      | fzf --prompt="action> " --header="Hyprland monitor tool" --height=45% --reverse)" || break
+    case "${pick%% *}" in
+      rotate)       action_rotate ;;
+      reposition)   action_reposition ;;
+      auto-arrange) action_autoarrange ;;
+      disable)      action_disable ;;
+      enable)       action_enable ;;
+      save)         action_save ;;
+      reload)       hyprctl reload >/dev/null && ok "reloaded config" ;;
+      quit|"")      break ;;
+    esac
+  done
+}
+
+# ---- entry ------------------------------------------------------------------
+case "${1:-}" in
+  list)        print_layout ;;
+  disable)     action_disable ;;
+  enable)      action_enable ;;
+  save)        action_save ;;
+  -h|--help)
+    grep '^#' "$0" | sed '1d;s/^# \{0,1\}//' | sed '/^!/d' | head -n 18 ;;
+  "")          menu ;;
+  *)           die "unknown command: $1  (try: list, save, --help)" ;;
+esac

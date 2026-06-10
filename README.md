@@ -18,14 +18,14 @@ The setup script installs the desktop and shell baseline, while the repo also sh
 | Terminal | Ghostty source build, Ghostty config, launcher defaults that prefer Ghostty |
 | Desktop | Auto-detected GNOME, KDE, or Hyprland configuration path |
 | Dev tools | GitHub CLI, lazygit, lazydocker, Docker, Node, pnpm, Bun, Rust, Python, uv |
-| Config links | Managed symlinks for Fish, Git, Ghostty, Rofi, Neovim, Zed, Cursor, Hyprland, Waybar, Dunst, and related configs |
+| Config links | Managed symlinks for Fish, Git, Ghostty, Fuzzel, Neovim, Zed, Cursor, Hyprland, Waybar, Dunst, and related configs |
 | User commands | `dotfiles`, `launcher`, `todo`, `copy`, `replace`, `ports`, `db`, `wallpaper`, `spellcheck`, `license`, `create-oauth`, `generate-turso-db` |
 
 Example command surface:
 
 ```bash
 dotfiles symlinks
-launcher --mode
+launcher
 todo list --upcoming
 copy tree -L 2
 replace ~/.config/nvim/init.lua
@@ -133,7 +133,7 @@ Most commands follow the same pattern: the implementation lives in `scripts/`, a
 
 | Command | Purpose | Docs | Example |
 | --- | --- | --- | --- |
-| `launcher` | Rofi-based app, file, and command launcher | [configs/rofi/README.md](configs/rofi/README.md) | `launcher --mode` |
+| `launcher` | App launcher wrapper for Fuzzel or KDE KRunner | `-` | `launcher` |
 | `powermenu` | Session power actions | `-` | `powermenu` |
 | `dotfiles` | Browse repo tools, config, and managed symlinks | `-` | `dotfiles symlinks`<br>`dotfiles search ports` |
 | `todo` | Todo list and shell-display helpers | [scripts/todo.js](scripts/todo.js) | `todo list --upcoming`<br>`todo count`<br>`todo "Task" 15pm` |
@@ -187,7 +187,7 @@ spellcheck --history
 ## Repository Layout
 
 - `bin/` contains small launchers that call into `scripts/`
-- `configs/` contains app-specific config, including Fish, Ghostty, Rofi, Hyprland, GNOME, Zed, Cursor, and others
+- `configs/` contains app-specific config, including Fish, Ghostty, Fuzzel, Hyprland, GNOME, Zed, Cursor, and others
 - `scripts/` contains the actual command implementations and utilities
 - `scripts/lib/` contains support code used by the commands, not standalone commands
 - `setup/` contains package installation, symlink setup, desktop detection, and shell setup
