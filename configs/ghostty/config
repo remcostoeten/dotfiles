@@ -1,25 +1,23 @@
 command = /usr/bin/fish
 
-background-opacity = 0.92
+background-opacity = 0.86
 background-opacity-cells = true
-background-blur = 24
+background-blur = 32
 
-theme = dotfiles-dark
+theme = sunset-drive
 window-decoration = none
 gtk-titlebar = false
 window-show-tab-bar = never
-gtk-tabs-location = hidden
 gtk-toolbar-style = flat
 gtk-custom-css = gtk.css
-window-padding-x = 14
-window-padding-y = 14
+window-padding-x = 8
+window-padding-y = 8
 
 # Font & Typography
-# font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
-# font-family = "JetBrains Mono Nerd Font", "Fira Code", monospace
-font-family = "Iosevka Nerd Font Propo"
-
-font-size = 14.5
+font-family = "JetBrainsMono Nerd Font"
+font-size = 14
+adjust-cell-height = 2%
+adjust-cell-width = 0%
 
 # Terminal Options
 confirm-close-surface = false

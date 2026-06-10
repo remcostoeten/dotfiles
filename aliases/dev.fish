@@ -45,11 +45,6 @@ function vi
     nvim $argv
 end
 
-# DOCSTRING: Open files with Neovim
-function vim
-    nvim $argv
-end
-
 # DOCSTRING: Deploy to Vercel
 alias deploy "vercel deploy"
 

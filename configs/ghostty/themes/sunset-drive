@@ -1,0 +1,24 @@
+# Sunset Drive (A+ edition) - Paletty
+palette = 0=#0a0a13
+palette = 1=#ff5c77
+palette = 2=#00f992
+palette = 3=#ffe900
+palette = 4=#009dff
+palette = 5=#ff57fd
+palette = 6=#00ffed
+palette = 7=#ededff
+palette = 8=#3c3c4c
+palette = 9=#ff8398
+palette = 10=#67ffbf
+palette = 11=#fff065
+palette = 12=#5ab8ff
+palette = 13=#ff8dfe
+palette = 14=#66fff2
+palette = 15=#ffffff
+
+background = #0f0f1a
+foreground = #ededfe
+cursor-color = #00ffed
+selection-background = #1c1c2f
+selection-foreground = #ededfe
+split-divider-color = #2a2a40

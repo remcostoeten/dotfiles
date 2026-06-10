@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly TRACKING_MARKER='{% if false %}{{ include('\''base/activecampaign.html.twig'\'') }}{% endif %}'
+readonly TRACKING_ENABLED='{{ include('\''base/activecampaign.html.twig'\'') }}'
+
+_color() {
+  local color=$1 text=$2
+  case $color in
+    green) printf '\033[32m%s\033[0m\n' "$text" ;;
+    red) printf '\033[31m%s\033[0m\n' "$text" ;;
+    yellow) printf '\033[33m%s\033[0m\n' "$text" ;;
+    cyan) printf '\033[36m%s\033[0m\n' "$text" ;;
+    bold) printf '\033[1m%s\033[0m\n' "$text" ;;
+    *) printf '%s\n' "$text" ;;
+  esac
+}
+
+_usage() {
+  cat <<'EOF'
+Usage: tracking [on|off|status|toggle]
+
+Toggle ActiveCampaign site tracking in the Powerwalk website repo.
+
+  tracking          Toggle tracking on/off
+  tracking on       Enable tracking
+  tracking off      Disable tracking
+  tracking status   Show current state
+
+Environment:
+  WEBSITE_2022_ROOT   Path to website-2022 (default: ~/dev/website-2022)
+EOF
+}
+
+_find_repo() {
+  local root="${WEBSITE_2022_ROOT:-$HOME/dev/website-2022}"
+
+  if git -C "$PWD" rev-parse --show-toplevel >/dev/null 2>&1; then
+    local git_root
+    git_root="$(git -C "$PWD" rev-parse --show-toplevel)"
+    if [[ -f "$git_root/templates/base.html.twig" ]]; then
+      root="$git_root"
+    fi
+  fi
+
+  if [[ ! -d "$root" ]]; then
+    _color red "website-2022 repo not found at: $root"
+    exit 1
+  fi
+
+  printf '%s' "$root"
+}
+
+_tracking_files() {
+  local root=$1
+  local -a files=()
+
+  [[ -f "$root/templates/base.html.twig" ]] && files+=("$root/templates/base.html.twig")
+  [[ -f "$root/apps/vanderwalvans/templates/base.html.twig" ]] && files+=("$root/apps/vanderwalvans/templates/base.html.twig")
+
+  if ((${#files[@]} == 0)); then
+    _color red "No base.html.twig files found in $root"
+    exit 1
+  fi
+
+  printf '%s\n' "${files[@]}"
+}
+
+_file_state() {
+  local file=$1
+
+  if grep -qF "$TRACKING_MARKER" "$file"; then
+    printf 'off'
+  elif grep -qF "$TRACKING_ENABLED" "$file"; then
+    printf 'on'
+  else
+    printf 'unknown'
+  fi
+}
+
+_enable_tracking() {
+  local file=$1
+  perl -pi -e 's/\{% if false %\}\{\{ include\('"'"'base\/activecampaign\.html\.twig'"'"'\) \}\}\{% endif %\}/{{ include('"'"'base\/activecampaign.html.twig'"'"') }}/' "$file"
+}
+
+_disable_tracking() {
+  local file=$1
+  perl -pi -e 's/\{\{ include\('"'"'base\/activecampaign\.html\.twig'"'"'\) \}\}/{% if false %}{{ include('"'"'base\/activecampaign\.html\.twig'"'"') }}{% endif %}/' "$file"
+}
+
+_set_state() {
+  local desired=$1
+  local root
+  root="$(_find_repo)"
+  local changed=0
+
+  while IFS= read -r file; do
+    local state
+    state="$(_file_state "$file")"
+
+    case "$desired" in
+      on)
+        if [[ "$state" == "on" ]]; then
+          _color yellow "already on: ${file#"$root"/}"
+          continue
+        fi
+        if [[ "$state" != "off" ]]; then
+          _color red "unrecognized tracking line in: ${file#"$root"/}"
+          continue
+        fi
+        _enable_tracking "$file"
+        _color green "enabled: ${file#"$root"/}"
+        changed=1
+        ;;
+      off)
+        if [[ "$state" == "off" ]]; then
+          _color yellow "already off: ${file#"$root"/}"
+          continue
+        fi
+        if [[ "$state" != "on" ]]; then
+          _color red "unrecognized tracking line in: ${file#"$root"/}"
+          continue
+        fi
+        _disable_tracking "$file"
+        _color green "disabled: ${file#"$root"/}"
+        changed=1
+        ;;
+    esac
+  done < <(_tracking_files "$root")
+
+  if ((changed)); then
+    _color cyan "ActiveCampaign tracking is now $desired in website-2022."
+    _color cyan "This is a local working-tree change only."
+  fi
+}
+
+_show_status() {
+  local root
+  root="$(_find_repo)"
+  _color bold "Repo: $root"
+
+  while IFS= read -r file; do
+    local state
+    state="$(_file_state "$file")"
+    case "$state" in
+      on) _color green "${file#"$root"/}: tracking ON" ;;
+      off) _color red "${file#"$root"/}: tracking OFF" ;;
+      *) _color yellow "${file#"$root"/}: unknown (line not found)" ;;
+    esac
+  done < <(_tracking_files "$root")
+}
+
+main() {
+  local cmd=${1:-toggle}
+
+  case "$cmd" in
+    -h|--help|help)
+      _usage
+      ;;
+    status)
+      _show_status
+      ;;
+    on|enable)
+      _set_state on
+      ;;
+    off|disable)
+      _set_state off
+      ;;
+    toggle)
+      local root first_file first_state
+      root="$(_find_repo)"
+      first_file="$(_tracking_files "$root" | head -n1)"
+      first_state="$(_file_state "$first_file")"
+
+      case "$first_state" in
+        on) _set_state off ;;
+        off) _set_state on ;;
+        *)
+          _color red "Could not determine tracking state in $first_file"
+          exit 1
+          ;;
+      esac
+      ;;
+    *)
+      _color red "Unknown command: $cmd"
+      _usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

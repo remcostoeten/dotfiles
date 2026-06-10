@@ -126,6 +126,7 @@ configure_gnome_desktop() {
     configure_cursor
     configure_top_bar
     configure_fonts
+    configure_app_launcher_shortcut
     setup_wallpaper_rotation
     
     log_success "Desktop aesthetics configured"
@@ -283,6 +284,45 @@ configure_fonts() {
     gsettings set org.gnome.desktop.interface font-name 'Inter 11' 2>/dev/null || true
     gsettings set org.gnome.desktop.interface monospace-font-name 'JetBrains Mono 11' 2>/dev/null || true
     log_success "Fonts configured"
+}
+
+configure_app_launcher_shortcut() {
+    local shortcut_path="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/dotfiles-launcher/"
+    local launcher_cmd="$HOME/.config/dotfiles/bin/launcher"
+    local custom_keybindings
+
+    log_step "Configuring app launcher shortcut..."
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "bind Ctrl+Space to $launcher_cmd"
+        return 0
+    fi
+
+    if ! gsettings list-schemas 2>/dev/null | grep -qx 'org.gnome.settings-daemon.plugins.media-keys'; then
+        log_warn "GNOME media-key schema not found - skipping app launcher shortcut"
+        return 0
+    fi
+
+    if ! gsettings list-schemas 2>/dev/null | grep -qx 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding'; then
+        log_warn "GNOME custom keybinding schema not found - skipping app launcher shortcut"
+        return 0
+    fi
+
+    custom_keybindings="$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null || echo "@as []")"
+    if [[ "$custom_keybindings" != *"'$shortcut_path'"* && "$custom_keybindings" != *"\"$shortcut_path\""* ]]; then
+        if [[ "$custom_keybindings" == "@as []" || "$custom_keybindings" == "[]" ]]; then
+            custom_keybindings="['$shortcut_path']"
+        else
+            custom_keybindings="${custom_keybindings%]}"
+            custom_keybindings="${custom_keybindings}, '$shortcut_path']"
+        fi
+        gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$custom_keybindings" 2>/dev/null || true
+    fi
+
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$shortcut_path" name 'Dotfiles launcher' 2>/dev/null || true
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$shortcut_path" command "$launcher_cmd" 2>/dev/null || true
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$shortcut_path" binding '<Control>space' 2>/dev/null || true
+
+    log_success "App launcher shortcut configured (Ctrl+Space)"
 }
 
 setup_wallpaper_rotation() {
@@ -522,12 +562,13 @@ install_hyprland() {
 
     install_apt "hyprland" "Hyprland"
     install_apt "waybar" "Waybar"
-    install_apt "rofi" "Rofi"
+    install_apt "fuzzel" "Fuzzel"
     install_apt "dunst" "Dunst"
     install_apt "brightnessctl" "Brightness control"
     install_apt "playerctl" "Media controls"
     install_apt "polkit-gnome" "Polkit GNOME"
     install_apt "swayosd" "SwayOSD"
+    install_keyd
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_dry_run "enable SwayOSD libinput backend if available"
@@ -586,6 +627,7 @@ install_category() {
             install_apt "python3-venv"
             install_apt "nodejs"
             install_apt "npm"
+            install_wayland_clipboard_prereqs
             install_curl "https://get.pnpm.io/install.sh" "pnpm" "sh"
             install_curl "https://bun.sh/install" "bun" "bash"
             install_curl "https://sh.rustup.rs" "rustup" "bash" "-y"
@@ -674,6 +716,11 @@ install_package() {
     local shell
     local flags
     
+    if [[ "$pkg" == "keyd" ]]; then
+        install_keyd
+        return
+    fi
+
     method=$(get_method "$pkg")
     extra=$(get_extra "$pkg")
     shell=$(get_shell "$pkg")
@@ -685,7 +732,8 @@ install_package() {
     fi
     
     case "$method" in
-        apt)
+        apt|pacman)
+            # install_apt detects the active package manager and maps names
             install_apt "$pkg" "$pkg"
             ;;
         curl)
@@ -793,8 +841,22 @@ preflight
 if [[ "$ENABLE_PASSWORDLESS_SUDO" == "true" ]]; then
     setup_passwordless_sudo
 fi
-install_arch_audio
-ensure_fish_config
+
+is_full_setup() {
+    [[ -z "$category" && -z "$package" ]]
+}
+
+should_configure_fish() {
+    is_full_setup || [[ "$category" == "essential" || "$package" == "fish" ]]
+}
+
+if is_full_setup; then
+    install_arch_audio
+fi
+
+if should_configure_fish; then
+    ensure_fish_config
+fi
 
 run_with_progress() {
     local cat="$1"
@@ -837,7 +899,9 @@ else
     run_with_progress "desktop"
 fi
 
-set_fish_default_shell
+if should_configure_fish; then
+    set_fish_default_shell
+fi
 
 echo ""
 if [[ "$DRY_RUN" == "true" ]]; then

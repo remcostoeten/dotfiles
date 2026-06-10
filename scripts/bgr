@@ -18,6 +18,10 @@ fi
 
 BG_PIDS_FILE="${BG_DIR}/processes"
 
+_supports_color() {
+  [ -t 1 ] && [ -z "${NO_COLOR:-}" ]
+}
+
 _init() {
   mkdir -p "$BG_LOG_DIR"
   touch "$BG_PIDS_FILE"
@@ -25,141 +29,593 @@ _init() {
 
 _color() {
   local color=$1 text=$2
+  if ! _supports_color; then
+    printf '%s' "$text"
+    return
+  fi
   case $color in
-    green) echo -e "\033[32m${text}\033[0m" ;;
-    red) echo -e "\033[31m${text}\033[0m" ;;
-    yellow) echo -e "\033[33m${text}\033[0m" ;;
-    blue) echo -e "\033[34m${text}\033[0m" ;;
-    cyan) echo -e "\033[36m${text}\033[0m" ;;
-    gray) echo -e "\033[90m${text}\033[0m" ;;
-    bold) echo -e "\033[1m${text}\033[0m" ;;
-    *) echo "$text" ;;
+    green) printf '\033[32m%s\033[0m' "$text" ;;
+    red) printf '\033[31m%s\033[0m' "$text" ;;
+    yellow) printf '\033[33m%s\033[0m' "$text" ;;
+    blue) printf '\033[34m%s\033[0m' "$text" ;;
+    magenta) printf '\033[35m%s\033[0m' "$text" ;;
+    cyan) printf '\033[36m%s\033[0m' "$text" ;;
+    gray) printf '\033[90m%s\033[0m' "$text" ;;
+    bold) printf '\033[1m%s\033[0m' "$text" ;;
+    underline) printf '\033[4m%s\033[0m' "$text" ;;
+    *) printf '%s' "$text" ;;
   esac
 }
 
-_border() {
-  _color cyan "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+_colorln() {
+  printf '%s\n' "$(_color "$1" "$2")"
 }
 
-_header() {
+_dim() {
+  _color gray "$1"
+}
+
+_sep() {
+  _dim " · "
+}
+
+_color_cmd() {
+  local cmd=$1 first rest
+  first=${cmd%% *}
+  rest=${cmd#"$first"}
+
+  if [ -z "$rest" ]; then
+    _color cyan "$cmd"
+    return
+  fi
+
+  printf '%s%s' "$(_color cyan "$first")" "$(_color bold "$rest")"
+}
+
+_color_url() {
+  local url=$1
+  if ! _supports_color; then
+    printf '%s' "$url"
+    return
+  fi
+  printf '\033[4m\033[36m%s\033[0m' "$url"
+}
+
+_color_urls() {
+  local ports=$1 port url out=""
+  for port in $ports; do
+    url="http://localhost:$port"
+    out+="${out:+, }$(_color_url "$url")"
+  done
+  printf '%s' "$out"
+}
+
+_print_meta() {
+  local cwd=$1 ports=$2 uptime=$3 pid=$4
+  local first=1
+
+  if [ -n "$cwd" ]; then
+    printf '      %s\n' "$(_color blue "$cwd")"
+  fi
+
+  if [ -z "$ports" ] && [ -z "$uptime" ] && [ -z "$pid" ]; then
+    return
+  fi
+
+  printf '      '
+
+  if [ -n "$ports" ]; then
+    _color_ports "$ports"
+    first=0
+  fi
+
+  if [ -n "$uptime" ]; then
+    [ "$first" -eq 0 ] && _sep
+    printf '%s' "$(_color green "$uptime")"
+    first=0
+  fi
+
+  if [ -n "$pid" ]; then
+    [ "$first" -eq 0 ] && _sep
+    printf '%s' "$(_dim "pid $pid")"
+  fi
+
   echo
-  _border
-  _color blue "  $1"
-  _border
+}
+
+_color_ports() {
+  local ports=$1 port out=""
+  for port in $ports; do
+    out+="${out:+, }$(_color cyan ":$port")"
+  done
+  printf '%s' "$out"
+}
+
+_title() {
+  _colorln bold "$1"
 }
 
 _get_next_id() {
   echo $(($(awk '{print $1}' "$BG_PIDS_FILE" 2>/dev/null | sort -n | tail -1 || echo 0) + 1))
 }
 
+_shorten_path() {
+  local path=$1
+  case "$path" in
+    "$HOME"/*) printf '~%s' "${path#$HOME}" ;;
+    "$HOME") printf '~' ;;
+    *) printf '%s' "$path" ;;
+  esac
+}
+
+_format_duration() {
+  local secs=$1
+  if (( secs < 60 )); then
+    printf '%ss' "$secs"
+  elif (( secs < 3600 )); then
+    printf '%sm' "$((secs / 60))"
+  elif (( secs < 86400 )); then
+    printf '%sh %sm' "$((secs / 3600))" "$(((secs % 3600) / 60))"
+  else
+    printf '%sd' "$((secs / 86400))"
+  fi
+}
+
+_get_process_start_epoch() {
+  local pid=$1 started
+  started=$(ps -o lstart= -p "$pid" 2>/dev/null | xargs)
+  [ -n "$started" ] || return 1
+  date -d "$started" +%s 2>/dev/null
+}
+
+_descendant_pids() {
+  local pid=$1 child
+  printf '%s\n' "$pid"
+  for child in $(pgrep -P "$pid" 2>/dev/null); do
+    _descendant_pids "$child"
+  done
+}
+
+_get_listen_ports() {
+  local root_pid=$1 ports="" pid port
+  for pid in $(_descendant_pids "$root_pid"); do
+    while read -r port; do
+      [ -n "$port" ] || continue
+      case " $ports " in
+        *" $port "*) ;;
+        *) ports+="${ports:+ }$port" ;;
+      esac
+    done < <(
+      lsof -Pan -p "$pid" -iTCP -sTCP:LISTEN 2>/dev/null \
+        | awk 'NR>1 { split($9, a, ":"); print a[length(a)] }'
+    )
+  done
+  printf '%s' "$ports"
+}
+
+_parse_record() {
+  local id=$1 pid=$2 rest=$3
+  PARSED_ID=$id
+  PARSED_PID=$pid
+  PARSED_CMD=""
+  PARSED_CWD=""
+  PARSED_STARTED=""
+
+  if [[ "$rest" =~ ^([0-9]{10,})[[:space:]](.+)$ ]]; then
+    PARSED_STARTED="${BASH_REMATCH[1]}"
+    rest="${BASH_REMATCH[2]}"
+  fi
+
+  if [[ "$rest" == *'|||'* ]]; then
+    PARSED_CWD="${rest%%|||*}"
+    PARSED_CMD="${rest#*|||}"
+  else
+    PARSED_CMD="$rest"
+  fi
+
+  if kill -0 "$PARSED_PID" 2>/dev/null; then
+    if [ -z "$PARSED_CWD" ]; then
+      PARSED_CWD=$(readlink -f "/proc/$PARSED_PID/cwd" 2>/dev/null || true)
+    fi
+    if [ -z "$PARSED_STARTED" ]; then
+      PARSED_STARTED=$(_get_process_start_epoch "$PARSED_PID" || true)
+    fi
+  fi
+}
+
+_lookup_id() {
+  local id=$1
+  LOOKUP_LINE=$(grep -E "^${id} " "$BG_PIDS_FILE" 2>/dev/null | head -1)
+  [ -n "$LOOKUP_LINE" ] || return 1
+  LOOKUP_ID=$(awk '{print $1}' <<< "$LOOKUP_LINE")
+  LOOKUP_PID=$(awk '{print $2}' <<< "$LOOKUP_LINE")
+  LOOKUP_REST=$(cut -d' ' -f3- <<< "$LOOKUP_LINE")
+}
+
+_log_file_for() {
+  printf '%s/process_%s.log' "$BG_LOG_DIR" "$1"
+}
+
+_remove_record() {
+  local id=$1
+  sed -i.bak "/^${id} /d" "$BG_PIDS_FILE"
+  rm -f "$BG_PIDS_FILE.bak"
+}
+
+_kill_tree() {
+  local pid=$1 p
+  for p in $( _descendant_pids "$pid" | tac 2>/dev/null || _descendant_pids "$pid" ); do
+    kill "$p" 2>/dev/null || true
+  done
+}
+
+_prune_dead() {
+  local tmp="${BG_PIDS_FILE}.tmp" line id pid rest
+  : > "$tmp"
+
+  while read -r line; do
+    [[ "$line" =~ ^[0-9]+[[:space:]]+[0-9]+ ]] || continue
+    id=$(awk '{print $1}' <<< "$line")
+    pid=$(awk '{print $2}' <<< "$line")
+    rest=$(cut -d' ' -f3- <<< "$line")
+    if kill -0 "$pid" 2>/dev/null; then
+      printf '%s %s %s\n' "$id" "$pid" "$rest" >> "$tmp"
+    fi
+  done < "$BG_PIDS_FILE"
+
+  mv "$tmp" "$BG_PIDS_FILE"
+}
+
 _start() {
   local id=$(_get_next_id)
   local cmd="$*"
-  local log_file="$BG_LOG_DIR/process_${id}.log"
-  
+  local cwd started_at log_file
+
+  cwd=$(pwd)
+  started_at=$(date +%s)
+  log_file=$(_log_file_for "$id")
+
   nohup "$@" > "$log_file" 2>&1 &
   local pid=$!
-  
-  echo "$id $pid $cmd" >> "$BG_PIDS_FILE"
-  
+
+  printf '%s %s %s %s|||%s\n' "$id" "$pid" "$started_at" "$cwd" "$cmd" >> "$BG_PIDS_FILE"
+
   echo
-  _color green "  ✓ Started process"
-  _color bold "  [ $id ]  $cmd"
-  _color gray "  PID: $pid | Log: $log_file"
+  _colorln green "Started #$id"
+  printf '  %s\n' "$(_color_cmd "$cmd")"
+  printf '  %s\n' "$(_color blue "$(_shorten_path "$cwd")")"
+  printf '  %s  %s\n' "$(_dim "pid $pid")" "$(_dim "$log_file")"
   echo
 }
 
 _list() {
   local active=0
-  
-  _header "Active Background Processes"
-  
+
   if [ ! -s "$BG_PIDS_FILE" ]; then
+    _title "Background processes"
     echo
-    _color yellow "  ℹ No active processes"
-    echo
+    _colorln yellow "No processes running"
     return
   fi
-  
-  echo
-  while read -r id pid cmd; do
-    if kill -0 "$pid" 2>/dev/null; then
-      printf "  $(_color bold "[ $id ]")  %s\n" "$cmd"
-      _color gray "       └─ PID: $pid"
+
+  while read -r id pid rest; do
+    _parse_record "$id" "$pid" "$rest"
+    if kill -0 "$PARSED_PID" 2>/dev/null; then
       ((active++))
     fi
   done < "$BG_PIDS_FILE"
-  
+
+  if [ "$active" -eq 0 ]; then
+    _title "Background processes"
+    echo
+    _colorln yellow "No processes running"
+    return
+  fi
+
+  if [ "$active" -eq 1 ]; then
+    _title "Background processes · 1 running"
+  else
+    _title "Background processes · $active running"
+  fi
   echo
-  _color gray "  Total: $active process(es)"
-  echo
+
+  local first=1
+  while read -r id pid rest; do
+    _parse_record "$id" "$pid" "$rest"
+    if kill -0 "$PARSED_PID" 2>/dev/null; then
+      local ports="" cwd_display="" uptime=""
+
+      [ "$first" -eq 0 ] && echo
+      first=0
+
+      printf '  %s  %s\n' "$(_color magenta "#$PARSED_ID")" "$(_color_cmd "$PARSED_CMD")"
+
+      if [ -n "$PARSED_CWD" ]; then
+        cwd_display=$(_shorten_path "$PARSED_CWD")
+      fi
+
+      ports=$(_get_listen_ports "$PARSED_PID")
+
+      if [ -n "$PARSED_STARTED" ]; then
+        uptime=$(_format_duration "$(($(date +%s) - PARSED_STARTED))")
+      fi
+
+      _print_meta "$cwd_display" "$ports" "$uptime" "$PARSED_PID"
+    fi
+  done < "$BG_PIDS_FILE"
 }
 
 _kill() {
-  local id=$1
-  local pid=$(awk -v id="$id" '$1 == id {print $2}' "$BG_PIDS_FILE")
-  
-  if [ -z "$pid" ]; then
+  local id=$1 pid
+
+  _lookup_id "$id" || {
     echo
-    _color red "  ✗ Process [ $id ] not found"
+    _colorln red "Process #$id not found"
     echo
+    return 1
+  }
+
+  pid=$LOOKUP_PID
+
+  if kill -0 "$pid" 2>/dev/null; then
+    _kill_tree "$pid"
+    sleep 0.1
+    if kill -0 "$pid" 2>/dev/null; then
+      echo
+      _colorln red "Failed to stop #$id"
+      echo
+      return 1
+    fi
+  fi
+
+  echo
+  _colorln green "Stopped #$id"
+  printf '  %s\n' "$(_dim "pid $pid")"
+  _remove_record "$id"
+  echo
+}
+
+_log() {
+  local id=$1 follow=${2:--f}
+  local log_file
+
+  _lookup_id "$id" || {
+    echo "Process #$id not found" >&2
+    return 1
+  }
+
+  log_file=$(_log_file_for "$id")
+  if [ ! -f "$log_file" ]; then
+    echo "No log file for process #$id" >&2
     return 1
   fi
-  
-  if kill "$pid" 2>/dev/null; then
-    echo
-    _color green "  ✓ Terminated process"
-    _color bold "  [ $id ]  PID: $pid"
-    sed -i.bak "/^$id /d" "$BG_PIDS_FILE"
-    rm -f "$BG_PIDS_FILE.bak"
-    echo
+
+  if [ "$follow" = "--no-follow" ] || [ "$follow" = "-n" ]; then
+    tail -n "${3:-50}" "$log_file"
   else
-    echo
-    _color red "  ✗ Failed to terminate process [ $id ]"
-    echo
-    return 1
+    tail -f "$log_file"
   fi
 }
 
-_cleanup() {
-  sed -i.bak '/^[0-9]/!d' "$BG_PIDS_FILE" 2>/dev/null
-  rm -f "$BG_PIDS_FILE.bak"
+_open() {
+  local id=$1 ports port url opener
+
+  _lookup_id "$id" || {
+    echo
+    _colorln red "Process #$id not found"
+    echo
+    return 1
+  }
+
+  if ! kill -0 "$LOOKUP_PID" 2>/dev/null; then
+    echo
+    _colorln red "Process #$id is not running"
+    echo
+    return 1
+  fi
+
+  ports=$(_get_listen_ports "$LOOKUP_PID")
+  if [ -z "$ports" ]; then
+    echo
+    _colorln yellow "Process #$id has no listening port"
+    echo
+    return 1
+  fi
+
+  opener=$(command -v xdg-open || command -v open || true)
+  if [ -z "$opener" ]; then
+    echo
+    _colorln red "  ✗ No URL opener found (xdg-open / open)"
+    echo
+    return 1
+  fi
+
+  echo
+  for port in $ports; do
+    url="http://localhost:$port"
+    "$opener" "$url" >/dev/null 2>&1 &
+    printf '  %s Opened %s\n' "$(_color green "↗")" "$(_color_url "$url")"
+  done
+  echo
+}
+
+_cd() {
+  local id=$1
+
+  _lookup_id "$id" || {
+    echo "Process #$id not found" >&2
+    return 1
+  }
+
+  _parse_record "$LOOKUP_ID" "$LOOKUP_PID" "$LOOKUP_REST"
+
+  if [ -z "$PARSED_CWD" ]; then
+    echo "No working directory for process #$id" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$PARSED_CWD"
+}
+
+_restart() {
+  local id=$1 cwd cmd started_at log_file pid
+
+  _lookup_id "$id" || {
+    echo
+    _colorln red "Process #$id not found"
+    echo
+    return 1
+  }
+
+  _parse_record "$LOOKUP_ID" "$LOOKUP_PID" "$LOOKUP_REST"
+  cwd=$PARSED_CWD
+  cmd=$PARSED_CMD
+
+  if [ -z "$cmd" ]; then
+    echo
+    _colorln red "No command stored for process #$id"
+    echo
+    return 1
+  fi
+
+  if [ -z "$cwd" ] || [ ! -d "$cwd" ]; then
+    echo
+    _colorln red "Working directory missing for process #$id"
+    echo
+    return 1
+  fi
+
+  kill -0 "$LOOKUP_PID" 2>/dev/null && _kill_tree "$LOOKUP_PID"
+
+  log_file=$(_log_file_for "$id")
+  : > "$log_file"
+  started_at=$(date +%s)
+
+  cd "$cwd" || {
+    echo
+    _colorln red "  ✗ Could not cd to $cwd"
+    echo
+    return 1
+  }
+
+  nohup bash -lc "$cmd" > "$log_file" 2>&1 &
+  pid=$!
+
+  _remove_record "$id"
+  printf '%s %s %s %s|||%s\n' "$id" "$pid" "$started_at" "$cwd" "$cmd" >> "$BG_PIDS_FILE"
+
+  echo
+  _colorln green "Restarted #$id"
+  printf '  %s\n' "$(_color_cmd "$cmd")"
+  printf '  %s\n' "$(_color blue "$(_shorten_path "$cwd")")"
+  printf '  %s\n' "$(_dim "$log_file")"
+  echo
+}
+
+_kill_all() {
+  local count=0 id pid rest
+
+  if [ ! -s "$BG_PIDS_FILE" ]; then
+    echo
+    _colorln yellow "No processes to stop"
+    echo
+    return
+  fi
+
+  echo
+  while read -r id pid rest; do
+    if kill -0 "$pid" 2>/dev/null; then
+      _kill_tree "$pid"
+      printf '  stopped %s\n' "$(_color magenta "#$id")"
+      ((count++))
+    fi
+  done < "$BG_PIDS_FILE"
+
+  : > "$BG_PIDS_FILE"
+
+  if [ "$count" -eq 0 ]; then
+    _colorln yellow "No running processes"
+  else
+    _colorln green "Stopped $count process(es)"
+  fi
+  echo
 }
 
 _help() {
-  _header "Background Process Manager"
+  _title "Background Process Manager"
+  echo
   cat << 'EOF'
-  Usage: bg [COMMAND] [OPTIONS]
+Usage: bgr [COMMAND] [ARGS]
 
-  Commands:
-    bg <command>        Start a command in background
-    bg                  List all active processes
-    bg <id>             Kill process by ID
-    bg help             Show this help menu
+Commands:
+  bgr <command>           Start a command in background
+  bgr                     List active processes
+  bgr list                List active processes
+  bgr <id>                Kill process by ID
+  bgr log <id>            Follow process log (tail -f)
+  bgr log <id> -n [lines] Show last N log lines (default 50)
+  bgr open <id>           Open listening port URL in browser
+  bgr cd <id>             Print process working directory
+  bgr restart <id>        Restart a tracked process
+  bgr kill-all            Stop all tracked processes
+  bgr help                Show this help menu
 
-  Examples:
-    bg bun run dev
-    bg brave-browser http://localhost:3000
-    bg 1                (kill process #1)
+Examples:
+  bgr bun run dev
+  bgr log 2
+  bgr open 2
+  cd "$(bgr cd 2)"
+  bgr restart 2
+  bgr 2                   (kill process #2)
 
-  Process locations:
+Data:
 EOF
-  _color gray "    Processes: $BG_PIDS_FILE"
-  _color gray "    Logs: $BG_LOG_DIR"
+  _colorln gray "  $BG_PIDS_FILE"
+  _colorln gray "  $BG_LOG_DIR"
   echo
 }
 
 _init
 
-case "${1}" in
+case "${1:-}" in
   help|--help|-h)
     _help
     ;;
   ""|list)
-    _cleanup
+    _prune_dead
     _list
     ;;
+  log)
+    if [ -z "${2:-}" ]; then
+      echo "Usage: bgr log <id> [-n [lines]]" >&2
+      exit 1
+    fi
+    if [ "${3:-}" = "-n" ]; then
+      _log "$2" --no-follow "${4:-50}"
+    else
+      _log "$2"
+    fi
+    ;;
+  open)
+    [ -n "${2:-}" ] || { echo "Usage: bgr open <id>" >&2; exit 1; }
+    _open "$2"
+    ;;
+  cd)
+    [ -n "${2:-}" ] || { echo "Usage: bgr cd <id>" >&2; exit 1; }
+    _cd "$2"
+    ;;
+  restart)
+    [ -n "${2:-}" ] || { echo "Usage: bgr restart <id>" >&2; exit 1; }
+    _restart "$2"
+    ;;
+  kill-all|killall)
+    _kill_all
+    ;;
   *)
-    _start "$@"
+    if [[ "${1}" =~ ^[0-9]+$ ]]; then
+      _kill "$1"
+    else
+      _start "$@"
+    fi
     ;;
 esac

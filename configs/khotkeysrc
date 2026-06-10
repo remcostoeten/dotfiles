@@ -1,0 +1,52 @@
+[Data]
+DataCount=2
+
+[Data_1]
+Comment=Open Brave Browser
+Name=Open Brave
+Type=SIMPLE_ACTION_DATA
+DataCount=1
+
+[Data_1_1]
+Type=COMMAND
+DataCount=1
+
+[Data_1_1_1]
+Type=COMMAND_URL
+Url=/usr/bin/brave
+
+[Data_1_Conditions]
+ConditionsCount=0
+
+[Data_1_Triggers]
+TriggersCount=1
+
+[Data_1_Triggers_0]
+Key=Alt+B
+Type=SHORTCUT
+Uuid={8ac49920-9d33-4818-aa58-2a450d57252d}
+
+[Data_2]
+Comment=Open Ghostty Terminal
+Name=Open Ghostty
+Type=SIMPLE_ACTION_DATA
+DataCount=1
+
+[Data_2_1]
+Type=COMMAND
+DataCount=1
+
+[Data_2_1_1]
+Type=COMMAND_URL
+Url=/usr/bin/ghostty
+
+[Data_2_Conditions]
+ConditionsCount=0
+
+[Data_2_Triggers]
+TriggersCount=1
+
+[Data_2_Triggers_0]
+Key=Alt+T
+Type=SHORTCUT
+Uuid={61f38d63-485e-4529-af2c-ef0674bdcdbc}

@@ -1,17 +1,17 @@
 {
   "layer": "top",
   "position": "top",
-  "height": 34,
-  "margin-top": 8,
-  "margin-bottom": 8,
+  "height": 32,
+  "margin-top": 0,
+  "margin-bottom": 0,
   "margin-left": 12,
   "margin-right": 12,
-  "spacing": 8,
+  "spacing": 4,
   "exclusive": true,
   "gtk-layer-shell": true,
   "modules-left": ["hyprland/workspaces", "hyprland/window"],
   "modules-center": ["clock"],
-  "modules-right": ["cpu", "memory", "disk", "pulseaudio", "network", "custom/bluetooth-panel", "tray", "custom/power"],
+  "modules-right": ["cpu", "memory", "pulseaudio", "network", "custom/bluetooth-panel", "tray", "custom/power"],
 
   "hyprland/workspaces": {
     "disable-scroll": false,
@@ -21,64 +21,52 @@
     "format-window-separator": "  ",
     "window-rewrite-default": "{title}",
     "window-rewrite": {
-      "class<ghostty>": "Ghostty",
-      "class<Alacritty>": "Alacritty",
-      "class<firefox>": "Firefox",
-      "class<brave-browser>": "Brave",
-      "class<code>": "Code",
-      "class<Cursor>": "Cursor",
-      "class<discord>": "Discord",
-      "class<spotify>": "Spotify"
+      "class<ghostty>": "",
+      "class<Alacritty>": "",
+      "class<firefox>": "󰈹",
+      "class<brave-browser>": "󰆍",
+      "class<code>": "󰨞",
+      "class<Cursor>": "󰨞",
+      "class<discord>": "󰙯",
+      "class<spotify>": "󰓇"
     }
   },
 
   "hyprland/window": {
     "format": "{}",
-    "max-length": 64,
+    "max-length": 48,
     "separate-outputs": true
   },
 
   "clock": {
     "timezone": "Europe/Amsterdam",
     "format": "{:%H:%M}",
-    "format-alt": "{:%a %d %b  %H:%M}",
-    "tooltip-format": "<big>{:%A, %d %B %Y}</big>"
+    "format-alt": "{:%a %d %b  %H:%M}"
   },
 
   "cpu": {
     "interval": 3,
-    "format": "  {usage}%",
-    "tooltip": true
+    "format": " {usage}%"
   },
 
   "memory": {
     "interval": 5,
-    "format": "  {percentage}%",
-    "tooltip-format": "{used:0.1f}G used / {total:0.1f}G"
+    "format": " {percentage}%"
   },
 
-  "disk": {
-    "path": "/",
-    "interval": 30,
-    "format": "󰋊  {percentage_used}%",
-    "tooltip-format": "{used} used / {total}"
+  "pulseaudio": {
+    "format": " {volume}%",
+    "format-muted": " Muted",
+    "scroll-step": 5,
+    "on-click": "pavucontrol-qt"
   },
 
   "network": {
     "interval": 5,
-    "format-wifi": "  {signalStrength}%",
-    "format-ethernet": "󰈀  {ipaddr}",
-    "format-linked": "󰈀  {ifname}",
-    "format-disconnected": "󰤮  Offline",
-    "tooltip-format": "{ifname} {ipaddr}/{cidr}",
+    "format-wifi": " {signalStrength}%",
+    "format-ethernet": " Connected",
+    "format-disconnected": " Offline",
     "on-click": "nm-connection-editor"
-  },
-
-  "pulseaudio": {
-    "format": "󰕾  {volume}%",
-    "format-muted": "󰖁  Muted",
-    "scroll-step": 5,
-    "on-click": "pavucontrol"
   },
 
   "custom/bluetooth-panel": {
@@ -92,13 +80,13 @@
   },
 
   "custom/power": {
-    "format": "⏻",
+    "format": "",
     "tooltip": false,
     "on-click": "~/.config/dotfiles/bin/powermenu"
   },
 
   "tray": {
-    "spacing": 8,
-    "icon-size": 15
+    "spacing": 6,
+    "icon-size": 14
   }
 }

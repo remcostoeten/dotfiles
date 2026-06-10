@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec bun run "$HOME/.config/dotfiles/scripts/bg-remove/src/cli.ts" "$@"

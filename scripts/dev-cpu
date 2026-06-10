@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Runs `bun run dev` with a CPU cap to prevent thermal throttling.
+# Usage: dev-cpu [cpu_limit_%]  — default is 200 (2 cores worth)
+
+LIMIT="${1:-200}"
+
+echo "Starting bun run dev (CPU capped at ${LIMIT}%)"
+exec cpulimit -l "$LIMIT" -- bun run dev

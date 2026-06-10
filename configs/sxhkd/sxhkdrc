@@ -1,0 +1,35 @@
+# Open Brave
+alt + b
+    /usr/bin/brave
+
+# Open Ghostty
+alt + t
+    /usr/bin/ghostty
+
+# ── Window management (delegated to KWin via kglobalaccel) ──────────
+# sxhkd only runs commands, so the actual tiling/moving is done by
+# invoking KWin's own actions by name.
+
+# Half-tile the focused window
+alt + Left
+    qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Window Quick Tile Left"
+alt + Right
+    qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Window Quick Tile Right"
+alt + Up
+    qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Window Quick Tile Top"
+alt + Down
+    qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Window Quick Tile Bottom"
+
+# Fullscreen / minimize
+alt + shift + Up
+    qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Window Fullscreen"
+alt + shift + Down
+    qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Window Minimize"
+
+# Switch to workspace 1..3
+alt + {1,2,3}
+    qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Switch to Desktop {1,2,3}"
+
+# Move focused window to workspace 1..3
+alt + shift + {1,2,3}
+    qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Window to Desktop {1,2,3}"

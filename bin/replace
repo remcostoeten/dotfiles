@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Replace file contents from clipboard, with history.
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+DOTFILES_ROOT="$(dirname "$SCRIPT_DIR")"
+
+if command -v bun >/dev/null 2>&1; then
+    exec bun "$DOTFILES_ROOT/scripts/replace.ts" "$@"
+fi
+
+if command -v tsx >/dev/null 2>&1; then
+    exec tsx "$DOTFILES_ROOT/scripts/replace.ts" "$@"
+fi
+
+printf 'replace requires bun or tsx to run scripts/replace.ts\n' >&2
+exit 127

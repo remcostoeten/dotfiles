@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+DOTFILES_ROOT="$(dirname "$SCRIPT_DIR")"
+
+source_path="$DOTFILES_ROOT/configs/keyd/default.conf"
+
+usage() {
+    cat <<EOF
+Usage: keymaps [--repo|--live|--check]
+
+Options:
+  --repo   Show the keyd config stored in dotfiles (default)
+  --live   Show the active system keyd config from /etc/keyd/default.conf
+  --check  Validate the live keyd config
+EOF
+}
+
+case "${1:-}" in
+    ""|--repo)
+        source_path="$DOTFILES_ROOT/configs/keyd/default.conf"
+        ;;
+    --live)
+        source_path="/etc/keyd/default.conf"
+        ;;
+    --check)
+        exec sudo keyd check /etc/keyd/default.conf
+        ;;
+    -h|--help)
+        usage
+        exit 0
+        ;;
+    *)
+        usage >&2
+        exit 1
+        ;;
+esac
+
+if [[ ! -f "$source_path" ]]; then
+    printf 'No keyd config found at %s\n' "$source_path" >&2
+    exit 1
+fi
+
+format_token() {
+    case "$1" in
+        capslock) printf 'CapsLock' ;;
+        esc|escape) printf 'Esc' ;;
+        control) printf 'Ctrl' ;;
+        leftcontrol) printf 'Left Ctrl' ;;
+        rightcontrol) printf 'Right Ctrl' ;;
+        shift) printf 'Shift' ;;
+        leftshift) printf 'Left Shift' ;;
+        rightshift) printf 'Right Shift' ;;
+        meta) printf 'Meta' ;;
+        alt|leftalt) printf 'Alt' ;;
+        rightalt|altgr) printf 'AltGr' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+format_combo() {
+    local combo="$1"
+    local IFS='+'
+    local parts=($combo)
+    local formatted=""
+
+    for part in "${parts[@]}"; do
+        if [[ -n "$formatted" ]]; then
+            formatted+=" + "
+        fi
+        formatted+="$(format_token "$part")"
+    done
+
+    printf '%s' "$formatted"
+}
+
+printf 'Source: %s\n\n' "$source_path"
+printf 'Mappings:\n'
+
+awk '
+    /^\s*($|#)/ { next }
+    /^\[/ {
+        section=$0
+        gsub(/^\[|\]$/, "", section)
+        next
+    }
+    /=/ && section != "ids" {
+        lhs=$1
+        rhs=$0
+        sub(/^[^=]*=/, "", rhs)
+        gsub(/^[ \t]+|[ \t]+$/, "", lhs)
+        gsub(/^[ \t]+|[ \t]+$/, "", rhs)
+        print section "|" lhs "|" rhs
+    }
+' "$source_path" | while IFS='|' read -r section key action; do
+    if [[ "$section" == "main" ]]; then
+        combo="$key"
+    else
+        combo="$section+$key"
+    fi
+
+    printf '  %-28s -> %s\n' "$(format_combo "$combo")" "$(format_combo "$action")"
+done
