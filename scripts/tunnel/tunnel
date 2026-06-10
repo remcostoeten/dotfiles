@@ -1,0 +1,466 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+is_macos() {
+  [[ "$(uname -s)" == "Darwin" ]]
+}
+
+detect_root() {
+  local dir="$PWD"
+  while [[ "$dir" != "/" ]]; do
+    if [[ -d "$dir/.git" ]]; then
+      echo "$dir"
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  echo "$PWD"
+  return 1
+}
+
+guess_port() {
+  local root="$1"
+
+  if [[ -f "$root/package.json" ]] && command -v python3 &>/dev/null; then
+    local port
+    port=$(python3 - "$root/package.json" <<'PY'
+import json
+import re
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path) as f:
+        scripts = " ".join(json.load(f).get("scripts", {}).values())
+except OSError:
+    sys.exit(0)
+
+for name in ("dev", "preview", "start", "serve"):
+    if re.search(rf"(^|\s){re.escape(name)}(\s|$)", scripts, re.I):
+        match = re.search(r"\b\d{4,5}\b", scripts)
+        if match:
+            print(match.group(0))
+            break
+PY
+)
+    [[ -n "$port" ]] && { echo "$port"; return 0; }
+  fi
+
+  for p in 5173 3000 4321 8000 8080 1420 5174 3001 5000 8787 8001; do
+    if is_macos || ! command -v ss &>/dev/null; then
+      if command -v lsof &>/dev/null; then
+        lsof -nP -iTCP:"$p" -sTCP:LISTEN &>/dev/null && { echo "$p"; return 0; }
+      fi
+    elif ss -tln "sport = :$p" 2>/dev/null | grep -q ":$p"; then
+      echo "$p"
+      return 0
+    fi
+  done
+
+  echo ""
+}
+
+has_clipboard() {
+  command -v pbcopy &>/dev/null \
+    || command -v wl-copy &>/dev/null \
+    || command -v xclip &>/dev/null \
+    || command -v xsel &>/dev/null
+}
+
+has_browser_opener() {
+  if is_macos; then
+    command -v open &>/dev/null
+  else
+    command -v xdg-open &>/dev/null || command -v open &>/dev/null
+  fi
+}
+
+linux_deb_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64) echo "amd64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *) echo "" ;;
+  esac
+}
+
+linux_rpm_arch() {
+  case "$(uname -m)" in
+    x86_64) echo "x86_64" ;;
+    aarch64) echo "aarch64" ;;
+    *) echo "" ;;
+  esac
+}
+
+print_manual_install() {
+  echo -e "${RED}✗ Could not auto-install dependencies${NC}"
+  echo ""
+
+  if is_macos; then
+    echo -e "  ${CYAN}macOS:${NC}  brew install cloudflared"
+  elif [[ -f /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    case "${ID:-}" in
+      arch|endeavouros|manjaro)
+        echo -e "  ${CYAN}Arch:${NC}  sudo pacman -S cloudflared xdg-utils"
+        echo -e "  ${CYAN}AUR:${NC}   yay -S cloudflared-bin  (if not in main repos)"
+        ;;
+      ubuntu|debian|pop|linuxmint)
+        echo -e "  ${CYAN}Debian/Ubuntu:${NC}"
+        echo -e "    curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb"
+        echo -e "    sudo dpkg -i /tmp/cloudflared.deb"
+        echo -e "    sudo apt install xdg-utils"
+        ;;
+      fedora|rhel|centos)
+        echo -e "  ${CYAN}Fedora/RHEL:${NC}"
+        echo -e "    curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-x86_64.rpm -o /tmp/cloudflared.rpm"
+        echo -e "    sudo dnf install /tmp/cloudflared.rpm"
+        echo -e "    sudo dnf install xdg-utils"
+        ;;
+      *)
+        echo -e "  ${YELLOW}Unknown distro. Install cloudflared from:${NC}"
+        echo -e "    https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+        ;;
+    esac
+  else
+    echo -e "  ${YELLOW}Install cloudflared from:${NC}"
+    echo -e "    https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+  fi
+
+  echo ""
+  echo -e "${YELLOW}Install manually and re-run the script.${NC}"
+}
+
+install_cloudflared() {
+  echo -e "${YELLOW}⟳ cloudflared not found — installing...${NC}"
+
+  if is_macos; then
+    if ! command -v brew &>/dev/null; then
+      echo -e "${RED}✗ Homebrew not found. Install from https://brew.sh${NC}"
+      return 1
+    fi
+    brew install cloudflared
+    return 0
+  fi
+
+  if [[ ! -f /etc/os-release ]]; then
+    return 1
+  fi
+
+  # shellcheck disable=SC1091
+  . /etc/os-release
+
+  case "${ID:-}" in
+    arch|endeavouros|manjaro)
+      if pacman -Si cloudflared &>/dev/null; then
+        sudo pacman -S --needed --noconfirm cloudflared
+      elif command -v yay &>/dev/null; then
+        yay -S --needed --noconfirm cloudflared-bin
+      elif command -v paru &>/dev/null; then
+        paru -S --needed --noconfirm cloudflared-bin
+      else
+        return 1
+      fi
+      ;;
+    ubuntu|debian|pop|linuxmint)
+      local deb_arch deb tmp
+      deb_arch=$(linux_deb_arch)
+      case "$deb_arch" in
+        amd64) deb="cloudflared-linux-amd64.deb" ;;
+        arm64) deb="cloudflared-linux-arm64.deb" ;;
+        *) return 1 ;;
+      esac
+      if ! command -v curl &>/dev/null; then
+        echo -e "${RED}✗ curl required to download cloudflared${NC}"
+        return 1
+      fi
+      tmp=$(mktemp "${TMPDIR:-/tmp}/cloudflared.XXXXXX")
+      curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/$deb" -o "$tmp"
+      sudo dpkg -i "$tmp" || sudo apt-get install -f -y
+      rm -f "$tmp"
+      ;;
+    fedora|rhel|centos)
+      local rpm_arch rpm tmp
+      rpm_arch=$(linux_rpm_arch)
+      case "$rpm_arch" in
+        x86_64) rpm="cloudflared-linux-x86_64.rpm" ;;
+        aarch64) rpm="cloudflared-linux-aarch64.rpm" ;;
+        *) return 1 ;;
+      esac
+      if ! command -v curl &>/dev/null; then
+        echo -e "${RED}✗ curl required to download cloudflared${NC}"
+        return 1
+      fi
+      tmp=$(mktemp "${TMPDIR:-/tmp}/cloudflared.XXXXXX")
+      curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/$rpm" -o "$tmp"
+      if command -v dnf &>/dev/null; then
+        sudo dnf install -y "$tmp"
+      else
+        sudo rpm -i "$tmp"
+      fi
+      rm -f "$tmp"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+install_xdg_utils() {
+  echo -e "${YELLOW}⟳ xdg-open not found — installing xdg-utils...${NC}"
+
+  if [[ ! -f /etc/os-release ]]; then
+    return 1
+  fi
+
+  # shellcheck disable=SC1091
+  . /etc/os-release
+
+  case "${ID:-}" in
+    arch|endeavouros|manjaro)
+      sudo pacman -S --needed --noconfirm xdg-utils
+      ;;
+    ubuntu|debian|pop|linuxmint)
+      sudo apt-get install -y xdg-utils
+      ;;
+    fedora|rhel|centos)
+      sudo dnf install -y xdg-utils
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+check_deps() {
+  if ! command -v cloudflared &>/dev/null; then
+    install_cloudflared || true
+    if ! command -v cloudflared &>/dev/null; then
+      print_manual_install
+      exit 1
+    fi
+    echo -e "${GREEN}✓ cloudflared installed${NC}"
+  fi
+
+  if ! has_browser_opener; then
+    if is_macos; then
+      echo -e "${RED}✗ open command missing (unexpected on macOS)${NC}"
+      exit 1
+    fi
+    install_xdg_utils || true
+    if ! has_browser_opener; then
+      print_manual_install
+      exit 1
+    fi
+    echo -e "${GREEN}✓ xdg-utils installed${NC}"
+  fi
+
+  if ! has_clipboard; then
+    echo -e "${YELLOW}⚠ No clipboard tool found. Install one:${NC}"
+    if is_macos; then
+      echo -e "  ${CYAN}pbcopy${NC} is built into macOS and should already be available."
+    elif [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+      echo -e "  ${CYAN}sudo pacman -S wl-clipboard${NC}  ${YELLOW}|${NC}  ${CYAN}sudo apt install wl-clipboard${NC}"
+    else
+      echo -e "  ${CYAN}sudo pacman -S xclip${NC}  ${YELLOW}|${NC}  ${CYAN}sudo apt install xclip${NC}"
+    fi
+    echo ""
+  fi
+}
+
+read_key() {
+  local key=""
+  # macOS ships Bash 3.2, which only accepts integer read timeouts.
+  if [[ "${BASH_VERSINFO[0]:-0}" -lt 4 ]]; then
+    read -rsn1 -t 1 key 2>/dev/null || true
+  else
+    read -rsn1 -t 0.1 key 2>/dev/null || true
+  fi
+  [[ -n "$key" ]] && printf '%s' "$key"
+}
+
+check_deps
+
+ROOT=$(detect_root)
+if [[ -z "$ROOT" || ! -d "$ROOT" ]]; then
+  echo -e "${RED}✗ Could not find project root (no .git directory found)${NC}" >&2
+  exit 1
+fi
+
+PROJECT_NAME=$(basename "$ROOT")
+PORT=${1:-$(guess_port "$ROOT")}
+
+if [[ -z "$PORT" ]]; then
+  echo -e "${RED}╭──────────────────────────────────────────╮${NC}" >&2
+  echo -e "${RED}│  ✗ Could not auto-detect port             │${NC}" >&2
+  echo -e "${RED}╰──────────────────────────────────────────╯${NC}" >&2
+  echo "" >&2
+  echo -e "  ${YELLOW}Usage:${NC} tunnel ${GREEN}<port>${NC}" >&2
+  echo "" >&2
+  echo -e "  ${BOLD}Common ports:${NC}" >&2
+  echo -e "    ${CYAN}5173${NC}  Vite / React / Svelte / Vue" >&2
+  echo -e "    ${CYAN}3000${NC}  Next.js / Nuxt / Gatsby" >&2
+  echo -e "    ${CYAN}4321${NC}  Astro" >&2
+  echo -e "    ${CYAN}8000${NC}  Python / Laravel" >&2
+  echo -e "    ${CYAN}8080${NC}  HTTP alternative" >&2
+  echo -e "    ${CYAN}8001${NC}  Docker / PHP" >&2
+  echo -e "    ${CYAN}1420${NC}  Tauri" >&2
+  echo "" >&2
+  echo -e "  ${YELLOW}Examples:${NC}" >&2
+  echo -e "    ${GREEN}tunnel 3000${NC}" >&2
+  echo -e "    ${GREEN}tunnel 5173${NC}" >&2
+  echo "" >&2
+  echo -e "  ${YELLOW}Tip:${NC} Run a dev server first, then tunnel." >&2
+  exit 1
+fi
+
+CF_PID=""
+OUTPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/cloudflared_out.XXXXXX")
+URL_FILE="${TMPDIR:-/tmp}/tunnel_url_$$.txt"
+last_line=0
+
+cleanup() {
+  kill "$CF_PID" 2>/dev/null || true
+  echo -e "\n${CYAN}╰─ tunnel stopped${NC}"
+  rm -f "$OUTPUT_FILE" "$URL_FILE"
+  exit 0
+}
+trap cleanup EXIT INT TERM
+
+start_tunnel() {
+  kill "$CF_PID" 2>/dev/null || true
+  wait "$CF_PID" 2>/dev/null || true
+  rm -f "$URL_FILE"
+  last_line=0
+  : > "$OUTPUT_FILE"
+  cloudflared tunnel --url "http://localhost:$PORT" > "$OUTPUT_FILE" 2>&1 &
+  CF_PID=$!
+}
+
+copy_url() {
+  local url="${1:-}"
+  [[ -z "$url" ]] && return 1
+  if command -v pbcopy &>/dev/null; then
+    printf '%s' "$url" | pbcopy
+  elif command -v wl-copy &>/dev/null; then
+    wl-copy "$url"
+  elif command -v xclip &>/dev/null; then
+    printf '%s' "$url" | xclip -selection clipboard
+  elif command -v xsel &>/dev/null; then
+    printf '%s' "$url" | xsel -ib
+  else
+    return 1
+  fi
+}
+
+open_url() {
+  local url="${1:-}"
+  [[ -z "$url" ]] && return 1
+  if is_macos && command -v open &>/dev/null; then
+    open "$url"
+  elif command -v xdg-open &>/dev/null; then
+    xdg-open "$url"
+  elif command -v open &>/dev/null; then
+    open "$url"
+  else
+    return 1
+  fi
+}
+
+clipboard_suggest() {
+  if is_macos; then
+    echo -e "  ${CYAN}macOS:${NC} pbcopy should be available by default"
+  elif [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+    echo -e "  ${CYAN}Install:${NC} sudo pacman -S wl-clipboard  |  sudo apt install wl-clipboard"
+  else
+    echo -e "  ${CYAN}Install:${NC} sudo pacman -S xclip          |  sudo apt install xclip"
+  fi
+}
+
+echo -e "${CYAN}╭──────────────────────────────────────────╮${NC}"
+echo -e "${CYAN}│  ${GREEN}Tunnel${NC} - ${YELLOW}$PROJECT_NAME${NC}                    ${CYAN}│${NC}"
+echo -e "${CYAN}╰──────────────────────────────────────────╯${NC}"
+echo ""
+
+start_tunnel
+
+while true; do
+  if [[ -n "$CF_PID" ]] && ! kill -0 "$CF_PID" 2>/dev/null; then
+    wait "$CF_PID" 2>/dev/null || true
+    echo -e "\n${RED}✗ cloudflared exited unexpectedly${NC}"
+  fi
+
+  total_lines=$(wc -l < "$OUTPUT_FILE" 2>/dev/null | tr -d '[:space:]')
+  total_lines=${total_lines:-0}
+  if (( total_lines > last_line )); then
+    while IFS= read -r line; do
+      echo -e "\r\033[K$line"
+      if [[ ! -f "$URL_FILE" && $line =~ https://[a-z0-9-]+\.trycloudflare\.com ]]; then
+        url="${BASH_REMATCH[0]}"
+        echo "$url" > "$URL_FILE"
+        echo ""
+        echo -e "${GREEN}╭──────────────────────────────────────────╮${NC}"
+        echo -e "${GREEN}│  ✅ Tunnel ready                         │${NC}"
+        echo -e "${GREEN}│  ${CYAN}$url${NC}"
+        echo -e "${GREEN}╰──────────────────────────────────────────╯${NC}"
+        echo ""
+      fi
+    done < <(sed -n "$((last_line + 1)),\$p" "$OUTPUT_FILE" 2>/dev/null)
+    last_line=$total_lines
+  fi
+
+  if [[ -f "$URL_FILE" ]]; then
+    url=$(<"$URL_FILE")
+    echo -ne "\r\033[K${GREEN}●${NC} ${CYAN}$url${NC}  ${BOLD}q${NC}uit ${BOLD}r${NC}estart ${BOLD}c${NC}opy ${BOLD}o${NC}pen "
+  else
+    echo -ne "\r\033[K${YELLOW}◌${NC} Starting tunnel...  ${BOLD}q${NC}uit "
+  fi
+
+  key=$(read_key)
+  if [[ -n "$key" ]]; then
+    echo ""
+    case "$key" in
+      q) kill "$CF_PID" 2>/dev/null || true; cleanup ;;
+      r)
+        echo -e "${YELLOW}⟳ Restarting tunnel...${NC}"
+        start_tunnel
+        ;;
+      c)
+        if [[ -f "$URL_FILE" ]]; then
+          url=$(<"$URL_FILE")
+          if copy_url "$url"; then
+            echo -e "${GREEN}✓ Copied to clipboard${NC}"
+          else
+            echo -e "${RED}✗ No clipboard tool${NC}"
+            clipboard_suggest
+          fi
+        else
+          echo -e "${YELLOW}⏳ Waiting for URL...${NC}"
+        fi
+        ;;
+      o)
+        if [[ -f "$URL_FILE" ]]; then
+          url=$(<"$URL_FILE")
+          if open_url "$url"; then
+            echo -e "${GREEN}✓ Opening in browser...${NC}"
+          else
+            if is_macos; then
+              echo -e "${RED}✗ Could not open browser (missing open)${NC}"
+            else
+              echo -e "${RED}✗ No browser opener found (install xdg-utils)${NC}"
+            fi
+          fi
+        else
+          echo -e "${YELLOW}⏳ Waiting for URL...${NC}"
+        fi
+        ;;
+    esac
+  fi
+done
