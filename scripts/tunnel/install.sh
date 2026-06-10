@@ -12,6 +12,7 @@ GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 usage() {
@@ -27,7 +28,8 @@ Environment:
   INSTALL_DIR   Install location (default: ~/.local/bin)
   BRANCH        Git branch to download from (default: master)
   REPO          GitHub repo (default: remcostoeten/dotfiles)
-  TUNNEL_YES    Set to 1 to auto-accept shell config writes (non-interactive)
+  TUNNEL_YES    Force-write shell config without prompting
+  TUNNEL_NO     Skip writing shell config (even for curl | bash)
 EOF
 }
 
@@ -99,14 +101,23 @@ path_line_for_shell() {
   esac
 }
 
+is_interactive() {
+  [[ -t 0 ]]
+}
+
 prompt_yes() {
   local prompt="$1"
-  if [[ "${TUNNEL_YES:-}" == "1" ]]; then
-    return 0
+  local default_non_interactive="${2:-1}"
+
+  [[ "${TUNNEL_NO:-}" == "1" ]] && return 1
+  [[ "${TUNNEL_YES:-}" == "1" ]] && return 0
+
+  # curl | bash has no TTY — default to yes for install, no for uninstall
+  if ! is_interactive; then
+    [[ "$default_non_interactive" == "1" ]]
+    return
   fi
-  if [[ ! -t 0 ]]; then
-    return 1
-  fi
+
   local answer=""
   read -r -p "$prompt" answer
   case "${answer:-Y}" in
@@ -161,10 +172,18 @@ ensure_path_in_shell() {
   echo -e "  Line:   ${CYAN}$(path_line_for_shell)${NC}"
   echo ""
 
-  if prompt_yes "Add this to $config? [Y/n] "; then
+  if ! is_interactive; then
+    echo -e "${CYAN}⟳ Non-interactive install — updating shell config...${NC}"
+  fi
+
+  if prompt_yes "Add this to $config? [Y/n] " 1; then
     write_path_to_config "$config"
     echo ""
-    echo -e "  Run: ${CYAN}source $config${NC}  or open a new terminal"
+    if is_interactive; then
+      echo -e "  Run: ${CYAN}source $config${NC}  or open a new terminal"
+    else
+      echo -e "  Open a new terminal, or run: ${CYAN}source $config${NC}"
+    fi
   else
     echo -e "${YELLOW}Skipped.${NC} Add manually when ready:"
     echo -e "  ${CYAN}$(path_line_for_shell)${NC}"
@@ -251,7 +270,7 @@ uninstall_tunnel() {
   config=$(detect_shell_config)
   if [[ -f "$config" ]] && config_has_marker "$config"; then
     echo ""
-    if prompt_yes "Remove tunnel PATH entry from $config? [y/N] "; then
+    if prompt_yes "Remove tunnel PATH entry from $config? [y/N] " 0; then
       local tmp
       tmp=$(mktemp "${TMPDIR:-/tmp}/tunnel-config.XXXXXX")
       awk -v marker="$MARKER" '
