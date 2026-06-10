@@ -165,11 +165,35 @@ ensure_path_in_shell() {
     write_path_to_config "$config"
     echo ""
     echo -e "  Run: ${CYAN}source $config${NC}  or open a new terminal"
-    echo -e "  Then: ${CYAN}$BIN_NAME${NC}  or  ${CYAN}$BIN_NAME 3000${NC}"
   else
     echo -e "${YELLOW}Skipped.${NC} Add manually when ready:"
     echo -e "  ${CYAN}$(path_line_for_shell)${NC}"
   fi
+}
+
+print_next_steps() {
+  local config
+  config=$(detect_shell_config)
+
+  echo ""
+  echo -e "${GREEN}Done!${NC} Use it from any git project with a dev server running:"
+  echo ""
+  echo -e "  ${CYAN}$BIN_NAME${NC}           auto-detect port"
+  echo -e "  ${CYAN}$BIN_NAME 3000${NC}      expose port 3000"
+  echo ""
+
+  if command -v "$BIN_NAME" &>/dev/null; then
+    echo -e "  ${GREEN}✓${NC} Ready in this terminal — run ${CYAN}$BIN_NAME${NC} now."
+  elif path_contains "$INSTALL_DIR"; then
+    echo -e "  ${GREEN}✓${NC} Ready in this terminal — run ${CYAN}$BIN_NAME${NC} now."
+  elif config_has_path "$config"; then
+    echo -e "  Run ${CYAN}source $config${NC} or open a new terminal first."
+  else
+    echo -e "  Add the PATH line above, then open a new terminal."
+  fi
+
+  echo ""
+  echo -e "  While running: ${BOLD}q${NC}uit  ${BOLD}r${NC}estart  ${BOLD}c${NC}opy URL  ${BOLD}o${NC}pen in browser"
 }
 
 local_tunnel() {
@@ -207,6 +231,7 @@ install_tunnel() {
 
   echo -e "${GREEN}✓ Installed${NC} $dest"
   ensure_path_in_shell
+  print_next_steps
 }
 
 uninstall_tunnel() {
