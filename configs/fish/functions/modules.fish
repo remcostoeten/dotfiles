@@ -79,7 +79,7 @@ function _show_modules_help
     echo "  help --all              # Show comprehensive help for all helpers"
     echo "  dotfiles --help         # Show dotfiles management help"
     echo ""
-    echo "Runtime categories now live in tools/*.fish."
+    echo "Runtime categories now live in tools/fish/."
 end
 
 function _show_modules_quick_help

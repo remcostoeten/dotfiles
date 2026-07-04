@@ -1,17 +1,7 @@
 #!/usr/bin/env fish
 
 # DOCSTRING: Quick access to the interactive dotfiles menu
-function df
-    if test (count $argv) -eq 0
-        if test -t 1; and status --is-interactive
-            command bun ~/.config/dotfiles/scripts/dotfiles.ts interactive
-        else
-            command bun ~/.config/dotfiles/scripts/dotfiles.ts --help
-        end
-    else
-        command bun ~/.config/dotfiles/scripts/dotfiles.ts $argv
-    end
-end
+alias df dotfiles
 
 # DOCSTRING: Change to the dotfiles repository
 alias dot 'cd ~/.config/dotfiles'

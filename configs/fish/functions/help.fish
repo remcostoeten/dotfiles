@@ -430,7 +430,7 @@ function _show_dotfiles_overview
     y "Configuration Files:"
     echo "  • Shell Entrypoint: ~/.config/dotfiles/configs/fish/config.fish"
     echo "  • Orchestrator:     ~/.config/dotfiles/cfg"
-    echo "  • Tool Modules:     ~/.config/dotfiles/tools/*.fish"
+    echo "  • Tool Modules:     ~/.config/dotfiles/tools/fish/*.fish"
     echo "  • Vendor Helpers:   ~/.config/dotfiles/vendor/**/*"
     echo ""
     

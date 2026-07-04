@@ -28,6 +28,3 @@ dotfiles_load_all_recursive ~/.config/dotfiles/aliases source
 
 source ~/.config/dotfiles/loaders/tools-loader.fish
 
-if test -f ~/.config/dotfiles/configs/fish/functions/auto-Hypr.fish
-    source ~/.config/dotfiles/configs/fish/functions/auto-Hypr.fish
-end

@@ -18,7 +18,7 @@ The setup script installs the desktop and shell baseline, while the repo also sh
 | Terminal | Ghostty source build, Ghostty config, launcher defaults that prefer Ghostty |
 | Desktop | Auto-detected GNOME, KDE, or Hyprland configuration path |
 | Dev tools | GitHub CLI, lazygit, lazydocker, Docker, Node, pnpm, Bun, Rust, Python, uv |
-| Config links | Managed symlinks for Fish, Git, Ghostty, Fuzzel, Neovim, Zed, Cursor, Hyprland, Waybar, Dunst, and related configs |
+| Config links | Managed symlinks for Fish, Git, Ghostty, Fuzzel, Neovim, Agents skills, Zed, Cursor, Hyprland, Waybar, Dunst, and related configs |
 | User commands | `dotfiles`, `launcher`, `todo`, `copy`, `replace`, `ports`, `db`, `wallpaper`, `spellcheck`, `license`, `create-oauth`, `generate-turso-db` |
 
 Example command surface:
@@ -40,7 +40,7 @@ This repo is organized around a small set of stable entrypoints:
 - `bin/` for user-facing commands on `PATH`
 - `scripts/` for command implementations
 - `setup/` for installation and machine bootstrap
-- `configs/` for application config that gets linked into place
+- `configs/` for application config that gets linked into place, including the managed `~/.agents` tree
 - `tools/` for shell integration per tool or domain
 - `vendor/` for shared shell bootstrap code
 
@@ -187,7 +187,7 @@ spellcheck --history
 ## Repository Layout
 
 - `bin/` contains small launchers that call into `scripts/`
-- `configs/` contains app-specific config, including Fish, Ghostty, Fuzzel, Hyprland, GNOME, Zed, Cursor, and others
+- `configs/` contains app-specific config, including Fish, Ghostty, Fuzzel, Hyprland, GNOME, Agents skills, Zed, Cursor, and others
 - `scripts/` contains the actual command implementations and utilities
 - `scripts/lib/` contains support code used by the commands, not standalone commands
 - `setup/` contains package installation, symlink setup, desktop detection, and shell setup

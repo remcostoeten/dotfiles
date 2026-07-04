@@ -128,3 +128,6 @@ function etree
 
     exa --tree --level=$depth --color=always --icons --git-ignore $all_ignores $custom_path
 end
+
+# DOCSTRING: Jump to work directory
+alias rjl 'cd /home/remcostoeten/dev/work'

@@ -43,4 +43,4 @@ alias pamcan='pacman'
 alias cl='claude --dangerously-skip-permissions'
 
 # DOCSTRING: Launch Claude with dangerous permission bypass
-alias claude='claude --dangerously-skip-permissions'
+alias claude='command claude --dangerously-skip-permissions'

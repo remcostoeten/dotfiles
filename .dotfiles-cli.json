@@ -9,6 +9,7 @@
   "showDescriptions": false,
   "enableCategories": false,
   "recentItems": [
+    "bin::utility::cs2::/home/remcostoeten/.config/dotfiles/bin/cs2",
     "script::system::android-emulator::/home/remcostoeten/.config/dotfiles/scripts/android-emulator",
     "bin::utility::spellcheck::/home/remcostoeten/.config/dotfiles/bin/spellcheck",
     "bin::utility::kitty-cinematic::/home/remcostoeten/.config/dotfiles/bin/kitty-cinematic",
@@ -17,8 +18,7 @@
     "bin::utility::wallpaper::/home/remco/.config/dotfiles/bin/wallpaper",
     "script::system::bgr::/home/remco/.config/dotfiles/scripts/bgr",
     "function::l",
-    "alias::checkimports",
-    "script::database::postgres::/home/remco/.config/dotfiles/scripts/postgres"
+    "alias::checkimports"
   ],
   "excludeCategories": [
     "apps"
