@@ -15,7 +15,11 @@ type Service struct {
 	Label    string   `toml:"label"`
 	Profile  string   `toml:"profile"`  // compose profile to enable
 	Services []string `toml:"services"` // compose service names that make it up
-	URL      string   `toml:"url"`      // opened with 'o'
+	// StartAll runs `compose up -d` for the whole profile (no service filter),
+	// which also brings up unprofiled deps such as database/mailer. When false,
+	// only Services (plus composeInfraServices) are started — use for studio.
+	StartAll bool   `toml:"start_all"`
+	URL      string `toml:"url"` // opened with 'o'
 	// ReloadPort is the live-reload SSE port (0 = none). When set, the TUI shows
 	// a "live" badge only while that port is actually accepting connections.
 	ReloadPort int `toml:"reload_port"`
@@ -219,8 +223,8 @@ const defaultConfigTOML = `# work — dev launcher config
 
 [[project]]
 name = "website-2022"
-path = "~/dev/website-2022"
-alt_paths = ["~/dev/website2022"]
+path = "~/dev/work/website-2022"
+alt_paths = ["~/dev/website-2022", "~/dev/website2022"]
 
 # Jira: the issue key parsed from your branch (e.g. DCR-3061) is appended to
 # jira_browse to open the ticket; jira_board is the fallback / board view.
@@ -232,20 +236,22 @@ jira_browse = "https://concreetgeregeld.atlassian.net/browse/"
 repo_url = ""
 
   [[project.service]]
-  name     = "regeljelease"
-  label    = "Regeljelease"
-  profile  = "regeljelease"
-  services = ["regeljelease-php", "regeljelease-js", "regeljelease-sanity"]
-  url      = "http://localhost:8001"
+  name      = "regeljelease"
+  label     = "Regeljelease"
+  profile   = "regeljelease"
+  services  = ["regeljelease-php", "regeljelease-js", "regeljelease-sanity"]
+  start_all = true
+  url       = "http://localhost:8001"
   # Live-reload SSE port (build.mjs --watch). Shown as a badge only when active.
   reload_port = 8071
 
   [[project.service]]
-  name     = "vanderwalvans"
-  label    = "Van der Wal Vans"
-  profile  = "vanderwalvans"
-  services = ["vanderwalvans-php", "vanderwalvans-js", "vanderwalvans-sanity"]
-  url      = "http://localhost:8002"
+  name      = "vanderwalvans"
+  label     = "Van der Wal Vans"
+  profile   = "vanderwalvans"
+  services  = ["vanderwalvans-php", "vanderwalvans-js", "vanderwalvans-sanity"]
+  start_all = true
+  url       = "http://localhost:8002"
   reload_port = 8072
 
   [[project.service]]
@@ -263,12 +269,12 @@ repo_url = ""
   [[project.command]]
   name  = "composer:install"
   label = "composer install (regeljelease)"
-  run   = "docker compose run --rm regeljelease-php composer install"
+  run   = "docker compose --profile regeljelease run --rm regeljelease-php composer install"
 
   [[project.command]]
   name  = "npm:install"
   label = "npm install (regeljelease-js)"
-  run   = "docker compose run --rm regeljelease-js npm install"
+  run   = "docker compose --profile regeljelease run --rm regeljelease-js npm install"
 
   [[project.command]]
   name  = "php:lint"

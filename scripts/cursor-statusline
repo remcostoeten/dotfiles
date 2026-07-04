@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+payload=$(cat)
+
+model=$(echo "$payload" | jq -r '.model.display_name // "unknown"')
+param=$(echo "$payload" | jq -r '.model.param_summary // empty')
+max_mode=$(echo "$payload" | jq -r '.model.max_mode // false')
+pct=$(echo "$payload" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
+dir=$(echo "$payload" | jq -r '.workspace.current_dir // .cwd // ""')
+worktree=$(echo "$payload" | jq -r '.worktree.name // empty')
+autorun=$(echo "$payload" | jq -r '.autorun // false')
+
+bar_width=10
+filled=$((pct * bar_width / 100))
+empty=$((bar_width - filled))
+bar=""
+[ "$filled" -gt 0 ] && printf -v fill "%${filled}s" && bar="${fill// /▓}"
+[ "$empty" -gt 0 ] && printf -v pad "%${empty}s" && bar="${bar}${pad// /░}"
+
+model_label="$model"
+[ -n "$param" ] && model_label="$model_label $param"
+[ "$max_mode" = "true" ] && model_label="$model_label · max"
+
+branch=""
+if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+  branch=$(git -C "$dir" branch --show-current 2>/dev/null || true)
+  [ -z "$branch" ] && branch="detached"
+fi
+
+dirty=""
+if [ -n "$branch" ] && [ -n "$(git -C "$dir" status --porcelain 2>/dev/null)" ]; then
+  dirty="*"
+fi
+
+printf '\033[36m%s\033[0m \033[90m%s %s%%\033[0m' "$model_label" "$bar" "$pct"
+
+if [ -n "$branch" ]; then
+  printf '\033[90m%s\033[0m \033[32m%s%s\033[0m' "${dir##*/}" "$branch" "$dirty"
+else
+  printf '\033[90m%s\033[0m' "${dir##*/}"
+fi
+[ -n "$worktree" ] && printf ' \033[33mwt:%s\033[0m' "$worktree"
+[ "$autorun" = "true" ] && printf ' \033[35mauto\033[0m'
+printf '\n'

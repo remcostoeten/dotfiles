@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# rec — automated high-quality screen recording of any X11 window/region (NVENC)
+#
+# This is a thin entrypoint. The implementation is split into modules under
+# lib/, sourced below and orchestrated by rec_main (lib/main.sh).
+#
+#   rec                      # record the active window at 60fps, "deliver" quality
+#   rec region               # pick a region with the mouse instead of a window
+#   rec --dora               # auto-find Dora window
+#   rec master               # near-lossless capture (big files, best for editing)
+#   rec deliver              # high-quality, smaller (default, ready to upload)
+#   rec --fps 120            # override fps
+#   rec --audio              # also capture desktop audio
+#   rec --class firefox      # record the largest Firefox window
+#   rec --name "Dora"        # record the largest window matching a title
+# Stop recording with: q  (in the terminal) or Ctrl-C
+# Run `rec --help` for the full reference.
+set -euo pipefail
+
+# Resolve this script's real directory, following symlinks (bin/rec -> here),
+# so the modules can be found regardless of how rec was invoked.
+__rec_source="${BASH_SOURCE[0]}"
+while [[ -L "$__rec_source" ]]; do
+  __rec_dir="$(cd -P "$(dirname "$__rec_source")" >/dev/null 2>&1 && pwd)"
+  __rec_source="$(readlink "$__rec_source")"
+  [[ "$__rec_source" != /* ]] && __rec_source="$__rec_dir/$__rec_source"
+done
+REC_HOME="$(cd -P "$(dirname "$__rec_source")" >/dev/null 2>&1 && pwd)"
+REC_LIB="$REC_HOME/lib"
+unset __rec_source __rec_dir
+
+# Load the engine. Each module only defines functions, so order is irrelevant
+# except that main.sh (which defines rec_main) is convenient to load last.
+for __mod in colors util usage presets history menu interactive edit share postprocess overlay capture args main; do
+  # shellcheck source=/dev/null
+  source "$REC_LIB/$__mod.sh"
+done
+unset __mod
+
+# Safety net: ensure the recording indicator is always torn down on exit.
+trap stop_overlay EXIT
+
+rec_main "$@"

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+SCRIPT_DIR="$HOME/.config/dotfiles/scripts"
+exec "$SCRIPT_DIR/cursor-statusline" "$@"

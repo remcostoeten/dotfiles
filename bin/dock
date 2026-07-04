@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DOCK="${DOCK:-docker}"
+
+CMDS=(
+  "ps       List running containers"
+  "psa      List all containers"
+  "images   List images"
+  "stop     Stop a container"
+  "start    Start a container"
+  "rm       Remove a container"
+  "rmi      Remove an image"
+  "logs     Tail logs of a container"
+  "exec     Exec into a container"
+  "prune    Remove unused containers, networks, images"
+  "prunea   Remove ALL unused images (including volumes)"
+  "stats    Live resource stats"
+  "top      Show running processes in a container"
+  "restart  Restart a container"
+  "pause    Pause a container"
+  "unpause  Unpause a container"
+  "inspect  Inspect a container"
+  "network  List Docker networks"
+  "volume   List Docker volumes"
+  "compose  Docker Compose up -d"
+  "sys      Docker system df"
+  "quit     Stop Docker daemon + show RAM freed"
+  "up       Start Docker daemon"
+)
+
+ram_usage() {
+  free -h | awk '/^Mem:/ {print "RAM: " $3 " used / " $2 " total (" $4 " free)"}'
+}
+
+with_ram_track() {
+  local label="$1"
+  shift
+  echo "--- Before ---"
+  ram_usage
+  echo ""
+  "$@"
+  echo ""
+  echo "--- After ---"
+  ram_usage
+  echo "($label completed)"
+}
+
+usage() {
+  echo "Usage: dock [command] [args]"
+  echo ""
+  for cmd in "${CMDS[@]}"; do
+    IFS=' ' read -r name desc <<< "$cmd"
+    printf "  %-10s %s\n" "$name" "$desc"
+  done
+  echo ""
+  echo "  dock           - Interactive mode"
+  echo "  dock <cmd>     - Run command directly"
+  echo "  dock <cmd> -a  - Prompt for args (e.g. dock rm -a)"
+}
+
+interactive() {
+  while true; do
+    echo ""
+    echo "=== dock - Docker helper ==="
+    i=0
+    for cmd in "${CMDS[@]}"; do
+      IFS=' ' read -r name desc <<< "$cmd"
+      echo "  $i) $name - $desc"
+      ((i++))
+    done
+    echo ""
+    read -rp "Pick a number (q to quit): " choice
+    [[ "$choice" == "q" ]] && break
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 0 && choice < ${#CMDS[@]} )); then
+      IFS=' ' read -r name _ <<< "${CMDS[$choice]}"
+      run_cmd "$name"
+    else
+      echo "Invalid choice."
+    fi
+  done
+}
+
+run_cmd() {
+  local cmd="$1"
+  local arg="${2:-}"
+  case "$cmd" in
+    ps)      $DOCK ps ;;
+    psa)     $DOCK ps -a ;;
+    images)  $DOCK images ;;
+    stop)    [[ -z "$arg" ]] && read -rp "Container name/id: " arg; with_ram_track "stop $arg" $DOCK stop "$arg" ;;
+    start)   [[ -z "$arg" ]] && read -rp "Container name/id: " arg; $DOCK start "$arg" ;;
+    rm)      [[ -z "$arg" ]] && read -rp "Container name/id: " arg; with_ram_track "rm $arg" $DOCK rm "$arg" ;;
+    rmi)     [[ -z "$arg" ]] && read -rp "Image name/id: " arg; with_ram_track "rmi $arg" $DOCK rmi "$arg" ;;
+    logs)    [[ -z "$arg" ]] && read -rp "Container name/id: " arg; $DOCK logs -f "$arg" ;;
+    exec)    [[ -z "$arg" ]] && read -rp "Container name/id: " arg; $DOCK exec -it "$arg" /bin/sh -c "exec \$(command -v bash || command -v sh)" ;;
+    prune)   with_ram_track "prune" $DOCK system prune -f ;;
+    prunea)  with_ram_track "prune -a" $DOCK system prune -a -f --volumes ;;
+    stats)   $DOCK stats ;;
+    top)     [[ -z "$arg" ]] && read -rp "Container name/id: " arg; $DOCK top "$arg" ;;
+    restart) [[ -z "$arg" ]] && read -rp "Container name/id: " arg; $DOCK restart "$arg" ;;
+    pause)   [[ -z "$arg" ]] && read -rp "Container name/id: " arg; $DOCK pause "$arg" ;;
+    unpause) [[ -z "$arg" ]] && read -rp "Container name/id: " arg; $DOCK unpause "$arg" ;;
+    inspect) [[ -z "$arg" ]] && read -rp "Container name/id: " arg; $DOCK inspect "$arg" ;;
+    network) $DOCK network ls ;;
+    volume)  $DOCK volume ls ;;
+    compose) local dir="${arg:-}"; [[ -z "$dir" ]] && read -rp "Path to docker-compose dir: " dir; (cd "$dir" && $DOCK compose up -d) ;;
+    sys)     $DOCK system df ;;
+    quit)
+      echo "Stopping all containers..."
+      $DOCK stop $($DOCK ps -q) 2>/dev/null || true
+      echo ""
+      echo "--- Before stopping Docker daemon ---"
+      ram_usage
+      sudo systemctl stop docker
+      sudo systemctl stop docker.socket 2>/dev/null || true
+      echo "--- After stopping Docker daemon ---"
+      ram_usage
+      echo "(Docker daemon stopped)"
+      ;;
+    up)
+      echo "--- Before starting Docker daemon ---"
+      ram_usage
+      sudo systemctl start docker
+      sudo systemctl start docker.socket 2>/dev/null || true
+      echo "--- After starting Docker daemon ---"
+      ram_usage
+      echo "(Docker daemon started)"
+      ;;
+  esac
+}
+
+# --- Main ---
+case "${1:-}" in
+  "")     interactive ;;
+  -h|--help) usage ;;
+  *)
+    cmd="$1"
+    shift || true
+    if [[ "${1:-}" == "-a" ]]; then
+      run_cmd "$cmd" ""
+    else
+      run_cmd "$cmd" "${1:-}"
+    fi
+    ;;
+esac

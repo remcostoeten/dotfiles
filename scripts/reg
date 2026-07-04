@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+default_args=(
+  --hidden
+  --smart-case
+  --glob '!**/.git/**'
+  --glob '!**/node_modules/**'
+  --glob '!**/.next/**'
+  --glob '!**/.nuxt/**'
+  --glob '!**/.svelte-kit/**'
+  --glob '!**/.turbo/**'
+  --glob '!**/.cache/**'
+  --glob '!**/dist/**'
+  --glob '!**/build/**'
+  --glob '!**/coverage/**'
+  --glob '!**/out/**'
+  --glob '!**/vendor/**'
+  --glob '!**/tmp/**'
+  --glob '!**/temp/**'
+  --glob '!**/target/**'
+)
+
+svg_skip='(?s)<svg\b[^>]*>.*?</svg>(*SKIP)(*F)|'
+
+_help() {
+  local c_='' c_h='' c_d='' c_g='' c_e='' c_r=''
+  if [[ -t 2 ]]; then
+    c_=$'\033[0m'
+    c_h=$'\033[1;36m'
+    c_d=$'\033[1;33m'
+    c_g=$'\033[90m'
+    c_e=$'\033[32m'
+    c_r=$'\033[1;37m'
+  fi
+  printf "${c_h}Usage:${c_} reg ${c_r}<pattern>${c_} [${c_d}inline directives${c_}] [-- <paths>]\n\n" >&2
+  printf "${c_h}Inline directives${c_} (anywhere in sentence):\n" >&2
+  printf "  ${c_d}x:%s${c_} / ${c_d}except:%s${c_}    ${c_g}Exclude extension/dir${c_}  ${c_e}e.g. reg foo x:json${c_}\n" 'ext' 'ext' >&2
+  printf "  ${c_d}xd:%s${c_}                ${c_g}Exclude directory${c_}       ${c_e}e.g. reg foo xd:dist${c_}\n" 'dir' >&2
+  printf "  ${c_d}o:%s${c_} / ${c_d}only:%s${c_}       ${c_g}Only search extension${c_}  ${c_e}e.g. reg foo o:ts${c_}\n" 'ext' 'ext' >&2
+  printf "  ${c_d}in:%s${c_}                ${c_g}Scope to path(s)${c_}       ${c_e}e.g. reg foo in:src${c_}\n" 'path' >&2
+  printf "\n  ${c_g}Multiple values: except:ts,js,php  or  except ts js php  (commas optional)${c_}\n" >&2
+  printf "  ${c_g}Typo detection via hunspell (install hunspell-en_us for this)${c_}\n" >&2
+  printf "\n${c_h}Examples:${c_}\n" >&2
+  printf "  ${c_e}reg parseFloat${c_}\n" >&2
+  printf "  ${c_e}reg user auth x:test except:dist${c_}\n" >&2
+  printf "  ${c_e}reg o:ts in:src component${c_}\n" >&2
+  printf "  ${c_e}reg -i needle -- some-file${c_}\n" >&2
+}
+
+_typo_check() {
+  local pattern="$1"
+  [[ -z "$pattern" ]] && return
+  command -v hunspell &>/dev/null || return
+
+  if ! out=$(echo "test" | hunspell -d en_US -a 2>/dev/null); then
+    return
+  fi
+
+  local words
+  IFS=' ' read -ra words <<< "$pattern"
+  local suggestions=()
+
+  for w in "${words[@]}"; do
+    ((${#w} < 3)) && continue
+    [[ "$w" =~ ^[a-z]+$ ]] || continue
+
+    local out
+    out=$(hunspell -d en_US -a <<< "$w" 2>/dev/null) || continue
+
+    if [[ "$out" == \&* ]]; then
+      local sug="${out#*: }"
+      sug="${sug%%$'\n'*}"
+      suggestions+=("  $w -> ${sug//, / /}")
+    fi
+  done
+
+  if ((${#suggestions[@]})); then
+    printf '\033[33m\u26a0 Did you mean?\033[0m\n' >&2
+    printf '%s\n' "${suggestions[@]}" >&2
+    echo >&2
+  fi
+}
+
+_extract_directives() {
+  local -n _pattern="$1"
+  [[ -z "${_pattern}" ]] && return
+
+  local words cleaned
+  IFS=' ' read -ra words <<< "${_pattern}"
+  cleaned=()
+
+  local i=0 n=${#words[@]}
+  while ((i < n)); do
+    local w="${words[i]}" lower mode="" seed="" greedy=false
+    lower="${w,,}"
+
+    case "$lower" in
+      x|except)     mode="ext";  greedy=true ;;
+      xd)           mode="dir";  greedy=true ;;
+      o|only)       mode="only"; greedy=true ;;
+      in)           mode="in";   greedy=true ;;
+      x:*|except:*) mode="ext";  seed="${w#*:}" ;;
+      xd:*)         mode="dir";  seed="${w#*:}" ;;
+      o:*|only:*)   mode="only"; seed="${w#*:}" ;;
+      in:*)         mode="in";   seed="${w#*:}" ;;
+      *)            cleaned+=("$w"); i=$((i + 1)); continue ;;
+    esac
+    i=$((i + 1))
+
+    local raw="$seed"
+    if $greedy; then
+      while ((i < n)); do
+        case "${words[i],,}" in
+          x|except|xd|o|only|in|x:*|except:*|xd:*|o:*|only:*|in:*) break ;;
+        esac
+        raw+=" ${words[i]}"
+        i=$((i + 1))
+      done
+    else
+      while ((i < n)) && [[ "${words[i]}" == ,* ]]; do
+        raw+=" ${words[i]}"
+        i=$((i + 1))
+      done
+    fi
+
+    raw="${raw//,/ }"
+    local parts part
+    IFS=' ' read -ra parts <<< "$raw"
+    for part in "${parts[@]}"; do
+      [[ -z "$part" ]] && continue
+      part="${part,,}"
+      case "$mode" in
+        ext)  pre_args+=(--glob "!*.${part}" --glob "!**/${part}/**") ;;
+        dir)  pre_args+=(--glob "!**/${part}/**") ;;
+        only) pre_args+=(--glob "*.${part}") ;;
+        in)   part="${part%%/}"; pre_args+=(--glob "**/${part}/**") ;;
+      esac
+    done
+  done
+
+  _pattern="${cleaned[*]}"
+}
+
+pre_args=()
+post_args=()
+search_pattern=""
+fixed_strings=false
+
+while (($#)); do
+  case "$1" in
+    -h|--help)
+      _help
+      exit 0
+      ;;
+    -V|--version|--files|--files-with-matches|--files-without-match|--count|--count-matches|--list-files|--no-messages)
+      exec rg "${default_args[@]}" "$@"
+      ;;
+    -F|--fixed-strings)
+      fixed_strings=true
+      pre_args+=("$1")
+      shift
+      ;;
+    -P|--pcre2)
+      pre_args+=("$1")
+      shift
+      ;;
+    -U|--multiline|--multiline-dotall)
+      pre_args+=("$1")
+      shift
+      ;;
+    -e|--regexp)
+      missing_flag="$1"
+      shift
+      if (($# == 0)); then
+        printf 'reg: missing pattern for %s\n' "$missing_flag" >&2
+        exit 2
+      fi
+      search_pattern="$1"
+      shift
+      ;;
+    --regexp=*)
+      search_pattern="${1#--regexp=}"
+      shift
+      ;;
+    --glob|-g|--type|-t|--type-not|-T|--ignore-file|--sort|--context|-C|--before-context|-B|--after-context|-A|--max-count|-m|--max-filesize|-M|--encoding|-E|--threads|-j)
+      missing_flag="$1"
+      pre_args+=("$1")
+      shift
+      if (($# == 0)); then
+        printf 'reg: missing value for %s\n' "$missing_flag" >&2
+        exit 2
+      fi
+      pre_args+=("$1")
+      shift
+      ;;
+    --glob=*|--type=*|--type-not=*|--ignore-file=*|--sort=*|--context=*|--before-context=*|--after-context=*|--max-count=*|--max-filesize=*|--encoding=*|--threads=*)
+      pre_args+=("$1")
+      shift
+      ;;
+    --)
+      post_args+=("$1")
+      shift
+      while (($#)); do
+        post_args+=("$1")
+        shift
+      done
+      break
+      ;;
+    -*)
+      if [[ "$1" =~ ^-- ]]; then
+        # Long flags always go to pre_args
+        pre_args+=("$1")
+        shift
+      elif ((${#1} == 2)); then
+        # Single-char flag like -i, -n — always a flag
+        pre_args+=("$1")
+        shift
+      else
+        # Multi-char like -euo or -abc — could be flag cluster or search term
+        # Check if all chars are known rg single-char flags
+        chars="${1#-}" all_flags=true
+        while [[ -n "$chars" ]]; do
+          c="${chars:0:1}"
+          chars="${chars:1}"
+          case "$c" in
+            [eEfFgGtTBCAmMjJhHVFPUiISnNvLlLcCoOpPrRzZsSaAwWxX0123]) ;;
+            *) all_flags=false; break ;;
+          esac
+        done
+        if $all_flags; then
+          pre_args+=("$1")
+        else
+          if [[ -z "$search_pattern" ]]; then
+            search_pattern="$1"
+          else
+            search_pattern="$search_pattern $1"
+          fi
+        fi
+        shift
+      fi
+      ;;
+    *)
+      if [[ -z "$search_pattern" ]]; then
+        search_pattern="$1"
+      else
+        search_pattern="$search_pattern $1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+# Detect -F/--fixed-strings in pre_args (from flag clusters like -iF)
+for arg in "${pre_args[@]}"; do
+  if [[ "$arg" == "-F" || "$arg" == "--fixed-strings" ]]; then
+    fixed_strings=true
+    break
+  fi
+  if [[ "$arg" =~ ^-[a-zA-Z]+$ && "$arg" == *F* ]]; then
+    fixed_strings=true
+    break
+  fi
+done
+
+# No pattern at all — show help or passthrough
+if [[ -z "$search_pattern" ]]; then
+  if ((${#pre_args[@]} == 0 && ${#post_args[@]} == 0)); then
+    _help
+    exit 0
+  fi
+  exec rg "${default_args[@]}" "${pre_args[@]}" "${post_args[@]}"
+fi
+
+# Extract inline directives (x:except, o:only, in:) from pattern
+_extract_directives search_pattern
+
+# If all words were directives, just run rg with the filters
+if [[ -z "$search_pattern" ]]; then
+  exec rg "${default_args[@]}" "${pre_args[@]}" "${post_args[@]}"
+fi
+
+# Typo check (non-blocking, stderr only)
+_typo_check "$search_pattern"
+
+# Execute search
+if [[ "$fixed_strings" == true ]]; then
+  exec rg "${default_args[@]}" "${pre_args[@]}" "$search_pattern" "${post_args[@]}"
+else
+  exec rg "${default_args[@]}" "${pre_args[@]}" --pcre2 -U "${svg_skip}${search_pattern}" "${post_args[@]}"
+fi

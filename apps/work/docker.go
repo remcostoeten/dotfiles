@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// composeInfraServices are unprofiled compose services that site stacks depend on.
+// Passed explicitly when StartAll is false (e.g. studio-only); omitted when
+// StartAll is true because `compose --profile X up -d` starts them anyway.
+var composeInfraServices = []string{"database", "mailer"}
+
 // portActive reports whether something is accepting TCP connections on
 // localhost:port. Used to show the live-reload badge only when the watcher's
 // SSE server is up (it's gated behind LIVE_RELOAD, so it may well be off).
@@ -92,24 +97,43 @@ func dcRun(dir string, args ...string) (string, error) {
 	return sh(dir, full[0], full[1:]...)
 }
 
-func startService(dir string, s Service) (string, error) {
-	args := []string{}
-	if s.Profile != "" {
-		args = append(args, "--profile", s.Profile)
+// composeProfilePrefix returns ["--profile", name] when the service has a profile.
+func composeProfilePrefix(s Service) []string {
+	if s.Profile == "" {
+		return nil
 	}
+	return []string{"--profile", s.Profile}
+}
+
+// upTargets lists the compose service names passed to `up -d`.
+func upTargets(s Service) []string {
+	if s.StartAll {
+		return nil
+	}
+	out := append([]string{}, s.Services...)
+	return append(out, composeInfraServices...)
+}
+
+func startService(dir string, s Service) (string, error) {
+	args := composeProfilePrefix(s)
 	args = append(args, "up", "-d")
-	args = append(args, s.Services...)
+	args = append(args, upTargets(s)...)
 	return dcRun(dir, args...)
 }
 
 func stopService(dir string, s Service) (string, error) {
-	return dcRun(dir, append([]string{"stop"}, s.Services...)...)
+	args := composeProfilePrefix(s)
+	args = append(args, "stop")
+	args = append(args, s.Services...)
+	return dcRun(dir, args...)
 }
 
 func restartService(dir string, s Service) (string, error) {
-	out, err := dcRun(dir, append([]string{"restart"}, s.Services...)...)
-	if err != nil {
-		return startService(dir, s) // not up yet — start instead
+	if serviceState(dir, s, runningContainers()) != stRunning {
+		return startService(dir, s)
 	}
-	return out, nil
+	args := composeProfilePrefix(s)
+	args = append(args, "restart")
+	args = append(args, s.Services...)
+	return dcRun(dir, args...)
 }
