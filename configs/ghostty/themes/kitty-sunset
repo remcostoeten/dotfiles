@@ -1,0 +1,25 @@
+# Kitty Sunset - warm sunset palette on dark plum (ported from kitty.conf)
+palette = 0=#2a1620
+palette = 1=#ff6188
+palette = 2=#a9dc76
+palette = 3=#ffd866
+palette = 4=#78a9ff
+palette = 5=#ab9df2
+palette = 6=#78dce8
+palette = 7=#f0d8e0
+palette = 8=#4a3340
+palette = 9=#ff7a9c
+palette = 10=#bce68c
+palette = 11=#ffe089
+palette = 12=#93bcff
+palette = 13=#c4b8ff
+palette = 14=#9ae6f0
+palette = 15=#ffffff
+
+background = #1a0d14
+foreground = #f0d8e0
+cursor-color = #ff9e64
+cursor-text = #1a0d14
+selection-background = #5a2e44
+selection-foreground = #ffeef5
+split-divider-color = #4a3340

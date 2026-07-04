@@ -10,4 +10,4 @@ export __DOTFILES_SH_BOOTSTRAP_LOADED
 . "$HOME/.config/dotfiles/vendor/sh/core.sh"
 # shellcheck source=/dev/null
 . "$HOME/.config/dotfiles/vendor/sh/runtime.sh"
-dotfiles_source_dir "$HOME/.config/dotfiles/tools" sh
+dotfiles_source_dir "$HOME/.config/dotfiles/tools/sh" sh

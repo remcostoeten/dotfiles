@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="160" height="64" viewBox="0 0 160 64" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style id="current-color-scheme" type="text/css">
+      .ColorScheme-Background { color:#0b0f14; }
+      .ColorScheme-Text { color:#e6edf3; }
+      .ColorScheme-Highlight { color:#62d6ff; }
+    </style>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#19202a" stop-opacity="0.82"/>
+      <stop offset="0.48" stop-color="#0c1118" stop-opacity="0.74"/>
+      <stop offset="1" stop-color="#070a0f" stop-opacity="0.86"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#62d6ff" stop-opacity="0.50"/>
+      <stop offset="0.50" stop-color="#f2d06b" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#d271ff" stop-opacity="0.42"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000000" flood-opacity="0.38"/>
+    </filter>
+  </defs>
+
+  <rect id="hint-tile-center" x="0" y="0" width="4" height="4" fill="#ff6600"/>
+
+  <g id="center" filter="url(#soft-shadow)">
+    <rect x="56" y="22" width="12" height="12" fill="url(#glass)"/>
+    <rect x="56" y="22" width="12" height="1" fill="url(#edge)" opacity="0.95"/>
+    <rect x="56" y="33" width="12" height="1" fill="#ffffff" opacity="0.06"/>
+  </g>
+  <g id="top">
+    <rect x="56" y="16" width="12" height="6" fill="url(#glass)"/>
+    <rect x="56" y="16" width="12" height="1" fill="url(#edge)" opacity="0.95"/>
+  </g>
+  <g id="bottom">
+    <rect x="56" y="34" width="12" height="6" fill="url(#glass)"/>
+    <rect x="56" y="39" width="12" height="1" fill="#ffffff" opacity="0.06"/>
+  </g>
+  <g id="left">
+    <rect x="50" y="22" width="6" height="12" fill="url(#glass)"/>
+    <rect x="50" y="22" width="1" height="12" fill="#ffffff" opacity="0.08"/>
+  </g>
+  <g id="right">
+    <rect x="68" y="22" width="6" height="12" fill="url(#glass)"/>
+    <rect x="73" y="22" width="1" height="12" fill="#000000" opacity="0.18"/>
+  </g>
+  <g id="topleft">
+    <path d="M50 22v-2a4 4 0 0 1 4-4h2v6z" fill="url(#glass)"/>
+    <path d="M54 16h2v1h-2a3 3 0 0 0-3 3v2h-1v-2a4 4 0 0 1 4-4z" fill="url(#edge)" opacity="0.95"/>
+  </g>
+  <g id="topright">
+    <path d="M68 16h2a4 4 0 0 1 4 4v2h-6z" fill="url(#glass)"/>
+    <path d="M68 16h2a4 4 0 0 1 4 4v2h-1v-2a3 3 0 0 0-3-3h-2z" fill="url(#edge)" opacity="0.95"/>
+  </g>
+  <g id="bottomleft">
+    <path d="M50 34h6v6h-2a4 4 0 0 1-4-4z" fill="url(#glass)"/>
+    <path d="M50 34h1v2a3 3 0 0 0 3 3h2v1h-2a4 4 0 0 1-4-4z" fill="#ffffff" opacity="0.06"/>
+  </g>
+  <g id="bottomright">
+    <path d="M68 34h6v2a4 4 0 0 1-4 4h-2z" fill="url(#glass)"/>
+    <path d="M73 34h1v2a4 4 0 0 1-4 4h-2v-1h2a3 3 0 0 0 3-3z" fill="#ffffff" opacity="0.06"/>
+  </g>
+
+  <rect id="hint-left-margin" x="44" y="27" width="6" height="4" fill="#ff00ff"/>
+  <rect id="hint-right-margin" x="74" y="27" width="6" height="4" fill="#ff00ff"/>
+  <rect id="hint-top-margin" x="60" y="10" width="4" height="6" fill="#ff00ff"/>
+  <rect id="hint-bottom-margin" x="60" y="40" width="4" height="6" fill="#ff00ff"/>
+  <rect id="hint-left-inset" x="50" y="28" width="1" height="4" fill="#00ff00"/>
+  <rect id="hint-right-inset" x="73" y="28" width="1" height="4" fill="#00ff00"/>
+  <rect id="hint-top-inset" x="60" y="16" width="4" height="1" fill="#00ff00"/>
+  <rect id="hint-bottom-inset" x="60" y="39" width="4" height="1" fill="#00ff00"/>
+
+  <g id="shadow-center"><rect x="96" y="22" width="12" height="12" fill="#000000" opacity="0.12"/></g>
+  <g id="shadow-top"><rect x="96" y="16" width="12" height="6" fill="#000000" opacity="0.10"/></g>
+  <g id="shadow-bottom"><rect x="96" y="34" width="12" height="6" fill="#000000" opacity="0.20"/></g>
+  <g id="shadow-left"><rect x="90" y="22" width="6" height="12" fill="#000000" opacity="0.10"/></g>
+  <g id="shadow-right"><rect x="108" y="22" width="6" height="12" fill="#000000" opacity="0.10"/></g>
+  <g id="shadow-topleft"><rect x="90" y="16" width="6" height="6" fill="#000000" opacity="0.08"/></g>
+  <g id="shadow-topright"><rect x="108" y="16" width="6" height="6" fill="#000000" opacity="0.08"/></g>
+  <g id="shadow-bottomleft"><rect x="90" y="34" width="6" height="6" fill="#000000" opacity="0.18"/></g>
+  <g id="shadow-bottomright"><rect x="108" y="34" width="6" height="6" fill="#000000" opacity="0.18"/></g>
+  <rect id="shadow-hint-left-margin" x="84" y="27" width="6" height="4" fill="#ff6600"/>
+  <rect id="shadow-hint-right-margin" x="114" y="27" width="6" height="4" fill="#ff6600"/>
+  <rect id="shadow-hint-top-margin" x="100" y="10" width="4" height="6" fill="#ff6600"/>
+  <rect id="shadow-hint-bottom-margin" x="100" y="40" width="4" height="6" fill="#ff6600"/>
+  <rect id="shadow-hint-left-inset" x="90" y="28" width="1" height="4" fill="#ff5555"/>
+  <rect id="shadow-hint-right-inset" x="113" y="28" width="1" height="4" fill="#ff5555"/>
+  <rect id="shadow-hint-top-inset" x="100" y="16" width="4" height="1" fill="#ff5555"/>
+  <rect id="shadow-hint-bottom-inset" x="100" y="39" width="4" height="1" fill="#ff5555"/>
+
+  <g id="mask-center"><rect x="132" y="22" width="12" height="12" fill="#000000"/></g>
+  <g id="mask-top"><rect x="132" y="16" width="12" height="6" fill="#000000"/></g>
+  <g id="mask-bottom"><rect x="132" y="34" width="12" height="6" fill="#000000"/></g>
+  <g id="mask-left"><rect x="126" y="22" width="6" height="12" fill="#000000"/></g>
+  <g id="mask-right"><rect x="144" y="22" width="6" height="12" fill="#000000"/></g>
+  <g id="mask-topleft"><rect x="126" y="16" width="6" height="6" fill="#000000"/></g>
+  <g id="mask-topright"><rect x="144" y="16" width="6" height="6" fill="#000000"/></g>
+  <g id="mask-bottomleft"><rect x="126" y="34" width="6" height="6" fill="#000000"/></g>
+  <g id="mask-bottomright"><rect x="144" y="34" width="6" height="6" fill="#000000"/></g>
+</svg>

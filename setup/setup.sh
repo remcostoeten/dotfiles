@@ -166,6 +166,16 @@ configure_kde_desktop() {
     "$kwriteconfig" --file kdeglobals --group General --key fixed "JetBrains Mono,11,-1,5,50,0,0,0,0,0" 2>/dev/null || true
     "$kwriteconfig" --file kdeglobals --group General --key font "Inter,11,-1,5,50,0,0,0,0,0" 2>/dev/null || true
 
+    log_step "Making Alt+Tab instant (no highlight animation)..."
+    "$kwriteconfig" --file kwinrc --group TabBox --key HighlightWindows false 2>/dev/null || true
+    "$kwriteconfig" --file kwinrc --group TabBox --key LayoutName org.kde.breeze.desktop 2>/dev/null || true
+    "$kwriteconfig" --file kdeglobals --group KDE --key AnimationDurationFactor "0.1" 2>/dev/null || true
+    if command -v qdbus6 &>/dev/null; then
+        qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+    elif command -v qdbus &>/dev/null; then
+        qdbus org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+    fi
+
     if command -v kbuildsycoca6 &>/dev/null; then
         kbuildsycoca6 >/dev/null 2>&1 || true
     elif command -v kbuildsycoca5 &>/dev/null; then
@@ -862,6 +872,11 @@ run_with_progress() {
     local cat="$1"
     set_progress_category "$cat"
     log_section "$cat"
+    if category_already_satisfied "$cat"; then
+        log_info "Skipping $cat: already installed"
+        update_progress "$cat"
+        return 0
+    fi
     if ! ( install_category "$cat" ); then
         SETUP_FAILURES+=("category:$cat")
         log_warn "Category '$cat' had failures; continuing"

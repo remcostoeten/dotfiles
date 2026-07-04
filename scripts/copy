@@ -175,6 +175,30 @@ function handle_remote() {
     return 0
 }
 
+# Handle git branch name display
+function handle_branch() {
+    if ! git rev-parse --git-dir &> /dev/null; then
+        printf "%s Not in a git repository\n" "$(error)"
+        return 1
+    fi
+
+    local branch_name
+    if ! branch_name=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || [[ -z "$branch_name" ]]; then
+        printf "%s Could not determine current branch\n" "$(error)"
+        return 1
+    fi
+
+    if [[ "$branch_name" == "HEAD" ]]; then
+        printf "%s Detached HEAD state, no branch name to copy\n" "$(warning)"
+        return 1
+    fi
+
+    copy_to_clipboard "$branch_name" "Git Branch"
+    printf "%s 🌿 Git branch name displayed above\n" "$(success)"
+
+    return 0
+}
+
 # Handle tree display with custom arguments
 function handle_tree() {
     local tree_args=()
@@ -461,6 +485,7 @@ function handle_help() {
     printf "    %s             Display contents of file\n" "$(cyan "<filename>")"
     printf "    %s [path]             Display current directory or specified path\n" "$(cyan "pwd")"
     printf "    %s                 Display git remote URL\n" "$(cyan "remote")"
+    printf "    %s                 Display current git branch name\n" "$(cyan "branch")"
     printf "    %s [options] [path]   Display directory tree (excludes generated folders)\n" "$(cyan "tree")"
     printf "    %s <command...>       Run command, mirror output, and copy it\n" "$(cyan "output")"
     printf "    %s       Show this help message\n" "$(cyan "help, --help, -h")"
@@ -470,6 +495,7 @@ function handle_help() {
     printf "    %s               # Display current directory path\n" "$(green "copy pwd")"
     printf "    %s    # Display specific directory path\n" "$(green "copy pwd ~/projects")"
     printf "    %s            # Display git remote URL\n" "$(green "copy remote")"
+    printf "    %s            # Display current git branch name\n" "$(green "copy branch")"
     printf "    %s               # Display directory tree\n" "$(green "copy tree")"
     printf "    %s            # Tree limited to 2 levels\n" "$(green "copy tree -l 2")"
     printf "    %s    # Copy the output of a command\n" "$(green "copy output bun run build")"
@@ -492,12 +518,13 @@ function interactive_mode() {
         printf "2) %s\n" "$(cyan "Current directory path")"
         printf "3) %s\n" "$(cyan "Specific directory path")"
         printf "4) %s\n" "$(cyan "Git remote URL")"
-        printf "5) %s\n" "$(cyan "Directory tree")"
-        printf "6) %s\n" "$(cyan "Command output")"
-        printf "7) %s\n" "$(cyan "Quit")"
+        printf "5) %s\n" "$(cyan "Git branch name")"
+        printf "6) %s\n" "$(cyan "Directory tree")"
+        printf "7) %s\n" "$(cyan "Command output")"
+        printf "8) %s\n" "$(cyan "Quit")"
         echo
 
-        printf "%s " "$(bold "Choice (1-7):")"
+        printf "%s " "$(bold "Choice (1-8):")"
         read -r choice
         echo
 
@@ -527,6 +554,9 @@ function interactive_mode() {
                 handle_remote && break
                 ;;
             5)
+                handle_branch && break
+                ;;
+            6)
                 printf "%s " "$(blue "Enter directory path (or press Enter for current):")"
                 read -r treepath
                 if [[ -z "$treepath" ]]; then
@@ -598,7 +628,7 @@ function interactive_mode() {
                 tree_interactive_args+=("$treepath")
                 handle_tree "${tree_interactive_args[@]}" && break
                 ;;
-            6)
+            7)
                 printf "%s " "$(blue "Enter command to run:")"
                 read -r command_line
                 if [[ -n "$command_line" ]]; then
@@ -607,12 +637,12 @@ function interactive_mode() {
                     printf "%s No command provided\n" "$(warning)"
                 fi
                 ;;
-            7)
+            8)
                 printf "%s Goodbye! 👋\n" "$(info)"
                 exit 0
                 ;;
             *)
-                printf "%s Invalid choice. Please select 1-7.\n" "$(warning)"
+                printf "%s Invalid choice. Please select 1-8.\n" "$(warning)"
                 ;;
         esac
         echo
@@ -643,6 +673,13 @@ main() {
                 return 1
             fi
             handle_remote
+            ;;
+        branch)
+            if [[ $# -gt 0 ]]; then
+                printf "%s The 'branch' command does not accept arguments\n" "$(warning)"
+                return 1
+            fi
+            handle_branch
             ;;
         tree)
             handle_tree "$@"

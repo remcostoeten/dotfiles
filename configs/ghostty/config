@@ -1,23 +1,23 @@
 command = /usr/bin/fish
 
-background-opacity = 0.86
+background-opacity = 0.92
 background-opacity-cells = true
-background-blur = 32
+background-blur = 20
 
-theme = sunset-drive
+theme = dotfiles-dark
 window-decoration = none
 gtk-titlebar = false
 window-show-tab-bar = never
 gtk-toolbar-style = flat
 gtk-custom-css = gtk.css
-window-padding-x = 8
-window-padding-y = 8
+window-padding-x = 16
 
 # Font & Typography
-font-family = "JetBrainsMono Nerd Font"
-font-size = 14
+font-family = "ComicShannsMono Nerd Font"
+font-size = 18 
 adjust-cell-height = 2%
-adjust-cell-width = 0%
+adjust-cell-width = 2%
+
 
 # Terminal Options
 confirm-close-surface = false
@@ -45,7 +45,7 @@ keybind = ctrl+0=reset_font_size
 keybind = ctrl+enter=toggle_fullscreen
 keybind = ctrl+backquote=goto_split:next
 
-keybind = ctrl+d=new_split:right
+keybind = ctrl+h=new_split:right
 
 # Mouse
 mouse-hide-while-typing = true

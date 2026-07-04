@@ -109,6 +109,87 @@ is_installed_pacman() {
     pacman -Q "$pkg" >/dev/null 2>&1
 }
 
+is_package_installed() {
+    local pkg="$1"
+
+    case "$(detect_package_manager)" in
+        apt)
+            is_installed_apt "$pkg"
+            ;;
+        pacman)
+            local mapped_pkg
+            mapped_pkg="$(map_pacman_package_name "$pkg")"
+            [[ "$mapped_pkg" == "__skip__" ]] || is_installed_pacman "$mapped_pkg"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+all_packages_installed() {
+    local pkg
+
+    for pkg in "$@"; do
+        is_package_installed "$pkg" || return 1
+    done
+}
+
+all_commands_installed() {
+    local command_name
+
+    for command_name in "$@"; do
+        refresh_tool_path "$command_name"
+        exists "$command_name" || return 1
+    done
+}
+
+all_fonts_installed() {
+    local font_name
+
+    command -v fc-list >/dev/null 2>&1 || return 1
+    for font_name in "$@"; do
+        fc-list | grep -qi "$font_name" || return 1
+    done
+}
+
+category_already_satisfied() {
+    local category="$1"
+
+    case "$category" in
+        tools)
+            all_packages_installed neovim vim ripgrep fd-find fzf zoxide eza bat htop tree jq
+            ;;
+        curl-tools)
+            all_commands_installed starship fnm rustup uv
+            ;;
+        npm-tools)
+            npm list -g vercel >/dev/null 2>&1 && npm list -g "@google/gemini-cli" >/dev/null 2>&1
+            ;;
+        git-tools)
+            all_packages_installed gh && all_commands_installed lazygit lazydocker
+            ;;
+        editors)
+            all_commands_installed zed code opencode
+            ;;
+        terminals)
+            all_commands_installed ghostty
+            ;;
+        docker)
+            all_packages_installed docker.io docker-compose
+            ;;
+        system)
+            all_packages_installed fastfetch btop
+            ;;
+        fonts)
+            all_fonts_installed ComicShannsMono Geist Inter "JetBrains Mono" "IBM Plex Mono" Hack "Noto Color Emoji"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 install_apt() {
     local pkg="$1"
     local name="${2:-$pkg}"
@@ -463,9 +544,7 @@ ensure_symlink() {
     mkdir -p "$dst_dir"
 
     if [[ -L "$dst_path" ]]; then
-        local current_target
-        current_target="$(readlink "$dst_path" 2>/dev/null || true)"
-        if [[ "$current_target" == "$src_path" ]]; then
+        if is_symlink_current "$src_path" "$dst_path"; then
             return 0
         fi
         rm -f "$dst_path"
@@ -483,14 +562,43 @@ ensure_symlink() {
     }
 }
 
+canonical_path() {
+    local path="$1"
+
+    if command -v realpath >/dev/null 2>&1; then
+        realpath -m "$path"
+        return 0
+    fi
+
+    local dir
+    dir="$(dirname "$path")"
+    printf '%s/%s\n' "$(cd "$dir" 2>/dev/null && pwd -P)" "$(basename "$path")"
+}
+
+is_symlink_current() {
+    local src_path="$1"
+    local dst_path="$2"
+    local current_target
+
+    [[ -L "$dst_path" ]] || return 1
+    current_target="$(readlink "$dst_path" 2>/dev/null || true)"
+
+    case "$current_target" in
+        /*) ;;
+        *) current_target="$(dirname "$dst_path")/$current_target" ;;
+    esac
+
+    [[ "$(canonical_path "$current_target")" == "$(canonical_path "$src_path")" ]]
+}
+
 # Window-management keybinds: sxhkd grabs the keys (see configs/sxhkd/sxhkdrc)
 # but only runs commands, so the actual tiling/workspace actions are delegated
 # to KWin via kglobalaccel. This installs sxhkd, frees the Alt+arrow keys KWin
-# claims by default, and makes sure there are 3 virtual desktops for the
-# Alt+{1,2,3} workspace binds. Safe to re-run; no-ops on non-KDE machines.
+# claims by default, and makes sure there are 6 virtual desktops for the
+# Alt+{1,2,3,4,5,6} workspace binds. Safe to re-run; no-ops on non-KDE machines.
 setup_window_management() {
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_dry_run "install sxhkd and configure KWin (3 desktops, free Alt+arrows)"
+        log_dry_run "install sxhkd and configure KWin (6 desktops, free Alt+arrows)"
         return 0
     fi
 
@@ -511,27 +619,43 @@ setup_window_management() {
     kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Window Maximize" "Meta+PgUp,Meta+PgUp,Maximize Window"
     kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "Window Lower"    ",,Lower Window"
 
-    # Ensure at least 3 virtual desktops (workspaces 1..3).
+    # Ensure at least 6 virtual desktops (workspaces 1..6).
     local count
     count="$(kreadconfig6 --file kwinrc --group Desktops --key Number 2>/dev/null || echo 1)"
-    if [[ ! "$count" =~ ^[0-9]+$ ]] || (( count < 3 )); then
-        local id1
+    if [[ ! "$count" =~ ^[0-9]+$ ]] || (( count < 6 )); then
+        local id1 id2 id3 id4 id5 id6
         id1="$(kreadconfig6 --file kwinrc --group Desktops --key Id_1 2>/dev/null || true)"
+        id2="$(kreadconfig6 --file kwinrc --group Desktops --key Id_2 2>/dev/null || true)"
+        id3="$(kreadconfig6 --file kwinrc --group Desktops --key Id_3 2>/dev/null || true)"
+        id4="$(kreadconfig6 --file kwinrc --group Desktops --key Id_4 2>/dev/null || true)"
+        id5="$(kreadconfig6 --file kwinrc --group Desktops --key Id_5 2>/dev/null || true)"
+        id6="$(kreadconfig6 --file kwinrc --group Desktops --key Id_6 2>/dev/null || true)"
         [[ -z "$id1" ]] && id1="$(uuidgen)"
+        [[ -z "$id2" ]] && id2="$(uuidgen)"
+        [[ -z "$id3" ]] && id3="$(uuidgen)"
+        [[ -z "$id4" ]] && id4="$(uuidgen)"
+        [[ -z "$id5" ]] && id5="$(uuidgen)"
+        [[ -z "$id6" ]] && id6="$(uuidgen)"
         kwriteconfig6 --file kwinrc --group Desktops --key Rows 1
-        kwriteconfig6 --file kwinrc --group Desktops --key Number 3
+        kwriteconfig6 --file kwinrc --group Desktops --key Number 6
         kwriteconfig6 --file kwinrc --group Desktops --key Id_1 "$id1"
-        kwriteconfig6 --file kwinrc --group Desktops --key Id_2 "$(uuidgen)"
-        kwriteconfig6 --file kwinrc --group Desktops --key Id_3 "$(uuidgen)"
+        kwriteconfig6 --file kwinrc --group Desktops --key Id_2 "$id2"
+        kwriteconfig6 --file kwinrc --group Desktops --key Id_3 "$id3"
+        kwriteconfig6 --file kwinrc --group Desktops --key Id_4 "$id4"
+        kwriteconfig6 --file kwinrc --group Desktops --key Id_5 "$id5"
+        kwriteconfig6 --file kwinrc --group Desktops --key Id_6 "$id6"
         kwriteconfig6 --file kwinrc --group Desktops --key Name_2 "2"
         kwriteconfig6 --file kwinrc --group Desktops --key Name_3 "3"
+        kwriteconfig6 --file kwinrc --group Desktops --key Name_4 "4"
+        kwriteconfig6 --file kwinrc --group Desktops --key Name_5 "5"
+        kwriteconfig6 --file kwinrc --group Desktops --key Name_6 "6"
     fi
 
     # Apply live if a KWin session is already running (otherwise it lands on next login).
     if command -v qdbus6 >/dev/null 2>&1 && qdbus6 org.kde.KWin >/dev/null 2>&1; then
         local have
         have="$(qdbus6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.count 2>/dev/null || echo 1)"
-        while [[ "$have" =~ ^[0-9]+$ ]] && (( have < 3 )); do
+        while [[ "$have" =~ ^[0-9]+$ ]] && (( have < 6 )); do
             qdbus6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.createDesktop "$have" "$((have + 1))" >/dev/null 2>&1 || true
             have=$((have + 1))
         done
@@ -552,6 +676,7 @@ setup_config_symlinks() {
     ensure_setup_backup_root
 
     mkdir -p "$home_config_dir"
+    local links_changed=false
     
     local configs=(
         "nvim:$home_config_dir/nvim"
@@ -563,6 +688,7 @@ setup_config_symlinks() {
         "fish/conf.d:$home_config_dir/fish/conf.d"
         "zsh:$HOME/.config/zsh"
         "bash:$HOME/.config/bash"
+        "agents:$HOME/.agents"
         "zed:$HOME/.config/zed"
         "cursor:$HOME/.config/cursor"
         "hypr:$home_config_dir/hypr"
@@ -581,6 +707,9 @@ setup_config_symlinks() {
         local dst_path="$dst"
         
         if [[ -e "$src_path" ]]; then
+            if ! is_symlink_current "$src_path" "$dst_path"; then
+                links_changed=true
+            fi
             ensure_symlink "$src_path" "$dst_path" "$SETUP_BACKUP_ROOT"
         fi
     done
@@ -588,19 +717,33 @@ setup_config_symlinks() {
     # sxhkd autostart entry (KDE launches ~/.config/autostart on login)
     local sxhkd_autostart_src="$configs_dir/sxhkd/plasma-sxhkd.desktop"
     if [[ -f "$sxhkd_autostart_src" ]]; then
+        if ! is_symlink_current "$sxhkd_autostart_src" "$home_config_dir/autostart/plasma-sxhkd.desktop"; then
+            links_changed=true
+        fi
         ensure_symlink "$sxhkd_autostart_src" "$home_config_dir/autostart/plasma-sxhkd.desktop" "$SETUP_BACKUP_ROOT"
     fi
 
     local git_src="$configs_dir/git/.gitconfig"
     local git_dst="$HOME/.gitconfig"
     if [[ -f "$git_src" ]]; then
+        if ! is_symlink_current "$git_src" "$git_dst"; then
+            links_changed=true
+        fi
         ensure_symlink "$git_src" "$git_dst" "$SETUP_BACKUP_ROOT"
     fi
 
     local vimrc_src="$configs_dir/.vimrc"
     local vimrc_dst="$HOME/.vimrc"
     if [[ -f "$vimrc_src" ]]; then
+        if ! is_symlink_current "$vimrc_src" "$vimrc_dst"; then
+            links_changed=true
+        fi
         ensure_symlink "$vimrc_src" "$vimrc_dst" "$SETUP_BACKUP_ROOT"
+    fi
+
+    if [[ "$links_changed" == "false" ]]; then
+        log_success "Config symlinks already current"
+        return 0
     fi
 
     link_editor_configs_recursive "$configs_dir" "$home_config_dir"

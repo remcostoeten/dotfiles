@@ -1,4 +1,5 @@
 {
+  "diff_view_style": "unified",
   "cli_default_open_behavior": "existing_window",
   "project_panel": {
     "dock": "left"
@@ -15,7 +16,7 @@
     "model_parameters": []
   },
   "git_panel": {
-    "tree_view": true,
+    "tree_view": false,
     "dock": "left"
   },
   "session": {

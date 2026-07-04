@@ -199,6 +199,13 @@ function send_alarm_notification
     set -l message $argv[1]
     set -l urgency $argv[2]
 
+    # Method 0: Fullscreen system-wide overlay (primary, impossible to miss)
+    set -l lib_dir (dirname (realpath (status --current-filename)))/lib/alarm
+    if command -v python3 >/dev/null; and test -f "$lib_dir/overlay.py"
+        python3 "$lib_dir/overlay.py" "$message" >/dev/null 2>&1 &
+        echo $last_pid > /tmp/alarm_overlay_pid
+    end
+
     # Method 1: Try notify-send with proper environment
     if command -v notify-send >/dev/null
         # Export DBUS session variables to ensure notification works
@@ -218,13 +225,7 @@ function send_alarm_notification
 Run 'stop_alarm' to dismiss" &
     end
 
-    # Method 2: Use zenity for visual dialog (GNOME friendly)
-    if command -v zenity >/dev/null
-        zenity --question --text="🔔 ALARM! 🔔\n\n$message\n\nClick OK to dismiss this alarm" --title="ALARM" --no-wrap --ok-label="Dismiss Alarm" &
-        echo $last_pid > /tmp/alarm_zenity_pid
-    end
-
-    # Method 3: Use our custom notification script as fallback
+    # Method 2: Use our custom notification script as fallback
     set -l script_dir (dirname (realpath (status --current-filename)))
     fish "$script_dir/lib/alarm/send-notification.fish" "🔔 ALARM! 🔔" "$message\n\nRun 'stop_alarm' to dismiss" $urgency &
 
@@ -235,22 +236,22 @@ Run 'stop_alarm' to dismiss" &
 Run 'stop_alarm' to dismiss" [] {} 0 2>/dev/null &
     end
 
-    # Method 5: Terminal-based visual alert with blinking
-    fish -c "
-        for i in (seq 1 10)
-            printf '\033]11;#ff0000\007'  # Red background
-            printf '\r%s%s🔔 ALARM! 🔔%s\n' (tput setaf 1; tput bold) (tput sgr0)
-            sleep 0.5
-            printf '\033]11;#000000\007'  # Reset background
-            printf '\r%s                     %s\n' (tput setaf 1; tput bold) (tput sgr0)
-            sleep 0.5
+end
+
+function stop_alarm_overlay
+    if test -f /tmp/alarm_overlay_pid
+        set -l pid (cat /tmp/alarm_overlay_pid)
+        if kill -0 $pid 2>/dev/null
+            kill $pid 2>/dev/null
         end
-    " &
+        rm -f /tmp/alarm_overlay_pid
+    end
 end
 
 function stop_alarm
     printf "\n%s%s[STOPPED]%s Alarm stopped by user\n" "$fish_color_yellow" "$fish_color_bold" "$fish_color_reset"
     stop_alarm_sound
+    stop_alarm_overlay
 
     # Stop zenity dialog if running
     if test -f /tmp/alarm_zenity_pid
@@ -357,6 +358,7 @@ function run_alarm
 
     printf "\n%s%s[DONE]%s Alarm completed\n" "$fish_color_green" "$fish_color_bold" "$fish_color_reset"
     stop_alarm_sound
+    stop_alarm_overlay
 
     # Stop zenity dialog if running
     if test -f /tmp/alarm_zenity_pid

@@ -15,6 +15,22 @@ if test -f /tmp/alarm_sound_pid
     rm -f /tmp/alarm_sound_pid
 end
 
+if test -f /tmp/alarm_overlay_pid
+    set -l pid (cat /tmp/alarm_overlay_pid)
+    if kill -0 $pid 2>/dev/null
+        kill $pid 2>/dev/null
+    end
+    rm -f /tmp/alarm_overlay_pid
+end
+
+if test -f /tmp/alarm_zenity_pid
+    set -l pid (cat /tmp/alarm_zenity_pid)
+    if kill -0 $pid 2>/dev/null
+        kill $pid 2>/dev/null
+    end
+    rm -f /tmp/alarm_zenity_pid
+end
+
 # Send confirmation notification
 if command -v notify-send >/dev/null
     notify-send --urgency=low --app-name="Alarm" --icon="dialog-information" "Alarm Stopped" "The alarm has been manually stopped."

@@ -1,0 +1,20 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "remco@local",
+                "Name": "Remco"
+            }
+        ],
+        "Category": "",
+        "Dependencies": [
+        ],
+        "Description": "Custom compact smoked-glass topbar theme for Plasma",
+        "EnabledByDefault": true,
+        "Id": "RemcoTopbar",
+        "License": "GPL 3.0",
+        "Name": "Remco Topbar",
+        "Version": "0.1",
+        "Website": "https://local"
+    }
+}
