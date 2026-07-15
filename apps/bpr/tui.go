@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -102,6 +104,11 @@ type actionMsg struct {
 	err   error
 	after tea.Cmd
 }
+type editorDoneMsg struct {
+	id   int
+	path string
+	err  error
+}
 
 // --- commands ---
 
@@ -146,6 +153,39 @@ func (m *model) loadTransitions(key string) tea.Cmd {
 		ts, err := a.jira.Transitions(ctx, key)
 		return transitionsMsg{ts, err}
 	}
+}
+
+// editorCommand resolves which binary to launch for editing: $EDITOR, then
+// $VISUAL, falling back to nvim.
+func editorCommand() string {
+	if e := os.Getenv("EDITOR"); e != "" {
+		return e
+	}
+	if e := os.Getenv("VISUAL"); e != "" {
+		return e
+	}
+	return "nvim"
+}
+
+// editDescription opens the PR's description in $EDITOR/nvim via a temp
+// file, suspending the TUI until the editor exits.
+func (m *model) editDescription(id int, description string) tea.Cmd {
+	f, err := os.CreateTemp("", fmt.Sprintf("bpr-pr-%d-*.md", id))
+	if err != nil {
+		return func() tea.Msg { return editorDoneMsg{id: id, err: err} }
+	}
+	path := f.Name()
+	_, werr := f.WriteString(description)
+	f.Close()
+	if werr != nil {
+		os.Remove(path)
+		return func() tea.Msg { return editorDoneMsg{id: id, err: werr} }
+	}
+
+	cmd := exec.Command(editorCommand(), path)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return editorDoneMsg{id: id, path: path, err: err}
+	})
 }
 
 // act wraps a mutating call, reporting a status line and an optional follow-up.
@@ -301,6 +341,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case editorDoneMsg:
+		if msg.path != "" {
+			defer os.Remove(msg.path)
+		}
+		if msg.err != nil {
+			m.errMsg = "editor: " + msg.err.Error()
+			return m, nil
+		}
+		raw, err := os.ReadFile(msg.path)
+		if err != nil {
+			m.errMsg = err.Error()
+			return m, nil
+		}
+		description := strings.TrimRight(string(raw), "\n")
+		pr := &prRow{}
+		for i := range m.prs {
+			if m.prs[i].pr.ID == msg.id {
+				pr = &m.prs[i]
+				break
+			}
+		}
+		title := pr.pr.Title
+		id := msg.id
+		return m, act(fmt.Sprintf("updated description on #%d", id),
+			func() error { return m.a.bb.UpdatePR(m.ctx, m.a.slug, id, title, description) },
+			m.loadPRs())
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -445,7 +512,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "?":
-		m.status = "↑↓ nav · enter detail · a approve · u unapprove · m merge · d decline · c comment · t transition · o web · r refresh · / filter · tab switch · q quit"
+		m.status = "↑↓ nav · enter detail · a approve · u unapprove · m merge · d decline · c comment · e edit description · t transition · o web · r refresh · / filter · tab switch · q quit"
 		m.quitting = false
 		return m, nil
 	case "r":
@@ -608,6 +675,8 @@ func (m model) prAction(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			},
 		}
 		return m, nil
+	case "e":
+		return m, m.editDescription(id, pr.pr.Description)
 	}
 	return m, nil
 }
@@ -911,7 +980,7 @@ func (m model) footer() string {
 	} else if m.detail {
 		keys = "esc/←/⌫ back · o open · r refresh · q quit"
 	} else if m.tab == tabPRs {
-		keys = "↑↓ · 1-9 jump · / filter · enter detail · a approve · u unappr · m merge · d decline · c comment · ? help"
+		keys = "↑↓ · 1-9 jump · / filter · enter detail · a approve · u unappr · m merge · d decline · c comment · e edit · ? help"
 	} else {
 		keys = "↑↓ · 1-9 jump · / filter · enter detail · t transition · c comment · b branch · o web · ? help"
 	}

@@ -24,4 +24,10 @@ if dotfiles_shell_is_interactive; then
             node "$HOME/.config/dotfiles/scripts/todo.js" shell-display 2>/dev/null
         fi
     fi
+
+    if [ -f "$HOME/.config/dotfiles/scripts/bgr" ]; then
+        if command -v bash >/dev/null 2>&1; then
+            bash "$HOME/.config/dotfiles/scripts/bgr" shell-display 2>/dev/null
+        fi
+    fi
 fi

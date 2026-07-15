@@ -38,3 +38,7 @@ end
 
 # Add dotfiles bin directory to PATH
 set -gx PATH $DOTFILES_DIR/bin $PATH
+
+# Android SDK
+set -gx ANDROID_HOME "$HOME/Android/Sdk"
+set -gx PATH $ANDROID_HOME/emulator $ANDROID_HOME/platform-tools $ANDROID_HOME/cmdline-tools/latest/bin $PATH

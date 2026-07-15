@@ -46,18 +46,20 @@ type GHIssue struct {
 	Number    int    `json:"number"`
 	Title     string `json:"title"`
 	State     string `json:"state"`
+	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
 	Author    GHUser `json:"author"`
 	Body      string `json:"body"`
 }
 
 type GHIssueDetails struct {
-	Number   int         `json:"number"`
-	Title    string      `json:"title"`
-	Body     string      `json:"body"`
-	State    string      `json:"state"`
-	Author   GHUser      `json:"author"`
-	Comments []GHComment `json:"comments"`
+	Number    int         `json:"number"`
+	Title     string      `json:"title"`
+	Body      string      `json:"body"`
+	State     string      `json:"state"`
+	CreatedAt string      `json:"createdAt"`
+	Author    GHUser      `json:"author"`
+	Comments  []GHComment `json:"comments"`
 }
 
 func runGH(args ...string) ([]byte, error) {
@@ -130,7 +132,7 @@ func editPR(number int, title, body string) error {
 }
 
 func listIssues(state string) ([]GHIssue, error) {
-	out, err := runGH("issue", "list", "--state", state, "--limit", "50", "--json", "number,title,state,updatedAt,author,body")
+	out, err := runGH("issue", "list", "--state", state, "--limit", "50", "--json", "number,title,state,createdAt,updatedAt,author,body")
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +142,7 @@ func listIssues(state string) ([]GHIssue, error) {
 }
 
 func viewIssue(number int) (*GHIssueDetails, error) {
-	out, err := runGH("issue", "view", fmt.Sprintf("%d", number), "--json", "number,title,body,state,author,comments")
+	out, err := runGH("issue", "view", fmt.Sprintf("%d", number), "--json", "number,title,body,state,createdAt,author,comments")
 	if err != nil {
 		return nil, err
 	}

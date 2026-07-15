@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Intro } from "./Intro";
+import { Keybinds } from "./Keybinds";
+import { useZoom } from "./lib/zoom";
 import {
   catalog as fetchCatalog,
   checkPresence,
@@ -18,8 +20,11 @@ import {
 } from "./lib/api";
 
 type Running = InstallStart | null;
+type View = "setup" | "keybinds";
 
 function App() {
+  const [view, setView] = useState<View>("setup");
+  const zoom = useZoom();
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [presence, setPresence] = useState<Record<string, boolean>>({});
@@ -108,55 +113,78 @@ function App() {
           <span className="logo">DOTFILES</span>
           <span className="logo-sub">STUDIO</span>
         </div>
-        <div className="topbar-actions">
-          <label className={`toggle ${dryRun ? "on" : ""}`}>
-            <input
-              type="checkbox"
-              checked={dryRun}
-              onChange={(e) => setDryRun(e.target.checked)}
-            />
-            <span>Dry run</span>
-          </label>
-          <button className="btn btn-primary" disabled={busy} onClick={() => start("all", "")}>
-            Run full setup
+        {zoom !== 1 ? <span className="zoom-badge">{Math.round(zoom * 100)}%</span> : null}
+        <nav className="tabs">
+          <button
+            className={`tab ${view === "setup" ? "tab-on" : ""}`}
+            onClick={() => setView("setup")}
+          >
+            Setup
           </button>
-        </div>
+          <button
+            className={`tab ${view === "keybinds" ? "tab-on" : ""}`}
+            onClick={() => setView("keybinds")}
+          >
+            Keybinds
+          </button>
+        </nav>
+        {view === "setup" ? (
+          <div className="topbar-actions">
+            <label className={`toggle ${dryRun ? "on" : ""}`}>
+              <input
+                type="checkbox"
+                checked={dryRun}
+                onChange={(e) => setDryRun(e.target.checked)}
+              />
+              <span>Dry run</span>
+            </label>
+            <button className="btn btn-primary" disabled={busy} onClick={() => start("all", "")}>
+              Run full setup
+            </button>
+          </div>
+        ) : null}
       </header>
 
       <main className="content">
         {error ? <div className="banner">{error}</div> : null}
 
-        <SystemPanel info={info} />
+        {view === "keybinds" ? (
+          <Keybinds />
+        ) : (
+          <>
+            <SystemPanel info={info} />
 
-        {!info?.setupScriptFound ? (
-          <div className="banner">
-            setup.sh was not found under the detected workspace. Install actions are disabled.
-          </div>
-        ) : null}
+            {!info?.setupScriptFound ? (
+              <div className="banner">
+                setup.sh was not found under the detected workspace. Install actions are disabled.
+              </div>
+            ) : null}
 
-        <section className="catalog">
-          <div className="section-head">
-            <h2>Catalog</h2>
-            <span className="head-cursor" />
-            <span className="section-sub">
-              {categories.length} categories · install whole groups or single packages
-            </span>
-          </div>
+            <section className="catalog">
+              <div className="section-head">
+                <h2>Catalog</h2>
+                <span className="head-cursor" />
+                <span className="section-sub">
+                  {categories.length} categories · install whole groups or single packages
+                </span>
+              </div>
 
-          <div className="cat-list">
-            {categories.map((cat) => (
-              <CategoryCard
-                key={cat.id}
-                cat={cat}
-                presence={presence}
-                busy={busy}
-                runningId={running?.id ?? null}
-                onInstallCategory={() => start("category", cat.id)}
-                onInstallItem={(item) => start("package", item.id)}
-              />
-            ))}
-          </div>
-        </section>
+              <div className="cat-list">
+                {categories.map((cat) => (
+                  <CategoryCard
+                    key={cat.id}
+                    cat={cat}
+                    presence={presence}
+                    busy={busy}
+                    runningId={running?.id ?? null}
+                    onInstallCategory={() => start("category", cat.id)}
+                    onInstallItem={(item) => start("package", item.id)}
+                  />
+                ))}
+              </div>
+            </section>
+          </>
+        )}
       </main>
 
       <LogConsole

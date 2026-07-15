@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,6 +22,7 @@ const (
 	stateFormNewPR
 	stateFormNewIssue
 	stateFormEditPR
+	stateAIResponse
 )
 
 type tab int
@@ -117,18 +120,31 @@ var (
 	inputUnfocusedStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("240"))
+
+	keyStyle = lipgloss.NewStyle().
+			Foreground(accentColor).
+			Bold(true)
+
+	hintSep = cDim.Render("   ")
 )
 
 // Messages
 type prsLoadedMsg []GHPR
-type prDetailsLoadedMsg *GHPRDetails
+type prDetailsLoadedMsg struct {
+	details  *GHPRDetails
+	branches []string
+}
 type issuesLoadedMsg []GHIssue
-type issueDetailsLoadedMsg *GHIssueDetails
+type issueDetailsLoadedMsg struct {
+	details  *GHIssueDetails
+	branches []string
+}
 type operationCompleteMsg struct {
 	success bool
 	message string
 }
 type errorMsg error
+type aiResponseMsg string
 
 type model struct {
 	state      appState
@@ -157,12 +173,26 @@ type model struct {
 	descInput  textarea.Model
 	formFocus  int // 0 for Title, 1 for Description, 2 for Save/Submit, 3 for Cancel
 
+	// Vim mode for the description textarea
+	vimMode   bool // whether vim-style modal editing is enabled
+	vimInsert bool // true = insert mode, false = normal mode (only meaningful when vimMode is on)
+
 	// Status messages
 	statusMsg  string
 	statusTime time.Time
 
 	stateFilter filterState
 	allBranches []string
+
+	// Sorting and multi-select (issues)
+	sortNewestFirst bool
+	selectedIssues  map[int]bool
+
+	// Send-to-AI
+	aiBackend   string // one of aiBackends
+	aiLoading   bool
+	aiResponse  string
+	aiPrevState appState // state to return to on esc from stateAIResponse
 
 	// Viewport dimension
 	width  int
@@ -177,13 +207,19 @@ func initialModel() model {
 
 	ta := textarea.New()
 	ta.Placeholder = "Enter description/body..."
+	ta.ShowLineNumbers = false
+	ta.CharLimit = 0
 
 	m := model{
-		state:       stateList,
-		currentTab:  tabPRs,
-		stateFilter: filterOpen,
-		titleInput:  ti,
-		descInput:   ta,
+		state:           stateList,
+		currentTab:      tabPRs,
+		stateFilter:     filterOpen,
+		titleInput:      ti,
+		descInput:       ta,
+		vimInsert:       true,
+		sortNewestFirst: true,
+		selectedIssues:  make(map[int]bool),
+		aiBackend:       aiBackends[0],
 	}
 
 	// Try loading cached open PRs
@@ -301,6 +337,17 @@ func (m model) closePRCmd(number int) tea.Cmd {
 	}
 }
 
+func (m model) sendToAICmd(prompt string) tea.Cmd {
+	backend := m.aiBackend
+	return func() tea.Msg {
+		out, err := runAI(backend, prompt)
+		if err != nil {
+			return errorMsg(err)
+		}
+		return aiResponseMsg(out)
+	}
+}
+
 func (m model) closeAndRemovePRCmd(number int) tea.Cmd {
 	return func() tea.Msg {
 		err := closeAndRemovePR(number)
@@ -328,8 +375,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.prsLoading = false
 		m.issuesLoading = false
 		m.detailsLoading = false
+		m.aiLoading = false
 		m.statusMsg = fmt.Sprintf("Error: %s", msg.Error())
 		m.statusTime = time.Now()
+
+	case aiResponseMsg:
+		m.aiLoading = false
+		m.aiResponse = string(msg)
+		m.state = stateAIResponse
 
 	case prsLoadedMsg:
 		m.prs = msg
@@ -460,6 +513,85 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.prsLoading = true
 				m.issuesLoading = true
 				cmds = append(cmds, m.fetchPRsCmd(), m.fetchIssuesCmd())
+			case "o": // Toggle sort order (newest/oldest first)
+				m.sortNewestFirst = !m.sortNewestFirst
+			case "b": // Cycle AI backend
+				for i, name := range aiBackends {
+					if name == m.aiBackend {
+						m.aiBackend = aiBackends[(i+1)%len(aiBackends)]
+						break
+					}
+				}
+			case "v": // Toggle multi-select (issues only)
+				if m.currentTab == tabIssues {
+					filtered := m.getFilteredIssues()
+					if len(filtered) > 0 && m.issueCursor < len(filtered) {
+						num := filtered[m.issueCursor].Number
+						if m.selectedIssues[num] {
+							delete(m.selectedIssues, num)
+						} else {
+							m.selectedIssues[num] = true
+						}
+					}
+				}
+			case "y": // Copy issue(s) to clipboard
+				if m.currentTab == tabIssues {
+					var text string
+					if len(m.selectedIssues) > 0 {
+						var blocks []string
+						for _, issue := range m.issues {
+							if m.selectedIssues[issue.Number] {
+								blocks = append(blocks, formatIssueForCopy(issue))
+							}
+						}
+						text = strings.Join(blocks, "\n"+strings.Repeat("=", 40)+"\n\n")
+						if err := clipboard.WriteAll(text); err != nil {
+							m.statusMsg = fmt.Sprintf("Error: %s", err.Error())
+						} else {
+							m.statusMsg = fmt.Sprintf("Copied %d issue(s) to clipboard", len(m.selectedIssues))
+							m.selectedIssues = make(map[int]bool)
+						}
+					} else {
+						filtered := m.getFilteredIssues()
+						if len(filtered) > 0 && m.issueCursor < len(filtered) {
+							text = formatIssueForCopy(filtered[m.issueCursor])
+							if err := clipboard.WriteAll(text); err != nil {
+								m.statusMsg = fmt.Sprintf("Error: %s", err.Error())
+							} else {
+								m.statusMsg = fmt.Sprintf("Copied issue #%d to clipboard", filtered[m.issueCursor].Number)
+							}
+						}
+					}
+					m.statusTime = time.Now()
+				}
+			case "g": // Send issue(s) straight to AI
+				if m.currentTab == tabIssues && !m.aiLoading {
+					var prompt string
+					if len(m.selectedIssues) > 0 {
+						var blocks []string
+						for _, issue := range m.issues {
+							if m.selectedIssues[issue.Number] {
+								blocks = append(blocks, formatIssueForCopy(issue))
+							}
+						}
+						prompt = "Review the following GitHub issues and help address them:\n\n" +
+							strings.Join(blocks, "\n"+strings.Repeat("=", 40)+"\n\n")
+						m.selectedIssues = make(map[int]bool)
+					} else {
+						filtered := m.getFilteredIssues()
+						if len(filtered) > 0 && m.issueCursor < len(filtered) {
+							prompt = "Review the following GitHub issue and help address it:\n\n" +
+								formatIssueForCopy(filtered[m.issueCursor])
+						}
+					}
+					if prompt != "" {
+						m.aiLoading = true
+						m.aiPrevState = stateList
+						m.statusMsg = fmt.Sprintf("Asking %s...", m.aiBackend)
+						m.statusTime = time.Now()
+						cmds = append(cmds, m.sendToAICmd(prompt))
+					}
+				}
 			case "n": // New
 				if m.currentTab == tabPRs {
 					m.state = stateFormNewPR
@@ -523,9 +655,118 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else if m.currentTab == tabIssues && m.issueDetails != nil {
 					cmds = append(cmds, m.fetchIssueDetailsCmd(m.issueDetails.Number))
 				}
+			case "y": // Copy full issue (with comments) to clipboard
+				if m.currentTab == tabIssues && m.issueDetails != nil {
+					if err := clipboard.WriteAll(formatIssueDetailsForCopy(m.issueDetails)); err != nil {
+						m.statusMsg = fmt.Sprintf("Error: %s", err.Error())
+					} else {
+						m.statusMsg = fmt.Sprintf("Copied issue #%d to clipboard", m.issueDetails.Number)
+					}
+					m.statusTime = time.Now()
+				}
+			case "b": // Cycle AI backend
+				if m.currentTab == tabIssues {
+					for i, name := range aiBackends {
+						if name == m.aiBackend {
+							m.aiBackend = aiBackends[(i+1)%len(aiBackends)]
+							break
+						}
+					}
+				}
+			case "g": // Send full issue (with comments) straight to AI
+				if m.currentTab == tabIssues && m.issueDetails != nil && !m.aiLoading {
+					prompt := "Review the following GitHub issue and help address it:\n\n" +
+						formatIssueDetailsForCopy(m.issueDetails)
+					m.aiLoading = true
+					m.aiPrevState = stateDetail
+					m.statusMsg = fmt.Sprintf("Asking %s...", m.aiBackend)
+					m.statusTime = time.Now()
+					cmds = append(cmds, m.sendToAICmd(prompt))
+				}
+			}
+
+		case stateAIResponse:
+			switch msg.String() {
+			case "esc", "backspace", "q":
+				m.state = m.aiPrevState
 			}
 
 		case stateFormNewPR, stateFormNewIssue, stateFormEditPR:
+			// Toggle vim mode for the description field
+			if msg.String() == "ctrl+g" {
+				m.vimMode = !m.vimMode
+				m.vimInsert = !m.vimMode // vim on -> start in normal mode; vim off -> plain typing
+				return m, nil
+			}
+
+			// While vim mode is on and the description field is focused and in
+			// normal mode, keystrokes are vim navigation commands, not text input.
+			if m.vimMode && m.formFocus == 1 && !m.vimInsert {
+				handled := true
+				switch msg.String() {
+				case "i":
+					m.vimInsert = true
+				case "a":
+					m.descInput, cmd = m.descInput.Update(tea.KeyMsg{Type: tea.KeyRight})
+					cmds = append(cmds, cmd)
+					m.vimInsert = true
+				case "I":
+					m.descInput.CursorStart()
+					m.vimInsert = true
+				case "A":
+					m.descInput.CursorEnd()
+					m.vimInsert = true
+				case "o":
+					m.descInput.CursorEnd()
+					m.descInput, cmd = m.descInput.Update(tea.KeyMsg{Type: tea.KeyEnter})
+					cmds = append(cmds, cmd)
+					m.vimInsert = true
+				case "h":
+					m.descInput, cmd = m.descInput.Update(tea.KeyMsg{Type: tea.KeyLeft})
+					cmds = append(cmds, cmd)
+				case "l":
+					m.descInput, cmd = m.descInput.Update(tea.KeyMsg{Type: tea.KeyRight})
+					cmds = append(cmds, cmd)
+				case "j":
+					m.descInput, cmd = m.descInput.Update(tea.KeyMsg{Type: tea.KeyDown})
+					cmds = append(cmds, cmd)
+				case "k":
+					m.descInput, cmd = m.descInput.Update(tea.KeyMsg{Type: tea.KeyUp})
+					cmds = append(cmds, cmd)
+				case "0":
+					m.descInput.CursorStart()
+				case "$":
+					m.descInput.CursorEnd()
+				case "x":
+					m.descInput, cmd = m.descInput.Update(tea.KeyMsg{Type: tea.KeyDelete})
+					cmds = append(cmds, cmd)
+				case "tab", "down":
+					m.formFocus = (m.formFocus + 1) % 4
+					m.updateFormFocus()
+				case "up":
+					m.formFocus = (m.formFocus - 1 + 4) % 4
+					m.updateFormFocus()
+				case "esc":
+					if m.state == stateFormEditPR {
+						m.state = stateDetail
+					} else {
+						m.state = stateList
+					}
+				default:
+					handled = false
+				}
+				if handled {
+					return m, tea.Batch(cmds...)
+				}
+			}
+
+			// Leaving insert mode via esc returns to vim normal mode instead of
+			// forwarding esc to the textarea or closing the form.
+			if m.vimMode && m.formFocus == 1 && m.vimInsert && msg.String() == "esc" {
+				m.vimInsert = false
+				return m, nil
+			}
+
 			switch msg.String() {
 			case "esc":
 				if m.state == stateFormEditPR {
@@ -562,11 +803,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-			// Forward key inputs to inputs
+			// Forward key inputs to inputs (skipped entirely while in vim normal mode,
+			// handled above)
 			if m.formFocus == 0 {
 				m.titleInput, cmd = m.titleInput.Update(msg)
 				cmds = append(cmds, cmd)
-			} else if m.formFocus == 1 {
+			} else if m.formFocus == 1 && (!m.vimMode || m.vimInsert) {
 				m.descInput, cmd = m.descInput.Update(msg)
 				cmds = append(cmds, cmd)
 			}
@@ -589,34 +831,70 @@ func (m *model) updateFormFocus() {
 
 // Helper methods to filter lists
 func (m model) getFilteredPRs() []GHPR {
-	if m.filterText == "" {
-		return m.prs
-	}
-	var filtered []GHPR
-	q := strings.ToLower(m.filterText)
-	for _, pr := range m.prs {
-		if strings.Contains(strings.ToLower(pr.Title), q) ||
-			strings.Contains(strings.ToLower(pr.HeadRefName), q) ||
-			strings.Contains(strings.ToLower(fmt.Sprintf("#%d", pr.Number)), q) {
-			filtered = append(filtered, pr)
+	filtered := m.prs
+	if m.filterText != "" {
+		filtered = nil
+		q := strings.ToLower(m.filterText)
+		for _, pr := range m.prs {
+			if strings.Contains(strings.ToLower(pr.Title), q) ||
+				strings.Contains(strings.ToLower(pr.HeadRefName), q) ||
+				strings.Contains(strings.ToLower(fmt.Sprintf("#%d", pr.Number)), q) {
+				filtered = append(filtered, pr)
+			}
 		}
 	}
-	return filtered
+	sorted := make([]GHPR, len(filtered))
+	copy(sorted, filtered)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if m.sortNewestFirst {
+			return sorted[i].UpdatedAt > sorted[j].UpdatedAt
+		}
+		return sorted[i].UpdatedAt < sorted[j].UpdatedAt
+	})
+	return sorted
 }
 
 func (m model) getFilteredIssues() []GHIssue {
-	if m.filterText == "" {
-		return m.issues
-	}
-	var filtered []GHIssue
-	q := strings.ToLower(m.filterText)
-	for _, issue := range m.issues {
-		if strings.Contains(strings.ToLower(issue.Title), q) ||
-			strings.Contains(strings.ToLower(fmt.Sprintf("#%d", issue.Number)), q) {
-			filtered = append(filtered, issue)
+	filtered := m.issues
+	if m.filterText != "" {
+		filtered = nil
+		q := strings.ToLower(m.filterText)
+		for _, issue := range m.issues {
+			if strings.Contains(strings.ToLower(issue.Title), q) ||
+				strings.Contains(strings.ToLower(fmt.Sprintf("#%d", issue.Number)), q) {
+				filtered = append(filtered, issue)
+			}
 		}
 	}
-	return filtered
+	sorted := make([]GHIssue, len(filtered))
+	copy(sorted, filtered)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if m.sortNewestFirst {
+			return sorted[i].CreatedAt > sorted[j].CreatedAt
+		}
+		return sorted[i].CreatedAt < sorted[j].CreatedAt
+	})
+	return sorted
+}
+
+// formatIssueForCopy renders a list-level issue (no comments available yet).
+func formatIssueForCopy(issue GHIssue) string {
+	return fmt.Sprintf("#%d %s\nState: %s | Author: %s | Created: %s\n\n%s\n",
+		issue.Number, issue.Title, issue.State, issue.Author.Login, issue.CreatedAt, issue.Body)
+}
+
+// formatIssueDetailsForCopy renders a fully loaded issue including comments.
+func formatIssueDetailsForCopy(d *GHIssueDetails) string {
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("#%d %s\nState: %s | Author: %s | Created: %s\n\n%s\n",
+		d.Number, d.Title, d.State, d.Author.Login, d.CreatedAt, d.Body))
+	if len(d.Comments) > 0 {
+		s.WriteString("\n--- Comments ---\n")
+		for _, c := range d.Comments {
+			s.WriteString(fmt.Sprintf("\n%s (%s):\n%s\n", c.Author.Login, c.CreatedAt, c.Body))
+		}
+	}
+	return s.String()
 }
 
 // View function
@@ -664,6 +942,8 @@ func (m model) View() string {
 		s.WriteString(m.formView("Create New Issue"))
 	case stateFormEditPR:
 		s.WriteString(m.formView(fmt.Sprintf("Edit PR #%d", m.prDetails.Number)))
+	case stateAIResponse:
+		s.WriteString(m.aiResponseView())
 	}
 
 	// Footer status / help bar
@@ -730,7 +1010,13 @@ func (m model) listView() string {
 				stateStr = statusClosedStyle.Render("✖ CLOSED")
 			}
 
-			rowContent := fmt.Sprintf("  #%-4d  %-10s  %-50s  (%s)",
+			checkbox := "[ ]"
+			if m.selectedIssues[issue.Number] {
+				checkbox = "[x]"
+			}
+
+			rowContent := fmt.Sprintf("  %s #%-4d  %-10s  %-50s  (%s)",
+				checkbox,
 				issue.Number,
 				stateStr,
 				issue.Title,
@@ -824,6 +1110,18 @@ func (m model) detailView() string {
 	return s.String()
 }
 
+func (m model) aiResponseView() string {
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("  %s\n\n", cBold.Render(cCyan.Render(fmt.Sprintf("AI Response (%s)", m.aiBackend)))))
+	s.WriteString(cDim.Render(strings.Repeat("─", m.width-4)) + "\n\n")
+	if m.aiResponse == "" {
+		s.WriteString(cDim.Render("  No response."))
+	} else {
+		s.WriteString(fmt.Sprintf("  %s\n", strings.ReplaceAll(m.aiResponse, "\n", "\n  ")))
+	}
+	return s.String()
+}
+
 func (m model) formView(title string) string {
 	var s strings.Builder
 
@@ -862,6 +1160,16 @@ func (m model) formView(title string) string {
 	return s.String()
 }
 
+// renderHints renders a row of "[key] label" pairs, with the key highlighted
+// distinctly from its label so it's scannable at a glance.
+func renderHints(pairs ...[2]string) string {
+	parts := make([]string, len(pairs))
+	for i, p := range pairs {
+		parts[i] = keyStyle.Render("["+p[0]+"]") + cDim.Render(" "+p[1])
+	}
+	return "  " + strings.Join(parts, hintSep)
+}
+
 func (m model) footerView() string {
 	var s strings.Builder
 
@@ -869,11 +1177,11 @@ func (m model) footerView() string {
 	s.WriteString(cDim.Render(strings.Repeat("━", m.width)) + "\n")
 
 	// Status messages
-	if time.Since(m.statusTime) < 5*time.Second && m.statusMsg != "" {
+	if (m.aiLoading || time.Since(m.statusTime) < 5*time.Second) && m.statusMsg != "" {
 		if strings.HasPrefix(m.statusMsg, "Error") {
-			s.WriteString(errorStyle.Render("  " + m.statusMsg) + "\n")
+			s.WriteString(errorStyle.Render("  "+m.statusMsg) + "\n")
 		} else {
-			s.WriteString(successStyle.Render("  " + m.statusMsg) + "\n")
+			s.WriteString(successStyle.Render("  "+m.statusMsg) + "\n")
 		}
 	} else {
 		s.WriteString("\n")
@@ -882,15 +1190,73 @@ func (m model) footerView() string {
 	// Help instructions
 	switch m.state {
 	case stateList:
-		s.WriteString(cDim.Render(fmt.Sprintf("  [tab] Switch Tab | [s] State: %s | [↑/↓] Nav | [enter] View Details | [/] Filter | [n] New | [r] Refresh | [q] Quit", strings.ToUpper(string(m.stateFilter)))))
+		sortStr := "Newest first"
+		if !m.sortNewestFirst {
+			sortStr = "Oldest first"
+		}
+
+		s.WriteString(renderHints(
+			[2]string{"tab", "Switch tab"},
+			[2]string{"↑/↓", "Navigate"},
+			[2]string{"enter", "Details"},
+			[2]string{"/", "Filter"},
+			[2]string{"q", "Quit"},
+		) + "\n")
+
+		if m.currentTab == tabIssues {
+			s.WriteString(renderHints(
+				[2]string{"s", "State: " + strings.ToUpper(string(m.stateFilter))},
+				[2]string{"o", "Sort: " + sortStr},
+				[2]string{"v", "Select"},
+				[2]string{"y", "Copy"},
+				[2]string{"g", "Ask AI"},
+				[2]string{"b", "Backend: " + m.aiBackend},
+				[2]string{"n", "New"},
+				[2]string{"r", "Refresh"},
+			))
+		} else {
+			s.WriteString(renderHints(
+				[2]string{"s", "State: " + strings.ToUpper(string(m.stateFilter))},
+				[2]string{"o", "Sort: " + sortStr},
+				[2]string{"n", "New"},
+				[2]string{"r", "Refresh"},
+			))
+		}
 	case stateDetail:
 		if m.currentTab == tabPRs {
-			s.WriteString(cDim.Render("  [esc/backspace] Back | [e] Edit | [c] Close PR | [d] Close PR & Delete Branch | [r] Refresh"))
+			s.WriteString(renderHints(
+				[2]string{"esc", "Back"},
+				[2]string{"e", "Edit"},
+				[2]string{"c", "Close PR"},
+				[2]string{"d", "Close + delete branch"},
+				[2]string{"r", "Refresh"},
+			))
 		} else {
-			s.WriteString(cDim.Render("  [esc/backspace] Back | [r] Refresh"))
+			s.WriteString(renderHints(
+				[2]string{"esc", "Back"},
+				[2]string{"y", "Copy"},
+				[2]string{"g", "Ask AI"},
+				[2]string{"b", "Backend: " + m.aiBackend},
+				[2]string{"r", "Refresh"},
+			))
 		}
+	case stateAIResponse:
+		s.WriteString(renderHints([2]string{"esc/q", "Back"}))
 	case stateFormNewPR, stateFormNewIssue, stateFormEditPR:
-		s.WriteString(cDim.Render("  [tab/up/down] Focus Field | [enter] Select / Submit | [esc] Cancel"))
+		vimStatus := "off"
+		if m.vimMode {
+			if m.vimInsert {
+				vimStatus = "on · insert"
+			} else {
+				vimStatus = "on · normal"
+			}
+		}
+		s.WriteString(renderHints(
+			[2]string{"tab/↑/↓", "Focus field"},
+			[2]string{"enter", "Select / submit"},
+			[2]string{"esc", "Cancel"},
+			[2]string{"ctrl+g", "Vim mode: " + vimStatus},
+		))
 	}
 
 	return s.String()

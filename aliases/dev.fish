@@ -73,14 +73,6 @@ function allow
     chmod +x $argv
 end
 
-# DOCSTRING: Launch the dev-menu TUI in the current project (auto-detects + first-run wizard writes dev-menu.config.ts)
-function dev-menu
-    bun ~/dev/dev-menu/scripts/dev-all.ts $argv
-end
-
-# DOCSTRING: Short alias for the dev-menu TUI
-alias dm dev-menu
-
 # DOCSTRING: Bring up the regeljelease profile stack in ~/dev/work/website-2022
 function rjl
     docker compose --project-directory ~/dev/work/website-2022 --profile regeljelease up $argv

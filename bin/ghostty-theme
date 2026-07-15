@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG="$HOME/.config/dotfiles/configs/ghostty/config"
+ASSETS="$HOME/.config/dotfiles/configs/ghostty/assets"
+
+# slug:theme-value:background-image
+THEMES=(
+  "pastel-dark:pastel-dark:$ASSETS/pastel-dark-bg.png"
+  "warm-sunset:warm-sunset:$ASSETS/warm-sunset-bg.png"
+  "catppuccin-mocha:Catppuccin Mocha:$ASSETS/catppuccin-mocha-gradient.png"
+)
+
+slugs=()
+for entry in "${THEMES[@]}"; do
+  slugs+=("${entry%%:*}")
+done
+
+current_theme=$(grep -m1 '^theme = ' "$CONFIG" | cut -d' ' -f3-)
+current_index=0
+for i in "${!THEMES[@]}"; do
+  IFS=':' read -r _ theme_value _ <<< "${THEMES[$i]}"
+  if [[ "$theme_value" == "$current_theme" ]]; then
+    current_index=$i
+    break
+  fi
+done
+
+target="${1:-toggle}"
+
+if [[ "$target" == "toggle" ]]; then
+  next_index=$((( current_index + 1 ) % ${#THEMES[@]}))
+else
+  next_index=-1
+  for i in "${!slugs[@]}"; do
+    if [[ "${slugs[$i]}" == "$target" ]]; then
+      next_index=$i
+      break
+    fi
+  done
+  if [[ "$next_index" -eq -1 ]]; then
+    echo "Usage: ghostty-theme [${slugs[*]}|toggle]" >&2
+    exit 1
+  fi
+fi
+
+IFS=':' read -r slug theme_value image_path <<< "${THEMES[$next_index]}"
+
+sed -i "s|^theme = .*|theme = $theme_value|" "$CONFIG"
+sed -i "s|^background-image = .*|background-image = $image_path|" "$CONFIG"
+
+notify-send -t 1500 "Ghostty theme: $slug" 2>/dev/null || echo "Ghostty theme: $slug"
+echo "Press Ctrl+Shift+, in Ghostty to apply."

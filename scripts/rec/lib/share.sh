@@ -18,7 +18,7 @@ share_upload() {
   share_available || { echo "Upload needs curl." >&2; return 1; }
   setup_colors
 
-  host="${REC_UPLOAD_HOST:-0x0.st}"
+  host="${UPLOAD_HOST:-0x0.st}"
   printf '\n%sUpload%s  %s  ->  https://%s\n' "$BOLD$CYAN" "$RESET" "$(basename -- "$out")" "$host"
   printf '%sThis makes the file publicly downloadable by anyone who has the link.%s\n' "$DIM" "$RESET"
   printf 'Proceed? [y/N]: '

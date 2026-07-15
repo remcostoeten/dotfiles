@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Keybind Manager",
+  "version": "0.1.0",
+  "identifier": "org.remcostoeten.keybind-manager",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Keybind Manager",
+        "width": 1000,
+        "height": 640,
+        "minWidth": 720,
+        "minHeight": 500
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage"],
+    "icon": ["icons/128x128.png", "icons/icon.png"],
+    "category": "Utility",
+    "shortDescription": "System-wide keyboard remapping for KDE Plasma via keyd",
+    "linux": {
+      "deb": {
+        "depends": ["keyd", "policykit-1"],
+        "files": {
+          "/usr/share/polkit-1/actions/org.remcostoeten.keybind-manager.policy": "../polkit/org.remcostoeten.keybind-manager.policy",
+          "/usr/bin/keybind-manager-helper": "target/release/keybind-manager-helper"
+        }
+      }
+    }
+  }
+}

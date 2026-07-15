@@ -1,0 +1,24 @@
+# Midnight Neon - cool navy base with vivid cyan/magenta accents
+palette = 0=#0d1321
+palette = 1=#ff5d8f
+palette = 2=#37f5ac
+palette = 3=#f5c451
+palette = 4=#4fb8ff
+palette = 5=#c792ea
+palette = 6=#43e8d8
+palette = 7=#c8d3f5
+palette = 8=#3b4261
+palette = 9=#ff7aa5
+palette = 10=#5cffc1
+palette = 11=#ffd479
+palette = 12=#7cc9ff
+palette = 13=#daadf5
+palette = 14=#6df2e4
+palette = 15=#f0f4ff
+
+background = #0a0e1a
+foreground = #c8d3f5
+cursor-color = #37f5ac
+selection-background = #232b45
+selection-foreground = #f0f4ff
+split-divider-color = #232b45

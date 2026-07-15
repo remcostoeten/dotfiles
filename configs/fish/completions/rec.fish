@@ -1,7 +1,7 @@
 # Fish completions for rec
 
 function __rec_seen_command
-    __fish_seen_subcommand_from deliver master region gif clip upload edit latest open play help
+    __fish_seen_subcommand_from deliver master region gif clip upload edit latest list open play config help
 end
 
 function __rec_complete_commands
@@ -13,8 +13,10 @@ function __rec_complete_commands
     printf '%s\t%s\n' upload 'Upload-ready preset'
     printf '%s\t%s\n' edit 'Near-lossless editing preset'
     printf '%s\t%s\n' latest 'Print newest recording path'
+    printf '%s\t%s\n' list 'List recent recordings'
     printf '%s\t%s\n' open 'Open recordings folder'
     printf '%s\t%s\n' play 'Open newest recording'
+    printf '%s\t%s\n' config 'Edit persistent defaults'
     printf '%s\t%s\n' help 'Show help'
 end
 
@@ -49,6 +51,8 @@ function __rec_register_completions
     complete -c $command_name -l play -d 'Open recording after it finishes'
     complete -c $command_name -l notify -d 'Send desktop notifications'
     complete -c $command_name -l no-notify -d 'Disable desktop notifications'
+    complete -c $command_name -l indicator -d 'Show on-screen recording indicator'
+    complete -c $command_name -l no-indicator -d 'Hide on-screen recording indicator'
 
     complete -c $command_name -l fps -r -d 'Capture frame rate' -a '30 60 120 144'
     complete -c $command_name -l countdown -r -d 'Countdown before recording' -a '0 3 5 10'

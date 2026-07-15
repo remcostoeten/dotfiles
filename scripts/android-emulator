@@ -24,9 +24,17 @@ PASTEL_RED='\033[38;2;137;220;235m'
 android_sdk="$HOME/Android/Sdk"
 adb_path="$android_sdk/platform-tools/adb"
 emulator_path="$android_sdk/emulator/emulator"
+studio_path="$HOME/Android/android-studio/bin/studio.sh"
+
+# XDG-aware AVD location: avdmanager/emulator put AVDs under
+# $XDG_CONFIG_HOME/.android/avd when XDG_CONFIG_HOME is set, instead of ~/.android/avd
+if [ -d "$HOME/.config/.android/avd" ]; then
+    export ANDROID_AVD_HOME="$HOME/.config/.android/avd"
+fi
 
 # Preferred devices in order of preference
 preferred_devices=(
+    "Pixel_6_API_35"
     "Pixel_9_Pro_Fold"
     "Pixel_9_Pro"
     "Pixel_9_Pro_Test"
@@ -35,21 +43,23 @@ preferred_devices=(
     "Pixel_8_Pro"
 )
 
-# Enhanced logging functions
+# Enhanced logging functions. Written to stderr so functions that return a
+# value via `echo` inside a $(...) capture (e.g. find_best_device) don't get
+# their return value corrupted by log output on stdout.
 log_info() {
-    echo -e "${CYAN}ℹ️  $1${NC}"
+    echo -e "${CYAN}ℹ️  $1${NC}" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    echo -e "${GREEN}✅ $1${NC}" >&2
 }
 
 log_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+    echo -e "${YELLOW}⚠️  $1${NC}" >&2
 }
 
 log_error() {
-    echo -e "${RED}❌ $1${NC}"
+    echo -e "${RED}❌ $1${NC}" >&2
 }
 
 log_debug() {
@@ -142,6 +152,9 @@ show_menu() {
     echo -e "${CYAN}🔧 Core Commands:${NC}"
     echo ""
 
+    echo -e "  ${GREEN}launch${NC}          Open Android Studio + boot the phone"
+    echo -e "  ${GREEN}launch -po${NC}      Boot only the phone, skip Android Studio"
+    echo -e "  ${GREEN}studio${NC}          Open Android Studio only"
     echo -e "  ${GREEN}start${NC}           Start Android emulator (smart device detection)"
     echo -e "  ${GREEN}stop${NC}            Stop running emulator"
     echo -e "  ${GREEN}restart${NC}         Stop and restart emulator"
@@ -323,7 +336,7 @@ prompt_user_device_selection() {
 }
 
 get_devices() {
-    local count=$(adb devices 2>/dev/null | tail -n +2 | grep -v '^$' | wc -l)
+    local count=$($adb_path devices 2>/dev/null | tail -n +2 | grep -v '^$' | wc -l)
     echo "$count" | tr -d ' '
 }
 
@@ -385,16 +398,13 @@ cmd_start() {
     log_info "🚀 Starting Android emulator: $selected_device"
     log_info "Starting in optimized mode..."
 
-    # Start with optimizations in background
+    # Start with optimizations in background. Quick-boot snapshot is left
+    # enabled (no -no-snapshot-load) so subsequent launches resume instantly.
     nohup $emulator_path -avd "$selected_device" \
-        -no-snapshot-load \
         -no-boot-anim \
         -no-audio \
         -gpu host \
         -accel on \
-        -memory 4096 \
-        -cores 4 \
-        -no-window \
         >/dev/null 2>&1 &
 
     local emulator_pid=$!
@@ -410,7 +420,7 @@ cmd_start() {
     while [ $elapsed -lt $timeout ]; do
         if is_emulator_running; then
             local boot_complete
-            boot_complete=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            boot_complete=$($adb_path shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
             if [ "$boot_complete" = "1" ]; then
                 log_success "Emulator is ready! 🎉"
                 log_info "Device: $selected_device"
@@ -471,7 +481,7 @@ cmd_stop() {
 
     echo -e "${YELLOW}🛑 Stopping emulator...${NC}"
 
-    adb emu kill >/dev/null 2>&1
+    $adb_path emu kill >/dev/null 2>&1
 
     echo -e "${GREEN}✅ Emulator stopped${NC}"
 }
@@ -490,7 +500,7 @@ cmd_status() {
 
         # Get device information
         local devices
-        devices=$(adb devices 2>/dev/null | tail -n +2 | grep -v '^$')
+        devices=$($adb_path devices 2>/dev/null | tail -n +2 | grep -v '^$')
 
         if [ -n "$devices" ]; then
             echo -e "${YELLOW}Connected devices:${NC}"
@@ -507,22 +517,22 @@ cmd_status() {
 
                     # Get device model
                     local model
-                    model=$(adb -s "$device_id" shell getprop ro.product.model 2>/dev/null | tr -d '\r')
+                    model=$($adb_path -s "$device_id" shell getprop ro.product.model 2>/dev/null | tr -d '\r')
                     echo -e "   Model: ${GREEN}$model${NC}"
 
                     # Get Android version
                     local android_version
-                    android_version=$(adb -s "$device_id" shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')
+                    android_version=$($adb_path -s "$device_id" shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')
                     echo -e "   Android: ${GREEN}$android_version${NC}"
 
                     # Get API level
                     local api_level
-                    api_level=$(adb -s "$device_id" shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')
+                    api_level=$($adb_path -s "$device_id" shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')
                     echo -e "   API Level: ${GREEN}$api_level${NC}"
 
                     # Get boot status
                     local boot_complete
-                    boot_complete=$(adb -s "$device_id" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+                    boot_complete=$($adb_path -s "$device_id" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
                     if [ "$boot_complete" = "1" ]; then
                         echo -e "   Status: ${GREEN}Ready${NC}"
                     else
@@ -575,7 +585,7 @@ cmd_devices() {
 
     echo -e "${CYAN}📱 Connected Devices:${NC}"
     echo ""
-    adb devices
+    $adb_path devices
 }
 
 cmd_packages() {
@@ -594,9 +604,9 @@ cmd_packages() {
 
     if [ $# -gt 1 ]; then
         echo -e "${YELLOW}Searching for: $2${NC}"
-        adb shell pm list packages | grep -i "$2" | cut -d: -f2 | sort
+        $adb_path shell pm list packages | grep -i "$2" | cut -d: -f2 | sort
     else
-        adb shell pm list packages -3 | cut -d: -f2 | sort
+        $adb_path shell pm list packages -3 | cut -d: -f2 | sort
     fi
 }
 
@@ -613,7 +623,7 @@ cmd_logcat() {
     echo -e "${YELLOW}📋 Showing live logs (Ctrl+C to exit)...${NC}"
     echo ""
 
-    adb logcat
+    $adb_path logcat
 }
 
 cmd_screenshot() {
@@ -629,7 +639,7 @@ cmd_screenshot() {
     filename="screenshot-$(date +%Y%m%d-%H%M%S).png"
     path="$HOME/$filename"
 
-    adb shell screencap -p > "$path" 2>/dev/null
+    $adb_path shell screencap -p > "$path" 2>/dev/null
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Screenshot saved: $path${NC}"
@@ -640,7 +650,7 @@ cmd_screenshot() {
 
 cmd_feeld() {
     # Use the feeld function (must be available in fish shell)
-    feeld
+    fish -c "feeld"
 }
 
 cmd_govee() {
@@ -658,6 +668,34 @@ cmd_spotify() {
     fish -c "spotify"
 }
 
+cmd_studio() {
+    if [ ! -f "$studio_path" ]; then
+        log_error "Android Studio not found at: $studio_path"
+        return 1
+    fi
+
+    log_info "🚀 Launching Android Studio..."
+    nohup "$studio_path" >/dev/null 2>&1 &
+    disown
+}
+
+cmd_launch() {
+    local phone_only=0
+    for arg in "$@"; do
+        case "$arg" in
+            --phoneonly|-po)
+                phone_only=1
+                ;;
+        esac
+    done
+
+    if [ "$phone_only" -eq 0 ]; then
+        cmd_studio
+    fi
+
+    cmd_start
+}
+
 # Main command handler
 if [ $# -eq 0 ]; then
     show_menu
@@ -667,6 +705,16 @@ fi
 command="$1"
 
 case "$command" in
+    --phoneonly|-po)
+        cmd_start
+        exit $?
+        ;;
+    launch)
+        cmd_launch "$@"
+        ;;
+    studio)
+        cmd_studio "$@"
+        ;;
     start)
         cmd_start "$@"
         ;;

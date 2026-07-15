@@ -8,6 +8,24 @@ export function Catalog():Promise<Array<main.CatalogCategory>>;
 
 export function CheckPresence(arg1:Array<string>):Promise<Record<string, boolean>>;
 
+export function KeydApplyProfile(arg1:string):Promise<main.KeydResult>;
+
+export function KeydDeleteProfile(arg1:string):Promise<main.KeydResult>;
+
+export function KeydListKeys():Promise<Array<string>>;
+
+export function KeydListProfiles():Promise<Array<main.KeydProfile>>;
+
+export function KeydSaveProfile(arg1:string,arg2:Array<main.KeydBinding>):Promise<main.KeydResult>;
+
+export function KeydStartCapture():Promise<main.KeydResult>;
+
+export function KeydStatus():Promise<main.KeydStatus>;
+
+export function KeydStopCapture():Promise<void>;
+
+export function KeydValidate(arg1:Array<main.KeydBinding>):Promise<main.KeydResult>;
+
 export function RunInstall(arg1:string,arg2:string,arg3:boolean):Promise<string>;
 
 export function SystemInfo():Promise<main.SystemInfo>;

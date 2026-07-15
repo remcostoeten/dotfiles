@@ -268,6 +268,11 @@ _prune_dead() {
 
 _start() {
   local id=$(_get_next_id)
+  local piped_input=""
+  if ! [ -t 0 ]; then
+    piped_input=$(cat | tr -d '\n\r')
+  fi
+  [ -n "$piped_input" ] && set -- "$@" "$piped_input"
   local cmd="$*"
   local cwd started_at log_file
 
@@ -575,11 +580,45 @@ EOF
   echo
 }
 
+_shell_display() {
+  if [ ! -s "$BG_PIDS_FILE" ]; then
+    return
+  fi
+
+  _prune_dead
+
+  if [ ! -s "$BG_PIDS_FILE" ]; then
+    return
+  fi
+
+  local count=0 lines="" id pid rest
+  while read -r id pid rest; do
+    _parse_record "$id" "$pid" "$rest"
+    if kill -0 "$PARSED_PID" 2>/dev/null; then
+      ((count++))
+      local uptime=""
+      if [ -n "$PARSED_STARTED" ]; then
+        uptime=$(_format_duration "$(($(date +%s) - PARSED_STARTED))")
+      fi
+      lines+="  $(_color magenta "#$PARSED_ID") $PARSED_CMD [$uptime]\n"
+    fi
+  done < "$BG_PIDS_FILE"
+
+  [ "$count" -eq 0 ] && return
+
+  _colorln bold "⚙️  Background Processes ($count)"
+  printf '%b' "$lines"
+  echo
+}
+
 _init
 
 case "${1:-}" in
   help|--help|-h)
     _help
+    ;;
+  shell-display)
+    _shell_display
     ;;
   ""|list)
     _prune_dead

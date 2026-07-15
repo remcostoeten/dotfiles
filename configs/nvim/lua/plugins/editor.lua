@@ -16,6 +16,9 @@ return {
       vim.list_extend(opts.ensure_installed or {}, {
         "bash",
         "css",
+        "eex",
+        "elixir",
+        "heex",
         "html",
         "javascript",
         "json",
@@ -33,6 +36,7 @@ return {
         "vim",
         "vimdoc",
         "yaml",
+        "graphql",
       })
     end,
   },

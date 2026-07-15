@@ -1,0 +1,24 @@
+# Pastel Dark - soft dark plum base, gentle pastel accents
+palette = 0=#2a2b3d
+palette = 1=#f28fad
+palette = 2=#a6e3a1
+palette = 3=#f9e2af
+palette = 4=#89b4fa
+palette = 5=#cba6f7
+palette = 6=#94e2d5
+palette = 7=#d9dced
+palette = 8=#494d64
+palette = 9=#f5a9c0
+palette = 10=#b6f2b6
+palette = 11=#fbe8bd
+palette = 12=#a0c4fa
+palette = 13=#dcc0f9
+palette = 14=#a8ecdf
+palette = 15=#f2f3fb
+
+background = #232436
+foreground = #d9dced
+cursor-color = #f28fad
+selection-background = #3a3c54
+selection-foreground = #f2f3fb
+split-divider-color = #3a3c54

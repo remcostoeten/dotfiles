@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Keybind Manager
+Comment=System-wide keyboard remapping for KDE Plasma via keyd
+Exec=keybind-manager
+Icon=keybind-manager
+Terminal=false
+Categories=Utility;Settings;
+Keywords=keyboard;remap;keyd;shortcuts;capslock;

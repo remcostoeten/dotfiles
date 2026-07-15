@@ -61,7 +61,7 @@
       "enable_lsp_tasks": true
     }
   },
-  "vim_mode": true,
+  "vim_mode": false,
   "agent_servers": {
     "opencode": {
       "type": "registry"

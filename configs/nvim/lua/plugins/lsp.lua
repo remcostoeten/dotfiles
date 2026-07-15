@@ -15,6 +15,8 @@ return {
         "php-cs-fixer",
         "css-lsp",
         "mdx-analyzer",
+        "elixir-ls",
+        "graphql-language-service-cli",
       },
     },
   },
@@ -36,6 +38,10 @@ return {
         mdx_analyzer = {
           filetypes = { "markdown.mdx", "mdx" },
         },
+        -- Elixir language server (completion, diagnostics, go-to-def)
+        elixirls = {},
+        -- GraphQL language server
+        graphql = {},
       },
     },
   },
@@ -62,6 +68,7 @@ return {
         css = { "prettier" },
         html = { "prettier" },
         yaml = { "prettier" },
+        graphql = { "prettier" },
       },
     },
   },

@@ -1,0 +1,41 @@
+# Maintainer: Remco Stoeten <remcostoeten@hotmail.com>
+pkgname=keybind-manager
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="GUI for system-wide keyboard remapping on KDE Plasma via keyd"
+arch=('x86_64')
+url="https://github.com/remcostoeten/keybind-manager"
+license=('MIT')
+depends=('keyd' 'polkit' 'webkit2gtk-4.1' 'gtk3')
+makedepends=('cargo' 'pnpm' 'nodejs')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  pnpm install --frozen-lockfile
+  pnpm build
+  cd src-tauri
+  cargo build --release --locked
+  cargo build --release --locked -p keybind-helper
+}
+
+check() {
+  cd "$pkgname-$pkgver/src-tauri"
+  cargo test --release --locked --workspace
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 "src-tauri/target/release/keybind-manager" "$pkgdir/usr/bin/keybind-manager"
+  install -Dm755 "src-tauri/target/release/keybind-manager-helper" "$pkgdir/usr/bin/keybind-manager-helper"
+  install -Dm644 "polkit/org.remcostoeten.keybind-manager.policy" \
+    "$pkgdir/usr/share/polkit-1/actions/org.remcostoeten.keybind-manager.policy"
+  install -Dm644 "packaging/keybind-manager.desktop" \
+    "$pkgdir/usr/share/applications/keybind-manager.desktop"
+  install -Dm644 "src-tauri/icons/icon.png" \
+    "$pkgdir/usr/share/icons/hicolor/512x512/apps/keybind-manager.png"
+  install -Dm644 "src-tauri/icons/128x128.png" \
+    "$pkgdir/usr/share/icons/hicolor/128x128/apps/keybind-manager.png"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE" 2>/dev/null || true
+}

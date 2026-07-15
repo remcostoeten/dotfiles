@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RED=$'\e[31m'
+GREEN=$'\e[32m'
+YELLOW=$'\e[33m'
+BLUE=$'\e[34m'
+CYAN=$'\e[36m'
+BOLD=$'\e[1m'
+DIM=$'\e[2m'
+RESET=$'\e[0m'
+
+STEPS=4
+STEP=0
+
+function usage() {
+	cat <<EOF
+${BOLD}install-deb${RESET} — install a .deb package natively on Arch (via debtap)
+
+${BOLD}Usage:${RESET}
+    install-deb <path/to/package.deb>
+    install-deb -h | --help
+
+${BOLD}What it does:${RESET}
+    1. Converts the .deb to an Arch package with debtap
+    2. Detects existing installs and offers to replace them
+    3. Installs via pacman so it's tracked like any native package
+EOF
+}
+
+function die() {
+	printf '%s✗ %s%s\n' "$RED" "$1" "$RESET" >&2
+	exit 1
+}
+
+function step() {
+	STEP=$((STEP + 1))
+	printf '\n%s[%d/%d]%s %s%s%s\n' "$DIM" "$STEP" "$STEPS" "$RESET" "$BOLD" "$1" "$RESET"
+}
+
+function spin() {
+	local pid=$1 msg=$2 frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' i=0
+	tput civis 2>/dev/null || true
+	while kill -0 "$pid" 2>/dev/null; do
+		printf '\r  %s%s%s %s' "$CYAN" "${frames:i++%10:1}" "$RESET" "$msg"
+		sleep 0.08
+	done
+	tput cnorm 2>/dev/null || true
+	if wait "$pid"; then
+		printf '\r  %s✓%s %s\n' "$GREEN" "$RESET" "$msg"
+	else
+		printf '\r  %s✗%s %s\n' "$RED" "$RESET" "$msg"
+		return 1
+	fi
+}
+
+function bar() {
+	local current=$1 total=$2 width=30
+	local filled=$((current * width / total))
+	printf '\r  %s[%s%s]%s %d%%' "$DIM" "$(printf '█%.0s' $(seq 1 $filled))" "$(printf '░%.0s' $(seq $filled $((width - 1))))" "$RESET" $((current * 100 / total))
+}
+
+[[ $# -eq 0 ]] && { usage; exit 1; }
+[[ $1 == -h || $1 == --help ]] && { usage; exit 0; }
+[[ $# -gt 1 ]] && die 'expected exactly one argument, see --help'
+
+DEB=$1
+[[ -f $DEB ]] || die "file not found: $DEB"
+[[ $DEB == *.deb ]] || die "not a .deb file: $DEB"
+
+command -v debtap &>/dev/null || die 'debtap is not installed (yay -S debtap)'
+command -v pacman &>/dev/null || die 'pacman not found, is this Arch?'
+
+printf '%s%s◆ deb → arch installer%s\n' "$BOLD" "$BLUE" "$RESET"
+printf '%s  %s%s\n' "$DIM" "$(realpath "$DEB")" "$RESET"
+
+if [[ ! -s /var/cache/debtap/debtap.db && ! -d /var/cache/debtap ]] || ! ls /var/cache/debtap/* &>/dev/null; then
+	step 'Updating debtap database (first run)'
+	sudo debtap -u &>/tmp/debtap-update.log &
+	spin $! 'sudo debtap -u' || die "database update failed, see /tmp/debtap-update.log"
+else
+	STEP=1
+fi
+
+step 'Converting package'
+WORKDIR=$(mktemp -d)
+trap 'rm -rf "$WORKDIR"' EXIT
+cp "$DEB" "$WORKDIR/"
+(cd "$WORKDIR" && debtap -Q "$(basename "$DEB")" &>/tmp/debtap-convert.log) &
+spin $! "debtap -Q $(basename "$DEB")" || die 'conversion failed, see /tmp/debtap-convert.log'
+
+PKG=$(find "$WORKDIR" -name '*.pkg.tar.*' | head -n1)
+[[ -n $PKG ]] || die 'debtap produced no package'
+
+NAME=$(pacman -Qip "$PKG" | awk -F ' *: *' '/^Name/ {print $2}')
+VERSION=$(pacman -Qip "$PKG" | awk -F ' *: *' '/^Version/ {print $2}')
+printf '  %s→%s %s%s%s %s%s%s\n' "$DIM" "$RESET" "$BOLD" "$NAME" "$RESET" "$DIM" "$VERSION" "$RESET"
+
+step 'Checking existing install'
+if PKGINFO=$(pacman -Qi "$NAME" 2>/dev/null); then
+	OLD=$(awk -F ' *: *' '/^Version/ {print $2}' <<<"$PKGINFO")
+	OLD_NAME=$(awk -F ' *: *' '/^Name/ {print $2}' <<<"$PKGINFO")
+	printf '  %s!%s %s%s%s is already installed %s(%s)%s\n' "$YELLOW" "$RESET" "$BOLD" "$NAME" "$RESET" "$DIM" "$OLD" "$RESET"
+	printf '  %sRemove old install and install %s?%s [y/N] ' "$YELLOW" "$VERSION" "$RESET"
+	read -r answer
+	[[ ${answer,,} == y ]] || { printf '  %sCancelled%s\n' "$DIM" "$RESET"; exit 0; }
+	sudo pacman -Rns --noconfirm "$OLD_NAME" &>/tmp/debtap-remove.log &
+	spin $! "sudo pacman -Rns $OLD_NAME" || die 'removal failed, see /tmp/debtap-remove.log'
+else
+	printf '  %s✓%s not installed, clean install\n' "$GREEN" "$RESET"
+fi
+
+step 'Installing'
+sudo pacman -U --noconfirm \
+	--assume-installed=gtk=gtk3 \
+	"$PKG" &>/tmp/debtap-install.log &
+spin $! "sudo pacman -U $(basename "$PKG")" || die 'install failed, see /tmp/debtap-install.log'
+for i in $(seq 1 30); do bar "$i" 30; sleep 0.01; done
+printf '\n'
+
+BINS=$(pacman -Qlq "$NAME" | grep -E '^/usr/bin/[^/]+$' || true)
+
+printf '\n%s%s✔ Installed %s %s%s\n' "$BOLD" "$GREEN" "$NAME" "$VERSION" "$RESET"
+if [[ -n $BINS ]]; then
+	while IFS= read -r bin; do
+		printf '  %sRun:%s  %s%s%s  %s(%s)%s\n' "$DIM" "$RESET" "$CYAN" "$(basename "$bin")" "$RESET" "$DIM" "$bin" "$RESET"
+	done <<<"$BINS"
+else
+	printf '  %sNo binaries in /usr/bin — check:%s pacman -Ql %s\n' "$DIM" "$RESET" "$NAME"
+fi

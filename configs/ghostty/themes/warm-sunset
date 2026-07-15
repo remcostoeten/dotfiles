@@ -1,0 +1,24 @@
+# Warm Sunset - charcoal/brown base, orange, coral and gold accents
+palette = 0=#241a14
+palette = 1=#e8623f
+palette = 2=#b8a15e
+palette = 3=#f0a75e
+palette = 4=#8a7a8a
+palette = 5=#d9668c
+palette = 6=#c98a5e
+palette = 7=#f0d9c0
+palette = 8=#4a3b30
+palette = 9=#ff8a63
+palette = 10=#d4c07e
+palette = 11=#ffc47e
+palette = 12=#a596a5
+palette = 13=#f08cae
+palette = 14=#e0aa7e
+palette = 15=#fbecd9
+
+background = #1c1512
+foreground = #f0d9c0
+cursor-color = #f0a75e
+selection-background = #3a2c22
+selection-foreground = #fbecd9
+split-divider-color = #3a2c22

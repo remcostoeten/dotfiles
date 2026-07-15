@@ -287,6 +287,15 @@ func (c *Client) AddComment(ctx context.Context, slug string, id int, raw string
 	return c.do(ctx, http.MethodPost, fmt.Sprintf("/repositories/%s/pullrequests/%d/comments", slug, id), body, nil)
 }
 
+// UpdatePR edits a pull request's title and/or description.
+func (c *Client) UpdatePR(ctx context.Context, slug string, id int, title, description string) error {
+	body := map[string]any{
+		"title":       title,
+		"description": description,
+	}
+	return c.do(ctx, http.MethodPut, fmt.Sprintf("/repositories/%s/pullrequests/%d", slug, id), body, nil)
+}
+
 type CreateOptions struct {
 	Title             string
 	Source            string

@@ -45,7 +45,7 @@
       "skillFolderHash": "3cf9a8db32597ba3e24b584a3d696f4e11c7d7b6",
       "pluginName": "example-skills",
       "installedAt": "2026-05-25T13:53:27.803Z",
-      "updatedAt": "2026-06-23T19:40:29.074Z"
+      "updatedAt": "2026-07-11T19:26:46.829Z"
     },
     "caveman": {
       "source": "juliusbrussee/caveman",
@@ -131,6 +131,33 @@
       "pluginName": "mattpocock-skills",
       "installedAt": "2026-07-01T07:12:35.250Z",
       "updatedAt": "2026-07-01T07:12:35.250Z"
+    },
+    "copywriting": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/coreyhaines31/marketingskills.git",
+      "skillPath": "skills/copywriting/SKILL.md",
+      "skillFolderHash": "13d216690bbbcb88e2fee9f3e2d8f5a5bbc4b338",
+      "installedAt": "2026-07-09T17:02:28.111Z",
+      "updatedAt": "2026-07-09T17:02:28.111Z"
+    },
+    "readme-blueprint-generator": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/github/awesome-copilot.git",
+      "skillPath": "skills/readme-blueprint-generator/SKILL.md",
+      "skillFolderHash": "1caa0e533a87a92baee6e0bdf24f531588a2cfac",
+      "installedAt": "2026-07-09T17:17:49.503Z",
+      "updatedAt": "2026-07-09T17:17:49.503Z"
+    },
+    "review-animations": {
+      "source": "emilkowalski/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/emilkowalski/skills.git",
+      "skillPath": "skills/review-animations/SKILL.md",
+      "skillFolderHash": "0012fc43a25cce5df019102ab28bb6a68ad9db3d",
+      "installedAt": "2026-07-13T23:27:22.978Z",
+      "updatedAt": "2026-07-13T23:27:22.978Z"
     }
   },
   "dismissed": {

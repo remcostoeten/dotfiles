@@ -26,6 +26,9 @@ type App struct {
 	installMu     sync.Mutex
 	installing    bool
 	installCancel context.CancelFunc
+
+	keydMu     sync.Mutex
+	keydCancel context.CancelFunc
 }
 
 // SystemInfo is the read-only machine summary shown on first launch.

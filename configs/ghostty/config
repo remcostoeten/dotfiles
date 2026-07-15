@@ -1,10 +1,13 @@
 command = /usr/bin/fish
 
-background-opacity = 0.92
+background-opacity = 0.82
 background-opacity-cells = true
-background-blur = 20
+background-blur = 90
+background-image = /home/remcostoeten/.config/dotfiles/configs/ghostty/assets/pastel-dark-bg.png
+background-image-opacity = 0.5
+background-image-fit = cover
 
-theme = dotfiles-dark
+theme = pastel-dark
 window-decoration = none
 gtk-titlebar = false
 window-show-tab-bar = never
@@ -14,8 +17,8 @@ window-padding-x = 16
 
 # Font & Typography
 font-family = "ComicShannsMono Nerd Font"
-font-size = 18 
-adjust-cell-height = 2%
+font-size = 27
+adjust-cell-height = 15%
 adjust-cell-width = 2%
 
 

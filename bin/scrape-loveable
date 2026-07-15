@@ -1,0 +1,229 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# scrape-loveable — pull every file/folder of a Lovable project to disk.
+#
+# Uses Lovable's git API:
+#   GET /projects/{id}/git/files?ref={ref}          -> file list
+#   GET /projects/{id}/git/file?ref={ref}&path={p}  -> raw file bytes
+# Auth is a Firebase ID token (see `scrape-loveable token`).
+
+API="${SCRAPE_LOVEABLE_API:-https://api.lovable.dev}"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/scrape-loveable"
+RUNS_TSV="$DATA_DIR/runs.tsv"
+TOKEN_FILE="$DATA_DIR/token"
+DEST_ROOT="${SCRAPE_LOVEABLE_DEST:-$HOME/lovable-projects}"
+
+C_RESET=$'\e[0m'; C_DIM=$'\e[2m'; C_BOLD=$'\e[1m'
+C_CYAN=$'\e[36m'; C_GREEN=$'\e[32m'; C_YELLOW=$'\e[33m'; C_RED=$'\e[31m'; C_MAG=$'\e[35m'
+
+info()  { printf '%s\n' "${C_CYAN}$*${C_RESET}"; }
+ok()    { printf '%s\n' "${C_GREEN}$*${C_RESET}"; }
+warn()  { printf '%s\n' "${C_YELLOW}$*${C_RESET}" >&2; }
+err()   { printf '%s\n' "${C_RED}$*${C_RESET}" >&2; }
+
+need() { command -v "$1" >/dev/null 2>&1 || { err "Missing dependency: $1"; exit 1; }; }
+need curl; need jq
+
+mkdir -p "$DATA_DIR"
+[[ -f "$RUNS_TSV" ]] || printf 'when\tproject\tref\tfiles\tdest\n' > "$RUNS_TSV"
+
+# ---------------------------------------------------------------------------
+
+token_snippet() {
+  cat <<'SNIP'
+Paste this into the DevTools console of the Lovable project tab (logged in):
+
+  (async () => {
+    const rows = await new Promise((res) => {
+      const req = indexedDB.open('firebaseLocalStorageDb');
+      req.onsuccess = () => {
+        const tx = req.result.transaction('firebaseLocalStorage', 'readonly')
+          .objectStore('firebaseLocalStorage').getAll();
+        tx.onsuccess = () => res(tx.result);
+      };
+    });
+    copy(rows[0].value.stsTokenManager.accessToken);
+    console.log('token copied to clipboard');
+  })();
+
+Then run:  scrape-loveable token   (and paste it)
+The token is short-lived (~1h); re-grab when you get a 401.
+SNIP
+}
+
+get_token() {
+  if [[ -n "${LOVABLE_TOKEN:-}" ]]; then
+    printf '%s' "$LOVABLE_TOKEN"; return
+  fi
+  if [[ -s "$TOKEN_FILE" ]]; then
+    cat "$TOKEN_FILE"; return
+  fi
+  err "No token set. Run: scrape-loveable token"
+  exit 1
+}
+
+set_token() {
+  warn "Paste your Lovable token (input hidden), then Enter:"
+  local t; read -rs t; echo
+  if [[ -z "$t" ]]; then err "Empty token, aborted."; exit 1; fi
+  printf '%s' "$t" > "$TOKEN_FILE"
+  chmod 600 "$TOKEN_FILE"
+  ok "Token saved to $TOKEN_FILE"
+}
+
+# Accept a bare id or a full lovable.dev URL, echo the project id.
+normalize_id() {
+  local raw="$1"
+  if [[ "$raw" =~ projects/([0-9a-f-]{36}) ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  else
+    printf '%s' "$raw"
+  fi
+}
+
+record_run() {
+  printf '%s\t%s\t%s\t%s\t%s\n' "$(date +%Y-%m-%dT%H:%M:%S)" "$1" "$2" "$3" "$4" >> "$RUNS_TSV"
+}
+
+# ---------------------------------------------------------------------------
+
+do_scrape() {
+  local project ref dest token
+  project="$(normalize_id "$1")"
+  ref="${2:-main}"
+  dest="${3:-$DEST_ROOT/$project}"
+  token="$(get_token)"
+
+  info "Project ${C_BOLD}$project${C_RESET}${C_CYAN} @ $ref"
+  info "Dest    $dest"
+
+  local listfile; listfile="$(mktemp)"
+  local code
+  code="$(curl -sS -w '%{http_code}' -o "$listfile" \
+    -H "authorization: Bearer $token" \
+    "$API/projects/$project/git/files?ref=$ref")"
+
+  if [[ "$code" == "401" ]]; then
+    err "401 unauthorized — token expired or invalid. Run: scrape-loveable token"
+    rm -f "$listfile"; exit 1
+  fi
+  if [[ "$code" != "200" ]]; then
+    err "Failed to list files (HTTP $code):"; cat "$listfile" >&2; rm -f "$listfile"; exit 1
+  fi
+
+  mapfile -t paths < <(jq -r '.files[].path' "$listfile")
+  rm -f "$listfile"
+  local total="${#paths[@]}"
+  if [[ "$total" -eq 0 ]]; then warn "No files returned."; exit 0; fi
+  info "Found $total files. Downloading…"
+
+  local n=0 fail=0
+  for p in "${paths[@]}"; do
+    local out="$dest/$p"
+    mkdir -p "$(dirname "$out")"
+    local u="$API/projects/$project/git/file?ref=$ref&path=$(jq -rn --arg s "$p" '$s|@uri')"
+    if curl -sS -f -H "authorization: Bearer $token" -o "$out" "$u"; then
+      n=$((n+1))
+    else
+      fail=$((fail+1)); warn "  ! failed: $p"
+    fi
+    printf '\r  %s%d/%d%s  %s' "$C_DIM" "$((n+fail))" "$total" "$C_RESET" "${p:0:50}"
+  done
+  printf '\r%*s\r' 80 ''
+
+  record_run "$project" "$ref" "$n" "$dest"
+  if [[ "$fail" -gt 0 ]]; then
+    warn "Done with $fail failure(s). $n/$total files written to:"
+  else
+    ok "Done. $n files written to:"
+  fi
+  printf '%s\n' "$dest"
+}
+
+# ---------------------------------------------------------------------------
+
+list_runs() {
+  if [[ "$(wc -l < "$RUNS_TSV")" -le 1 ]]; then
+    warn "No previous runs yet."; return
+  fi
+  printf '%s\n' "${C_BOLD}Previous runs${C_RESET}"
+  column -t -s $'\t' "$RUNS_TSV" | sed "1s/.*/${C_DIM}&${C_RESET}/"
+}
+
+pick_rerun() {
+  if [[ "$(wc -l < "$RUNS_TSV")" -le 1 ]]; then
+    warn "No previous runs to re-run."; return 1
+  fi
+  local line
+  line="$(tail -n +2 "$RUNS_TSV" | tac | \
+    fzf --with-nth=1,2,3,4 --delimiter='\t' \
+        --prompt='re-run › ' --height=40% --reverse \
+        --header='select a previous run to scrape again')" || return 1
+  local project ref dest
+  project="$(cut -f2 <<<"$line")"; ref="$(cut -f3 <<<"$line")"; dest="$(cut -f5 <<<"$line")"
+  do_scrape "$project" "$ref" "$dest"
+}
+
+new_scrape_interactive() {
+  local project ref dest
+  printf '%s' "${C_MAG}Project id or lovable.dev URL: ${C_RESET}"; read -r project
+  [[ -z "$project" ]] && { err "Nothing entered."; return 1; }
+  project="$(normalize_id "$project")"
+  printf '%s' "${C_MAG}Branch/ref [main]: ${C_RESET}"; read -r ref; ref="${ref:-main}"
+  printf '%s' "${C_MAG}Dest [$DEST_ROOT/$project]: ${C_RESET}"; read -r dest
+  dest="${dest:-$DEST_ROOT/$project}"
+  do_scrape "$project" "$ref" "$dest"
+}
+
+menu() {
+  local choice
+  choice="$(printf '%s\n' \
+    "new        — scrape a project" \
+    "rerun      — repeat a previous run" \
+    "list       — show previous runs" \
+    "token      — set / update auth token" \
+    "help       — usage + how to get a token" \
+    | fzf --prompt='scrape-loveable › ' --height=40% --reverse \
+          --header='what do you want to do?')" || exit 0
+  case "$choice" in
+    new*)   new_scrape_interactive ;;
+    rerun*) pick_rerun ;;
+    list*)  list_runs ;;
+    token*) set_token ;;
+    help*)  usage ;;
+  esac
+}
+
+usage() {
+  cat <<EOF
+${C_BOLD}scrape-loveable${C_RESET} — download every file of a Lovable project to disk.
+
+${C_BOLD}Usage${C_RESET}
+  scrape-loveable                       open interactive menu
+  scrape-loveable <id|url> [ref] [dest] scrape directly (ref defaults to main)
+  scrape-loveable list                  show previous runs
+  scrape-loveable rerun                 pick a previous run and repeat it
+  scrape-loveable token                 set/update your auth token
+  scrape-loveable help                  this help
+
+${C_BOLD}Auth${C_RESET}
+$(token_snippet)
+
+${C_BOLD}Paths${C_RESET}
+  runs history : $RUNS_TSV
+  token cache  : $TOKEN_FILE
+  default dest : $DEST_ROOT/<projectId>   (override with \$SCRAPE_LOVEABLE_DEST)
+EOF
+}
+
+# ---------------------------------------------------------------------------
+
+case "${1:-}" in
+  ""|menu)          menu ;;
+  -h|--help|help)   usage ;;
+  list|runs)        list_runs ;;
+  rerun)            pick_rerun ;;
+  token)            set_token ;;
+  *)                do_scrape "$@" ;;
+esac

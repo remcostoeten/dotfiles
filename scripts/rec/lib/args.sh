@@ -5,7 +5,7 @@
 suggest_arg() {
   local arg="$1"
   local options=(--fps --audio --name --class --active --region --dora --output-dir --prefix --countdown --copy-path --play --notify --no-notify --indicator --no-indicator --interactive --help)
-  local commands=(master deliver region gif clip upload edit latest open play help)
+  local commands=(master deliver region gif clip upload edit latest list open play config help)
   local opt
 
   if [[ "$arg" != --* ]]; then
@@ -64,6 +64,12 @@ unknown_arg() {
   exit 1
 }
 
+need_number() {
+  local opt="$1" value="$2"
+  [[ "$value" =~ ^[0-9]+$ ]] || { echo "$opt expects a whole number, got '$value'" >&2; exit 1; }
+  printf '%s\n' "$value"
+}
+
 parse_args() {
   local replay_index
 
@@ -84,9 +90,9 @@ parse_args() {
       -i|--interactive|menu) INTERACTIVE=1; shift;;
       master|deliver) QUALITY="$1"; shift;;
       gif|clip|upload|edit) apply_preset "$1"; shift;;
-      latest|open|play) ACTION="$1"; shift;;
+      latest|list|open|play|config) ACTION="$1"; shift;;
       region) REGION=1; shift;;
-      --fps) FPS="$(need_value "$1" "${2-}")"; shift 2;;
+      --fps) FPS="$(need_number "$1" "$(need_value "$1" "${2-}")")"; shift 2;;
       --audio) AUDIO=1; shift;;
       --active) NAME=""; CLASS=""; REGION=0; shift;;
       --name) NAME="$(need_value "$1" "${2-}")"; shift 2;;
@@ -95,7 +101,7 @@ parse_args() {
       --dora) CLASS="dora"; NAME=""; REGION=0; PREFIX="dora"; shift;;
       --output-dir) OUTDIR="$(need_value "$1" "${2-}")"; shift 2;;
       --prefix) PREFIX="$(need_value "$1" "${2-}")"; shift 2;;
-      --countdown) COUNTDOWN="$(need_value "$1" "${2-}")"; shift 2;;
+      --countdown) COUNTDOWN="$(need_number "$1" "$(need_value "$1" "${2-}")")"; shift 2;;
       --copy-path) COPY_PATH=1; shift;;
       --play) PLAY_AFTER=1; shift;;
       --notify) NOTIFY=1; shift;;
@@ -105,4 +111,9 @@ parse_args() {
       *) unknown_arg "$1";;
     esac
   done
+
+  if [[ "$FPS" -eq 0 ]]; then
+    echo "--fps must be at least 1" >&2
+    exit 1
+  fi
 }

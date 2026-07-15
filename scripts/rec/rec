@@ -13,7 +13,9 @@
 #   rec --audio              # also capture desktop audio
 #   rec --class firefox      # record the largest Firefox window
 #   rec --name "Dora"        # record the largest window matching a title
-# Stop recording with: q  (in the terminal) or Ctrl-C
+#   rec list                 # list recent recordings
+#   rec config               # edit persistent defaults (~/.config/rec/config)
+# While recording: space pauses/resumes, q or Enter stops, Ctrl-C stops.
 # Run `rec --help` for the full reference.
 set -euo pipefail
 
@@ -31,7 +33,7 @@ unset __rec_source __rec_dir
 
 # Load the engine. Each module only defines functions, so order is irrelevant
 # except that main.sh (which defines rec_main) is convenient to load last.
-for __mod in colors util usage presets history menu interactive edit share postprocess overlay capture args main; do
+for __mod in colors util usage config presets history menu interactive edit share postprocess overlay capture args main; do
   # shellcheck source=/dev/null
   source "$REC_LIB/$__mod.sh"
 done

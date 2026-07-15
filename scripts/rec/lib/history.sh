@@ -1,6 +1,15 @@
 # rec engine — persistence and replay of interactive setups.
 # History lives in $HISTORY_FILE, newest first, capped at $HISTORY_LIMIT.
 
+# One-time move from the old hidden location to ~/.config/rec/history.
+migrate_history_file() {
+  [[ -z "${REC_HISTORY_FILE-}" ]] || return 0
+  local old="$HOME/.config/.dotfiles/rec"
+  [[ ! -e "$HISTORY_FILE" && -f "$old" ]] || return 0
+  mkdir -p "$(dirname -- "$HISTORY_FILE")"
+  mv -f -- "$old" "$HISTORY_FILE" 2>/dev/null || true
+}
+
 history_line() {
   printf 'ts=%s quality=%s preset=%s fps=%s audio=%s name=%s class=%s region=%s countdown=%s copy_path=%s play_after=%s notify=%s gif=%s outdir=%s prefix=%s\n' \
     "$(quote_value "$(date +%Y-%m-%dT%H:%M:%S%z)")" \

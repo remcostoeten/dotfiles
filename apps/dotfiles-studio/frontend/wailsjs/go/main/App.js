@@ -14,6 +14,42 @@ export function CheckPresence(arg1) {
   return window['go']['main']['App']['CheckPresence'](arg1);
 }
 
+export function KeydApplyProfile(arg1) {
+  return window['go']['main']['App']['KeydApplyProfile'](arg1);
+}
+
+export function KeydDeleteProfile(arg1) {
+  return window['go']['main']['App']['KeydDeleteProfile'](arg1);
+}
+
+export function KeydListKeys() {
+  return window['go']['main']['App']['KeydListKeys']();
+}
+
+export function KeydListProfiles() {
+  return window['go']['main']['App']['KeydListProfiles']();
+}
+
+export function KeydSaveProfile(arg1, arg2) {
+  return window['go']['main']['App']['KeydSaveProfile'](arg1, arg2);
+}
+
+export function KeydStartCapture() {
+  return window['go']['main']['App']['KeydStartCapture']();
+}
+
+export function KeydStatus() {
+  return window['go']['main']['App']['KeydStatus']();
+}
+
+export function KeydStopCapture() {
+  return window['go']['main']['App']['KeydStopCapture']();
+}
+
+export function KeydValidate(arg1) {
+  return window['go']['main']['App']['KeydValidate'](arg1);
+}
+
 export function RunInstall(arg1, arg2, arg3) {
   return window['go']['main']['App']['RunInstall'](arg1, arg2, arg3);
 }

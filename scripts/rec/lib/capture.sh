@@ -7,6 +7,29 @@ latest_recording() {
     awk 'NR == 1 { sub(/^[^ ]+ /, ""); print }'
 }
 
+list_recordings() {
+  setup_colors
+  local entries
+  mapfile -t entries < <(
+    find "$OUTDIR" -maxdepth 1 -type f \( -name '*.mp4' -o -name '*.gif' \) -printf '%T@\t%s\t%p\n' 2>/dev/null |
+      sort -nr | head -n 20
+  )
+  if (( ${#entries[@]} == 0 )); then
+    echo "No recordings found in $OUTDIR"
+    return 0
+  fi
+
+  printf '%sLatest recordings in %s (newest first)%s\n' "$DIM" "$OUTDIR" "$RESET"
+  local entry ts size path
+  for entry in "${entries[@]}"; do
+    IFS=$'\t' read -r ts size path <<<"$entry"
+    printf '  %s  %9s  %s\n' \
+      "$(date -d "@${ts%.*}" '+%Y-%m-%d %H:%M' 2>/dev/null || printf '?')" \
+      "$(human_size "$size")" \
+      "$(basename -- "$path")"
+  done
+}
+
 # Round down to an even number (NVENC requires even dimensions).
 even() { echo $(( $1 - ($1 % 2) )); }
 
@@ -65,12 +88,34 @@ select_x11_region() {
   exit 1
 }
 
+# GIF captures record to a temp mp4 first ($GIF_TMP), then get converted with a
+# palette pass for far better colors and smaller files. No-op for plain video.
+finalize_capture() {
+  local out="$1"
+  [[ -n "${GIF_TMP:-}" && -f "$GIF_TMP" ]] || return 0
+  echo "Rendering GIF (palette pass for clean colors)..."
+  if ffmpeg -nostdin -hide_banner -loglevel error -y -i "$GIF_TMP" \
+       -vf "fps=${FPS},split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+       -- "$out" </dev/null; then
+    rm -f -- "$GIF_TMP"
+    GIF_TMP=""
+  else
+    echo "GIF render failed; the raw capture was kept at $GIF_TMP" >&2
+    return 1
+  fi
+}
+
 run_recorder() {
   local out="$1"
   shift
   local paused=0
-  local key
+  local key rc
   local status=0
+  local have_tty=0 no_input=0
+  local start_s=$SECONDS paused_total=0 pause_started=0
+  local live_file="${GIF_TMP:-$out}"
+  [[ -t 0 && -t 1 ]] && have_tty=1
+  (( have_tty )) && setup_colors
 
   # Run ffmpeg in its own session when possible, so a terminal Ctrl-C
   # (delivered to our whole foreground process group) does NOT reach ffmpeg
@@ -99,35 +144,66 @@ run_recorder() {
   # Ctrl-C can't truncate the file mid-finalize.
   trap 'stop_recorder' INT TERM
 
+  pause_capture() {
+    kill -STOP -- "$signal_target" >/dev/null 2>&1 || true
+    paused=1
+    pause_started=$SECONDS
+  }
+
+  resume_capture() {
+    kill -CONT -- "$signal_target" >/dev/null 2>&1 || true
+    paused=0
+    paused_total=$(( paused_total + SECONDS - pause_started ))
+  }
+
+  # Live one-line status: state, recorded time (excluding pauses), file size.
+  draw_capture_status() {
+    local elapsed size_b state
+    if (( paused )); then
+      elapsed=$(( pause_started - start_s - paused_total ))
+      state="${BOLD}${YELLOW}⏸ PAUSED${RESET}"
+    else
+      elapsed=$(( SECONDS - start_s - paused_total ))
+      state="${BOLD}${RED}● REC${RESET}"
+    fi
+    size_b="$(stat -c '%s' -- "$live_file" 2>/dev/null || echo 0)"
+    printf '\r\033[K  %s  %s   %s   %sspace pause · q stop%s' \
+      "$state" "$(human_duration "$elapsed")" "$(human_size "$size_b")" "$DIM" "$RESET"
+  }
+
   # Show the on-screen recording indicator for the duration of the capture.
   # No-op when unavailable (missing yad, --no-indicator, unknown geometry).
   start_overlay
 
-  printf 'Controls: p pause, r resume, q stop\n'
+  printf 'Controls: space pause/resume · q or Enter stop · Ctrl-C stop\n'
   while [[ "$STOPPING" -eq 0 ]] && kill -0 "$pid" >/dev/null 2>&1; do
-    if IFS= read -rsn1 -t 0.2 key; then
+    (( have_tty )) && draw_capture_status
+    if (( no_input )); then
+      sleep 0.2
+      continue
+    fi
+    key=""; rc=0
+    IFS= read -rsn1 -t 0.2 key || rc=$?
+    if (( rc == 0 )); then
       case "$key" in
-        p|P)
-          if [[ "$paused" -eq 0 ]]; then
-            kill -STOP -- "$signal_target" >/dev/null 2>&1 || true
-            paused=1
-            echo "Paused. Press r to resume."
-          fi
+        ' '|p|P)
+          if (( paused )); then resume_capture; else pause_capture; fi
           ;;
         r|R)
-          if [[ "$paused" -eq 1 ]]; then
-            kill -CONT -- "$signal_target" >/dev/null 2>&1 || true
-            paused=0
-            echo "Resumed."
-          fi
+          if (( paused )); then resume_capture; fi
           ;;
-        q|Q)
+        q|Q|"")
           stop_recorder
           break
           ;;
       esac
+    elif (( rc < 128 )); then
+      # stdin is gone (EOF, closed pipe) — keep recording, just stop polling
+      # keys so we don't spin; a signal or the recorder exiting still stops us.
+      no_input=1
     fi
   done
+  (( have_tty )) && printf '\r\033[K'
 
   # Wait for ffmpeg to fully exit, resuming the wait if a trapped signal
   # interrupts it, so the trailer is always written before we continue.
@@ -141,6 +217,7 @@ run_recorder() {
   trap - INT TERM
   stop_overlay
   [[ "$status" -eq 0 || "$status" -eq 255 || "$status" -eq 130 ]] || return "$status"
+  finalize_capture "$out" || return 1
   post_recording_actions "$out"
 }
 
@@ -152,6 +229,7 @@ do_record() {
   EXT="mp4"
   [[ "$GIF" -eq 1 ]] && EXT="gif"
   OUT="$OUTDIR/$PREFIX-$STAMP.$EXT"
+  GIF_TMP=""
 
   if [[ "${XDG_SESSION_TYPE-}" == "wayland" ]]; then
     echo "Wayland session detected. X11 window targeting is unavailable; install wf-recorder or wl-screenrec for native Wayland capture." >&2
@@ -227,10 +305,13 @@ do_record() {
   send_notification "Recording started: $OUT"
 
   if [[ "$GIF" -eq 1 ]]; then
-    REC_CMD=(ffmpeg -nostdin -hide_banner -loglevel warning -stats
+    # Capture to a lightweight intermediate mp4; finalize_capture converts it
+    # to a palette-optimized GIF afterwards (much better than direct gif encode).
+    GIF_TMP="$OUTDIR/.$PREFIX-$STAMP.capture.mp4"
+    REC_CMD=(ffmpeg -nostdin -hide_banner -loglevel warning
       -f x11grab -draw_mouse 1 -framerate "$FPS" -video_size "${W}x${H}" -i ":0.0+${X},${Y}"
-      -vf "fps=${FPS},scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos"
-      "$OUT")
+      -c:v h264_nvenc -preset p4 -rc constqp -qp 16 -pix_fmt yuv420p
+      "$GIF_TMP")
   else
     # --- quality presets (NVENC, p7 = slowest/best) ---
     if [[ "$QUALITY" == "master" ]]; then
@@ -247,7 +328,7 @@ do_record() {
       AUDIO_ENC=(-c:a aac -b:a 256k)
     fi
 
-    REC_CMD=(ffmpeg -nostdin -hide_banner -loglevel warning -stats
+    REC_CMD=(ffmpeg -nostdin -hide_banner -loglevel warning
       -f x11grab -draw_mouse 1 -framerate "$FPS" -video_size "${W}x${H}" -i ":0.0+${X},${Y}"
       "${AUDIO_IN[@]}"
       "${VENC[@]}" "${AUDIO_ENC[@]}"
