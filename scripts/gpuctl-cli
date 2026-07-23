@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+#
+# gpu — manage & inspect the NVIDIA GPU (power, clocks, fans, throttling)
+#
+# Usage:
+#   gpu [status]          snapshot: temp, fan, power, clocks, throttle state
+#   gpu watch             live dashboard (2s refresh, ctrl-c to exit)
+#   gpu top               processes using the GPU, heaviest first
+#   gpu throttle          active clock-throttle reasons
+#   gpu limit <W|+N|-N>   set power limit (absolute watts, or relative)
+#   gpu limit default     restore default power limit
+#   gpu clocks <mhz>      lock max graphics clock
+#   gpu clocks default    unlock clocks
+#   gpu fans <pct>        force fan duty cycle (both fans)
+#   gpu fans auto         restore automatic fan control
+#   gpu reset             restore defaults: power limit, clocks, fan policy
+#
+# Anti-coil-whine / anti-scream baseline: gpu limit 160 && gpu clocks 1800
+set -euo pipefail
+
+GPU=0
+C_RESET=$'\e[0m' C_DIM=$'\e[2m' C_BOLD=$'\e[1m'
+C_GREEN=$'\e[32m' C_YELLOW=$'\e[33m' C_RED=$'\e[31m' C_CYAN=$'\e[36m'
+
+function query() {
+	nvidia-smi -i "$GPU" --query-gpu="$1" --format=csv,noheader,nounits
+}
+
+function bar() {
+	local val=$1 max=$2 width=${3:-24} color=$4
+	local pct=$((val * 100 / max))
+	((pct > 100)) && pct=100
+	local filled=$((pct * width / 100))
+	printf '%s%s%s%s%s %3d%%' "$color" \
+		"$(printf '█%.0s' $(seq 1 $((filled == 0 ? 1 : filled))))" "$C_DIM" \
+		"$(printf '░%.0s' $(seq 1 $((width - filled))))" "$C_RESET" "$pct"
+}
+
+function heat_color() {
+	local val=$1 warn=$2 hot=$3
+	if ((val >= hot)); then echo "$C_RED"
+	elif ((val >= warn)); then echo "$C_YELLOW"
+	else echo "$C_GREEN"; fi
+}
+
+function throttle_reasons() {
+	nvidia-smi -i "$GPU" -q | awk '
+		/Clocks Event Reasons/ { in_section = 1; next }
+		in_section && /^        [A-Z]/ {
+			gsub(/^ +| +$/, "")
+			split($0, kv, / *: */)
+			if (kv[2] == "Active" && kv[1] != "Idle") print kv[1]
+		}
+		in_section && /^    [A-Z]/ && !/Clocks/ { in_section = 0 }
+	'
+}
+
+function proc_table() {
+	nvidia-smi pmon -c 1 2>/dev/null | awk 'NR > 2 && $2 != "-"' | while read -r _ pid type sm mem _; do
+		local cmd
+		cmd=$(ps -p "$pid" -o comm= 2>/dev/null) || continue
+		[[ $sm == "-" ]] && sm=0
+		[[ $mem == "-" ]] && mem=0
+		printf '%s\t%s\t%s\t%s\t%s\n' "$sm" "$pid" "$type" "$mem" "$cmd"
+	done | sort -rn | awk -F'\t' '{ printf "  %-20s %-8s %-5s sm %3s%%  mem %3s%%\n", $5, $2, $3, $1, $4 }'
+}
+
+function status() {
+	local name
+	name=$(query name)
+	IFS=', ' read -r temp fan power plimit pdefault util mem_used mem_total gclock gclock_max pstate <<<"$(
+		query temperature.gpu,fan.speed,power.draw,power.limit,power.default_limit,utilization.gpu,memory.used,memory.total,clocks.gr,clocks.max.gr,pstate
+	)"
+	power=${power%%.*} plimit=${plimit%%.*} pdefault=${pdefault%%.*} mem_used=${mem_used%%.*} mem_total=${mem_total%%.*}
+
+	echo "${C_BOLD}$name${C_RESET}  ${C_DIM}pstate $pstate${C_RESET}"
+	echo
+	printf '  %-7s %s  %s°C\n' temp "$(bar "$temp" 90 24 "$(heat_color "$temp" 65 80)")" "$temp"
+	printf '  %-7s %s\n' fan "$(bar "$fan" 100 24 "$(heat_color "$fan" 60 85)")"
+	printf '  %-7s %s  %sW / %sW cap\n' power "$(bar "$power" "$plimit" 24 "$(heat_color "$power" $((plimit * 70 / 100)) $((plimit * 90 / 100)))")" "$power" "$plimit"
+	printf '  %-7s %s\n' util "$(bar "$util" 100 24 "$C_CYAN")"
+	printf '  %-7s %s  %s / %s MiB\n' vram "$(bar "$mem_used" "$mem_total" 24 "$C_CYAN")" "$mem_used" "$mem_total"
+	echo
+	printf '  clocks  %s MHz (max %s)' "$gclock" "$gclock_max"
+	((plimit != pdefault)) && printf '   %spower capped (default %sW)%s' "$C_DIM" "$pdefault" "$C_RESET"
+	echo
+
+	local reasons
+	reasons=$(throttle_reasons)
+	if [[ -n $reasons ]]; then
+		echo "  ${C_RED}throttling:${C_RESET} $(echo "$reasons" | paste -sd ', ')"
+	else
+		echo "  ${C_GREEN}no throttling${C_RESET}"
+	fi
+}
+
+function watch_loop() {
+	tput civis 2>/dev/null || true
+	trap 'tput cnorm 2>/dev/null || true; exit 0' INT TERM
+	while true; do
+		local frame
+		frame=$(
+			status
+			echo
+			echo "${C_BOLD}processes${C_RESET}"
+			proc_table
+			echo
+			echo "${C_DIM}refreshing every 2s — ctrl-c to exit${C_RESET}"
+		)
+		clear
+		echo "$frame"
+		sleep 2
+	done
+}
+
+function fans() {
+	local target=$1
+	sudo python3 - "$GPU" "$target" <<-'EOF'
+		import ctypes, sys
+		gpu, target = int(sys.argv[1]), sys.argv[2]
+		nvml = ctypes.CDLL("libnvidia-ml.so.1")
+		assert nvml.nvmlInit_v2() == 0, "nvml init failed"
+		dev = ctypes.c_void_p()
+		assert nvml.nvmlDeviceGetHandleByIndex_v2(gpu, ctypes.byref(dev)) == 0
+		n = ctypes.c_uint()
+		nvml.nvmlDeviceGetNumFans(dev, ctypes.byref(n))
+		for i in range(n.value):
+		    if target == "auto":
+		        ret = nvml.nvmlDeviceSetDefaultFanSpeed_v2(dev, i)
+		        print(f"fan {i}: auto policy restored (ret={ret})")
+		    else:
+		        ret = nvml.nvmlDeviceSetFanSpeed_v2(dev, i, int(target))
+		        print(f"fan {i}: set to {target}% (ret={ret})")
+	EOF
+}
+
+function limit() {
+	local arg=$1 current target
+	current=$(query power.limit)
+	current=${current%%.*}
+	case $arg in
+	default) target=$(query power.default_limit); target=${target%%.*} ;;
+	+*) target=$((current + ${arg#+})) ;;
+	-*) target=$((current - ${arg#-})) ;;
+	*) target=$arg ;;
+	esac
+	sudo nvidia-smi -i "$GPU" -pl "$target"
+}
+
+function clocks() {
+	if [[ $1 == default ]]; then
+		sudo nvidia-smi -i "$GPU" -rgc
+	else
+		sudo nvidia-smi -i "$GPU" -lgc "210,$1"
+	fi
+}
+
+function reset_all() {
+	limit default
+	clocks default
+	fans auto
+	echo "${C_GREEN}all defaults restored${C_RESET}"
+}
+
+case ${1:-status} in
+status) status ;;
+watch) watch_loop ;;
+top) proc_table ;;
+throttle)
+	reasons=$(throttle_reasons)
+	[[ -n $reasons ]] && echo "$reasons" || echo "no active throttle reasons"
+	;;
+limit) limit "${2:?usage: gpu limit <W|+N|-N|default>}" ;;
+clocks) clocks "${2:?usage: gpu clocks <mhz|default>}" ;;
+fans) fans "${2:?usage: gpu fans <pct|auto>}" ;;
+reset) reset_all ;;
+-h | --help | help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' ;;
+*)
+	echo "unknown command: $1" >&2
+	exit 1
+	;;
+esac

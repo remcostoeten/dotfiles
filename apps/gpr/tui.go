@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -9,7 +10,9 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -23,6 +26,8 @@ const (
 	stateFormNewIssue
 	stateFormEditPR
 	stateAIResponse
+	stateChecks
+	stateAIPicker
 )
 
 type tab int
@@ -50,12 +55,16 @@ var (
 	dimColor       = lipgloss.Color("242") // Gray
 	greenColor     = lipgloss.Color("42")  // Mint green
 	redColor       = lipgloss.Color("197") // Crimson red
+	yellowColor    = lipgloss.Color("220") // Amber
 
 	cDim    = lipgloss.NewStyle().Foreground(dimColor)
 	cCyan   = lipgloss.NewStyle().Foreground(primaryColor)
 	cBranch = lipgloss.NewStyle().Foreground(secondaryColor)
 	cBold   = lipgloss.NewStyle().Bold(true)
 	cBlue   = lipgloss.NewStyle().Foreground(primaryColor)
+	cGreen  = lipgloss.NewStyle().Foreground(greenColor)
+	cRed    = lipgloss.NewStyle().Foreground(redColor)
+	cYellow = lipgloss.NewStyle().Foreground(yellowColor)
 
 	// Styles
 	titleStyle = lipgloss.NewStyle().
@@ -145,6 +154,10 @@ type operationCompleteMsg struct {
 }
 type errorMsg error
 type aiResponseMsg string
+type checksLoadedMsg struct {
+	prNumber int
+	checks   []GHCheck
+}
 
 type model struct {
 	state      appState
@@ -167,6 +180,7 @@ type model struct {
 	issueDetails    *GHIssueDetails
 	detailsLoading  bool
 	detailsBranches []string // branches matching the issue/PR
+	detailVP        viewport.Model
 
 	// Inputs/Forms
 	titleInput textinput.Model
@@ -188,11 +202,25 @@ type model struct {
 	sortNewestFirst bool
 	selectedIssues  map[int]bool
 
+	// CI checks view
+	checks          []GHCheck
+	checksLoading   bool
+	checksPR        int
+	checksPRTitle   string
+	checksCursor    int
+	checksPrevState appState
+
 	// Send-to-AI
 	aiBackend   string // one of aiBackends
 	aiLoading   bool
 	aiResponse  string
 	aiPrevState appState // state to return to on esc from stateAIResponse
+	aiVP        viewport.Model
+
+	// AI backend picker (shown before sending)
+	aiPickerIndex   int
+	aiPickerTyped   string
+	aiPendingPrompt string
 
 	// Viewport dimension
 	width  int
@@ -297,6 +325,25 @@ func (m model) fetchIssueDetailsCmd(number int) tea.Cmd {
 	}
 }
 
+func (m model) fetchChecksCmd(number int) tea.Cmd {
+	return func() tea.Msg {
+		checks, err := listChecks(number)
+		if err != nil {
+			return errorMsg(err)
+		}
+		return checksLoadedMsg{prNumber: number, checks: checks}
+	}
+}
+
+func (m model) openChecksInBrowserCmd(number int) tea.Cmd {
+	return func() tea.Msg {
+		if err := openChecksInBrowser(number); err != nil {
+			return errorMsg(err)
+		}
+		return nil
+	}
+}
+
 func (m model) createPRCmd(title, body string) tea.Cmd {
 	return func() tea.Msg {
 		out, err := createPR(title, body)
@@ -358,6 +405,24 @@ func (m model) closeAndRemovePRCmd(number int) tea.Cmd {
 	}
 }
 
+func (m model) openPRInBrowserCmd(number int) tea.Cmd {
+	return func() tea.Msg {
+		if err := openPRInBrowser(number); err != nil {
+			return errorMsg(err)
+		}
+		return operationCompleteMsg{success: true, message: fmt.Sprintf("Opened PR #%d in browser", number)}
+	}
+}
+
+func (m model) openIssueInBrowserCmd(number int) tea.Cmd {
+	return func() tea.Msg {
+		if err := openIssueInBrowser(number); err != nil {
+			return errorMsg(err)
+		}
+		return operationCompleteMsg{success: true, message: fmt.Sprintf("Opened issue #%d in browser", number)}
+	}
+}
+
 // Model Update loop
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -369,6 +434,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.descInput.SetWidth(msg.Width - 6)
 		m.descInput.SetHeight(12)
+		m.detailVP.Width = msg.Width - 2
+		m.detailVP.Height = max(msg.Height-detailChromeLines, 5)
+		m.setDetailContent()
+		m.aiVP.Width = msg.Width - 2
+		m.aiVP.Height = max(msg.Height-aiChromeLines, 5)
+		m.setAIContent()
 
 	case errorMsg:
 		m.err = msg
@@ -383,6 +454,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.aiLoading = false
 		m.aiResponse = string(msg)
 		m.state = stateAIResponse
+		m.setAIContent()
+		m.aiVP.GotoTop()
+
+	case checksLoadedMsg:
+		if msg.prNumber == m.checksPR {
+			m.checks = msg.checks
+			m.checksLoading = false
+			if m.checksCursor >= len(m.checks) {
+				m.checksCursor = max(len(m.checks)-1, 0)
+			}
+		}
 
 	case prsLoadedMsg:
 		m.prs = msg
@@ -407,6 +489,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+		m.setDetailContent()
+		m.detailVP.GotoTop()
 
 	case issueDetailsLoadedMsg:
 		m.issueDetails = msg.details
@@ -422,6 +506,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+		m.setDetailContent()
+		m.detailVP.GotoTop()
 
 	case operationCompleteMsg:
 		m.statusMsg = msg.message
@@ -564,7 +650,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.statusTime = time.Now()
 				}
-			case "g": // Send issue(s) straight to AI
+			case "a": // Send issue(s) straight to AI
 				if m.currentTab == tabIssues && !m.aiLoading {
 					var prompt string
 					if len(m.selectedIssues) > 0 {
@@ -585,11 +671,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 					if prompt != "" {
-						m.aiLoading = true
-						m.aiPrevState = stateList
-						m.statusMsg = fmt.Sprintf("Asking %s...", m.aiBackend)
-						m.statusTime = time.Now()
-						cmds = append(cmds, m.sendToAICmd(prompt))
+						m.openAIPicker(prompt, stateList)
+					}
+				}
+			case "i": // CI insights for selected PR
+				if m.currentTab == tabPRs {
+					filtered := m.getFilteredPRs()
+					if len(filtered) > 0 && m.prCursor < len(filtered) {
+						pr := filtered[m.prCursor]
+						m.state = stateChecks
+						m.checksPrevState = stateList
+						m.checksPR = pr.Number
+						m.checksPRTitle = pr.Title
+						m.checks = nil
+						m.checksCursor = 0
+						m.checksLoading = true
+						cmds = append(cmds, m.fetchChecksCmd(pr.Number))
 					}
 				}
 			case "n": // New
@@ -648,12 +745,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.titleInput.Focus()
 					m.formFocus = 0
 				}
+			case "i": // CI insights
+				if m.currentTab == tabPRs && m.prDetails != nil {
+					m.state = stateChecks
+					m.checksPrevState = stateDetail
+					m.checksPR = m.prDetails.Number
+					m.checksPRTitle = m.prDetails.Title
+					m.checks = nil
+					m.checksCursor = 0
+					m.checksLoading = true
+					cmds = append(cmds, m.fetchChecksCmd(m.prDetails.Number))
+				}
 			case "r": // Refresh details
 				m.detailsLoading = true
 				if m.currentTab == tabPRs && m.prDetails != nil {
 					cmds = append(cmds, m.fetchPRDetailsCmd(m.prDetails.Number))
 				} else if m.currentTab == tabIssues && m.issueDetails != nil {
 					cmds = append(cmds, m.fetchIssueDetailsCmd(m.issueDetails.Number))
+				}
+			case "o": // Open in browser
+				if m.currentTab == tabPRs && m.prDetails != nil {
+					cmds = append(cmds, m.openPRInBrowserCmd(m.prDetails.Number))
+				} else if m.currentTab == tabIssues && m.issueDetails != nil {
+					cmds = append(cmds, m.openIssueInBrowserCmd(m.issueDetails.Number))
 				}
 			case "y": // Copy full issue (with comments) to clipboard
 				if m.currentTab == tabIssues && m.issueDetails != nil {
@@ -673,22 +787,86 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				}
-			case "g": // Send full issue (with comments) straight to AI
+			case "a": // Send full issue (with comments) to AI via backend picker
 				if m.currentTab == tabIssues && m.issueDetails != nil && !m.aiLoading {
 					prompt := "Review the following GitHub issue and help address it:\n\n" +
 						formatIssueDetailsForCopy(m.issueDetails)
-					m.aiLoading = true
-					m.aiPrevState = stateDetail
-					m.statusMsg = fmt.Sprintf("Asking %s...", m.aiBackend)
-					m.statusTime = time.Now()
-					cmds = append(cmds, m.sendToAICmd(prompt))
+					m.openAIPicker(prompt, stateDetail)
 				}
+			default:
+				m.detailVP, cmd = m.detailVP.Update(msg)
+				cmds = append(cmds, cmd)
 			}
 
 		case stateAIResponse:
 			switch msg.String() {
 			case "esc", "backspace", "q":
 				m.state = m.aiPrevState
+			default:
+				m.aiVP, cmd = m.aiVP.Update(msg)
+				cmds = append(cmds, cmd)
+			}
+
+		case stateAIPicker:
+			switch msg.String() {
+			case "esc":
+				m.state = m.aiPrevState
+			case "tab", "right":
+				m.aiPickerIndex = (m.aiPickerIndex + 1) % len(aiBackends)
+				m.aiPickerTyped = ""
+			case "shift+tab", "left":
+				m.aiPickerIndex = (m.aiPickerIndex - 1 + len(aiBackends)) % len(aiBackends)
+				m.aiPickerTyped = ""
+			case "backspace":
+				if len(m.aiPickerTyped) > 0 {
+					m.aiPickerTyped = m.aiPickerTyped[:len(m.aiPickerTyped)-1]
+				}
+			case "enter":
+				m.aiBackend = aiBackends[m.aiPickerIndex]
+				m.aiLoading = true
+				m.statusMsg = fmt.Sprintf("Asking %s...", m.aiBackend)
+				m.statusTime = time.Now()
+				m.state = m.aiPrevState
+				cmds = append(cmds, m.sendToAICmd(m.aiPendingPrompt))
+			default:
+				if len(msg.Runes) > 0 {
+					typed := m.aiPickerTyped + strings.ToLower(string(msg.Runes))
+					for i, name := range aiBackends {
+						if strings.HasPrefix(name, typed) {
+							m.aiPickerIndex = i
+							m.aiPickerTyped = typed
+							break
+						}
+					}
+				}
+			}
+
+		case stateChecks:
+			switch msg.String() {
+			case "esc", "backspace", "q":
+				m.state = m.checksPrevState
+			case "up", "k":
+				if m.checksCursor > 0 {
+					m.checksCursor--
+				}
+			case "down", "j":
+				if m.checksCursor < len(m.checks)-1 {
+					m.checksCursor++
+				}
+			case "r":
+				m.checksLoading = true
+				cmds = append(cmds, m.fetchChecksCmd(m.checksPR))
+			case "enter", "o":
+				if m.checksCursor < len(m.checks) && m.checks[m.checksCursor].Link != "" {
+					if err := openURL(m.checks[m.checksCursor].Link); err != nil {
+						m.statusMsg = fmt.Sprintf("Error: %s", err.Error())
+					} else {
+						m.statusMsg = fmt.Sprintf("Opened %s in browser", m.checks[m.checksCursor].Name)
+					}
+					m.statusTime = time.Now()
+				}
+			case "w":
+				cmds = append(cmds, m.openChecksInBrowserCmd(m.checksPR))
 			}
 
 		case stateFormNewPR, stateFormNewIssue, stateFormEditPR:
@@ -944,12 +1122,43 @@ func (m model) View() string {
 		s.WriteString(m.formView(fmt.Sprintf("Edit PR #%d", m.prDetails.Number)))
 	case stateAIResponse:
 		s.WriteString(m.aiResponseView())
+	case stateChecks:
+		s.WriteString(m.checksView())
+	case stateAIPicker:
+		s.WriteString(m.aiPickerView())
 	}
 
 	// Footer status / help bar
 	s.WriteString("\n" + m.footerView())
 
 	return s.String()
+}
+
+// ciIcon renders a one-cell CI indicator for an overall rollup state.
+func ciIcon(state string) string {
+	switch state {
+	case ciPass:
+		return cGreen.Render("✓")
+	case ciFail:
+		return cRed.Render("✗")
+	case ciPending:
+		return cYellow.Render("●")
+	default:
+		return cDim.Render("·")
+	}
+}
+
+func ciLabel(state string) string {
+	switch state {
+	case ciPass:
+		return cGreen.Render("✓ checks passing")
+	case ciFail:
+		return cRed.Render("✗ checks failing")
+	case ciPending:
+		return cYellow.Render("● checks running")
+	default:
+		return cDim.Render("· no checks")
+	}
 }
 
 func (m model) listView() string {
@@ -978,7 +1187,8 @@ func (m model) listView() string {
 				stateStr = cDim.Render(pr.State)
 			}
 
-			rowContent := fmt.Sprintf("  #%-4d  %-10s  %-40s  [%s -> %s] (%s)",
+			rowContent := fmt.Sprintf("  %s #%-4d  %-10s  %-40s  [%s -> %s] (%s)",
+				ciIcon(ciState(pr.StatusCheckRollup)),
 				pr.Number,
 				stateStr,
 				pr.Title,
@@ -1034,6 +1244,110 @@ func (m model) listView() string {
 	return s.String()
 }
 
+// detailChromeLines is the number of terminal rows occupied by the fixed
+// chrome around the detail viewport: app header, detail header, and footer.
+const detailChromeLines = 11
+
+// aiChromeLines is the same for the AI response viewport.
+const aiChromeLines = 10
+
+var (
+	htmlCommentRe = regexp.MustCompile(`(?s)<!--.*?-->`)
+	summaryRe     = regexp.MustCompile(`(?is)<summary>\s*(.*?)\s*</summary>`)
+	brRe          = regexp.MustCompile(`(?i)<br\s*/?>`)
+	imgRe         = regexp.MustCompile(`(?is)<img[^>]*>`)
+	preRe         = regexp.MustCompile(`(?is)<pre[^>]*>(.*?)</pre>`)
+	anchorRe      = regexp.MustCompile(`(?is)<a\s[^>]*href="([^"]*)"[^>]*>(.*?)</a>`)
+	codeTagRe     = regexp.MustCompile(`(?is)<(?:code|tt)[^>]*>(.*?)</(?:code|tt)>`)
+	headingRe     = regexp.MustCompile(`(?is)<h([1-6])[^>]*>(.*?)</h[1-6]>`)
+	listItemRe    = regexp.MustCompile(`(?i)<li[^>]*>`)
+	hrTagRe       = regexp.MustCompile(`(?i)<hr[^>]*/?>`)
+	rowEndRe      = regexp.MustCompile(`(?i)</tr>`)
+	cellEndRe     = regexp.MustCompile(`(?i)</t[hd]>`)
+	htmlTagRe     = regexp.MustCompile(`(?i)</?(details|sub|sup|p|div|span|center|blockquote|b|i|em|strong|kbd|tt|code|a|pre|ul|ol|li|table|thead|tbody|tfoot|tr|th|td|h[1-6])[^>]*>`)
+	blankLinesRe  = regexp.MustCompile(`\n{3,}`)
+)
+
+// stripHTML converts the HTML that GitHub bots (CodeRabbit etc.) embed in
+// markdown bodies into plain markdown glamour can render.
+func stripHTML(s string) string {
+	s = htmlCommentRe.ReplaceAllString(s, "")
+	s = preRe.ReplaceAllString(s, "\n```\n$1\n```\n")
+	s = summaryRe.ReplaceAllString(s, "\n**▸ $1**\n")
+	s = anchorRe.ReplaceAllString(s, "[$2]($1)")
+	s = codeTagRe.ReplaceAllString(s, "`$1`")
+	s = headingRe.ReplaceAllStringFunc(s, func(m string) string {
+		parts := headingRe.FindStringSubmatch(m)
+		level := int(parts[1][0] - '0')
+		return "\n" + strings.Repeat("#", level) + " " + parts[2] + "\n"
+	})
+	s = listItemRe.ReplaceAllString(s, "\n- ")
+	s = hrTagRe.ReplaceAllString(s, "\n---\n")
+	s = cellEndRe.ReplaceAllString(s, " · ")
+	s = rowEndRe.ReplaceAllString(s, "\n")
+	s = strings.ReplaceAll(s, " · \n", "\n")
+	s = brRe.ReplaceAllString(s, "\n")
+	s = imgRe.ReplaceAllString(s, "")
+	s = htmlTagRe.ReplaceAllString(s, "")
+	s = blankLinesRe.ReplaceAllString(s, "\n\n")
+	return strings.TrimSpace(s)
+}
+
+func renderMarkdown(src string, width int) string {
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return src
+	}
+	out, err := r.Render(stripHTML(src))
+	if err != nil {
+		return src
+	}
+	return strings.Trim(out, "\n")
+}
+
+func (m *model) setDetailContent() {
+	if m.width == 0 {
+		return
+	}
+	w := max(m.detailVP.Width-2, 20)
+	var s strings.Builder
+
+	writeBody := func(body string) {
+		s.WriteString(detailTitleStyle.Render("Description") + "\n")
+		if body == "" {
+			s.WriteString(cDim.Render("  No description provided.") + "\n\n")
+		} else {
+			s.WriteString(renderMarkdown(body, w) + "\n\n")
+		}
+	}
+	writeComments := func(comments []GHComment) {
+		s.WriteString(detailTitleStyle.Render("Comments") + "\n")
+		if len(comments) == 0 {
+			s.WriteString(cDim.Render("  No comments.") + "\n")
+			return
+		}
+		for _, comment := range comments {
+			s.WriteString(fmt.Sprintf("\n  %s (%s):\n", commentHeaderStyle.Render(comment.Author.Login), cDim.Render(comment.CreatedAt)))
+			s.WriteString(renderMarkdown(comment.Body, w) + "\n")
+		}
+	}
+
+	if m.currentTab == tabPRs && m.prDetails != nil {
+		writeBody(m.prDetails.Body)
+		writeComments(m.prDetails.Comments)
+	} else if m.currentTab == tabIssues && m.issueDetails != nil {
+		writeBody(m.issueDetails.Body)
+		writeComments(m.issueDetails.Comments)
+	} else {
+		return
+	}
+
+	m.detailVP.SetContent(s.String())
+}
+
 func (m model) detailView() string {
 	if m.detailsLoading {
 		return "  Loading details from remote..."
@@ -1049,27 +1363,9 @@ func (m model) detailView() string {
 
 		s.WriteString(fmt.Sprintf("  %s %s\n", cBold.Render(cBlue.Render(fmt.Sprintf("PR #%d", pr.Number))), cBold.Render(pr.Title)))
 		s.WriteString(fmt.Sprintf("  Author: %s | State: %s\n", pr.Author.Login, pr.State))
-		s.WriteString(fmt.Sprintf("  Branch: %s -> %s\n", cBranch.Render(pr.HeadRefName), cBranch.Render(pr.BaseRefName)))
-		s.WriteString(cDim.Render(strings.Repeat("─", m.width-4)) + "\n\n")
-
-		// Description
-		s.WriteString(detailTitleStyle.Render("Description") + "\n")
-		if pr.Body == "" {
-			s.WriteString(cDim.Render("  No description provided.") + "\n\n")
-		} else {
-			s.WriteString(fmt.Sprintf("  %s\n\n", strings.ReplaceAll(pr.Body, "\n", "\n  ")))
-		}
-
-		// Comments
-		s.WriteString(detailTitleStyle.Render("Comments") + "\n")
-		if len(pr.Comments) == 0 {
-			s.WriteString(cDim.Render("  No comments.") + "\n\n")
-		} else {
-			for _, comment := range pr.Comments {
-				s.WriteString(fmt.Sprintf("  %s (%s):\n", commentHeaderStyle.Render(comment.Author.Login), cDim.Render(comment.CreatedAt)))
-				s.WriteString(fmt.Sprintf("    %s\n\n", strings.ReplaceAll(comment.Body, "\n", "\n    ")))
-			}
-		}
+		s.WriteString(fmt.Sprintf("  Branch: %s -> %s | CI: %s %s\n",
+			cBranch.Render(pr.HeadRefName), cBranch.Render(pr.BaseRefName),
+			ciLabel(ciState(pr.StatusCheckRollup)), cDim.Render("(press 'i' for details)")))
 	} else {
 		if m.issueDetails == nil {
 			return "  No issue details loaded."
@@ -1079,46 +1375,171 @@ func (m model) detailView() string {
 		s.WriteString(fmt.Sprintf("  %s %s\n", cBold.Render(cBlue.Render(fmt.Sprintf("Issue #%d", issue.Number))), cBold.Render(issue.Title)))
 		s.WriteString(fmt.Sprintf("  Author: %s | State: %s\n", issue.Author.Login, issue.State))
 
-		// Branch
 		if len(m.detailsBranches) > 0 {
 			s.WriteString(fmt.Sprintf("  Assigned Branch: %s\n", cBranch.Render(strings.Join(m.detailsBranches, ", "))))
 		} else {
 			s.WriteString(cDim.Render("  No matching development branch detected in local/remote branches.") + "\n")
 		}
-		s.WriteString(cDim.Render(strings.Repeat("─", m.width-4)) + "\n\n")
+	}
 
-		// Description
-		s.WriteString(detailTitleStyle.Render("Description") + "\n")
-		if issue.Body == "" {
-			s.WriteString(cDim.Render("  No description provided.") + "\n\n")
-		} else {
-			s.WriteString(fmt.Sprintf("  %s\n\n", strings.ReplaceAll(issue.Body, "\n", "\n  ")))
-		}
+	s.WriteString(cDim.Render(strings.Repeat("─", m.width-4)) + "\n")
+	s.WriteString(m.detailVP.View() + "\n")
 
-		// Comments
-		s.WriteString(detailTitleStyle.Render("Comments") + "\n")
-		if len(issue.Comments) == 0 {
-			s.WriteString(cDim.Render("  No comments.") + "\n\n")
-		} else {
-			for _, comment := range issue.Comments {
-				s.WriteString(fmt.Sprintf("  %s:\n", commentHeaderStyle.Render(comment.Author.Login)))
-				s.WriteString(fmt.Sprintf("    %s\n\n", strings.ReplaceAll(comment.Body, "\n", "\n    ")))
-			}
+	return s.String()
+}
+
+// openAIPicker stashes the prompt and opens the backend chooser, preselecting
+// the currently active backend.
+func (m *model) openAIPicker(prompt string, prev appState) {
+	m.aiPendingPrompt = prompt
+	m.aiPrevState = prev
+	m.aiPickerTyped = ""
+	m.aiPickerIndex = 0
+	for i, name := range aiBackends {
+		if name == m.aiBackend {
+			m.aiPickerIndex = i
+			break
 		}
+	}
+	m.state = stateAIPicker
+}
+
+func (m model) aiPickerView() string {
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("  %s\n\n", cBold.Render(cCyan.Render("Send to AI — choose backend"))))
+
+	parts := make([]string, len(aiBackends))
+	for i, name := range aiBackends {
+		label := "  " + name + "  "
+		if i == m.aiPickerIndex {
+			parts[i] = selectedRowStyle.Render(label)
+		} else {
+			parts[i] = cDim.Render(label)
+		}
+	}
+	s.WriteString("  " + strings.Join(parts, "   ") + "\n\n")
+
+	if m.aiPickerTyped != "" {
+		s.WriteString(cCyan.Render(fmt.Sprintf("  › %s▋", m.aiPickerTyped)) + "\n")
+	} else {
+		s.WriteString(cDim.Render("  Type a prefix (cl, co, oc) or tab through, enter to send.") + "\n")
 	}
 
 	return s.String()
 }
 
+func (m *model) setAIContent() {
+	if m.width == 0 || m.aiResponse == "" {
+		return
+	}
+	m.aiVP.SetContent(renderMarkdown(m.aiResponse, max(m.aiVP.Width-2, 20)))
+}
+
 func (m model) aiResponseView() string {
 	var s strings.Builder
 	s.WriteString(fmt.Sprintf("  %s\n\n", cBold.Render(cCyan.Render(fmt.Sprintf("AI Response (%s)", m.aiBackend)))))
-	s.WriteString(cDim.Render(strings.Repeat("─", m.width-4)) + "\n\n")
+	s.WriteString(cDim.Render(strings.Repeat("─", m.width-4)) + "\n")
 	if m.aiResponse == "" {
-		s.WriteString(cDim.Render("  No response."))
+		s.WriteString(cDim.Render("  No response.") + "\n")
 	} else {
-		s.WriteString(fmt.Sprintf("  %s\n", strings.ReplaceAll(m.aiResponse, "\n", "\n  ")))
+		s.WriteString(m.aiVP.View() + "\n")
 	}
+	return s.String()
+}
+
+func checkBucketIcon(bucket string) string {
+	switch bucket {
+	case "pass":
+		return cGreen.Render("✓")
+	case "fail":
+		return cRed.Render("✗")
+	case "pending":
+		return cYellow.Render("●")
+	case "skipping":
+		return cDim.Render("⊘")
+	case "cancel":
+		return cDim.Render("✖")
+	default:
+		return cDim.Render("·")
+	}
+}
+
+func checkDuration(c GHCheck) string {
+	start, err := time.Parse(time.RFC3339, c.StartedAt)
+	if err != nil || start.IsZero() {
+		return ""
+	}
+	end := time.Now()
+	if t, err := time.Parse(time.RFC3339, c.CompletedAt); err == nil && !t.IsZero() {
+		end = t
+	}
+	d := end.Sub(start).Round(time.Second)
+	if d < 0 {
+		return ""
+	}
+	return d.String()
+}
+
+func (m model) checksView() string {
+	var s strings.Builder
+
+	s.WriteString(fmt.Sprintf("  %s %s\n", cBold.Render(cBlue.Render(fmt.Sprintf("CI Checks — PR #%d", m.checksPR))), cBold.Render(m.checksPRTitle)))
+
+	if m.checksLoading {
+		s.WriteString("\n  Loading CI checks from remote...\n")
+		return s.String()
+	}
+	if len(m.checks) == 0 {
+		s.WriteString("\n" + cDim.Render("  No CI checks reported for this pull request.") + "\n")
+		return s.String()
+	}
+
+	var pass, fail, pending, other int
+	for _, c := range m.checks {
+		switch c.Bucket {
+		case "pass":
+			pass++
+		case "fail":
+			fail++
+		case "pending":
+			pending++
+		default:
+			other++
+		}
+	}
+	summary := fmt.Sprintf("%s  %s  %s",
+		cGreen.Render(fmt.Sprintf("✓ %d passed", pass)),
+		cRed.Render(fmt.Sprintf("✗ %d failed", fail)),
+		cYellow.Render(fmt.Sprintf("● %d running", pending)))
+	if other > 0 {
+		summary += "  " + cDim.Render(fmt.Sprintf("⊘ %d skipped/cancelled", other))
+	}
+	s.WriteString("  " + summary + "\n")
+	s.WriteString(cDim.Render(strings.Repeat("─", m.width-4)) + "\n")
+
+	for i, c := range m.checks {
+		name := c.Name
+		if c.Workflow != "" {
+			name = c.Workflow + " / " + name
+		}
+		meta := c.Bucket
+		if d := checkDuration(c); d != "" {
+			meta += " · " + d
+		}
+		if c.Event != "" {
+			meta += " · " + c.Event
+		}
+		row := fmt.Sprintf("  %s  %-60s  %s", checkBucketIcon(c.Bucket), name, cDim.Render(meta))
+		if i == m.checksCursor {
+			s.WriteString(selectedRowStyle.Render(row) + "\n")
+		} else {
+			s.WriteString(row + "\n")
+		}
+		if i == m.checksCursor && c.Description != "" {
+			s.WriteString(cDim.Render("       "+c.Description) + "\n")
+		}
+	}
+
 	return s.String()
 }
 
@@ -1209,7 +1630,7 @@ func (m model) footerView() string {
 				[2]string{"o", "Sort: " + sortStr},
 				[2]string{"v", "Select"},
 				[2]string{"y", "Copy"},
-				[2]string{"g", "Ask AI"},
+				[2]string{"a", "Ask AI"},
 				[2]string{"b", "Backend: " + m.aiBackend},
 				[2]string{"n", "New"},
 				[2]string{"r", "Refresh"},
@@ -1218,30 +1639,55 @@ func (m model) footerView() string {
 			s.WriteString(renderHints(
 				[2]string{"s", "State: " + strings.ToUpper(string(m.stateFilter))},
 				[2]string{"o", "Sort: " + sortStr},
+				[2]string{"i", "CI checks"},
 				[2]string{"n", "New"},
 				[2]string{"r", "Refresh"},
 			))
 		}
 	case stateDetail:
+		scroll := fmt.Sprintf("Scroll (%d%%)", int(m.detailVP.ScrollPercent()*100))
 		if m.currentTab == tabPRs {
 			s.WriteString(renderHints(
 				[2]string{"esc", "Back"},
+				[2]string{"↑/↓", scroll},
 				[2]string{"e", "Edit"},
+				[2]string{"i", "CI checks"},
 				[2]string{"c", "Close PR"},
 				[2]string{"d", "Close + delete branch"},
+				[2]string{"o", "Open in browser"},
 				[2]string{"r", "Refresh"},
 			))
 		} else {
 			s.WriteString(renderHints(
 				[2]string{"esc", "Back"},
+				[2]string{"↑/↓", scroll},
 				[2]string{"y", "Copy"},
-				[2]string{"g", "Ask AI"},
+				[2]string{"a", "Ask AI"},
 				[2]string{"b", "Backend: " + m.aiBackend},
+				[2]string{"o", "Open in browser"},
 				[2]string{"r", "Refresh"},
 			))
 		}
 	case stateAIResponse:
-		s.WriteString(renderHints([2]string{"esc/q", "Back"}))
+		s.WriteString(renderHints(
+			[2]string{"esc/q", "Back"},
+			[2]string{"↑/↓", fmt.Sprintf("Scroll (%d%%)", int(m.aiVP.ScrollPercent()*100))},
+		))
+	case stateChecks:
+		s.WriteString(renderHints(
+			[2]string{"esc/q", "Back"},
+			[2]string{"↑/↓", "Navigate"},
+			[2]string{"enter/o", "Open check"},
+			[2]string{"w", "All checks in browser"},
+			[2]string{"r", "Refresh"},
+		))
+	case stateAIPicker:
+		s.WriteString(renderHints(
+			[2]string{"tab/←/→", "Cycle backend"},
+			[2]string{"cl/co/oc", "Type to pick"},
+			[2]string{"enter", "Send"},
+			[2]string{"esc", "Cancel"},
+		))
 	case stateFormNewPR, stateFormNewIssue, stateFormEditPR:
 		vimStatus := "off"
 		if m.vimMode {

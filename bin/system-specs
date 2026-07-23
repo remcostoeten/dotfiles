@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+BOLD='\033[1m'
+DIM='\033[2m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+usage() {
+  echo -e "${BOLD}Usage:${NC} system-specs [${DIM}OPTIONS${NC}]"
+  echo
+  echo -e "${DIM}Collect system information and output it.${NC}"
+  echo
+  echo -e "${BOLD}Options:${NC}"
+  echo -e "  ${CYAN}-c, --clipboard${NC}     Copy to clipboard (default if available)"
+  echo -e "  ${CYAN}-f, --file [path]${NC}   Save to a file (default: ${DIM}system-info.txt${NC})"
+  echo -e "  ${CYAN}-o, --stdout${NC}        Print to stdout (no copy/save)"
+  echo -e "  ${CYAN}-q, --quiet${NC}         Suppress status messages"
+  echo -e "  ${CYAN}-h, --help${NC}          Show this help"
+  exit 0
+}
+
+MODE="auto"
+OUTPUT=""
+QUIET=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--clipboard) MODE="clipboard" ;;
+    -f|--file) MODE="file"; OUTPUT="${2:-system-info.txt}"; shift ;;
+    -o|--stdout) MODE="stdout" ;;
+    -q|--quiet) QUIET=true ;;
+    -h|--help) usage ;;
+    *) echo -e "${RED}Unknown option: $1${NC}"; usage ;;
+  esac
+  shift
+done
+
+sections=(
+  "OS:cat /etc/os-release"
+  "Kernel:uname -a"
+  "Host:hostnamectl"
+  "Session:echo \"Type: \$XDG_SESSION_TYPE\"; echo \"Desktop: \$XDG_CURRENT_DESKTOP\"; echo \"Session: \$DESKTOP_SESSION\""
+  "CPU:lscpu"
+  "Memory:free -h"
+  "GPU:lspci | grep -Ei \"vga|3d|display\""
+  "OpenGL:glxinfo -B 2>/dev/null"
+  "Vulkan:vulkaninfo --summary 2>/dev/null"
+  "Displays:xrandr --verbose 2>/dev/null || kscreen-doctor -o 2>/dev/null"
+  "Audio:pactl info 2>/dev/null"
+  "KWin:qdbus org.kde.KWin /KWin org.kde.KWin.supportInformation 2>/dev/null"
+  "Compositor:ps -e | grep -Ei \"kwin|picom|mutter|xfwm|compton\""
+  "inxi:inxi -Fzxx 2>/dev/null"
+)
+
+info=""
+
+for section in "${sections[@]}"; do
+  name="${section%%:*}"
+  cmd="${section#*:}"
+  $QUIET || echo -e "${CYAN}${BOLD}▸ ${name}${NC}${DIM}…${NC}" >&2
+  info+="=== ${name} ==="$'\n'
+  info+="$(eval "$cmd" 2>/dev/null || echo "N/A")"$'\n'
+  info+=$'\n'
+done
+
+case "$MODE" in
+  clipboard)
+    if command -v wl-copy &>/dev/null; then
+      echo -n "$info" | wl-copy
+      $QUIET || echo -e "${GREEN}${BOLD}✓ Copied to clipboard${NC}" >&2
+    elif command -v xclip &>/dev/null; then
+      echo -n "$info" | xclip -selection clipboard
+      $QUIET || echo -e "${GREEN}${BOLD}✓ Copied to clipboard${NC}" >&2
+    else
+      echo -e "${RED}No clipboard tool found (install wl-clipboard or xclip)${NC}" >&2
+      echo -n "$info"
+    fi
+    ;;
+  file)
+    echo -n "$info" > "$OUTPUT"
+    $QUIET || echo -e "${GREEN}${BOLD}✓ Saved to ${OUTPUT}${NC}" >&2
+    ;;
+  stdout)
+    echo -n "$info"
+    ;;
+  auto)
+    if command -v wl-copy &>/dev/null; then
+      echo -n "$info" | wl-copy
+      $QUIET || echo -e "${GREEN}${BOLD}✓ Copied to clipboard${NC}" >&2
+    elif command -v xclip &>/dev/null; then
+      echo -n "$info" | xclip -selection clipboard
+      $QUIET || echo -e "${GREEN}${BOLD}✓ Copied to clipboard${NC}" >&2
+    else
+      echo -n "$info"
+    fi
+    ;;
+esac
