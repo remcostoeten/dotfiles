@@ -76,7 +76,11 @@
       "type": "registry"
     }
   },
-  "icon_theme": "Warm Charmed Icons",
+  "icon_theme": {
+    "mode": "dark",
+    "light": "Warm Charmed Icons",
+    "dark": "Warm Charmed Icons"
+  },
   "theme": {
     "mode": "dark",
     "light": "One Light",

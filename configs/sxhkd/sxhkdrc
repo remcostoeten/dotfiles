@@ -34,6 +34,12 @@ alt + {1,2,3,4,5,6}
 alt + shift + {1,2,3,4,5,6}
     qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut "Window to Desktop {1,2,3,4,5,6}"
 
+# Volume
+super + minus
+    wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+super + equal
+    wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+ -l 1.0
+
 # Toggle audio between SteelSeries Arctis 7 and 3.5mm jack
 F4
-    /home/remcostoeten/.config/dotfiles/bin/audio-toggle
+    ~/.config/dotfiles/bin/audio-toggle

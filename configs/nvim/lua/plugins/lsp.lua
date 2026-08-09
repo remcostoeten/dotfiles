@@ -50,6 +50,18 @@ return {
   {
     "stevearc/conform.nvim",
     opts = {
+      formatters = {
+        ["markdownlint-cli2"] = {
+          -- markdownlint-cli2 treats file arguments as globs. Prefixing the
+          -- path with ":" keeps route groups like "(marketing)" literal.
+          args = function(_, ctx)
+            return { "--fix", ":" .. ctx.filename }
+          end,
+          condition = function()
+            return true
+          end,
+        },
+      },
       formatters_by_ft = {
         lua = { "stylua" },
         php = { "php_cs_fixer" },
@@ -62,9 +74,9 @@ return {
         typescriptreact = { "prettier" },
         json = { "prettier" },
         jsonc = { "prettier" },
-        markdown = { "prettier" },
-        ["markdown.mdx"] = { "prettier" },
-        mdx = { "prettier" },
+        markdown = { "prettier", "markdownlint-cli2" },
+        ["markdown.mdx"] = { "prettier", "markdownlint-cli2" },
+        mdx = { "prettier", "markdownlint-cli2" },
         css = { "prettier" },
         html = { "prettier" },
         yaml = { "prettier" },
