@@ -689,8 +689,11 @@ setup_config_symlinks() {
         "zsh:$HOME/.config/zsh"
         "bash:$HOME/.config/bash"
         "agents:$HOME/.agents"
-        "zed:$HOME/.config/zed"
-        "cursor:$HOME/.config/cursor"
+        # No "zed"/"cursor" entries: the editor configs live under
+        # configs/ide/* and are deployed by link_editor_configs_recursive.
+        # Naming them here matched nothing, and "cursor" pointed at the Cursor
+        # CLI's own state directory ($HOME/.config/cursor, lowercase) rather
+        # than the editor's ($HOME/.config/Cursor).
         "hypr:$home_config_dir/hypr"
         "waybar:$home_config_dir/waybar"
         "dunst:$home_config_dir/dunst"
@@ -732,7 +735,7 @@ setup_config_symlinks() {
         ensure_symlink "$git_src" "$git_dst" "$SETUP_BACKUP_ROOT"
     fi
 
-    local vimrc_src="$configs_dir/.vimrc"
+    local vimrc_src="$configs_dir/vim/vimrc"
     local vimrc_dst="$HOME/.vimrc"
     if [[ -f "$vimrc_src" ]]; then
         if ! is_symlink_current "$vimrc_src" "$vimrc_dst"; then
