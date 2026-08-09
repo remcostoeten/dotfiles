@@ -1,0 +1,163 @@
+# Dotfiles Studio — what this repository deploys, and where.
+#
+# One block per link. `dotweave deployment --home "$HOME"` reads these and
+# reports each one as deployed, diverged, in place, absent, or unobservable.
+# Nothing here deploys anything: it is a declaration, and the engine only ever
+# reads. Keep it in step with setup/lib/installers.sh.
+#
+# `repository` names what the link itself points at, not what it ultimately
+# resolves to. The four editors below share one real file through
+# configs/ide/all-editors, and a chain stops at the first target inside the
+# repository, so naming the final configs/vscode/... path would report
+# `diverged` instead (dotweave §32-O14).
+
+[[deployment]]
+deployed = "~/.agents"
+repository = "configs/agents"
+
+[[deployment]]
+deployed = "~/.config/Cursor/README.md"
+repository = "configs/ide/all-editors/README.md"
+
+[[deployment]]
+deployed = "~/.config/Cursor/extensions.json"
+repository = "configs/ide/all-editors/extensions.json"
+
+[[deployment]]
+deployed = "~/.config/Cursor/keybindings.json"
+repository = "configs/ide/all-editors/keybindings.json"
+
+[[deployment]]
+deployed = "~/.config/Cursor/settings.json"
+repository = "configs/ide/all-editors/settings.json"
+
+[[deployment]]
+deployed = "~/.config/Windsurf/README.md"
+repository = "configs/ide/all-editors/README.md"
+
+[[deployment]]
+deployed = "~/.config/Windsurf/extensions.json"
+repository = "configs/ide/all-editors/extensions.json"
+
+[[deployment]]
+deployed = "~/.config/Windsurf/keybindings.json"
+repository = "configs/ide/all-editors/keybindings.json"
+
+[[deployment]]
+deployed = "~/.config/Windsurf/settings.json"
+repository = "configs/ide/all-editors/settings.json"
+
+[[deployment]]
+deployed = "~/.config/autostart/plasma-sxhkd.desktop"
+repository = "configs/sxhkd/plasma-sxhkd.desktop"
+
+[[deployment]]
+deployed = "~/.config/bash"
+repository = "configs/bash"
+
+[[deployment]]
+deployed = "~/.config/dunst"
+repository = "configs/dunst"
+
+[[deployment]]
+deployed = "~/.config/fastfetch"
+repository = "configs/fastfetch"
+
+[[deployment]]
+deployed = "~/.config/fish/completions/kill.fish"
+repository = "configs/fish/completions/kill.fish"
+
+[[deployment]]
+deployed = "~/.config/fish/conf.d"
+repository = "configs/fish/conf.d"
+
+[[deployment]]
+deployed = "~/.config/fish/config.fish"
+repository = "configs/fish/config.fish"
+
+[[deployment]]
+deployed = "~/.config/fuzzel"
+repository = "configs/fuzzel"
+
+[[deployment]]
+deployed = "~/.config/ghostty"
+repository = "configs/ghostty"
+
+[[deployment]]
+deployed = "~/.config/git/ignore"
+repository = "configs/git/ignore"
+
+[[deployment]]
+deployed = "~/.config/hypr"
+repository = "configs/hypr"
+
+[[deployment]]
+deployed = "~/.config/khotkeysrc"
+repository = "configs/khotkeysrc"
+
+[[deployment]]
+deployed = "~/.config/kitty/kitty.conf"
+repository = "configs/kitty/kitty.conf"
+
+[[deployment]]
+deployed = "~/.config/kxkbrc"
+repository = "configs/kxkbrc"
+
+[[deployment]]
+deployed = "~/.config/nvim"
+repository = "configs/nvim"
+
+[[deployment]]
+deployed = "~/.config/starship.toml"
+repository = "configs/starship/starship.toml"
+
+[[deployment]]
+deployed = "~/.config/swaync"
+repository = "configs/swaync"
+
+[[deployment]]
+deployed = "~/.config/swayosd"
+repository = "configs/swayosd"
+
+[[deployment]]
+deployed = "~/.config/sxhkd"
+repository = "configs/sxhkd"
+
+[[deployment]]
+deployed = "~/.config/waybar"
+repository = "configs/waybar"
+
+[[deployment]]
+deployed = "~/.config/zed/README.md"
+repository = "configs/ide/all-editors/README.md"
+
+[[deployment]]
+deployed = "~/.config/zed/extensions.json"
+repository = "configs/ide/all-editors/extensions.json"
+
+[[deployment]]
+deployed = "~/.config/zed/keybindings.json"
+repository = "configs/ide/all-editors/keybindings.json"
+
+[[deployment]]
+deployed = "~/.config/zed/settings.json"
+repository = "configs/ide/all-editors/settings.json"
+
+[[deployment]]
+deployed = "~/.config/zsh"
+repository = "configs/zsh"
+
+[[deployment]]
+deployed = "~/.gitconfig"
+repository = "configs/git/.gitconfig"
+
+[[deployment]]
+deployed = "~/.vimrc"
+repository = "configs/vim/vimrc"
+
+# Deployed by install_keyd as a root-owned copy, outside $HOME. The engine may
+# only look under the declared home, so this reports `unobservable` — which is
+# the honest answer, not a clean bill of health.
+[[deployment]]
+deployed = "/etc/keyd/default.conf"
+repository = "configs/keyd/default.conf"
