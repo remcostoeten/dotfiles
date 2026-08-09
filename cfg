@@ -3,7 +3,6 @@
 source ~/.config/dotfiles/vendor/fish/bootstrap.fish
 
 set -gx TERMINAL ghostty
-set -gx TERM_PROGRAM ghostty
 
 set -l dotfiles_fish_functions ~/.config/dotfiles/configs/fish/functions
 if test -d "$dotfiles_fish_functions"
