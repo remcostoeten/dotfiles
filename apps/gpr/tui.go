@@ -237,6 +237,11 @@ func initialModel() model {
 	ta.Placeholder = "Enter description/body..."
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
+	// bubbles caps the textarea at MaxHeight rows (default 99) and MaxWidth
+	// columns (default 500) — both silently truncate typed and SetValue'd text,
+	// so disable them and let the body grow as long as it needs.
+	ta.MaxHeight = 0
+	ta.MaxWidth = 0
 
 	m := model{
 		state:           stateList,
@@ -433,7 +438,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.descInput.SetWidth(msg.Width - 6)
-		m.descInput.SetHeight(12)
+		m.descInput.SetHeight(max(msg.Height-formChromeLines, 6))
 		m.detailVP.Width = msg.Width - 2
 		m.detailVP.Height = max(msg.Height-detailChromeLines, 5)
 		m.setDetailContent()
@@ -1250,6 +1255,11 @@ const detailChromeLines = 11
 
 // aiChromeLines is the same for the AI response viewport.
 const aiChromeLines = 10
+
+// formChromeLines is the same for the create/edit form: app header, form title,
+// the title input box, the description box's own border and label, the button
+// row, and the footer.
+const formChromeLines = 18
 
 var (
 	htmlCommentRe = regexp.MustCompile(`(?s)<!--.*?-->`)
