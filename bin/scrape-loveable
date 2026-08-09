@@ -13,6 +13,8 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/scrape-loveable"
 RUNS_TSV="$DATA_DIR/runs.tsv"
 TOKEN_FILE="$DATA_DIR/token"
 DEST_ROOT="${SCRAPE_LOVEABLE_DEST:-$HOME/lovable-projects}"
+FIREBASE_AUD="${SCRAPE_LOVEABLE_AUD:-gpt-engineer-390607}"
+LOGIN_URL="${SCRAPE_LOVEABLE_LOGIN_URL:-https://lovable.dev/projects}"
 
 C_RESET=$'\e[0m'; C_DIM=$'\e[2m'; C_BOLD=$'\e[1m'
 C_CYAN=$'\e[36m'; C_GREEN=$'\e[32m'; C_YELLOW=$'\e[33m'; C_RED=$'\e[31m'; C_MAG=$'\e[35m'
@@ -56,10 +58,17 @@ get_token() {
   if [[ -n "${LOVABLE_TOKEN:-}" ]]; then
     printf '%s' "$LOVABLE_TOKEN"; return
   fi
-  if [[ -s "$TOKEN_FILE" ]]; then
+  if [[ -s "$TOKEN_FILE" ]] && token_is_live "$(cat "$TOKEN_FILE")"; then
     cat "$TOKEN_FILE"; return
   fi
-  err "No token set. Run: scrape-loveable token"
+
+  [[ -s "$TOKEN_FILE" ]] && warn "Cached token expired — pulling a fresh one from your browser…" \
+                         || warn "No token cached — pulling one from your browser…"
+  if generate_token >&2 && [[ -s "$TOKEN_FILE" ]]; then
+    cat "$TOKEN_FILE"; return
+  fi
+
+  err "No token set. Run: scrape-loveable generate-token"
   exit 1
 }
 
@@ -67,9 +76,164 @@ set_token() {
   warn "Paste your Lovable token (input hidden), then Enter:"
   local t; read -rs t; echo
   if [[ -z "$t" ]]; then err "Empty token, aborted."; exit 1; fi
-  printf '%s' "$t" > "$TOKEN_FILE"
+  save_token "$t"
+}
+
+save_token() {
+  printf '%s' "$1" > "$TOKEN_FILE"
   chmod 600 "$TOKEN_FILE"
   ok "Token saved to $TOKEN_FILE"
+}
+
+# --- token auto-discovery -------------------------------------------------
+#
+# Chromium keeps IndexedDB in LevelDB files under the profile dir, so the
+# Firebase ID token is readable straight off disk — no DevTools console needed.
+# Tokens are matched by `aud` so a shared Local Storage DB can't hand us some
+# other site's JWT.
+
+b64url_decode() {
+  local s="${1//-/+}"; s="${s//_//}"
+  case $(( ${#s} % 4 )) in
+    2) s="$s==" ;;
+    3) s="$s=" ;;
+  esac
+  printf '%s' "$s" | base64 -d 2>/dev/null || true
+}
+
+jwt_payload() { b64url_decode "$(cut -d. -f2 <<<"$1")"; }
+
+browser_roots() {
+  cat <<EOF
+Brave	$HOME/.config/BraveSoftware/Brave-Browser	brave-browser
+Chrome	$HOME/.config/google-chrome	google-chrome-stable
+Chromium	$HOME/.config/chromium	chromium
+Edge	$HOME/.config/microsoft-edge	microsoft-edge-stable
+Vivaldi	$HOME/.config/vivaldi	vivaldi
+Opera	$HOME/.config/opera	opera
+Chrome·flatpak	$HOME/.var/app/com.google.Chrome/config/google-chrome	flatpak run com.google.Chrome
+Chromium·flatpak	$HOME/.var/app/org.chromium.Chromium/config/chromium	flatpak run org.chromium.Chromium
+Ungoogled·flatpak	$HOME/.var/app/io.github.ungoogled_software.ungoogled_chromium/config/chromium	flatpak run io.github.ungoogled_software.ungoogled_chromium
+EOF
+}
+
+profile_label() {
+  local pref="$1/Preferences" name=''
+  [[ -f "$pref" ]] && name="$(jq -r '.profile.name // empty' "$pref" 2>/dev/null || true)"
+  printf '%s' "${name:-$(basename "$1")}"
+}
+
+# echo: mtime \t browser \t launcher \t profileDir
+find_profiles() {
+  local browser root launcher
+  while IFS=$'\t' read -r browser root launcher; do
+    [[ -d "$root" ]] || continue
+    while IFS= read -r store; do
+      local profile; profile="$(dirname "$(dirname "$store")")"
+      printf '%s\t%s\t%s\t%s\n' \
+        "$(stat -c %Y "$store" 2>/dev/null || echo 0)" "$browser" "$launcher" "$profile"
+    done < <(find "$root" -maxdepth 3 -type d -name 'https_lovable.dev_0.indexeddb.leveldb' 2>/dev/null)
+  done < <(browser_roots) | sort -rn
+}
+
+# echo the highest-exp token found in a profile, or nothing
+token_from_profile() {
+  local profile="$1" best='' best_exp=0
+  local -a stores=( "$profile/IndexedDB/https_lovable.dev_0.indexeddb.leveldb" "$profile/Local Storage/leveldb" )
+  local raw
+  raw="$(grep -raoh 'eyJ[A-Za-z0-9_-]\{10,\}\.eyJ[A-Za-z0-9_-]\{20,\}\.[A-Za-z0-9_-]\{20,\}' \
+    "${stores[@]}" 2>/dev/null | sort -u || true)"
+  [[ -z "$raw" ]] && return 1
+
+  local t payload aud exp
+  while IFS= read -r t; do
+    [[ -z "$t" ]] && continue
+    payload="$(jwt_payload "$t")"
+    aud="$(jq -r '.aud // empty' <<<"$payload" 2>/dev/null || true)"
+    [[ "$aud" == "$FIREBASE_AUD" ]] || continue
+    exp="$(jq -r '.exp // 0' <<<"$payload" 2>/dev/null || echo 0)"
+    if (( exp > best_exp )); then best_exp="$exp"; best="$t"; fi
+  done <<<"$raw"
+
+  [[ -z "$best" ]] && return 1
+  printf '%s\t%s' "$best_exp" "$best"
+}
+
+launch_browser() {
+  local launcher="$1" profile="$2" url="$3"
+  local -a cmd; read -ra cmd <<<"$launcher"
+  command -v "${cmd[0]}" >/dev/null 2>&1 || { warn "Can't launch ${cmd[0]}; open $url yourself."; return 1; }
+  info "Opening $url …"
+  "${cmd[@]}" --profile-directory="$(basename "$profile")" "$url" >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+}
+
+generate_token() {
+  local url="${1:-$LOGIN_URL}" retried="${2:-0}"
+
+  mapfile -t rows < <(find_profiles)
+  if [[ "${#rows[@]}" -eq 0 ]]; then
+    err "No browser profile has visited lovable.dev. Log in first, then re-run."
+    return 1
+  fi
+
+  local -a labels=() tokens=() metas=()
+  local stale_browser='' stale_profile='' stale_launcher='' stale_exp=0
+  local now; now="$(date +%s)"
+
+  local mtime browser launcher profile found exp tok
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -r mtime browser launcher profile <<<"$row"
+    found="$(token_from_profile "$profile" || true)"
+    [[ -z "$found" ]] && continue
+    IFS=$'\t' read -r exp tok <<<"$found"
+    if (( exp > now + 60 )); then
+      labels+=( "$(printf '%-16s %-22s expires %s' \
+        "$browser" "$(profile_label "$profile")" "$(date -d "@$exp" '+%H:%M:%S')")" )
+      tokens+=( "$tok" )
+      metas+=( "$browser / $(profile_label "$profile")" )
+    elif (( exp > stale_exp )); then
+      stale_exp="$exp"; stale_browser="$browser"
+      stale_profile="$profile"; stale_launcher="$launcher"
+    fi
+  done
+
+  if [[ "${#tokens[@]}" -eq 0 ]]; then
+    if (( retried )); then
+      err "Still no live token. Make sure you're actually logged in on lovable.dev."
+      return 1
+    fi
+    if (( stale_exp > 0 )); then
+      warn "Found only an expired token ($stale_browser, expired $(date -d "@$stale_exp" '+%F %H:%M'))."
+    else
+      warn "No Lovable token on disk yet."
+    fi
+    launch_browser "${stale_launcher:-$(cut -f3 <<<"${rows[0]}")}" \
+                   "${stale_profile:-$(cut -f4 <<<"${rows[0]}")}" "$url" || true
+    warn "Log in / reload the tab, then press Enter here to retry…"
+    read -r _
+    generate_token "$url" 1
+    return $?
+  fi
+
+  local idx=0
+  if [[ "${#tokens[@]}" -gt 1 ]] && command -v fzf >/dev/null 2>&1 && [[ -t 0 ]]; then
+    local pick
+    pick="$(for i in "${!labels[@]}"; do printf '%s\t%s\n' "$i" "${labels[$i]}"; done |
+      fzf --with-nth=2.. --delimiter='\t' \
+          --prompt='token › ' --height=40% --reverse \
+          --header='multiple live tokens — most recently used browser first')" || return 1
+    idx="$(cut -f1 <<<"$pick")"
+  fi
+
+  ok "Grabbed token from ${metas[$idx]}"
+  save_token "${tokens[$idx]}"
+}
+
+token_is_live() {
+  local t="$1" exp
+  exp="$(jq -r '.exp // 0' <<<"$(jwt_payload "$t")" 2>/dev/null || echo 0)"
+  (( exp > $(date +%s) + 60 ))
 }
 
 # Accept a bare id or a full lovable.dev URL, echo the project id.
@@ -182,16 +346,18 @@ menu() {
     "new        — scrape a project" \
     "rerun      — repeat a previous run" \
     "list       — show previous runs" \
-    "token      — set / update auth token" \
+    "generate   — auto-grab token from your browser" \
+    "token      — paste an auth token manually" \
     "help       — usage + how to get a token" \
     | fzf --prompt='scrape-loveable › ' --height=40% --reverse \
           --header='what do you want to do?')" || exit 0
   case "$choice" in
-    new*)   new_scrape_interactive ;;
-    rerun*) pick_rerun ;;
-    list*)  list_runs ;;
-    token*) set_token ;;
-    help*)  usage ;;
+    new*)      new_scrape_interactive ;;
+    rerun*)    pick_rerun ;;
+    list*)     list_runs ;;
+    generate*) generate_token ;;
+    token*)    set_token ;;
+    help*)     usage ;;
   esac
 }
 
@@ -204,10 +370,25 @@ ${C_BOLD}Usage${C_RESET}
   scrape-loveable <id|url> [ref] [dest] scrape directly (ref defaults to main)
   scrape-loveable list                  show previous runs
   scrape-loveable rerun                 pick a previous run and repeat it
-  scrape-loveable token                 set/update your auth token
+  scrape-loveable generate-token [url]  auto-grab a token from your browser
+  scrape-loveable token                 paste a token in manually
   scrape-loveable help                  this help
 
 ${C_BOLD}Auth${C_RESET}
+Tokens are short-lived (~1h). Scraping refreshes them automatically, so you
+normally never touch this — ${C_BOLD}--generate-token${C_RESET} is only for doing it up front.
+
+${C_BOLD}generate-token${C_RESET} reads the Firebase ID token straight out of your Chromium
+profile's on-disk LevelDB (IndexedDB + Local Storage), newest-used browser
+first, keeping only JWTs whose aud is $FIREBASE_AUD. Brave, Chrome,
+Chromium, Edge, Vivaldi, Opera and their flatpaks are all searched. If several
+profiles hold a live token you get an fzf picker; if none do, the browser opens
+at the login URL and it retries after you press Enter.
+
+  scrape-loveable generate-token
+  scrape-loveable generate-token https://lovable.dev/projects/<id>
+
+${C_DIM}Manual fallback (if the on-disk grab ever breaks):${C_RESET}
 $(token_snippet)
 
 ${C_BOLD}Paths${C_RESET}
@@ -225,5 +406,7 @@ case "${1:-}" in
   list|runs)        list_runs ;;
   rerun)            pick_rerun ;;
   token)            set_token ;;
+  generate-token|--generate-token|gen|auto)
+                    shift; generate_token "${1:-$LOGIN_URL}" ;;
   *)                do_scrape "$@" ;;
 esac

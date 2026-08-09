@@ -77,4 +77,74 @@ output="$("$reg" -n needle except:json -- "$tmp_dir")"
 grep -Fq "$tmp_dir/src/keep.ts:1:needle outside svg" <<<"$output"
 ! grep -Fq "needle in json" <<<"$output"
 
+# 9. Smart-case survives the svg-skip prefix
+echo "=== test 9: smart-case despite svg skip ==="
+echo "Needle Mixed" > "$tmp_dir/src/case.txt"
+output="$("$reg" needle mixed -- "$tmp_dir/src/case.txt")"
+grep -Fq "Needle Mixed" <<<"$output"
+! "$reg" NEEDLE MIXED -- "$tmp_dir/src/case.txt" >/dev/null 2>&1
+! "$reg" -s needle mixed -- "$tmp_dir/src/case.txt" >/dev/null 2>&1
+
+# 10. Pretty output: header, footer counts, no-match footer, exit codes
+echo "=== test 10: pretty output ==="
+output="$(REG_PRETTY=1 "$reg" needle -- "$tmp_dir/src/keep.ts")"
+grep -q "╭─" <<<"$output"
+grep -q "▍" <<<"$output"
+grep -q "╰─ 1 match in 1 file" <<<"$output"
+output="$(REG_PRETTY=1 "$reg" zzz_nomatch -- "$tmp_dir" || true)"
+grep -q "╰─ no matches" <<<"$output"
+! REG_PRETTY=1 "$reg" zzz_nomatch -- "$tmp_dir" >/dev/null 2>&1
+
+# 11. Pretty output stays off when piped (REG_PRETTY unset)
+echo "=== test 11: plain output when piped ==="
+output="$("$reg" needle -- "$tmp_dir/src/keep.ts")"
+! grep -q "╭─" <<<"$output"
+
+# 12. Hidden-results hint (capitalization) + reg -r rerun
+echo "=== test 12: hidden hint + rerun ==="
+state_a="$tmp_dir/state-a"
+printf 'Foo bar\nfoo bar\n' > "$tmp_dir/src/case2.txt"
+output="$(XDG_STATE_HOME="$state_a" REG_PRETTY=1 "$reg" Foo bar -- "$tmp_dir/src/case2.txt")"
+grep -q "1 found · 1 hidden by capitalization" <<<"$output"
+output="$(XDG_STATE_HOME="$state_a" REG_PRETTY=1 "$reg" -r)"
+grep -Fq "Foo bar" <<<"$output"
+grep -Fq "foo bar" <<<"$output"
+grep -q "2 matches" <<<"$output"
+
+# 13. Hidden-results hint for directives
+echo "=== test 13: directive hint ==="
+state_b="$tmp_dir/state-b"
+output="$(XDG_STATE_HOME="$state_b" REG_PRETTY=1 "$reg" needle o:ts -- "$tmp_dir")"
+grep -q "hidden by directives" <<<"$output"
+output="$(XDG_STATE_HOME="$state_b" REG_PRETTY=1 "$reg" rerun | sed 's/\x1b\[[0-9;]*m//g')"
+grep -Fq "needle in json" <<<"$output"
+! grep -Fq "needle in node_modules" <<<"$output"
+! grep -Fq "needle in dist" <<<"$output"
+
+# 14. No hint when nothing is hidden; no state saved
+echo "=== test 14: no hint when nothing hidden ==="
+state_c="$tmp_dir/state-c"
+output="$(XDG_STATE_HOME="$state_c" REG_PRETTY=1 "$reg" needle -- "$tmp_dir/src/keep.ts")"
+! grep -q "hidden by" <<<"$output"
+! XDG_STATE_HOME="$state_c" "$reg" -r >/dev/null 2>&1
+
+# 15. Nothing to rerun in a fresh state
+echo "=== test 15: nothing to rerun ==="
+! XDG_STATE_HOME="$tmp_dir/state-fresh" "$reg" -r >/dev/null 2>&1
+
+# 16. Close-match (typo) hint + rerun
+echo "=== test 16: close-match hint + rerun ==="
+state_d="$tmp_dir/state-d"
+printf 'const n = parseFloat(input)\n' > "$tmp_dir/src/typo.ts"
+output="$(XDG_STATE_HOME="$state_d" REG_PRETTY=1 "$reg" paresFloat -- "$tmp_dir/src/typo.ts" || true)"
+grep -q "close match" <<<"$output"
+output="$(XDG_STATE_HOME="$state_d" REG_PRETTY=1 "$reg" -r | sed 's/\x1b\[[0-9;]*m//g')"
+grep -Fq "parseFloat" <<<"$output"
+
+# 17. No close-match hint for gibberish with no near matches
+echo "=== test 17: no hint for gibberish ==="
+output="$(XDG_STATE_HOME="$tmp_dir/state-e" REG_PRETTY=1 "$reg" zzqqxxyy -- "$tmp_dir/src/typo.ts" || true)"
+! grep -q "close match" <<<"$output"
+! XDG_STATE_HOME="$tmp_dir/state-e" "$reg" -r >/dev/null 2>&1
+
 echo "ALL TESTS PASSED"

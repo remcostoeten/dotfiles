@@ -19,6 +19,8 @@ complete -c reg -n 'not __reg_has_prefix' -a "xd:\tExclude directory"
 complete -c reg -n 'not __reg_has_prefix' -a "o:\tOnly extension"
 complete -c reg -n 'not __reg_has_prefix' -a "only:\tOnly extension"
 complete -c reg -n 'not __reg_has_prefix' -a "in:\tScope to path"
+complete -c reg -n 'not __reg_has_prefix' -a "rerun\tRe-run last filtered search without filters"
+complete -c reg -s r -d "Re-run last filtered search without filters"
 
 # ── Value (post-":" context) ─────────────────────────────────────────────────
 

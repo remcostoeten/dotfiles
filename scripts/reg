@@ -23,6 +23,42 @@ default_args=(
 
 svg_skip='(?s)<svg\b[^>]*>.*?</svg>(*SKIP)(*F)|'
 
+pretty_flags=(
+  --heading --with-filename --line-number --trim --color=always
+  --colors 'line:none' --colors 'line:fg:8'
+  --colors 'match:none' --colors 'match:fg:yellow' --colors 'match:style:bold'
+)
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/reg"
+rerun_file="$state_dir/last-rerun"
+
+_is_pretty() {
+  [[ "${REG_PRETTY:-}" == "1" || ( -t 1 && "${REG_PRETTY:-}" != "0" ) ]]
+}
+
+_sum_counts() {
+  local out
+  out="$(rg --count "$@" 2>/dev/null | awk -F: '{s += $NF} END {print s + 0}')" || true
+  printf '%s' "${out:-0}"
+}
+
+_fuzzy_variants() {
+  local p="$1" i
+  local n=${#p}
+  local alts=()
+  for ((i = 0; i < n; i++)); do
+    alts+=("${p:0:i}.${p:i+1}")
+    alts+=("${p:0:i}${p:i+1}")
+    alts+=("${p:0:i}.${p:i}")
+  done
+  alts+=("${p}.")
+  for ((i = 0; i + 1 < n; i++)); do
+    alts+=("${p:0:i}${p:i+1:1}${p:i:1}${p:i+2}")
+  done
+  local IFS='|'
+  printf '(%s)' "${alts[*]}"
+}
+
 _help() {
   local c_='' c_h='' c_d='' c_g='' c_e='' c_r=''
   if [[ -t 2 ]]; then
@@ -39,6 +75,7 @@ _help() {
   printf "  ${c_d}xd:%s${c_}                ${c_g}Exclude directory${c_}       ${c_e}e.g. reg foo xd:dist${c_}\n" 'dir' >&2
   printf "  ${c_d}o:%s${c_} / ${c_d}only:%s${c_}       ${c_g}Only search extension${c_}  ${c_e}e.g. reg foo o:ts${c_}\n" 'ext' 'ext' >&2
   printf "  ${c_d}in:%s${c_}                ${c_g}Scope to path(s)${c_}       ${c_e}e.g. reg foo in:src${c_}\n" 'path' >&2
+  printf "  ${c_d}-r${c_} / ${c_d}rerun${c_}            ${c_g}Re-run last filtered search without filters${c_}\n" >&2
   printf "\n  ${c_g}Multiple values: except:ts,js,php  or  except ts js php  (commas optional)${c_}\n" >&2
   printf "  ${c_g}Typo detection via hunspell (install hunspell-en_us for this)${c_}\n" >&2
   printf "\n${c_h}Examples:${c_}\n" >&2
@@ -46,6 +83,53 @@ _help() {
   printf "  ${c_e}reg user auth x:test except:dist${c_}\n" >&2
   printf "  ${c_e}reg o:ts in:src component${c_}\n" >&2
   printf "  ${c_e}reg -i needle -- some-file${c_}\n" >&2
+}
+
+_pretty_run() {
+  local pattern_label="$1" hint="$2"
+  shift 2
+  local c_dim=$'\033[90m' c_bold=$'\033[1m' c_off=$'\033[0m'
+  printf '%s╭─%s %s%s%s\n' "$c_dim" "$c_off" "$c_bold" "$pattern_label" "$c_off"
+  if [[ -n "$hint" ]]; then
+    printf '%s\n' "$hint"
+  fi
+  local status=0
+  rg "$@" | awk -v dim="$c_dim" -v acc=$'\033[1;36m' -v off="$c_off" '
+    BEGIN { expect_heading = 1 }
+    {
+      plain = $0
+      gsub(/\033\[[0-9;]*m/, "", plain)
+      if (plain == "") { expect_heading = 1; next }
+      if (plain == "--") { printf "   %s┄%s\n", dim, off; next }
+      if (expect_heading) {
+        expect_heading = 0
+        files++
+        printf "\n %s▍ %s%s\n", acc, plain, off
+        next
+      }
+      line = $0
+      pad = ""
+      if (plain ~ /^[0-9]+[:-]/) {
+        num = plain
+        sub(/[:-].*$/, "", num)
+        if (length(num) < 4) pad = substr("    ", 1, 4 - length(num))
+      }
+      if (plain ~ /^[0-9]+:/) {
+        matches++
+        sub(/:/, " " dim "│" off " ", line)
+      } else if (plain ~ /^[0-9]+-/) {
+        sub(/-/, " " dim "┆" off " ", line)
+      }
+      print "  " pad line
+    }
+    END {
+      if (files == 0) {
+        printf "%s╰─ no matches%s\n", dim, off
+        exit
+      }
+      printf "\n%s╰─ %d %s in %d %s%s\n", dim, matches, (matches == 1 ? "match" : "matches"), files, (files == 1 ? "file" : "files"), off
+    }' || status=$?
+  exit "$status"
 }
 
 _typo_check() {
@@ -131,10 +215,10 @@ _extract_directives() {
       [[ -z "$part" ]] && continue
       part="${part,,}"
       case "$mode" in
-        ext)  pre_args+=(--glob "!*.${part}" --glob "!**/${part}/**") ;;
-        dir)  pre_args+=(--glob "!**/${part}/**") ;;
-        only) pre_args+=(--glob "*.${part}") ;;
-        in)   part="${part%%/}"; pre_args+=(--glob "**/${part}/**") ;;
+        ext)  directive_args+=(--glob "!*.${part}" --glob "!**/${part}/**") ;;
+        dir)  directive_args+=(--glob "!**/${part}/**") ;;
+        only) directive_args+=(--glob "*.${part}") ;;
+        in)   part="${part%%/}"; directive_args+=(--glob "**/${part}/**") ;;
       esac
     done
   done
@@ -142,7 +226,20 @@ _extract_directives() {
   _pattern="${cleaned[*]}"
 }
 
+if (($# == 1)) && [[ "$1" == "-r" || "$1" == "rerun" ]]; then
+  if [[ ! -f "$rerun_file" ]]; then
+    printf 'reg: nothing to rerun\n' >&2
+    exit 1
+  fi
+  mapfile -d '' -t stored < "$rerun_file"
+  if _is_pretty; then
+    _pretty_run "${stored[0]}" "" "${pretty_flags[@]}" "${stored[@]:1}"
+  fi
+  exec rg "${stored[@]:1}"
+fi
+
 pre_args=()
+directive_args=()
 post_args=()
 search_pattern=""
 fixed_strings=false
@@ -263,6 +360,20 @@ for arg in "${pre_args[@]}"; do
   fi
 done
 
+case_flag_given=false
+for arg in "${pre_args[@]}"; do
+  case "$arg" in
+    -i|--ignore-case|-s|--case-sensitive|-S|--smart-case)
+      case_flag_given=true
+      break
+      ;;
+  esac
+  if [[ "$arg" =~ ^-[a-zA-Z]+$ && "$arg" == *[isS]* ]]; then
+    case_flag_given=true
+    break
+  fi
+done
+
 # No pattern at all — show help or passthrough
 if [[ -z "$search_pattern" ]]; then
   if ((${#pre_args[@]} == 0 && ${#post_args[@]} == 0)); then
@@ -277,15 +388,91 @@ _extract_directives search_pattern
 
 # If all words were directives, just run rg with the filters
 if [[ -z "$search_pattern" ]]; then
-  exec rg "${default_args[@]}" "${pre_args[@]}" "${post_args[@]}"
+  exec rg "${default_args[@]}" "${directive_args[@]}" "${pre_args[@]}" "${post_args[@]}"
 fi
 
 # Typo check (non-blocking, stderr only)
 _typo_check "$search_pattern"
 
-# Execute search
-if [[ "$fixed_strings" == true ]]; then
-  exec rg "${default_args[@]}" "${pre_args[@]}" "$search_pattern" "${post_args[@]}"
-else
-  exec rg "${default_args[@]}" "${pre_args[@]}" --pcre2 -U "${svg_skip}${search_pattern}" "${post_args[@]}"
+# Execute search. rg_args is the real (filtered) search; unfiltered_args is the
+# same search minus the user filters (capitalization + inline directives), used
+# to count hidden results and saved as the `reg -r` rerun.
+case_filter=false
+if [[ "$case_flag_given" == false ]]; then
+  if [[ "$fixed_strings" == true ]]; then
+    probe="$search_pattern"
+  else
+    probe="$(sed 's/\\.//g' <<<"$search_pattern")"
+  fi
+  if [[ "$probe" == *[A-Z]* ]]; then
+    case_filter=true
+  fi
 fi
+
+rg_args=("${default_args[@]}" "${directive_args[@]}" "${pre_args[@]}")
+unfiltered_args=("${default_args[@]}" "${pre_args[@]}")
+if [[ "$case_filter" == true ]]; then
+  unfiltered_args+=(-i)
+fi
+if [[ "$fixed_strings" == true ]]; then
+  rg_args+=("$search_pattern")
+  unfiltered_args+=("$search_pattern")
+else
+  # The svg_skip prefix contains uppercase ((*SKIP)(*F)), which makes rg's
+  # --smart-case always case-sensitive. Re-apply the smart-case decision from
+  # the user's pattern alone, ignoring escape sequences like \S.
+  case_args=()
+  if [[ "$case_flag_given" == false && "$case_filter" == false ]]; then
+    case_args+=(-i)
+  fi
+  rg_args+=("${case_args[@]}" --pcre2 -U "${svg_skip}${search_pattern}")
+  unfiltered_args+=("${case_args[@]}" --pcre2 -U "${svg_skip}${search_pattern}")
+fi
+rg_args+=("${post_args[@]}")
+unfiltered_args+=("${post_args[@]}")
+
+if _is_pretty; then
+  hint=""
+  shown=$(_sum_counts "${rg_args[@]}")
+  filter_bits=()
+  if [[ "$case_filter" == true ]]; then
+    filter_bits+=("capitalization")
+  fi
+  if ((${#directive_args[@]})); then
+    filter_bits+=("directives")
+  fi
+  if ((${#filter_bits[@]})); then
+    total=$(_sum_counts "${unfiltered_args[@]}")
+    hidden=$((total - shown))
+    if ((hidden > 0)); then
+      label="${filter_bits[0]}"
+      if ((${#filter_bits[@]} > 1)); then
+        label="${filter_bits[0]} + ${filter_bits[1]}"
+      fi
+      hint=$'\033[33m'"   ${shown} found · ${hidden} hidden by ${label} — reg -r / reg rerun to show all"$'\033[0m'
+      mkdir -p "$state_dir"
+      printf '%s\0' "$search_pattern · all results" "${unfiltered_args[@]}" > "$rerun_file"
+    fi
+  fi
+  fuzzy_shape='^[A-Za-z0-9_ ]+$'
+  if [[ -z "$hint" && "$shown" == 0 && "$search_pattern" =~ $fuzzy_shape ]] \
+    && ((${#search_pattern} >= 4 && ${#search_pattern} <= 64)); then
+    fuzzy_args=(
+      "${default_args[@]}" "${directive_args[@]}" "${pre_args[@]}"
+      -i --pcre2 -U "${svg_skip}$(_fuzzy_variants "$search_pattern")"
+      "${post_args[@]}"
+    )
+    close=$(_sum_counts "${fuzzy_args[@]}")
+    if ((close > 0)); then
+      noun="matches"
+      if ((close == 1)); then
+        noun="match"
+      fi
+      hint=$'\033[33m'"   0 found · ${close} close ${noun} (typo?) — reg -r / reg rerun to show them"$'\033[0m'
+      mkdir -p "$state_dir"
+      printf '%s\0' "$search_pattern · close matches" "${fuzzy_args[@]}" > "$rerun_file"
+    fi
+  fi
+  _pretty_run "$search_pattern" "$hint" "${pretty_flags[@]}" "${rg_args[@]}"
+fi
+exec rg "${rg_args[@]}"
