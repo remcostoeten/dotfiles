@@ -1,0 +1,310 @@
+#!/bin/bash
+
+set -o pipefail
+
+API="https://api.bitbucket.org/2.0"
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/pipeline-cli/config"
+ENV_DOMAIN="${PIPELINE_ENV_DOMAIN:-regeljelease.dev}"
+ENV_PREFIX="${PIPELINE_ENV_PREFIX:-powerwalk-}"
+
+[ -f "$CONFIG_FILE" ] && . "$CONFIG_FILE"
+
+if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
+    BOLD=$'\e[1m' DIM=$'\e[2m' RED=$'\e[31m' GREEN=$'\e[32m' YELLOW=$'\e[33m'
+    BLUE=$'\e[34m' MAGENTA=$'\e[35m' CYAN=$'\e[36m' RESET=$'\e[0m'
+else
+    BOLD='' DIM='' RED='' GREEN='' YELLOW='' BLUE='' MAGENTA='' CYAN='' RESET=''
+fi
+
+info()  { printf '%s\n' "${CYAN}›${RESET} $*"; }
+ok()    { printf '%s\n' "${GREEN}✔${RESET} $*"; }
+warn()  { printf '%s\n' "${YELLOW}⚠${RESET} $*"; }
+fail()  { printf '%s\n' "${RED}✖${RESET} $*" >&2; }
+die()   { fail "$*"; exit 1; }
+
+repo_info() {
+    local url
+    url="$(git remote get-url origin 2>/dev/null)" || die "Not inside a git repository with an 'origin' remote."
+    case "$url" in
+        *bitbucket.org*) ;;
+        *) die "Origin is not a Bitbucket repository: $url" ;;
+    esac
+    WORKSPACE="$(printf '%s' "$url" | sed -E 's#.*bitbucket.org[:/]([^/]+)/.*#\1#')"
+    REPO="$(printf '%s' "$url" | sed -E 's#.*bitbucket.org[:/][^/]+/([^/.]+)(\.git)?$#\1#')"
+    [ -n "$WORKSPACE" ] && [ -n "$REPO" ] || die "Could not parse workspace/repo from: $url"
+}
+
+current_branch() { git branch --show-current 2>/dev/null; }
+
+repo_root() { git rev-parse --show-toplevel 2>/dev/null; }
+
+have_auth() { [ -n "$BITBUCKET_ACCESS_TOKEN" ] || { [ -n "$BITBUCKET_USER" ] && [ -n "$BITBUCKET_APP_PASSWORD" ]; }; }
+
+require_auth() {
+    have_auth && return 0
+    fail "No Bitbucket API credentials configured."
+    printf '\n  Create a repository access token (scope: Pipelines read+write) at:\n'
+    printf '  %s\n\n' "${BLUE}https://bitbucket.org/$WORKSPACE/$REPO/admin/access-tokens${RESET}"
+    printf '  Then store it in %s:\n\n' "${BOLD}${CONFIG_FILE}${RESET}"
+    printf '    BITBUCKET_ACCESS_TOKEN=your-access-token\n\n'
+    printf '  Falling back to the Bitbucket web UI where possible.\n'
+    return 1
+}
+
+api() {
+    local method="$1" path="$2" body="$3" auth=()
+    if [ -n "$BITBUCKET_ACCESS_TOKEN" ]; then
+        auth=(-H "Authorization: Bearer $BITBUCKET_ACCESS_TOKEN")
+    else
+        auth=(-u "$BITBUCKET_USER:$BITBUCKET_APP_PASSWORD")
+    fi
+    if [ -n "$body" ]; then
+        curl -sS -X "$method" "${auth[@]}" \
+            -H "Content-Type: application/json" -d "$body" "$API/repositories/$WORKSPACE/$REPO/$path"
+    else
+        curl -sS -X "$method" "${auth[@]}" \
+            "$API/repositories/$WORKSPACE/$REPO/$path"
+    fi
+}
+
+open_url() {
+    info "Opening ${BLUE}$1${RESET}"
+    xdg-open "$1" >/dev/null 2>&1 &
+}
+
+pick() {
+    local prompt="$1"
+    shift
+    if command -v fzf >/dev/null 2>&1 && [ -t 0 ]; then
+        printf '%s\n' "$@" | fzf --height=40% --reverse --border --prompt="$prompt " \
+            --header="↑/↓ or type to filter, Enter to select, Esc to cancel"
+    else
+        local choice
+        PS3="$prompt "
+        select choice in "$@"; do
+            [ -n "$choice" ] && { printf '%s\n' "$choice"; return 0; }
+        done
+    fi
+}
+
+confirm() {
+    local answer
+    printf '%s [y/N] ' "$1"
+    read -r answer
+    case "$answer" in y | Y | yes) return 0 ;; *) return 1 ;; esac
+}
+
+custom_pipelines() {
+    local yml
+    yml="$(repo_root)/bitbucket-pipelines.yml"
+    [ -f "$yml" ] || return 1
+    awk '
+        /^[[:space:]]*custom:[[:space:]]*$/ { base = match($0, /[^ ]/); found = 1; next }
+        found {
+            indent = match($0, /[^ ]/)
+            if ($0 !~ /^[[:space:]]*$/ && indent <= base) { found = 0; next }
+            if (indent == base + 2 && $0 ~ /^[[:space:]]+[A-Za-z0-9_-]+:[[:space:]]*$/) {
+                line = $0; gsub(/[[:space:]:]/, "", line); print line
+            }
+        }
+    ' "$yml"
+}
+
+env_slug() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+}
+
+find_environment() {
+    local slug len candidate url code
+    slug="$(env_slug "$1")"
+    for len in 63 48 42 36 32 28 24; do
+        candidate="${ENV_PREFIX}${slug}"
+        candidate="${candidate:0:len}"
+        candidate="${candidate%-}"
+        url="https://${candidate}.${ENV_DOMAIN}"
+        code="$(curl -so /dev/null --max-time 5 -w '%{http_code}' "$url" 2>/dev/null)"
+        case "$code" in
+            000 | 404 | "") ;;
+            *) printf '%s\n' "$url"; return 0 ;;
+        esac
+    done
+    return 1
+}
+
+state_color() {
+    case "$1" in
+        SUCCESSFUL) printf '%s' "${GREEN}$1${RESET}" ;;
+        FAILED | ERROR) printf '%s' "${RED}$1${RESET}" ;;
+        IN_PROGRESS | PENDING | RUNNING | BUILDING) printf '%s' "${YELLOW}$1${RESET}" ;;
+        STOPPED | PAUSED | HALTED) printf '%s' "${MAGENTA}$1${RESET}" ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+cmd_view() {
+    if ! require_auth; then
+        open_url "https://bitbucket.org/$WORKSPACE/$REPO/pipelines"
+        return
+    fi
+    info "Recent pipelines for ${BOLD}$WORKSPACE/$REPO${RESET}"
+    local rows
+    rows="$(api GET "pipelines/?sort=-created_on&pagelen=15" | jq -r '
+        .values[] | [
+            .build_number,
+            (.state.result.name // .state.stage.name // .state.name),
+            (.target.ref_name // "-"),
+            (.target.selector.pattern // .target.selector.type // "default"),
+            (.created_on | sub("\\.[0-9]+Z$"; "Z") | sub("T"; " ") | sub("Z$"; "")),
+            "\(.build_seconds_used // 0)s"
+        ] | @tsv')" || die "API request failed."
+    [ -n "$rows" ] || { warn "No pipelines found."; return; }
+    printf '%s\n' "${BOLD}  #     STATE         BRANCH                                PIPELINE                        STARTED              TOOK${RESET}"
+    while IFS=$'\t' read -r num state branch selector created took; do
+        printf '  %-5s %-24s %-37s %-31s %-20s %s\n' \
+            "$num" "$(state_color "$state")" "${branch:0:37}" "${selector:0:31}" "$created" "$took"
+    done <<< "$rows"
+}
+
+watch_pipeline() {
+    local uuid="$1" state result
+    info "Watching pipeline (Ctrl-C to stop watching, the pipeline keeps running)..."
+    while :; do
+        state="$(api GET "pipelines/$uuid" | jq -r '.state.name')"
+        if [ "$state" = "COMPLETED" ]; then
+            result="$(api GET "pipelines/$uuid" | jq -r '.state.result.name')"
+            printf '\r%-60s\n' "  state: $(state_color "$result")"
+            [ "$result" = "SUCCESSFUL" ] && ok "Pipeline finished successfully." || fail "Pipeline ended: $result"
+            return
+        fi
+        printf '\r  state: %-40s' "$(state_color "${state:-UNKNOWN}")"
+        sleep 10
+    done
+}
+
+cmd_trigger() {
+    local selector="$1" branch="$2" pipelines
+    if ! require_auth; then
+        open_url "https://bitbucket.org/$WORKSPACE/$REPO/pipelines"
+        warn "Trigger it manually via 'Run pipeline' until credentials are configured."
+        return 1
+    fi
+    if [ -z "$selector" ]; then
+        pipelines="$(custom_pipelines)"
+        [ -n "$pipelines" ] || die "No custom pipelines found in bitbucket-pipelines.yml."
+        # shellcheck disable=SC2086
+        selector="$(pick "Custom pipeline:" $pipelines)" || return 1
+        [ -n "$selector" ] || return 1
+    fi
+    [ -n "$branch" ] || branch="$(current_branch)"
+    [ -n "$branch" ] || die "Could not determine branch (detached HEAD?). Pass one: pipeline -t <pipeline> <branch>"
+    printf '\n  pipeline  %s\n  branch    %s\n  repo      %s/%s\n\n' \
+        "${BOLD}$selector${RESET}" "${BOLD}$branch${RESET}" "$WORKSPACE" "$REPO"
+    confirm "Trigger this pipeline?" || { warn "Aborted."; return 1; }
+    local response uuid number error
+    response="$(api POST "pipelines/" "$(jq -n --arg b "$branch" --arg s "$selector" \
+        '{target: {type: "pipeline_ref_target", ref_type: "branch", ref_name: $b, selector: {type: "custom", pattern: $s}}}')")"
+    error="$(printf '%s' "$response" | jq -r '.error.message // empty')"
+    [ -n "$error" ] && die "Bitbucket refused: $error"
+    uuid="$(printf '%s' "$response" | jq -r '.uuid')"
+    number="$(printf '%s' "$response" | jq -r '.build_number')"
+    ok "Triggered pipeline ${BOLD}#$number${RESET}"
+    info "${BLUE}https://bitbucket.org/$WORKSPACE/$REPO/pipelines/results/$number${RESET}"
+    confirm "Watch it until completion?" && watch_pipeline "$uuid"
+}
+
+cmd_deploy() {
+    local branch="${1:-$(current_branch)}" url
+    [ -n "$branch" ] || die "Could not determine branch. Pass one: pipeline -d <branch>"
+    info "Looking for a test environment for ${BOLD}$branch${RESET}..."
+    if url="$(find_environment "$branch")"; then
+        ok "Environment found: ${BLUE}$url${RESET}"
+        confirm "Open it in the browser?" && open_url "$url"
+    else
+        warn "No test environment responded for '$branch' on *.$ENV_DOMAIN."
+        confirm "Trigger one now?" && cmd_trigger "" "$branch"
+    fi
+}
+
+cmd_exists() {
+    local branch="${1:-$(current_branch)}" url
+    [ -n "$branch" ] || die "Could not determine branch."
+    if url="$(find_environment "$branch")"; then
+        ok "Exists: ${BLUE}$url${RESET}"
+    else
+        warn "No environment found for '$branch'."
+        return 1
+    fi
+}
+
+cmd_bitbucket() { open_url "https://bitbucket.org/$WORKSPACE/$REPO/pipelines"; }
+
+cmd_help() {
+    cat <<EOF
+${BOLD}pipeline${RESET} — Bitbucket Pipelines & test environments from the terminal
+
+${BOLD}USAGE${RESET}
+  pipeline                    interactive mode
+  pipeline [flag] [args]
+
+${BOLD}FLAGS${RESET}
+  ${CYAN}-t${RESET}, ${CYAN}--trigger${RESET} [name] [branch]   trigger a custom pipeline (picker if omitted)
+  ${CYAN}-v${RESET}, ${CYAN}--view${RESET}                      recent pipeline runs with live status
+  ${CYAN}-d${RESET}, ${CYAN}--deploy${RESET} [branch]           open the deployed test environment (offer trigger if absent)
+  ${CYAN}-e${RESET}, ${CYAN}--exists${RESET} [branch]           check whether a test environment exists
+  ${CYAN}-b${RESET}, ${CYAN}--bitbucket${RESET}                 open the repository's Pipelines page
+  ${CYAN}-h${RESET}, ${CYAN}--help${RESET}                      this help
+
+${BOLD}CONFIG${RESET}
+  Credentials (needed for --trigger/--view API access) live in:
+    ${DIM}$CONFIG_FILE${RESET}
+      BITBUCKET_ACCESS_TOKEN=...   ${DIM}(repository access token with Pipelines read+write)${RESET}
+    ${DIM}Legacy fallback: BITBUCKET_USER + BITBUCKET_APP_PASSWORD (basic auth)${RESET}
+  Environment detection can be tuned with:
+      PIPELINE_ENV_DOMAIN   ${DIM}(default: regeljelease.dev)${RESET}
+      PIPELINE_ENV_PREFIX   ${DIM}(default: powerwalk-)${RESET}
+
+Workspace and repository are read from the current directory's git origin.
+EOF
+}
+
+interactive() {
+    local branch choice
+    branch="$(current_branch)"
+    printf '\n%s\n' "${BOLD}Bitbucket Pipelines${RESET} ${DIM}·${RESET} $WORKSPACE/$REPO ${DIM}·${RESET} ${CYAN}${branch:-no branch}${RESET}"
+    while :; do
+        printf '\n'
+        choice="$(pick "What do you want to do?" \
+            "Trigger a custom pipeline" \
+            "View pipeline runs & status" \
+            "Open deployed test environment" \
+            "Check if a test environment exists" \
+            "Open Bitbucket pipelines page" \
+            "Help" \
+            "Quit")" || break
+        case "$choice" in
+            "Trigger a custom pipeline") cmd_trigger "" "" ;;
+            "View pipeline runs & status") cmd_view ;;
+            "Open deployed test environment") cmd_deploy ;;
+            "Check if a test environment exists") cmd_exists ;;
+            "Open Bitbucket pipelines page") cmd_bitbucket ;;
+            "Help") cmd_help ;;
+            "Quit" | "") break ;;
+        esac
+    done
+}
+
+case "$1" in
+    -h | --help) cmd_help; exit 0 ;;
+esac
+
+repo_info
+
+case "$1" in
+    "") interactive ;;
+    -t | --trigger) cmd_trigger "$2" "$3" ;;
+    -v | --view) cmd_view ;;
+    -d | --deploy) cmd_deploy "$2" ;;
+    -e | --exists) cmd_exists "$2" ;;
+    -b | --bitbucket) cmd_bitbucket ;;
+    *) fail "Unknown flag: $1"; cmd_help; exit 1 ;;
+esac
