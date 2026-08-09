@@ -1,14 +1,14 @@
 command = /usr/bin/fish
 
-background-opacity = 0.90
+background-opacity = 1.00
 background-opacity-cells = true
 background-blur = 100
 background-image = /home/remcostoeten/.config/dotfiles/configs/ghostty/assets/warm-sunset-bg.png
 background-image-opacity = 0.5
 background-image-fit = cover
 
-theme = Square
-window-decoration = none
+theme = Black Metal (Bathory)
+window-decoration = auto
 gtk-titlebar = false
 window-show-tab-bar = never
 gtk-toolbar-style = flat
@@ -16,9 +16,9 @@ gtk-custom-css = gtk.css
 window-padding-x = 16
 
 # Font & Typography
-font-family = "CaskaydiaMono NFP SemiBold"
+font-family = "ComicShannsMono Nerd Font Mono"
 font-size = 31
-adjust-cell-height = 40%
+adjust-cell-height = 20%
 adjust-cell-width = 18%
 
 
@@ -49,6 +49,13 @@ keybind = ctrl+enter=toggle_fullscreen
 keybind = ctrl+backquote=goto_split:next
 
 keybind = ctrl+h=new_split:right
+keybind = ctrl+shift+h=new_split:down
+
+keybind = ctrl+shift+arrow_right=resize_split:right,40
+keybind = ctrl+shift+arrow_left=resize_split:left,40
+keybind = ctrl+shift+arrow_down=resize_split:down,40
+keybind = ctrl+shift+arrow_up=resize_split:up,40
+keybind = ctrl+shift+backquote=equalize_splits
 
 # Mouse
 mouse-hide-while-typing = true

@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ghostty config — how it actually works</title>
+<style>
+  :root{
+    --bg:#050506; --panel:#0c0c0f; --panel-2:#111116; --line:#1c1c22; --line-hi:#2c2c36;
+    --fg:#e9e9ee; --muted:#7c7c8a; --dim:#54545f;
+    --amber:#e0a45e; --violet:#a78bfa; --teal:#5eead4; --rose:#f472b6; --blue:#7dd3fc;
+    --mono:"0xProto Nerd Font",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:14px;line-height:1.5}
+  body{padding:48px 32px 120px;-webkit-font-smoothing:antialiased}
+  a{color:var(--blue)}
+  .wrap{max-width:1400px;margin:0 auto}
+
+  header h1{font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0 0 6px}
+  header p{color:var(--muted);margin:0;max-width:70ch}
+  .kbd{border:1px solid var(--line-hi);border-radius:4px;padding:1px 6px;color:var(--fg);background:var(--panel-2);font-size:12px}
+
+  .tabs{display:flex;gap:6px;margin:36px 0 8px;border-bottom:1px solid var(--line);padding-bottom:0}
+  .tab{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font:inherit;font-size:13px;
+       padding:8px 14px;cursor:pointer;transition:.15s}
+  .tab:hover{color:var(--fg)}
+  .tab[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--amber)}
+
+  .legend{display:flex;gap:18px;flex-wrap:wrap;color:var(--dim);font-size:11.5px;margin:14px 0 26px}
+  .legend span{display:flex;align-items:center;gap:7px}
+  .swatch{width:18px;height:2px;border-radius:2px;display:inline-block}
+
+  /* ── graph ── */
+  .stage{position:relative;padding-bottom:104px}
+  svg.edges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:0}
+  .edge{fill:none;stroke:var(--line-hi);stroke-width:1.4;opacity:.75;transition:.2s}
+  .edge.flow{stroke-dasharray:5 7;animation:march 1.4s linear infinite}
+  @keyframes march{to{stroke-dashoffset:-24}}
+  .edge.dim{opacity:.1}
+  .edge.hot{stroke-width:2.2;opacity:1}
+  .edgelabel{font-size:10.5px;fill:var(--dim);paint-order:stroke;stroke:var(--bg);stroke-width:5px;transition:.2s}
+  .edgelabel.dim{opacity:.12}
+  .edgelabel.hot{fill:var(--fg)}
+
+  .cols{position:relative;z-index:1;display:grid;gap:60px;grid-template-columns:repeat(5,1fr);align-items:start}
+  .cols.split{grid-template-columns:repeat(3,1fr)}
+  .col{display:flex;flex-direction:column;gap:16px}
+  .colhead{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+           border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:2px}
+
+  .node{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 13px;
+        cursor:default;transition:.18s;overflow:hidden}
+  .node::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent,var(--line-hi));opacity:.85}
+  .node.clickable{cursor:pointer}
+  .node:hover{border-color:var(--line-hi);background:var(--panel-2);transform:translateY(-1px)}
+  .node.faded{opacity:.28}
+  .node.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset,0 8px 30px -12px var(--accent)}
+  .node .t{font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px}
+  .node .t .dot{width:6px;height:6px;border-radius:50%;background:var(--accent,var(--muted));flex:none}
+  .node .d{color:var(--muted);font-size:11.5px;margin-top:5px;line-height:1.45}
+  .node .tag{position:absolute;top:10px;right:11px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+  .node.ghost{border-style:dashed;background:transparent}
+
+  .tip{position:fixed;z-index:60;pointer-events:none;background:#000;border:1px solid var(--line-hi);border-radius:7px;
+       padding:7px 10px;font-size:11.5px;color:var(--fg);opacity:0;transition:opacity .12s;max-width:520px;
+       box-shadow:0 12px 40px -12px #000}
+  .tip .p{color:var(--teal);word-break:break-all}
+  .tip .h{color:var(--dim);margin-top:4px}
+
+  /* ── modal ── */
+  .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(3px);z-index:80;
+            display:none;align-items:center;justify-content:center;padding:40px}
+  .backdrop.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line-hi);border-radius:14px;width:min(980px,100%);
+         max-height:100%;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 40px 100px -30px #000}
+  .modal header{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:flex-start}
+  .modal header h2{font-size:15px;margin:0 0 4px;font-weight:600}
+  .modal header .path{font-size:11.5px;color:var(--teal);word-break:break-all}
+  .modal header .why{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.55;max-width:80ch}
+  .close{margin-left:auto;background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;
+         width:28px;height:28px;cursor:pointer;font:inherit;flex:none}
+  .close:hover{color:var(--fg);border-color:var(--line-hi)}
+  pre{margin:0;padding:18px 20px;overflow:auto;font-size:12.5px;line-height:1.65;flex:1;tab-size:2}
+  .c-com{color:var(--dim)}
+  .c-key{color:var(--violet)}
+  .c-val{color:var(--fg)}
+  .c-num{color:var(--amber)}
+  .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px;
+      border:1px solid rgba(255,255,255,.18)}
+
+  .note{border:1px solid var(--line);border-left:2px solid var(--amber);border-radius:8px;background:var(--panel);
+        padding:14px 16px;margin:34px 0 0;color:var(--muted);font-size:12.5px;line-height:1.6}
+  .note b{color:var(--fg);font-weight:500}
+  .note code{color:var(--teal)}
+  h3.sec{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin:44px 0 4px;font-weight:500}
+  .view{display:none}
+  .view.on{display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Ghostty, end to end</h1>
+    <p>Where the config lives, how a theme gets resolved, how the symlink makes the repo the source of truth,
+       and how Ghostty injects itself into your fish shell. Hover a box for its real path, click a
+       <span class="kbd">solid</span> box to read the file.</p>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-view="real">1 · The real pipeline</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="split">2 · Splitting it into 3 files</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="shell">3 · Shell injection</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="dead">4 · What's inert</button>
+  </div>
+
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--amber)"></i> config / plain text</span>
+    <span><i class="swatch" style="background:var(--violet)"></i> theme &amp; color</span>
+    <span><i class="swatch" style="background:var(--teal)"></i> filesystem / symlink</span>
+    <span><i class="swatch" style="background:var(--rose)"></i> process / runtime</span>
+    <span><i class="swatch" style="background:var(--blue)"></i> tooling</span>
+    <span>· dashed edge = live data flow</span>
+  </div>
+
+  <!-- ══════════ VIEW 1 ══════════ -->
+  <section class="view on" id="view-real">
+    <div class="stage">
+      <svg class="edges"></svg>
+      <div class="cols">
+        <div class="col">
+          <div class="colhead">Source of truth · git</div>
+          <div class="node clickable" id="n-config" data-file="config" style="--accent:var(--amber)">
+            <div class="t"><i class="dot"></i>config</div>
+            <div class="d">The single file Ghostty reads. Font, window, opacity, <em>theme = Batman</em>, every keybind.</div>
+            <div class="tag">62 lines</div>
+          </div>
+          <div class="node clickable" id="n-themes" data-file="theme-dark" style="--accent:var(--violet)">
+            <div class="t"><i class="dot"></i>themes/</div>
+            <div class="d">7 hand-written palettes. Same syntax as config — just the color keys.</div>
+            <div class="tag">custom</div>
+          </div>
+          <div class="node clickable" id="n-gtk" data-file="gtk" style="--accent:var(--amber)">
+            <div class="t"><i class="dot"></i>gtk.css</div>
+            <div class="d">Chrome around the terminal — tab bar, not the grid. GTK4 CSS, not Ghostty syntax.</div>
+          </div>
+          <div class="node" id="n-assets" style="--accent:var(--amber)">
+            <div class="t"><i class="dot"></i>assets/</div>
+            <div class="d">5 PNGs used by <em>background-image</em>.</div>
+          </div>
+          <div class="node ghost clickable" id="n-init" data-file="initcfg" style="--accent:var(--dim)">
+            <div class="t"><i class="dot"></i>init-cfg</div>
+            <div class="d">Dead file. Ghostty never loads it — the name isn't <em>config</em> and nothing includes it. An old snapshot.</div>
+            <div class="tag">unused</div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="colhead">Link layer</div>
+          <div class="node clickable" id="n-link" data-file="symlink" style="--accent:var(--teal)">
+            <div class="t"><i class="dot"></i>~/.config/ghostty →</div>
+            <div class="d">A <em>directory</em> symlink, not per-file. Whole folder points back into the repo, so edits in either place are the same inode.</div>
+            <div class="tag">symlink</div>
+          </div>
+          <div class="node clickable" id="n-setup" data-file="setup" style="--accent:var(--blue)">
+            <div class="t"><i class="dot"></i>setup.sh</div>
+            <div class="d"><em>setup_config_symlinks()</em> creates it, backing up anything already there.</div>
+            <div class="tag">installers.sh:685</div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="colhead">Ghostty process</div>
+          <div class="node" id="n-read" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>read config</div>
+            <div class="d">Follows the symlink, parses <em>key = value</em> top to bottom. Later lines win; <em>keybind</em> accumulates.</div>
+          </div>
+          <div class="node" id="n-resolve" style="--accent:var(--violet)">
+            <div class="t"><i class="dot"></i>resolve theme =</div>
+            <div class="d">Looks up the name in your themes dir first, then the 463 built-ins. Found file is spliced in <em>where the theme line sits</em>.</div>
+          </div>
+          <div class="node clickable" id="n-builtin" data-file="batman" style="--accent:var(--violet)">
+            <div class="t"><i class="dot"></i>/usr/share/ghostty/themes</div>
+            <div class="d">463 shipped themes. <em>Batman</em> is the one currently winning.</div>
+            <div class="tag">system</div>
+          </div>
+          <div class="node" id="n-render" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>render surface</div>
+            <div class="d">Palette + font + padding + background image composited on the GPU.</div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="colhead">Shell handoff</div>
+          <div class="node" id="n-spawn" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>command = fish</div>
+            <div class="d">Ghostty spawns <em>/usr/bin/fish</em> as the surface's process.</div>
+          </div>
+          <div class="node clickable" id="n-env" data-file="env" style="--accent:var(--teal)">
+            <div class="t"><i class="dot"></i>env injection</div>
+            <div class="d">Before exec it sets TERM, GHOSTTY_RESOURCES_DIR and prepends its own dir to XDG_DATA_DIRS.</div>
+          </div>
+          <div class="node clickable" id="n-fishint" data-file="fishint" style="--accent:var(--teal)">
+            <div class="t"><i class="dot"></i>vendor_conf.d</div>
+            <div class="d">fish auto-sources it from XDG_DATA_DIRS. No line in your config.fish — that's the trick.</div>
+            <div class="tag">auto-loaded</div>
+          </div>
+          <div class="node" id="n-features" style="--accent:var(--teal)">
+            <div class="t"><i class="dot"></i>cursor · path · title</div>
+            <div class="d">What the integration buys: OSC 133 prompt marks, cwd tracking for new tabs, window title, cursor shape.</div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="colhead">Control plane</div>
+          <div class="node clickable" id="n-tui" data-file="tui" style="--accent:var(--blue)">
+            <div class="t"><i class="dot"></i>ghostty-theme</div>
+            <div class="d">Go TUI. Live-previews by writing the real config, then restores your baseline if you quit without saving.</div>
+            <div class="tag">bin/</div>
+          </div>
+          <div class="node" id="n-write" style="--accent:var(--blue)">
+            <div class="t"><i class="dot"></i>atomic write</div>
+            <div class="d">temp file → <em>rename()</em> into the repo path. Never a half-written config.</div>
+          </div>
+          <div class="node" id="n-reload" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>SIGUSR2</div>
+            <div class="d"><em>pkill -USR2 -x ghostty</em> — every window re-reads the config in place. No restart.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>The loop that makes it feel live:</b> the TUI writes <code>configs/ghostty/config</code> in the repo →
+      the symlink means that <em>is</em> <code>~/.config/ghostty/config</code> → <code>SIGUSR2</code> tells the running
+      process to re-read it → your open windows repaint. Editing the file by hand and running
+      <code>pkill -USR2 -x ghostty</code> yourself does the identical thing.
+    </div>
+  </section>
+
+  <!-- ══════════ VIEW 2 ══════════ -->
+  <section class="view" id="view-split">
+    <h3 class="sec">Hypothetical: one file → three</h3>
+    <p style="color:var(--muted);max-width:80ch;margin:8px 0 30px">
+      Ghostty has a real include directive: <b style="color:var(--fg)">config-file</b>. Paths are relative to the file
+      doing the including, so a repo-local split needs no absolute paths. Everything here is composed into
+      <em>one flat key/value list</em> before anything is applied — includes are not scoped.
+    </p>
+    <div class="stage">
+      <svg class="edges"></svg>
+      <div class="cols split">
+        <div class="col">
+          <div class="colhead">Fragments</div>
+          <div class="node clickable" id="s-font" data-file="s-font" style="--accent:var(--amber)">
+            <div class="t"><i class="dot"></i>font.conf</div>
+            <div class="d">Family, size, cell metrics. Nothing else knows about it.</div>
+          </div>
+          <div class="node clickable" id="s-theme" data-file="s-theme" style="--accent:var(--violet)">
+            <div class="t"><i class="dot"></i>theme.conf</div>
+            <div class="d">Palette, opacity, blur, background image. The part <em>ghostty-theme</em> would own.</div>
+          </div>
+          <div class="node clickable" id="s-keys" data-file="s-keys" style="--accent:var(--teal)">
+            <div class="t"><i class="dot"></i>keybinds.conf</div>
+            <div class="d">All 20 <em>keybind =</em> lines. Additive, so order against the others doesn't matter.</div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="colhead">Entry point</div>
+          <div class="node clickable" id="s-main" data-file="s-main" style="--accent:var(--amber)">
+            <div class="t"><i class="dot"></i>config</div>
+            <div class="d">Shrinks to three <em>config-file</em> lines plus whatever you want to override afterwards.</div>
+            <div class="tag">the only name ghostty looks for</div>
+          </div>
+          <div class="node" id="s-order" style="--accent:var(--dim)">
+            <div class="t"><i class="dot"></i>order matters</div>
+            <div class="d">Includes are expanded in place. A <em>font-size</em> written <em>after</em> the include beats the one inside it — last write wins for scalar keys.</div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="colhead">Result</div>
+          <div class="node" id="s-flat" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>one flat config</div>
+            <div class="d">Identical to today's single file. Ghostty can't tell the difference — and neither can <em>ghostty-theme</em>, which is exactly the catch.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>Why the repo doesn't do this today:</b> <code>ghostty-theme</code> parses and rewrites one file
+      (<code>configs/ghostty/config</code>) with a line-by-line replace. Split the file and the TUI would rewrite
+      <code>font-size</code> into the entry point while <code>font.conf</code> still holds the old value — two
+      sources of truth for one key. A split needs the tool taught which fragment owns which key first.
+    </div>
+  </section>
+
+  <!-- ══════════ VIEW 3 ══════════ -->
+  <section class="view" id="view-shell">
+    <h3 class="sec">How Ghostty gets inside your shell</h3>
+    <p style="color:var(--muted);max-width:80ch;margin:8px 0 30px">
+      You never sourced anything. The terminal arranges for fish to find its integration script on its own,
+      then removes its own fingerprints so child shells don't inherit them.
+    </p>
+    <div class="stage">
+      <svg class="edges"></svg>
+      <div class="cols split">
+        <div class="col">
+          <div class="colhead">1 · Before exec</div>
+          <div class="node clickable" id="h-env" data-file="env" style="--accent:var(--teal)">
+            <div class="t"><i class="dot"></i>set the environment</div>
+            <div class="d">TERM=xterm-ghostty, TERM_PROGRAM, GHOSTTY_RESOURCES_DIR, GHOSTTY_SHELL_FEATURES.</div>
+          </div>
+          <div class="node" id="h-xdg" style="--accent:var(--teal)">
+            <div class="t"><i class="dot"></i>prepend XDG_DATA_DIRS</div>
+            <div class="d">Adds <em>/usr/share/ghostty/shell-integration</em> to the front of the search path.</div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="colhead">2 · fish starts</div>
+          <div class="node" id="h-scan" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>scan vendor_conf.d</div>
+            <div class="d">fish sources <em>&lt;dir&gt;/fish/vendor_conf.d/*.fish</em> for every entry in XDG_DATA_DIRS. Ghostty's dir is now one of them.</div>
+          </div>
+          <div class="node clickable" id="h-script" data-file="fishint" style="--accent:var(--teal)">
+            <div class="t"><i class="dot"></i>ghostty-shell-integration.fish</div>
+            <div class="d">Runs, installs prompt/preexec hooks, then <em>un-prepends</em> XDG_DATA_DIRS so a nested shell isn't double-hooked.</div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="colhead">3 · What you get</div>
+          <div class="node" id="h-osc" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>OSC 133 marks</div>
+            <div class="d">Prompt boundaries → jump between prompts, select a command's whole output.</div>
+          </div>
+          <div class="node" id="h-cwd" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>cwd reporting</div>
+            <div class="d">Feeds <em>window-inherit-working-directory</em>. New splits open where you were.</div>
+          </div>
+          <div class="node" id="h-cursor" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>cursor + title</div>
+            <div class="d">Bar cursor while typing, block in normal mode; title tracks the running command.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>Check it yourself:</b> <code>env | grep GHOSTTY</code> inside a Ghostty window. You'll see
+      <code>GHOSTTY_SHELL_FEATURES=cursor:blink,path,title</code> — those three words are literally the feature switches,
+      settable from the config with <code>shell-integration-features</code>.
+    </div>
+  </section>
+  <!-- ══════════ VIEW 4 ══════════ -->
+  <section class="view" id="view-dead">
+    <h3 class="sec">Lines that parse fine and do nothing</h3>
+    <p style="color:var(--muted);max-width:82ch;margin:8px 0 30px">
+      None of these are errors — <code style="color:var(--teal)">ghostty +show-config</code> reports them all as set,
+      with no warnings. They're neutralised by <em>another line in the same file</em>, which is why they survive:
+      nothing ever complains. Every claim below is quoted from <code style="color:var(--teal)">/usr/share/ghostty/doc/ghostty.5.md</code>,
+      the manual shipped with your 1.3.1 build.
+    </p>
+    <div class="stage">
+      <svg class="edges"></svg>
+      <div class="cols split">
+        <div class="col">
+          <div class="colhead">Written in the config</div>
+          <div class="node" id="d-blur" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>background-blur = 100</div>
+            <div class="d">Manual: “Whether to blur the background <em>when background-opacity is less than 1</em>.”</div>
+            <div class="tag">inert</div>
+          </div>
+          <div class="node" id="d-cells" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>background-opacity-cells</div>
+            <div class="d">Applies <em>background-opacity</em> to cells that set their own background. At opacity 1 there is nothing to apply.</div>
+            <div class="tag">inert</div>
+          </div>
+          <div class="node" id="d-titlebar" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>gtk-titlebar = false</div>
+            <div class="d">Manual, verbatim: “This option does nothing when <em>window-decoration</em> is none.”</div>
+            <div class="tag">inert</div>
+          </div>
+          <div class="node" id="d-toolbar" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>gtk-toolbar-style = flat</div>
+            <div class="d">Styles “the top and bottom bars tab bar”. There is no tab bar to style.</div>
+            <div class="tag">inert</div>
+          </div>
+          <div class="node clickable" id="d-gtk" data-file="gtk" style="--accent:var(--rose)">
+            <div class="t"><i class="dot"></i>gtk.css · 34 of 37 lines</div>
+            <div class="d">Every <em>tabbar</em> rule — hover states, selected states, radii. The file loads; these rules match nothing.</div>
+            <div class="tag">34/37 dead</div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="colhead">Neutralised by</div>
+          <div class="node" id="d-opacity" style="--accent:var(--amber)">
+            <div class="t"><i class="dot"></i>background-opacity = 1.00</div>
+            <div class="d">Fully opaque. Drop it to ~0.92 and the blur plus the cells flag both wake up at once.</div>
+            <div class="tag">config:3</div>
+          </div>
+          <div class="node" id="d-decor" style="--accent:var(--amber)">
+            <div class="t"><i class="dot"></i>window-decoration = none</div>
+            <div class="d">No decorations, so there is no titlebar for the GTK variant to replace.</div>
+            <div class="tag">config:11</div>
+          </div>
+          <div class="node" id="d-tabbar" style="--accent:var(--amber)">
+            <div class="t"><i class="dot"></i>window-show-tab-bar = never</div>
+            <div class="d">Tabs still work — <em>ctrl+shift+t</em> is live. You just never see the bar, so nothing styles it.</div>
+            <div class="tag">config:13</div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="colhead">Referenced by nothing</div>
+          <div class="node ghost clickable" id="d-init" data-file="initcfg" style="--accent:var(--dim)">
+            <div class="t"><i class="dot"></i>init-cfg</div>
+            <div class="d">A whole second config — font, palette, keybinds — that Ghostty never opens. 2.0 KB.</div>
+            <div class="tag">orphan</div>
+          </div>
+          <div class="node ghost" id="d-assets" style="--accent:var(--dim)">
+            <div class="t"><i class="dot"></i>2 orphan assets</div>
+            <div class="d"><em>subtle-gaussian-fade.png</em> (248 KB) and <em>pastel-gradient.png</em> (32 KB) — no config line, no Go source, nothing.</div>
+            <div class="tag">280 KB</div>
+          </div>
+          <div class="node ghost" id="d-themes" style="--accent:var(--dim)">
+            <div class="t"><i class="dot"></i>7 custom themes, 0 selected</div>
+            <div class="d">Not dead — reachable any time via <em>ghostty-theme &lt;name&gt;</em>. Just dormant while <em>theme = Batman</em> wins.</div>
+            <div class="tag">dormant, not dead</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>What is definitely alive,</b> for contrast — I checked rather than assumed:
+      <code>ghostty-theme</code> resolves on PATH, runs, and lists 470 themes; its Go tests pass;
+      Ghostty 1.3.1-arch2 is installed and running; the symlink is real (same inode both sides);
+      <code>background-image</code> and all 20 keybinds are in the effective config.
+      The rot is confined to the lines above.
+    </div>
+  </section>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<div class="backdrop" id="backdrop">
+  <div class="modal" role="dialog" aria-modal="true">
+    <header>
+      <div>
+        <h2 id="m-title"></h2>
+        <div class="path" id="m-path"></div>
+        <div class="why" id="m-why"></div>
+      </div>
+      <button class="close" id="m-close" aria-label="Close">✕</button>
+    </header>
+    <pre id="m-body"></pre>
+  </div>
+</div>
+
+<!-- ─── file payloads (text/plain: no escaping needed) ─── -->
+<script type="text/plain" id="f-config">command = /usr/bin/fish
+
+background-opacity = 1.00
+background-opacity-cells = true
+background-blur = 100
+background-image = /home/remcostoeten/.config/dotfiles/configs/ghostty/assets/warm-sunset-bg.png
+background-image-opacity = 0.5
+background-image-fit = cover
+
+theme = Batman
+window-decoration = none
+gtk-titlebar = false
+window-show-tab-bar = never
+gtk-toolbar-style = flat
+gtk-custom-css = gtk.css
+window-padding-x = 16
+
+# Font & Typography
+font-family = "0xProto Nerd Font"
+font-size = 31
+adjust-cell-height = 20%
+adjust-cell-width = 18%
+
+
+# Terminal Options
+confirm-close-surface = false
+
+# Window Behavior
+window-width = 120
+window-height = 40
+window-save-state = always
+window-inherit-working-directory = true
+tab-inherit-working-directory = true
+split-inherit-working-directory = true
+
+# Key Bindings
+keybind = ctrl+shift+c=copy_to_clipboard
+keybind = ctrl+shift+v=paste_from_clipboard
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+w=close_tab:this
+keybind = ctrl+shift+n=new_window
+keybind = ctrl+tab=next_tab
+keybind = ctrl+shift+tab=previous_tab
+keybind = ctrl+==increase_font_size:1
+keybind = ctrl+-=decrease_font_size:1
+keybind = ctrl+0=reset_font_size
+# Split operations - Ghostty handles direction automatically
+keybind = ctrl+enter=toggle_fullscreen
+keybind = ctrl+backquote=goto_split:next
+
+keybind = ctrl+h=new_split:right
+keybind = ctrl+shift+h=new_split:down
+
+keybind = ctrl+shift+arrow_right=resize_split:right,40
+keybind = ctrl+shift+arrow_left=resize_split:left,40
+keybind = ctrl+shift+arrow_down=resize_split:down,40
+keybind = ctrl+shift+arrow_up=resize_split:up,40
+keybind = ctrl+shift+backquote=equalize_splits
+
+# Mouse
+mouse-hide-while-typing = true
+copy-on-select = true
+</script>
+
+<script type="text/plain" id="f-theme-dark"># Dotfiles (backup) - dark
+palette = 0=#1d2021
+palette = 1=#c4746e
+palette = 2=#8a9a7b
+palette = 3=#c4b28a
+palette = 4=#7a8ca3
+palette = 5=#a292a3
+palette = 6=#7f9b97
+palette = 7=#d7d0c7
+palette = 8=#5a5f61
+palette = 9=#d08770
+palette = 10=#98a885
+palette = 11=#d1bf97
+palette = 12=#8b9eb7
+palette = 13=#b2a0b3
+palette = 14=#8ba7a2
+palette = 15=#f2ece4
+
+background = #141617
+foreground = #ddd6cd
+cursor-color = #d1bf97
+selection-background = #2a2e30
+selection-foreground = #f2ece4
+split-divider-color = #34393b
+
+# ── sibling themes in the same folder ──
+# dotfiles-purple   kitty-sunset   midnight-neon
+# pastel-dark       sunset-drive   warm-sunset
+</script>
+
+<script type="text/plain" id="f-batman">palette = 0=#1b1d1e
+palette = 1=#e6dc44
+palette = 2=#c8be46
+palette = 3=#f4fd22
+palette = 4=#737174
+palette = 5=#747271
+palette = 6=#62605f
+palette = 7=#c6c5bf
+palette = 8=#505354
+palette = 9=#fff78e
+palette = 10=#fff27d
+palette = 11=#feed6c
+palette = 12=#919495
+palette = 13=#9a9a9d
+palette = 14=#a3a3a6
+palette = 15=#dadbd6
+background = #1b1d1e
+foreground = #6f6f6f
+cursor-color = #fcef0c
+cursor-text = #000000
+selection-background = #4d504c
+selection-foreground = #f0e04a
+</script>
+
+<script type="text/plain" id="f-gtk">window.background {
+  background: transparent;
+}
+
+tabbar {
+  background: rgba(20, 22, 23, 0.2);
+  padding: 10px 12px 0 12px;
+}
+
+tabbar tabs {
+  background: transparent;
+}
+
+tabbar tabbox tab {
+  min-height: 30px;
+  margin: 0 8px 8px 0;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(215, 208, 199, 0.08);
+  background: rgba(215, 208, 199, 0.03);
+  color: #b9b2aa;
+  box-shadow: none;
+}
+
+tabbar tabbox tab:hover {
+  background: rgba(209, 191, 151, 0.08);
+  border-color: rgba(209, 191, 151, 0.16);
+  color: #ddd6cd;
+}
+
+tabbar tabbox tab:selected {
+  background: rgba(209, 191, 151, 0.12);
+  border-color: rgba(209, 191, 151, 0.22);
+  color: #f2ece4;
+}
+
+tabbar tabbox tab:selected:hover {
+  background: rgba(209, 191, 151, 0.16);
+}
+
+tabbar tabbox tab label {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+</script>
+
+<script type="text/plain" id="f-initcfg"># Ghostty Terminal Configuration
+# Refined dark theme with restrained contrast
+#
+# NOTE: this file is inert. Ghostty only auto-loads a file literally named
+# "config" in ~/.config/ghostty/. Nothing in the repo passes --config-file
+# or config-file = init-cfg, so every line below is decoration.
+
+# theme = Apple Classic
+background-opacity = 0.92
+window-decoration = false
+window-padding-x = 18
+window-padding-y = 16
+
+font-family = "Ubuntu Sans Mono Medium"
+font-size = 15
+
+background-blur = 28
+foreground = #ddd6cd
+background = #141617
+palette = 0=#1d2021
+palette = 1=#c4746e
+palette = 2=#8a9a7b
+palette = 3=#c4b28a
+palette = 15=#f2ece4
+
+cursor-color = #d1bf97
+cursor-style-blink = true
+selection-background = #2a2e30
+selection-foreground = #f2ece4
+
+shell-integration = detect
+gtk-wide-tabs = true
+gtk-custom-css = gtk.css
+</script>
+
+<script type="text/plain" id="f-symlink">$ ls -la ~/.config/ | grep ghostty
+lrwxrwxrwx  ghostty -> /home/remcostoeten/.config/dotfiles/setup/../configs/ghostty
+
+$ stat -c '%i %n' \
+    ~/.config/dotfiles/configs/ghostty/config \
+    ~/.config/ghostty/config
+22372815 /home/remcostoeten/.config/dotfiles/configs/ghostty/config
+22372815 /home/remcostoeten/.config/ghostty/config
+         ^^^^^^^^ same inode — one file, two names
+
+
+Why a directory link and not one link per file:
+  · themes/ and assets/ come along for free
+  · a new theme file needs no setup.sh change
+  · `git checkout` on the repo instantly changes the live config
+
+The un-normalised `setup/../configs` in the target is cosmetic —
+the kernel resolves it fine. It comes from SCRIPT_DIR/../configs
+being passed through verbatim.
+</script>
+
+<script type="text/plain" id="f-setup"># setup/lib/installers.sh:668
+setup_config_symlinks() {
+    local configs_dir="$SCRIPT_DIR/../configs"
+    local home_config_dir="$HOME/.config"
+    ...
+    local configs=(
+        "nvim:$home_config_dir/nvim"
+        "starship/starship.toml:$home_config_dir/starship.toml"
+        "fastfetch:$home_config_dir/fastfetch"
+        "ghostty:$home_config_dir/ghostty"        # <-- this line
+        "fuzzel:$home_config_dir/fuzzel"
+        "fish/config.fish:$home_config_dir/fish/config.fish"
+        ...
+    )
+
+    for item in "${configs[@]}"; do
+        local src="${item%%:*}" dst="${item##*:}"
+        if [[ -e "$configs_dir/$src" ]]; then
+            ensure_symlink "$configs_dir/$src" "$dst" "$SETUP_BACKUP_ROOT"
+        fi
+    done
+}
+
+# setup/lib/installers.sh:537
+ensure_symlink() {
+    local src_path="$1" dst_path="$2" backup_root="${3:-}"
+    mkdir -p "$(dirname "$dst_path")"
+
+    if [[ -L "$dst_path" ]]; then
+        is_symlink_current "$src_path" "$dst_path" && return 0   # idempotent
+        rm -f "$dst_path"
+    elif [[ -e "$dst_path" ]]; then
+        backup_existing_target "$dst_path" "$backup_root"        # never clobbers
+    fi
+
+    ln -s "$src_path" "$dst_path"
+}
+</script>
+
+<script type="text/plain" id="f-env">$ env | grep -iE 'ghostty|^TERM'
+
+TERM=xterm-ghostty
+TERM_PROGRAM=ghostty
+TERMINAL=ghostty
+GHOSTTY_BIN_DIR=/usr/bin
+GHOSTTY_RESOURCES_DIR=/usr/share/ghostty
+GHOSTTY_SHELL_FEATURES=cursor:blink,path,title
+
+
+/usr/share/ghostty/
+├── doc/
+├── themes/                    463 built-in themes (Batman lives here)
+└── shell-integration/
+    ├── bash/
+    ├── elvish/
+    ├── fish/
+    │   └── vendor_conf.d/
+    │       └── ghostty-shell-integration.fish
+    ├── nushell/
+    └── zsh/
+
+
+TERM=xterm-ghostty is why an unfamiliar remote box may complain about
+an unknown terminal — it needs the terminfo entry. `infocmp -x | ssh
+host -- tic -x -` copies it over, or set `term = xterm-256color` in
+the config to trade features for compatibility.
+</script>
+
+<script type="text/plain" id="f-fishint"># /usr/share/ghostty/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish
+#
+# fish sources <dir>/fish/vendor_conf.d/*.fish for every dir in
+# XDG_DATA_DIRS. Ghostty prepends its own dir before exec'ing fish,
+# so this file loads with zero lines in your config.fish.
+
+function ghostty_restore_xdg_data_dir -d "restore the original XDG_DATA_DIR value"
+    # If we don't have our own data dir then we don't need to do anything.
+    if not set -q GHOSTTY_SHELL_INTEGRATION_XDG_DIR
+        return
+    end
+
+    # If the data dir isn't set at all then we don't need to do anything.
+    if not set -q XDG_DATA_DIRS
+        return
+    end
+
+    # We need to do this so that XDG_DATA_DIRS turns into an array.
+    set --function --path xdg_data_dirs "$XDG_DATA_DIRS"
+
+    # If our data dir is in the list then remove it.
+    if set --function index (contains --index "$GHOSTTY_SHELL_INTEGRATION_XDG_DIR" $xdg_data_dirs)
+        set --erase --function xdg_data_dirs[$index]
+    end
+
+    # Re-export our data dir
+    if set -q xdg_data_dirs[1]
+        set --global --export --unpath XDG_DATA_DIRS "$xdg_data_dirs"
+    else
+        set --erase --global XDG_DATA_DIRS
+    end
+end
+
+# ... then it installs prompt hooks (OSC 133), cwd reporting (OSC 7),
+# title updates and cursor-shape changes, gated on GHOSTTY_SHELL_FEATURES.
+#
+# The restore step above is the important bit: it un-prepends Ghostty's
+# dir so a nested `fish` doesn't source the integration a second time.
+</script>
+
+<script type="text/plain" id="f-tui"># apps/ghostty-theme/main.go — the paths it operates on
+
+func resolvePaths() paths {
+    root := filepath.Join(home, ".config", "dotfiles")
+    if value := os.Getenv("DOTFILES"); value != "" { root = value }
+    return paths{
+        config:       root + "/configs/ghostty/config",   // the REPO file, not ~/.config
+        customThemes: root + "/configs/ghostty/themes",
+        systemThemes: "/usr/share/ghostty/themes",        // the 463 built-ins
+    }
+}
+
+func reloadGhostty() { exec.Command("pkill", "-USR2", "-x", "ghostty").Run() }
+
+
+# The live-preview trick (main.go: runTUI)
+#   1. read the config, keep the bytes as `baseline`
+#   2. every keystroke rewrites the real file + SIGUSR2 → you see it instantly
+#   3. quit without saving → baseline is written back + one more SIGUSR2
+#
+# So "cancel" is an undo, not a no-op. That's why it edits the repo file
+# directly instead of a scratch copy.
+
+
+# Commands
+ghostty-theme                    open the studio
+ghostty-theme list               all 470 themes
+ghostty-theme <name>             apply one
+ghostty-theme toggle             cycle pastel-dark → warm-sunset → Catppuccin Mocha
+ghostty-theme font <name>
+ghostty-theme opacity 0..1
+ghostty-theme line-height 20%    → adjust-cell-height
+ghostty-theme letter-spacing 18% → adjust-cell-width
+ghostty-theme decorations        toggle window-decoration
+
+
+# config.go: three themes also swap the background image
+images := map[string]string{
+    "pastel-dark":      "pastel-dark-bg.png",
+    "warm-sunset":      "warm-sunset-bg.png",
+    "Catppuccin Mocha": "catppuccin-mocha-gradient.png",
+}
+</script>
+
+<script type="text/plain" id="f-s-main"># configs/ghostty/config
+# The only filename Ghostty auto-loads. Paths in config-file are
+# relative to THIS file, so the repo stays portable.
+
+config-file = font.conf
+config-file = theme.conf
+config-file = keybinds.conf
+
+command = /usr/bin/fish
+window-decoration = none
+gtk-custom-css = gtk.css
+
+# Anything written below an include overrides it.
+# font-size = 18   ← would beat font.conf's value
+</script>
+
+<script type="text/plain" id="f-s-font"># configs/ghostty/font.conf
+font-family = "0xProto Nerd Font"
+font-size = 31
+adjust-cell-height = 20%
+adjust-cell-width = 18%
+
+# Optional per-style families — these are separate keys, not a fallback list:
+# font-family-bold = "0xProto Nerd Font"
+# font-family-italic = "0xProto Nerd Font"
+#
+# Repeating font-family adds a fallback chain for missing glyphs;
+# repeating font-size does not — the last one simply wins.
+</script>
+
+<script type="text/plain" id="f-s-theme"># configs/ghostty/theme.conf
+theme = Batman
+
+background-opacity = 1.00
+background-opacity-cells = true
+background-blur = 100
+background-image = assets/warm-sunset-bg.png
+background-image-opacity = 0.5
+background-image-fit = cover
+
+# theme = resolves against ~/.config/ghostty/themes first, then
+# /usr/share/ghostty/themes. It expands IN PLACE, so any palette /
+# background line written after it overrides the theme's version:
+#
+#   theme = Batman
+#   background = #000000   ← wins over Batman's #1b1d1e
+#
+# Light/dark pair, if you ever want it:
+#   theme = light:rose-pine-dawn,dark:Batman
+</script>
+
+<script type="text/plain" id="f-s-keys"># configs/ghostty/keybinds.conf
+# keybind is ADDITIVE — every line adds a binding rather than
+# replacing the previous one. So this file's position among the
+# includes doesn't matter. Use `keybind = clear` to wipe the slate.
+
+keybind = ctrl+shift+c=copy_to_clipboard
+keybind = ctrl+shift+v=paste_from_clipboard
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+w=close_tab:this
+keybind = ctrl+shift+n=new_window
+keybind = ctrl+tab=next_tab
+keybind = ctrl+shift+tab=previous_tab
+
+keybind = ctrl+==increase_font_size:1
+keybind = ctrl+-=decrease_font_size:1
+keybind = ctrl+0=reset_font_size
+
+keybind = ctrl+enter=toggle_fullscreen
+keybind = ctrl+backquote=goto_split:next
+keybind = ctrl+h=new_split:right
+keybind = ctrl+shift+h=new_split:down
+
+keybind = ctrl+shift+arrow_right=resize_split:right,40
+keybind = ctrl+shift+arrow_left=resize_split:left,40
+keybind = ctrl+shift+arrow_down=resize_split:down,40
+keybind = ctrl+shift+arrow_up=resize_split:up,40
+keybind = ctrl+shift+backquote=equalize_splits
+</script>
+
+<script>
+const META = {
+  'config':     {t:'config', p:'~/.config/dotfiles/configs/ghostty/config', src:'f-config',
+                 why:'Everything in one file. Ghostty reads it top to bottom; for scalar keys the last assignment wins, for keybind each line adds another binding. Note the theme line sits above the font block — a theme can only be overridden by lines that come after it. Four of these lines are inert — see tab 4.'},
+  'theme-dark': {t:'themes/dotfiles-dark', p:'~/.config/dotfiles/configs/ghostty/themes/dotfiles-dark', src:'f-theme-dark',
+                 why:'A theme file is just a config file restricted to color keys. Drop one in this folder and it shows up in ghostty-theme list immediately — no registration anywhere.'},
+  'batman':     {t:'Batman (built-in)', p:'/usr/share/ghostty/themes/Batman', src:'f-batman',
+                 why:'One of 463 themes shipped with the binary. Your themes/ folder is searched first, so a custom file with the same name shadows the built-in.'},
+  'gtk':        {t:'gtk.css', p:'~/.config/dotfiles/configs/ghostty/gtk.css', src:'f-gtk',
+                 why:'Pulled in by gtk-custom-css = gtk.css (relative to the config). This styles the GTK4 window chrome — tab bar, headerbar — not the terminal grid. Ironically the config also sets window-show-tab-bar = never, so most of these rules never render right now.'},
+  'initcfg':    {t:'init-cfg', p:'~/.config/dotfiles/configs/ghostty/init-cfg', src:'f-initcfg',
+                 why:'Loaded by nothing. Ghostty only auto-reads a file named exactly "config"; this one is an older full setup kept around by accident. Safe to delete or to revive with config-file = init-cfg.'},
+  'symlink':    {t:'The symlink', p:'~/.config/ghostty → ~/.config/dotfiles/configs/ghostty', src:'f-symlink',
+                 why:'One directory-level symlink is what makes the repo the source of truth. Ghostty resolves it transparently, so it believes it is reading a normal ~/.config path.'},
+  'setup':      {t:'setup_config_symlinks()', p:'~/.config/dotfiles/setup/lib/installers.sh:668', src:'f-setup',
+                 why:'Idempotent: an already-correct link is left alone, a wrong link is replaced, and a real file or directory in the way is moved to the backup root first. Ghostty is one entry in a table of ~19 configs.'},
+  'env':        {t:'Injected environment', p:'set by the Ghostty process before exec of the shell', src:'f-env',
+                 why:'These variables are the whole handshake. GHOSTTY_RESOURCES_DIR tells the shell where the integration scripts are; XDG_DATA_DIRS is what actually causes fish to load one.'},
+  'fishint':    {t:'ghostty-shell-integration.fish', p:'/usr/share/ghostty/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish', src:'f-fishint',
+                 why:'Auto-sourced by fish because Ghostty put its directory on XDG_DATA_DIRS. Your dotfiles contain no reference to it — that is by design, so the same fish config works under any terminal.'},
+  'tui':        {t:'ghostty-theme', p:'~/.config/dotfiles/apps/ghostty-theme/  →  bin/ghostty-theme', src:'f-tui',
+                 why:'A Bubble Tea TUI that treats the live config as its own preview buffer. It writes to the repo path and relies on the symlink to make that the running config, then sends SIGUSR2 so open windows repaint.'},
+  's-main':     {t:'config (entry point)', p:'hypothetical · configs/ghostty/config', src:'f-s-main', why:'The include mechanism is real: config-file = <path>, relative to the including file, expanded in place.'},
+  's-font':     {t:'font.conf', p:'hypothetical · configs/ghostty/font.conf', src:'f-s-font', why:'Typography only. Nothing in Ghostty scopes these keys to the file — they land in the same flat namespace as everything else.'},
+  's-theme':    {t:'theme.conf', p:'hypothetical · configs/ghostty/theme.conf', src:'f-s-theme', why:'The fragment a theme switcher would own. Isolating it is the strongest argument for splitting at all.'},
+  's-keys':     {t:'keybinds.conf', p:'hypothetical · configs/ghostty/keybinds.conf', src:'f-s-keys', why:'keybind is additive, so this fragment is order-independent — the easiest piece to split out safely.'},
+};
+
+const EDGES = {
+  real: [
+    ['n-config','n-link','',1], ['n-themes','n-link','',0], ['n-gtk','n-link','',0], ['n-assets','n-link','',0],
+    ['n-setup','n-link','creates',0],
+    ['n-link','n-read','follows',1],
+    ['n-read','n-resolve','theme = Batman',1],
+    ['n-builtin','n-resolve','lookup #2',0],
+    ['n-themes','n-resolve','lookup #1',0],
+    ['n-resolve','n-render','palette',1],
+    ['n-gtk','n-render','window chrome',0],
+    ['n-read','n-spawn','command =',1],
+    ['n-spawn','n-env','',1],
+    ['n-env','n-fishint','XDG_DATA_DIRS',1],
+    ['n-fishint','n-features','',0],
+    ['n-tui','n-write','',1],
+    ['n-write','n-config','rewrites the repo file',1,'below'],
+    ['n-reload','n-read','SIGUSR2 · re-read in place',1,'below'],
+    ['n-write','n-reload','',1],
+  ],
+  split: [
+    ['s-font','s-main','config-file =',1],
+    ['s-theme','s-main','config-file =',1],
+    ['s-keys','s-main','config-file =',1],
+    ['s-main','s-order','',0],
+    ['s-order','s-flat','expand in place',1],
+  ],
+  shell: [
+    ['h-env','h-xdg','',1],
+    ['h-xdg','h-scan','fish reads it',1],
+    ['h-scan','h-script','sources',1],
+    ['h-script','h-osc','',1],
+    ['h-script','h-cwd','',1],
+    ['h-script','h-cursor','',1],
+  ],
+  dead: [
+    ['d-blur','d-opacity','killed by',0],
+    ['d-cells','d-opacity','killed by',0],
+    ['d-titlebar','d-decor','killed by',0],
+    ['d-toolbar','d-tabbar','killed by',0],
+    ['d-gtk','d-tabbar','killed by',0],
+  ],
+};
+
+const NS = 'http://www.w3.org/2000/svg';
+
+function drawEdges(view) {
+  const section = document.getElementById('view-' + view);
+  const stage = section.querySelector('.stage');
+  const svg = stage.querySelector('svg.edges');
+  svg.innerHTML = '';
+  const base = stage.getBoundingClientRect();
+
+  const stageBottom = stage.getBoundingClientRect().height;
+
+  EDGES[view].forEach(([from, to, label, flow, route], i) => {
+    const a = document.getElementById(from), b = document.getElementById(to);
+    if (!a || !b) return;
+    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+    const sameCol = Math.abs(ra.left - rb.left) < 4;
+
+    let x1, y1, x2, y2, d;
+    if (route === 'below') {
+      // Feedback edges span the whole board; running them under the columns
+      // keeps their labels out from behind the cards.
+      x1 = ra.left + ra.width / 2 - base.left; y1 = ra.bottom - base.top;
+      x2 = rb.left + rb.width / 2 - base.left; y2 = rb.bottom - base.top;
+      const floor = stageBottom - 74 + i * 16;
+      d = `M${x1},${y1} C${x1},${floor} ${x2},${floor} ${x2},${y2}`;
+    } else if (sameCol) {
+      const down = rb.top > ra.top;
+      x1 = ra.right - base.left - 22; y1 = (down ? ra.bottom : ra.top) - base.top;
+      x2 = rb.right - base.left - 22; y2 = (down ? rb.top : rb.bottom) - base.top;
+      const bow = 34;
+      d = `M${x1},${y1} C${x1 + bow},${y1} ${x2 + bow},${y2} ${x2},${y2}`;
+    } else {
+      const l2r = rb.left > ra.left;
+      x1 = (l2r ? ra.right : ra.left) - base.left; y1 = ra.top + ra.height / 2 - base.top;
+      x2 = (l2r ? rb.left : rb.right) - base.left; y2 = rb.top + rb.height / 2 - base.top;
+      const dx = (x2 - x1) * 0.5;
+      d = `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+    }
+
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('class', 'edge' + (flow ? ' flow' : ''));
+    path.dataset.from = from; path.dataset.to = to;
+    svg.appendChild(path);
+
+    if (label) {
+      const t = document.createElementNS(NS, 'text');
+      const mid = path.getPointAtLength(path.getTotalLength() * 0.5);
+      t.setAttribute('x', mid.x); t.setAttribute('y', mid.y - 6);
+      t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('class', 'edgelabel');
+      t.dataset.from = from; t.dataset.to = to;
+      t.textContent = label;
+      svg.appendChild(t);
+    }
+  });
+}
+
+function currentView() {
+  return document.querySelector('.tab[aria-selected="true"]').dataset.view;
+}
+
+function redraw() { drawEdges(currentView()); }
+
+/* ── highlight on hover ── */
+function highlight(id) {
+  const view = currentView();
+  const section = document.getElementById('view-' + view);
+  const touched = new Set([id]);
+  section.querySelectorAll('.edge, .edgelabel').forEach(el => {
+    const hit = el.dataset.from === id || el.dataset.to === id;
+    el.classList.toggle('hot', hit);
+    el.classList.toggle('dim', !hit);
+    if (hit) { touched.add(el.dataset.from); touched.add(el.dataset.to); }
+  });
+  section.querySelectorAll('.node').forEach(n => n.classList.toggle('faded', !touched.has(n.id)));
+}
+function clearHighlight() {
+  document.querySelectorAll('.edge, .edgelabel').forEach(el => el.classList.remove('hot', 'dim'));
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('faded'));
+}
+
+/* ── tooltip ── */
+const tip = document.getElementById('tip');
+function showTip(node, e) {
+  const key = node.dataset.file;
+  const meta = key && META[key];
+  const path = meta ? meta.p : node.querySelector('.d').textContent.trim();
+  tip.innerHTML = `<div class="p">${path}</div>` + (meta ? `<div class="h">click to open the file</div>` : '');
+  tip.style.opacity = 1;
+  moveTip(e);
+}
+function moveTip(e) {
+  const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  if (x + w > innerWidth - 8) x = e.clientX - w - pad;
+  if (y + h > innerHeight - 8) y = e.clientY - h - pad;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+
+/* ── syntax highlight ── */
+function esc(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
+function paint(text) {
+  return esc(text).split('\n').map(line => {
+    if (/^\s*#/.test(line)) return `<span class="c-com">${line}</span>`;
+    const m = line.match(/^([a-zA-Z0-9_.\/-]+)(\s*=\s*)(.*)$/);
+    if (!m) return line;
+    let val = m[3].replace(/#[0-9a-fA-F]{6}\b/g, hex => `<span class="sw" style="background:${hex}"></span><span class="c-num">${hex}</span>`);
+    return `<span class="c-key">${m[1]}</span>${m[2]}<span class="c-val">${val}</span>`;
+  }).join('\n');
+}
+
+/* ── modal ── */
+const backdrop = document.getElementById('backdrop');
+function openModal(key) {
+  const meta = META[key];
+  if (!meta) return;
+  document.getElementById('m-title').textContent = meta.t;
+  document.getElementById('m-path').textContent = meta.p;
+  document.getElementById('m-why').textContent = meta.why;
+  document.getElementById('m-body').innerHTML = paint(document.getElementById(meta.src).textContent.replace(/^\n/, ''));
+  backdrop.classList.add('open');
+}
+function closeModal() { backdrop.classList.remove('open'); }
+document.getElementById('m-close').onclick = closeModal;
+backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
+addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+/* ── wiring ── */
+document.querySelectorAll('.node').forEach(node => {
+  node.addEventListener('mouseenter', e => { highlight(node.id); showTip(node, e); });
+  node.addEventListener('mousemove', moveTip);
+  node.addEventListener('mouseleave', () => { clearHighlight(); tip.style.opacity = 0; });
+  if (node.dataset.file) node.addEventListener('click', () => openModal(node.dataset.file));
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t === tab)));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + tab.dataset.view));
+    requestAnimationFrame(redraw);
+  });
+});
+
+addEventListener('resize', redraw);
+addEventListener('load', redraw);
+requestAnimationFrame(redraw);
+setTimeout(redraw, 250);
+</script>
+</body>
+</html>
