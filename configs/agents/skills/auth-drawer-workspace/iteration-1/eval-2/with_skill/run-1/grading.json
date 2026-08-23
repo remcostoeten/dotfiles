@@ -1,0 +1,40 @@
+{
+  "expectations": [
+    {
+      "text": "Uses createMockAdapter from adapters/mock",
+      "passed": true,
+      "evidence": "AuthDemo.tsx imports createMockAdapter from adapters/mock"
+    },
+    {
+      "text": "Wraps in <AuthProvider> and renders <AuthDrawer> with the mock adapter",
+      "passed": true,
+      "evidence": "AuthProvider wraps DemoHeader + AuthDrawer, both given the mock adapter"
+    },
+    {
+      "text": "Configures github and google providers",
+      "passed": true,
+      "evidence": "config ui.auth.providers: ['github','google']"
+    },
+    {
+      "text": "Imports '@remcostoeten/auth-drawer/styles.css'",
+      "passed": true,
+      "evidence": "styles.css imported"
+    },
+    {
+      "text": "Tells user the mock credentials and/or how to trigger the error state",
+      "passed": true,
+      "evidence": "documents admin@example.com/password (success) and spam@example.com (rate_limited error)"
+    },
+    {
+      "text": "No non-public / nonexistent imports",
+      "passed": true,
+      "evidence": "only real exports"
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  }
+}

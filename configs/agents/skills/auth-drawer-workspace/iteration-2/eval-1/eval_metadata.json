@@ -1,0 +1,52 @@
+{
+  "eval_id": 1,
+  "eval_name": "custom-jwt-scroll-paywall",
+  "prompt": "Integrate @remcostoeten/auth-drawer into my React + Vite app as a paywall. Backend is my own Express API with JWT auth: POST /api/auth/login, POST /api/auth/register, POST /api/auth/logout, GET /api/auth/me, token in a Bearer header. Show it as a MODAL (not a drawer), with NO social login buttons, and auto-open when the reader scrolls about a third down the article. Give me the components.",
+  "assertions": [
+    {
+      "text": "Uses createCustomJwtAdapter (or createAdapter) imported from '@remcostoeten/auth-drawer/adapters/custom-jwt'",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Wraps the app in the real AuthProvider (from the package) with the adapter, and renders <AuthDrawer>",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Session/header uses useAuth() (the real hook) rather than a hand-rolled provider/hook",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Handles CSS correctly: relies on the package's out-of-the-box styles and does NOT present a manual styles.css import as required",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "No nonexistent/invented imports or props (no createAdapterError import, no invented hooks/flags)",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "presentation.variant is 'modal'",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "OAuth disabled via providers: [] (or omitting signInWithOAuth), not an invented flag",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Shared createAuthTriggerStore passed to AuthDrawer via triggerStore; scroll wired with useScrollOpenTrigger emitting {kind:'scrollOpen'}",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "triggers.scrollOpen threshold ~0.33 and hideTrigger on AuthDrawer",
+      "passed": null,
+      "evidence": ""
+    }
+  ]
+}

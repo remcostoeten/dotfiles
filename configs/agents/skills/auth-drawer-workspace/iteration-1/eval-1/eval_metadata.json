@@ -1,0 +1,14 @@
+{
+  "eval_id": 1,
+  "eval_name": "custom-jwt-scroll-paywall",
+  "prompt": "Integrate @remcostoeten/auth-drawer into my React + Vite app as a paywall. The backend is my own Express API with JWT auth: POST /api/auth/login, POST /api/auth/register, POST /api/auth/logout, GET /api/auth/me, and the token goes in a Bearer header. I want it shown as a MODAL (not a drawer), with NO social login buttons at all, and it should auto-open when the reader scrolls about a third of the way down the article. Give me the components.",
+  "assertions": [
+    { "text": "Uses the custom-jwt adapter from '@remcostoeten/auth-drawer/adapters/custom-jwt' (or a createAdapter custom adapter) wired to the REST endpoints", "passed": null, "evidence": "" },
+    { "text": "Sets presentation.variant to 'modal'", "passed": null, "evidence": "" },
+    { "text": "Disables OAuth via ui.auth.providers: [] or by omitting signInWithOAuth — NOT via an invented flag like showOAuth/disableOAuth", "passed": null, "evidence": "" },
+    { "text": "Creates a shared store with createAuthTriggerStore and passes it to AuthDrawer via triggerStore", "passed": null, "evidence": "" },
+    { "text": "Wires scroll via useScrollOpenTrigger and emits { kind: 'scrollOpen', progress } into the store", "passed": null, "evidence": "" },
+    { "text": "Declares config.triggers.scrollOpen with a threshold around 0.33 and passes hideTrigger to AuthDrawer", "passed": null, "evidence": "" },
+    { "text": "Does NOT import any non-public symbol (e.g. createAdapterError) or a non-existent subpath", "passed": null, "evidence": "" }
+  ]
+}

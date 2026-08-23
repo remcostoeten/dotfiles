@@ -27,3 +27,9 @@ dotfiles_load_all_recursive ~/.config/dotfiles/aliases source
 
 source ~/.config/dotfiles/loaders/tools-loader.fish
 
+if status is-interactive
+    if type -q system-health
+        system-health
+    end
+end
+

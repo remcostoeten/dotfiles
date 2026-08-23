@@ -73,11 +73,6 @@ function allow
     chmod +x $argv
 end
 
-# DOCSTRING: Bring up the regeljelease profile stack in ~/dev/work/website-2022
-function rjl
-    docker compose --project-directory ~/dev/work/website-2022 --profile regeljelease up $argv
-end
-
 # DOCSTRING: Docker helper. Run `dock` for usage. Manage the daemon, kill containers, reset the website-2022 stack
 function dock
     set -l website ~/dev/work/website-2022

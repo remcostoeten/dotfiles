@@ -1,19 +1,29 @@
+# Shell
 command = /usr/bin/fish
 
+
+# Background
 background-opacity = 1.00
-background-opacity-cells = true
+background-opacity-cells = false
 background-blur = 100
-background-image = /home/remcostoeten/.config/dotfiles/configs/ghostty/assets/warm-sunset-bg.png
-background-image-opacity = 0.5
+
+background-image = /home/remcostoeten/.config/dotfiles/configs/ghostty/assets/graphite.png
+background-image-opacity = 0.50
 background-image-fit = cover
 
-theme = Black Metal (Bathory)
+
+# Theme
+theme = Fahrenheit
+
+
+# Window Appearance
 window-decoration = auto
 gtk-titlebar = false
 window-show-tab-bar = never
 gtk-toolbar-style = flat
 gtk-custom-css = gtk.css
 window-padding-x = 16
+
 
 # Font & Typography
 font-family = "ComicShannsMono Nerd Font Mono"
@@ -22,40 +32,76 @@ adjust-cell-height = 20%
 adjust-cell-width = 18%
 
 
-# Terminal Options
+# Terminal Behavior
 confirm-close-surface = false
+
 
 # Window Behavior
 window-width = 120
 window-height = 40
 window-save-state = always
+
 window-inherit-working-directory = true
 tab-inherit-working-directory = true
 split-inherit-working-directory = true
 
-# Key Bindings
+
+# Clipboard
 keybind = ctrl+shift+c=copy_to_clipboard
 keybind = ctrl+shift+v=paste_from_clipboard
+
+
+# Tabs & Windows
 keybind = ctrl+shift+t=new_tab
 keybind = ctrl+shift+w=close_tab:this
 keybind = ctrl+shift+n=new_window
+
 keybind = ctrl+tab=next_tab
 keybind = ctrl+shift+tab=previous_tab
+
+
+# Font Size
 keybind = ctrl+==increase_font_size:1
 keybind = ctrl+-=decrease_font_size:1
 keybind = ctrl+0=reset_font_size
-# Split operations - Ghostty handles direction automatically
-keybind = ctrl+enter=toggle_fullscreen
+
+
+# Window Controls
+# Toggle between maximized and normal window size
+keybind = ctrl+enter=toggle_maximize
+
+
+# Quick Terminal
+# Global shortcut, works even when Ghostty is not focused
+# Ctrl + Shift + ` toggles the dropdown terminal
+keybind = global:ctrl+shift+backquote=toggle_quick_terminal
+
+
+# Split Navigation
+# Cycle through existing splits
 keybind = ctrl+backquote=goto_split:next
 
+
+# Split Creation
+# Create a split to the right
 keybind = ctrl+h=new_split:right
+
+# Create a split below
 keybind = ctrl+shift+h=new_split:down
 
+
+# Split Resizing
+# Resize the active split by 40 cells
 keybind = ctrl+shift+arrow_right=resize_split:right,40
 keybind = ctrl+shift+arrow_left=resize_split:left,40
 keybind = ctrl+shift+arrow_down=resize_split:down,40
 keybind = ctrl+shift+arrow_up=resize_split:up,40
-keybind = ctrl+shift+backquote=equalize_splits
+
+
+# Split Layout
+# Make all current splits equal in size
+keybind = ctrl+shift+e=equalize_splits
+
 
 # Mouse
 mouse-hide-while-typing = true

@@ -18,10 +18,12 @@ type settings struct {
 	Blur          int
 	Padding       int
 	Decorations   bool
+	Background    string
+	ImageOpacity  int
 }
 
 func defaultSettings() settings {
-	return settings{Theme: "default", Font: "monospace", FontSize: 14, Opacity: 100, Decorations: true}
+	return settings{Theme: "default", Font: "monospace", FontSize: 14, Opacity: 100, Decorations: true, ImageOpacity: 100}
 }
 
 func parsePercent(s string, fallback int) int {
@@ -68,6 +70,12 @@ func loadSettings(path string) (settings, []byte, error) {
 			s.Padding, _ = strconv.Atoi(value)
 		case "window-decoration":
 			s.Decorations = value != "none" && value != "false"
+		case "background-image":
+			s.Background = value
+		case "background-image-opacity":
+			if n, e := strconv.ParseFloat(value, 64); e == nil {
+				s.ImageOpacity = int(n*100 + .5)
+			}
 		}
 	}
 	return s, raw, nil
@@ -79,17 +87,21 @@ func settingValues(s settings) map[string]string {
 		decoration = "auto"
 	}
 	return map[string]string{
-		"theme":              s.Theme,
-		"font-family":        fmt.Sprintf("%q", s.Font),
-		"font-size":          strconv.Itoa(s.FontSize),
-		"adjust-cell-height": fmt.Sprintf("%d%%", s.LineHeight),
-		"adjust-cell-width":  fmt.Sprintf("%d%%", s.LetterSpacing),
-		"background-opacity": fmt.Sprintf("%.2f", float64(s.Opacity)/100),
-		"background-blur":    strconv.Itoa(s.Blur),
-		"window-padding-x":   strconv.Itoa(s.Padding),
-		"window-decoration":  decoration,
+		"theme":                    s.Theme,
+		"font-family":              fmt.Sprintf("%q", s.Font),
+		"font-size":                strconv.Itoa(s.FontSize),
+		"adjust-cell-height":       fmt.Sprintf("%d%%", s.LineHeight),
+		"adjust-cell-width":        fmt.Sprintf("%d%%", s.LetterSpacing),
+		"background-opacity":       fmt.Sprintf("%.2f", float64(s.Opacity)/100),
+		"background-blur":          strconv.Itoa(s.Blur),
+		"window-padding-x":         strconv.Itoa(s.Padding),
+		"window-decoration":        decoration,
+		"background-image":         s.Background,
+		"background-image-opacity": fmt.Sprintf("%.2f", float64(s.ImageOpacity)/100),
 	}
 }
+
+var managedKeys = []string{"theme", "font-family", "font-size", "adjust-cell-height", "adjust-cell-width", "background-opacity", "background-blur", "window-padding-x", "window-decoration", "background-image", "background-image-opacity"}
 
 func renderConfig(raw []byte, s settings) []byte {
 	values, seen := settingValues(s), map[string]bool{}
@@ -104,7 +116,7 @@ func renderConfig(raw []byte, s settings) []byte {
 			}
 		}
 	}
-	for _, key := range []string{"theme", "font-family", "font-size", "adjust-cell-height", "adjust-cell-width", "background-opacity", "background-blur", "window-padding-x", "window-decoration"} {
+	for _, key := range managedKeys {
 		if !seen[key] {
 			lines = append(lines, key+" = "+values[key])
 		}
@@ -112,18 +124,55 @@ func renderConfig(raw []byte, s settings) []byte {
 	return []byte(strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n")
 }
 
-func renderConfigWithAssets(raw []byte, s settings, assetsDir string) []byte {
-	data := renderConfig(raw, s)
-	images := map[string]string{
-		"pastel-dark":      "pastel-dark-bg.png",
-		"warm-sunset":      "warm-sunset-bg.png",
-		"Catppuccin Mocha": "catppuccin-mocha-gradient.png",
-	}
-	image, ok := images[s.Theme]
+var themeImages = map[string]string{
+	"pastel-dark":           "pastel-dark-bg.png",
+	"warm-sunset":           "warm-sunset-bg.png",
+	"Catppuccin Mocha":      "catppuccin-mocha-gradient.png",
+	"Duskfox":               "duskfox-plum.png",
+	"Gruvbox Dark":          "rice-gruvbox-mountains.png",
+	"Gruvbox Dark Hard":     "rice-gruvbox-mountains.png",
+	"Gruvbox Material":      "rice-gruvbox-lowpoly.png",
+	"Gruvbox Material Dark": "rice-gruvbox-lowpoly.png",
+	"Nord":                  "rice-nord-polar.png",
+	"Nord Wave":             "rice-nord-polar.png",
+	"Nordfox":               "rice-nord-polar.png",
+	"TokyoNight":            "rice-tokyonight-outrun.png",
+	"TokyoNight Night":      "rice-tokyonight-outrun.png",
+	"TokyoNight Moon":       "rice-tokyonight-outrun.png",
+	"TokyoNight Storm":      "rice-tokyonight-outrun.png",
+	"Catppuccin Macchiato":  "rice-catppuccin-waves.png",
+	"Catppuccin Frappe":     "rice-catppuccin-waves.png",
+	"Rose Pine":             "rice-rosepine-moon.png",
+	"Rose Pine Moon":        "rice-rosepine-moon.png",
+	"Rosé Pine":             "rice-rosepine-moon.png",
+	"Rosé Pine Moon":        "rice-rosepine-moon.png",
+	"Dracula":               "rice-dracula-blobs.png",
+	"Dracula+":              "rice-dracula-blobs.png",
+	"Everforest Dark Hard":  "rice-everforest-pines.png",
+	"Kanagawa Wave":         "rice-kanagawa-wave.png",
+	"Kanagawa Dragon":       "rice-kanagawa-wave.png",
+	"Ayu Mirage":            "rice-ayu-skyline.png",
+	"Ayu":                   "rice-ayu-skyline.png",
+}
+
+/*
+themeImage returns the wallpaper bundled with a curated theme, if any.
+*/
+func themeImage(themeName, assetsDir string) (string, bool) {
+	image, ok := themeImages[themeName]
 	if !ok {
-		return data
+		return "", false
 	}
-	return replaceConfigValue(data, "background-image", filepath.Join(assetsDir, image))
+	return filepath.Join(assetsDir, image), true
+}
+
+func renderConfigWithAssets(raw []byte, s settings, assetsDir string) []byte {
+	if s.Background == "" {
+		if image, ok := themeImage(s.Theme, assetsDir); ok {
+			s.Background = image
+		}
+	}
+	return renderConfig(raw, s)
 }
 
 func replaceConfigValue(raw []byte, key, value string) []byte {

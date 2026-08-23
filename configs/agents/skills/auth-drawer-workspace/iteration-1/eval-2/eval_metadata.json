@@ -1,0 +1,13 @@
+{
+  "eval_id": 2,
+  "eval_name": "mock-demo-vite",
+  "prompt": "Before our auth backend is ready I want to demo the @remcostoeten/auth-drawer login UI in our Vite React app. Use a fake/mock backend so I can click through sign-in, see the loading state, and trigger an error state. Show GitHub and Google buttons. Keep it minimal — one file is fine.",
+  "assertions": [
+    { "text": "Uses createMockAdapter from '@remcostoeten/auth-drawer/adapters/mock'", "passed": null, "evidence": "" },
+    { "text": "Wraps in <AuthProvider> and renders <AuthDrawer> with the mock adapter", "passed": null, "evidence": "" },
+    { "text": "Configures github and google providers (ui.auth.providers) or relies on the mock adapter's providers", "passed": null, "evidence": "" },
+    { "text": "Imports the stylesheet '@remcostoeten/auth-drawer/styles.css'", "passed": null, "evidence": "" },
+    { "text": "Tells the user the mock credentials (admin@example.com / password) and/or how to trigger the error state", "passed": null, "evidence": "" },
+    { "text": "Does NOT import any non-public symbol (e.g. createAdapterError) or a non-existent subpath", "passed": null, "evidence": "" }
+  ]
+}

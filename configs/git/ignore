@@ -2,6 +2,9 @@
 .env
 .env.local
 
+AGENTS.md
+CLAUDE.md
+
 .DS_Store
 node_modules
 .next/

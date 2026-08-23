@@ -1,0 +1,45 @@
+{
+  "expectations": [
+    {
+      "text": "Uses custom-jwt adapter from adapters/custom-jwt (or createAdapter) on the REST endpoints",
+      "passed": true,
+      "evidence": "auth-adapter.ts: createCustomJwtAdapter from adapters/custom-jwt with login/register/logout/me URLs"
+    },
+    {
+      "text": "Sets presentation.variant to 'modal'",
+      "passed": true,
+      "evidence": "auth-config.ts variant: 'modal'"
+    },
+    {
+      "text": "Disables OAuth via providers: [] (or omitting signInWithOAuth), not an invented flag",
+      "passed": true,
+      "evidence": "ui.auth.providers: [] and adapter omits providers; no showSocial"
+    },
+    {
+      "text": "Creates shared store via createAuthTriggerStore and passes it to AuthDrawer (triggerStore)",
+      "passed": true,
+      "evidence": "trigger-store.ts + triggerStore passed to <AuthDrawer>"
+    },
+    {
+      "text": "Wires scroll via useScrollOpenTrigger and emits {kind:'scrollOpen',progress}",
+      "passed": true,
+      "evidence": "article-paywall.tsx useScrollOpenTrigger -> emit scrollOpen"
+    },
+    {
+      "text": "Declares triggers.scrollOpen ~0.33 and passes hideTrigger",
+      "passed": true,
+      "evidence": "SCROLL_THRESHOLD = 0.33; hideTrigger on AuthDrawer"
+    },
+    {
+      "text": "No non-public / nonexistent imports",
+      "passed": true,
+      "evidence": "only real exports"
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  }
+}

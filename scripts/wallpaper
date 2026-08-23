@@ -10,6 +10,7 @@ STATE_FILE="$WALLPAPERS_DIR/.current-wallpaper"
 METADATA_FILE="$WALLPAPERS_DIR/.metadata.tsv"
 
 USER_DATA_DIR="$HOME/.dotfiles/wallpaper"
+PREVIEW_CACHE_DIR="$USER_DATA_DIR/preview-cache"
 UI_STATE_FILE="$USER_DATA_DIR/ui-state"
 UI_MARKS_FILE="$USER_DATA_DIR/marks"
 ROTATION_PID_FILE="$USER_DATA_DIR/rotation.pid"
@@ -25,6 +26,8 @@ WALLPAPER_TAGS=()
 WALLPAPER_SOURCES=()
 WALLPAPER_AUTHORS=()
 WALLPAPER_LICENSES=()
+
+WALLPAPER_APPLY_ERROR=""
 
 ensure_user_data_dir() {
     mkdir -p "$USER_DATA_DIR"
@@ -334,10 +337,210 @@ current_wallpaper_name() {
     active_name 2>/dev/null || cat "$STATE_FILE" 2>/dev/null || true
 }
 
+has_command() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+detect_backend() {
+    if [[ -n "${WALLPAPER_BACKEND:-}" ]]; then
+        printf '%s\n' "$WALLPAPER_BACKEND"
+        return 0
+    fi
+
+    local desktop="${XDG_CURRENT_DESKTOP:-}:${DESKTOP_SESSION:-}"
+
+    case "${desktop,,}" in
+        *hyprland*) printf 'hyprland\n'; return 0 ;;
+        *kde*|*plasma*) printf 'plasma\n'; return 0 ;;
+        *gnome*|*cinnamon*|*unity*|*budgie*) printf 'gnome\n'; return 0 ;;
+    esac
+
+    if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+        printf 'hyprland\n'
+    elif [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        printf 'wlroots\n'
+    else
+        printf 'x11\n'
+    fi
+}
+
+apply_plasma() {
+    local path="$1"
+
+    has_command plasma-apply-wallpaperimage || {
+        WALLPAPER_APPLY_ERROR="plasma-apply-wallpaperimage not found (install plasma-workspace)"
+        return 1
+    }
+
+    plasma-apply-wallpaperimage "$path" >/dev/null 2>&1 || {
+        WALLPAPER_APPLY_ERROR="plasma-apply-wallpaperimage failed for $path"
+        return 1
+    }
+}
+
+apply_gnome() {
+    local path="$1"
+    local mode="$2"
+    local option
+
+    has_command gsettings || {
+        WALLPAPER_APPLY_ERROR="gsettings not found"
+        return 1
+    }
+
+    case "$mode" in
+        stretch) option="stretched" ;;
+        fit) option="scaled" ;;
+        center) option="centered" ;;
+        tile) option="wallpaper" ;;
+        *) option="zoom" ;;
+    esac
+
+    gsettings set org.gnome.desktop.background picture-uri "file://$path" >/dev/null 2>&1 &&
+        gsettings set org.gnome.desktop.background picture-uri-dark "file://$path" >/dev/null 2>&1 &&
+        gsettings set org.gnome.desktop.background picture-options "$option" >/dev/null 2>&1 || {
+        WALLPAPER_APPLY_ERROR="gsettings failed to apply $path"
+        return 1
+    }
+}
+
+apply_swww() {
+    local path="$1"
+    local mode="$2"
+    local resize
+
+    case "$mode" in
+        stretch) resize="stretch" ;;
+        fit) resize="fit" ;;
+        center|tile) resize="no" ;;
+        *) resize="crop" ;;
+    esac
+
+    swww query >/dev/null 2>&1 || {
+        if has_command swww-daemon; then
+            nohup swww-daemon >/dev/null 2>&1 &
+        else
+            nohup swww init >/dev/null 2>&1 &
+        fi
+        sleep 0.5
+    }
+
+    swww img "$path" --resize "$resize" >/dev/null 2>&1 || {
+        WALLPAPER_APPLY_ERROR="swww failed to apply $path"
+        return 1
+    }
+}
+
+apply_hyprpaper() {
+    local path="$1"
+
+    pgrep -x hyprpaper >/dev/null 2>&1 || {
+        nohup hyprpaper >/dev/null 2>&1 &
+        sleep 0.5
+    }
+
+    hyprctl hyprpaper preload "$path" >/dev/null 2>&1 &&
+        hyprctl hyprpaper wallpaper ",$path" >/dev/null 2>&1 || {
+        WALLPAPER_APPLY_ERROR="hyprpaper failed to apply $path"
+        return 1
+    }
+}
+
+apply_swaybg() {
+    local path="$1"
+    local mode="$2"
+
+    has_command swaybg || {
+        WALLPAPER_APPLY_ERROR="swaybg not found (install swaybg)"
+        return 1
+    }
+
+    case "$mode" in
+        stretch|fill|fit|center|tile|solid_color) ;;
+        *) mode="fill" ;;
+    esac
+
+    pkill -x swaybg >/dev/null 2>&1 || true
+    nohup swaybg -i "$path" -m "$mode" >/dev/null 2>&1 &
+}
+
+apply_x11() {
+    local path="$1"
+    local mode="$2"
+
+    if has_command xwallpaper; then
+        local flag
+        case "$mode" in
+            stretch) flag="--stretch" ;;
+            fit) flag="--maximize" ;;
+            center) flag="--center" ;;
+            tile) flag="--tile" ;;
+            *) flag="--zoom" ;;
+        esac
+        xwallpaper "$flag" "$path" >/dev/null 2>&1 || {
+            WALLPAPER_APPLY_ERROR="xwallpaper failed to apply $path"
+            return 1
+        }
+        return 0
+    fi
+
+    if has_command feh; then
+        local flag
+        case "$mode" in
+            stretch) flag="--bg-scale" ;;
+            fit) flag="--bg-max" ;;
+            center) flag="--bg-center" ;;
+            tile) flag="--bg-tile" ;;
+            *) flag="--bg-fill" ;;
+        esac
+        feh --no-fehbg "$flag" "$path" >/dev/null 2>&1 || {
+            WALLPAPER_APPLY_ERROR="feh failed to apply $path"
+            return 1
+        }
+        return 0
+    fi
+
+    WALLPAPER_APPLY_ERROR="no X11 wallpaper setter found (install xwallpaper or feh)"
+    return 1
+}
+
 start_wallpaper() {
     local mode="$1"
-    pkill -x swaybg >/dev/null 2>&1 || true
-    nohup swaybg -i "$CURRENT_LINK" -m "$mode" >/dev/null 2>&1 &
+    local backend path
+
+    WALLPAPER_APPLY_ERROR=""
+    backend="$(detect_backend)"
+    path="$(readlink -f "$CURRENT_LINK" 2>/dev/null || printf '%s' "$CURRENT_LINK")"
+
+    case "$backend" in
+        plasma) apply_plasma "$path" ;;
+        gnome) apply_gnome "$path" "$mode" ;;
+        hyprland)
+            if has_command swww; then
+                apply_swww "$path" "$mode"
+            elif has_command hyprctl; then
+                apply_hyprpaper "$path"
+            else
+                apply_swaybg "$path" "$mode"
+            fi
+            ;;
+        wlroots)
+            if has_command swaybg; then
+                apply_swaybg "$path" "$mode"
+            elif has_command swww; then
+                apply_swww "$path" "$mode"
+            else
+                WALLPAPER_APPLY_ERROR="no wayland wallpaper setter found (install swaybg or swww)"
+            fi
+            ;;
+        x11) apply_x11 "$path" "$mode" ;;
+        *) WALLPAPER_APPLY_ERROR="unknown backend: $backend" ;;
+    esac
+
+    if [[ -n "$WALLPAPER_APPLY_ERROR" ]]; then
+        printf 'wallpaper: %s\n' "$WALLPAPER_APPLY_ERROR" >&2
+        return 0
+    fi
 }
 
 set_wallpaper() {
@@ -348,6 +551,9 @@ set_wallpaper() {
     ln -sfn "$(wallpaper_path "$idx")" "$CURRENT_LINK"
     printf '%s\n' "$name" > "$STATE_FILE"
     start_wallpaper "${WALLPAPER_MODES[$idx]}"
+    if [[ -n "$WALLPAPER_APPLY_ERROR" ]]; then
+        die "could not apply $name"
+    fi
     printf 'set %s\n' "$name"
 }
 
@@ -576,9 +782,20 @@ mime_type() {
     fi
 }
 
+prune_preview_cache() {
+    local keep=400
+    [[ -d "$PREVIEW_CACHE_DIR" ]] || return 0
+    find "$PREVIEW_CACHE_DIR" -maxdepth 1 -type f -printf '%T@\t%p\0' 2>/dev/null \
+        | sort -zrn \
+        | tail -z -n "+$((keep + 1))" \
+        | cut -z -f2- \
+        | xargs -0 -r rm -f
+}
+
 load_ui_state() {
     UI_LAST_FOLDER=""
     UI_SORT_MODE="$SORT_MODE_DEFAULT"
+    UI_PREVIEW_PANE="on"
     ensure_user_data_dir
 
     if [[ -f "$UI_STATE_FILE" ]]; then
@@ -588,6 +805,7 @@ load_ui_state() {
 
     UI_LAST_FOLDER="$(normalize_relative_dir "${UI_LAST_FOLDER:-}" || printf '')"
     [[ -n "$UI_SORT_MODE" ]] || UI_SORT_MODE="$SORT_MODE_DEFAULT"
+    [[ "$UI_PREVIEW_PANE" == "off" ]] || UI_PREVIEW_PANE="on"
 }
 
 save_ui_state() {
@@ -595,6 +813,7 @@ save_ui_state() {
     cat > "$UI_STATE_FILE" <<EOF
 UI_LAST_FOLDER=${UI_LAST_FOLDER:-}
 UI_SORT_MODE=${UI_SORT_MODE:-$SORT_MODE_DEFAULT}
+UI_PREVIEW_PANE=${UI_PREVIEW_PANE:-on}
 EOF
 }
 
@@ -1084,10 +1303,136 @@ delete_wallpaper_items() {
     printf 'deleted %s wallpaper(s)\n' "$#"
 }
 
-download_wallpaper_noninteractive() {
+url_encode() {
+    local value="$1"
+    if has_command jq; then
+        jq -rn --arg v "$value" '$v|@uri'
+    else
+        printf '%s\n' "${value// /+}"
+    fi
+}
+
+json_string_field() {
+    local field="$1"
+    local body="$2"
+    if has_command jq; then
+        printf '%s' "$body" | jq -r "$field // empty" 2>/dev/null
+    else
+        printf '%s' "$body" |
+            grep -o '"path":"[^"]*"' |
+            head -n1 |
+            sed 's/.*"path":"//; s/"$//; s#\\/#/#g'
+    fi
+}
+
+clipboard_text() {
+    if [[ -n "${WAYLAND_DISPLAY:-}" ]] && has_command wl-paste; then
+        wl-paste --no-newline 2>/dev/null || true
+    elif has_command xclip; then
+        xclip -selection clipboard -o 2>/dev/null || true
+    elif has_command xsel; then
+        xsel --clipboard --output 2>/dev/null || true
+    fi
+}
+
+page_image_url() {
+    local page="$1"
+    printf '%s' "$page" |
+        grep -oiE '<meta[^>]+(property|name)=("|'"'"')(og:image|twitter:image)("|'"'"')[^>]*>' |
+        grep -oiE 'content=("|'"'"')[^"'"'"']+' |
+        head -n1 |
+        sed -E 's/^content=("|'"'"')//' || true
+}
+
+resolve_image_url() {
     local url="$1"
-    shift
-    local folder="" name="" tags="" source="" author="" license="" ext filename target_rel target_abs manifest_name
+    local id body found
+
+    case "$url" in
+        *wallhaven.cc/w/*|*whvn.cc/*)
+            id="${url##*/}"
+            id="${id%%\?*}"
+            [[ -n "$id" ]] || return 1
+            body="$(curl -fsSL --max-time 20 "https://wallhaven.cc/api/v1/w/$id${WALLHAVEN_API_KEY:+?apikey=$WALLHAVEN_API_KEY}" 2>/dev/null || true)"
+            found="$(json_string_field '.data.path' "$body")"
+            [[ -n "$found" ]] || return 1
+            printf '%s\n' "$found"
+            return 0
+            ;;
+        *unsplash.com/photos/*)
+            id="${url##*/}"
+            id="${id%%\?*}"
+            printf 'https://unsplash.com/photos/%s/download?force=true\n' "$id"
+            return 0
+            ;;
+    esac
+
+    if image_extension_from_url "$url" >/dev/null 2>&1; then
+        printf '%s\n' "$url"
+        return 0
+    fi
+
+    body="$(curl -fsSL --max-time 20 "$url" 2>/dev/null || true)"
+    if [[ -n "$body" ]]; then
+        found="$(page_image_url "$body")"
+        if [[ -n "$found" ]]; then
+            printf '%s\n' "$found"
+            return 0
+        fi
+    fi
+
+    printf '%s\n' "$url"
+}
+
+download_one_wallpaper() {
+    local url="$1" folder="$2" name="$3" tags="$4" source="$5" author="$6" license="$7"
+    local ext filename target_rel target_abs manifest_name image_url
+
+    image_url="$(resolve_image_url "$url")" || die "could not resolve an image from: $url"
+    [[ "$image_url" == "$url" ]] || [[ -n "$source" ]] || source="$url"
+
+    ext="$(image_extension_from_url "$image_url" 2>/dev/null || true)"
+    if [[ -z "$ext" ]]; then
+        local mime
+        mime="$(curl -fsSLI "$image_url" | awk -F': ' 'BEGIN{IGNORECASE=1} /^content-type:/ {print $2}' | tail -n1 | tr -d '\r' | cut -d';' -f1)"
+        case "$mime" in
+            image/jpeg) ext="jpg" ;;
+            image/png) ext="png" ;;
+            image/webp) ext="webp" ;;
+        esac
+    fi
+    [[ -n "$ext" ]] || die "could not determine image type from URL: $url"
+    folder="$(normalize_relative_dir "$folder")" || die "invalid folder path"
+    filename="$(download_filename_from_url "$image_url" "$ext")"
+    [[ "$filename" == *.* ]] || filename="$filename.$ext"
+    target_rel="$filename"
+    [[ -n "$folder" ]] && target_rel="$folder/$filename"
+    target_rel="$(unique_relative_path "$target_rel")"
+    target_abs="$WALLPAPERS_DIR/$target_rel"
+    mkdir -p "$(dirname "$target_abs")"
+
+    curl -fsSL "$image_url" -o "$target_abs" || {
+        rm -f "$target_abs"
+        die "failed to download image: $image_url"
+    }
+
+    [[ -n "$name" ]] || name="${filename%.*}"
+    manifest_name="$(unique_manifest_name "$folder" "$name")"
+    printf '%s\t%s\tfill\n' "$manifest_name" "$target_rel" >> "$MANIFEST_FILE"
+    WALLPAPER_NAMES+=("$manifest_name")
+    WALLPAPER_FILES+=("$target_rel")
+    WALLPAPER_MODES+=("fill")
+    WALLPAPER_TAGS+=("$tags")
+    WALLPAPER_SOURCES+=("$source")
+    WALLPAPER_AUTHORS+=("$author")
+    WALLPAPER_LICENSES+=("$license")
+    write_metadata
+    printf 'downloaded %s -> %s\n' "$manifest_name" "$target_rel"
+}
+
+download_wallpaper_noninteractive() {
+    local folder="" name="" tags="" source="" author="" license="" apply=0
+    local -a urls=()
 
     while (($#)); do
         case "$1" in
@@ -1115,48 +1460,207 @@ download_wallpaper_noninteractive() {
                 license="${2:-}"
                 shift 2
                 ;;
-            *)
+            --clip|--clipboard)
+                local clip
+                clip="$(clipboard_text)"
+                [[ -n "$clip" ]] || die "clipboard is empty"
+                urls+=("$clip")
+                shift
+                ;;
+            --apply|--set)
+                apply=1
+                shift
+                ;;
+            -*)
                 die "unknown download option: $1"
+                ;;
+            *)
+                urls+=("$1")
+                shift
                 ;;
         esac
     done
 
-    ext="$(image_extension_from_url "$url" 2>/dev/null || true)"
-    if [[ -z "$ext" ]]; then
-        local mime
-        mime="$(curl -fsSLI "$url" | awk -F': ' 'BEGIN{IGNORECASE=1} /^content-type:/ {print $2}' | tail -n1 | tr -d '\r' | cut -d';' -f1)"
-        case "$mime" in
-            image/jpeg) ext="jpg" ;;
-            image/png) ext="png" ;;
-            image/webp) ext="webp" ;;
-        esac
+    [[ ${#urls[@]} -gt 0 ]] || die "download needs a URL (or --clip)"
+    [[ ${#urls[@]} -eq 1 || -z "$name" ]] || die "--name only works with a single URL"
+
+    local url
+    for url in "${urls[@]}"; do
+        download_one_wallpaper "$url" "$folder" "$name" "$tags" "$source" "$author" "$license"
+    done
+
+    if (( apply )); then
+        set_wallpaper "${WALLPAPER_NAMES[-1]}"
     fi
-    [[ -n "$ext" ]] || die "could not determine image type from URL"
-    folder="$(normalize_relative_dir "$folder")" || die "invalid folder path"
-    filename="$(download_filename_from_url "$url" "$ext")"
-    target_rel="$filename"
-    [[ -n "$folder" ]] && target_rel="$folder/$filename"
-    target_rel="$(unique_relative_path "$target_rel")"
-    target_abs="$WALLPAPERS_DIR/$target_rel"
-    mkdir -p "$(dirname "$target_abs")"
+}
 
-    curl -fsSL "$url" -o "$target_abs" || {
-        rm -f "$target_abs"
-        die "failed to download image"
-    }
+wallpaper_site_url() {
+    local site="$1"
+    local query="${2:-}"
+    local encoded
+    encoded="$(url_encode "$query")"
 
-    [[ -n "$name" ]] || name="${filename%.*}"
-    manifest_name="$(unique_manifest_name "$folder" "$name")"
-    printf '%s\t%s\tfill\n' "$manifest_name" "$target_rel" >> "$MANIFEST_FILE"
-    WALLPAPER_NAMES+=("$manifest_name")
-    WALLPAPER_FILES+=("$target_rel")
-    WALLPAPER_MODES+=("fill")
-    WALLPAPER_TAGS+=("$tags")
-    WALLPAPER_SOURCES+=("$source")
-    WALLPAPER_AUTHORS+=("$author")
-    WALLPAPER_LICENSES+=("$license")
-    write_metadata
-    printf 'downloaded %s -> %s\n' "$manifest_name" "$target_rel"
+    case "$site" in
+        wallhaven)
+            if [[ -n "$query" ]]; then
+                printf 'https://wallhaven.cc/search?q=%s&sorting=relevance&atleast=1920x1080\n' "$encoded"
+            else
+                printf 'https://wallhaven.cc/toplist\n'
+            fi
+            ;;
+        unsplash)
+            if [[ -n "$query" ]]; then
+                printf 'https://unsplash.com/s/photos/%s\n' "$encoded"
+            else
+                printf 'https://unsplash.com/t/wallpapers\n'
+            fi
+            ;;
+        pexels)
+            if [[ -n "$query" ]]; then
+                printf 'https://www.pexels.com/search/%s/\n' "$encoded"
+            else
+                printf 'https://www.pexels.com/search/wallpaper/\n'
+            fi
+            ;;
+        pixabay)
+            if [[ -n "$query" ]]; then
+                printf 'https://pixabay.com/images/search/%s/\n' "$encoded"
+            else
+                printf 'https://pixabay.com/images/search/wallpaper/\n'
+            fi
+            ;;
+        reddit)
+            if [[ -n "$query" ]]; then
+                printf 'https://www.reddit.com/r/wallpapers/search/?q=%s&restrict_sr=1\n' "$encoded"
+            else
+                printf 'https://www.reddit.com/r/wallpapers/top/?t=week\n'
+            fi
+            ;;
+        flare|wallpaperflare)
+            if [[ -n "$query" ]]; then
+                printf 'https://www.wallpaperflare.com/search?wallpaper=%s\n' "$encoded"
+            else
+                printf 'https://www.wallpaperflare.com/\n'
+            fi
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+list_wallpaper_sites() {
+    printf 'wallhaven        https://wallhaven.cc            (default, page URLs resolve via API)\n'
+    printf 'unsplash         https://unsplash.com\n'
+    printf 'pexels           https://www.pexels.com\n'
+    printf 'pixabay          https://pixabay.com\n'
+    printf 'reddit           https://reddit.com/r/wallpapers\n'
+    printf 'wallpaperflare   https://www.wallpaperflare.com\n'
+}
+
+browse_wallpaper_site() {
+    local site="wallhaven"
+    local query=""
+
+    if [[ $# -gt 0 ]]; then
+        if wallpaper_site_url "$1" "" >/dev/null 2>&1; then
+            site="$1"
+            shift
+        fi
+        query="$*"
+    fi
+
+    local url
+    url="$(wallpaper_site_url "$site" "$query")" || die "unknown site: $site (try 'wallpaper sites')"
+
+    has_command xdg-open || die "xdg-open not found"
+    nohup xdg-open "$url" >/dev/null 2>&1 &
+    printf 'opened %s\n' "$url"
+    printf "grab an image with: wallpaper download <url>  (or copy it and run: wallpaper download --clip)\n"
+}
+
+search_wallhaven() {
+    local query="" folder="" limit=5 resolution="1920x1080" sorting="relevance" purity="100" categories="100" dry=0
+
+    while (($#)); do
+        case "$1" in
+            --folder)
+                folder="${2:-}"
+                shift 2
+                ;;
+            --limit|-n)
+                limit="${2:-5}"
+                shift 2
+                ;;
+            --resolution)
+                resolution="${2:-}"
+                shift 2
+                ;;
+            --sorting)
+                sorting="${2:-relevance}"
+                shift 2
+                ;;
+            --purity)
+                purity="${2:-100}"
+                shift 2
+                ;;
+            --categories)
+                categories="${2:-100}"
+                shift 2
+                ;;
+            --dry-run|--urls)
+                dry=1
+                shift
+                ;;
+            -*)
+                die "unknown search option: $1"
+                ;;
+            *)
+                query="${query:+$query }$1"
+                shift
+                ;;
+        esac
+    done
+
+    [[ -n "$query" ]] || die "search needs a query"
+    [[ "$limit" =~ ^[0-9]+$ ]] || die "limit must be a number"
+    (( limit > 0 )) || die "limit must be greater than 0"
+
+    local api body
+    api="https://wallhaven.cc/api/v1/search?q=$(url_encode "$query")&sorting=$sorting&purity=$purity&categories=$categories"
+    [[ -n "$resolution" ]] && api="$api&atleast=$resolution"
+    [[ -n "${WALLHAVEN_API_KEY:-}" ]] && api="$api&apikey=$WALLHAVEN_API_KEY"
+
+    body="$(curl -fsSL --max-time 30 "$api" 2>/dev/null || true)"
+    [[ -n "$body" ]] || die "wallhaven search failed (no response)"
+
+    local -a paths=()
+    local path
+    while IFS= read -r path; do
+        [[ -n "$path" ]] && paths+=("$path")
+    done < <(
+        if has_command jq; then
+            printf '%s' "$body" | jq -r '.data[].path' 2>/dev/null | head -n "$limit"
+        else
+            printf '%s' "$body" |
+                grep -o '"path":"[^"]*"' |
+                sed 's/.*"path":"//; s/"$//; s#\\/#/#g' |
+                head -n "$limit"
+        fi
+    )
+
+    [[ ${#paths[@]} -gt 0 ]] || die "no results for: $query"
+
+    if (( dry )); then
+        printf '%s\n' "${paths[@]}"
+        return 0
+    fi
+
+    local tags
+    tags="$(normalize_tags "${query// /,}")"
+    for path in "${paths[@]}"; do
+        download_one_wallpaper "$path" "$folder" "" "$tags" "https://wallhaven.cc" "" ""
+    done
 }
 
 prompt_input() {
@@ -1216,19 +1720,21 @@ interactive_select() {
     local has_preview=0
     local key
     local list_window=12
+    local PREVIEW_PANE_ROW=5
     local selected_name_after_action=""
     local COLOR_ACCENT='\033[38;5;110m'
     local COLOR_MARK='\033[38;5;179m'
     local COLOR_ACTIVE='\033[38;5;114m'
     local COLOR_DIM='\033[2m'
     local COLOR_RESET='\033[0m'
-    local UI_LAST_FOLDER UI_SORT_MODE
+    local UI_LAST_FOLDER UI_SORT_MODE UI_PREVIEW_PANE
     local -A MARKED_NAMES=()
     local -a VIEW_TYPES=() VIEW_LABELS=() VIEW_KEYS=() VIEW_WALLPAPER_INDEXES=()
 
     load_ui_state
     load_mark_names
     prune_mark_names
+    prune_preview_cache
 
     [[ -n "$UI_LAST_FOLDER" ]] && is_folder_known "$UI_LAST_FOLDER" || UI_LAST_FOLDER=""
 
@@ -1248,6 +1754,83 @@ interactive_select() {
         else
             printf '80\n'
         fi
+    }
+
+    term_lines() {
+        local lines
+        lines="$(tput lines 2>/dev/null || printf '24')"
+        if [[ "$lines" =~ ^[0-9]+$ ]] && (( lines > 0 )); then
+            printf '%s\n' "$lines"
+        else
+            printf '24\n'
+        fi
+    }
+
+    thumbnail_lines() {
+        local path="$1" width="$2" height="$3"
+        local stamp key cache
+
+        has_chafa || return 1
+        [[ -f "$path" ]] || return 1
+        (( width > 0 && height > 0 )) || return 1
+
+        mkdir -p "$PREVIEW_CACHE_DIR"
+        stamp="$(stat -c '%Y:%s' "$path" 2>/dev/null || printf 'unknown')"
+        key="$(printf '%s|%s|%sx%s' "$path" "$stamp" "$width" "$height" | md5sum | cut -d' ' -f1)"
+        cache="$PREVIEW_CACHE_DIR/$key"
+
+        if [[ ! -s "$cache" ]]; then
+            if ! chafa --format symbols --colors full --size "${width}x${height}" \
+                --animate off "$path" > "$cache.part" 2>/dev/null; then
+                rm -f "$cache.part"
+                return 1
+            fi
+            mv -f "$cache.part" "$cache"
+        fi
+
+        cat "$cache"
+    }
+
+    preview_pane_geometry() {
+        local cols lines col width height
+        cols="$(term_cols)"
+        lines="$(term_lines)"
+        col=$(($(clamp_width "$((cols - 34))" 16 52) + 22))
+        width=$((cols - col - 1))
+        height="$(clamp_width "$((lines - 11))" 6 15)"
+        (( width >= 24 )) || return 1
+        (( width > 72 )) && width=72
+        printf '%s %s %s\n' "$col" "$width" "$height"
+    }
+
+    preview_pane_active() {
+        [[ "$UI_PREVIEW_PANE" == "on" ]] || return 1
+        has_chafa || return 1
+        preview_pane_geometry >/dev/null || return 1
+    }
+
+    render_preview_pane() {
+        local geometry col width height idx path line row
+
+        preview_pane_active || return 0
+        [[ "$(current_view_type)" == "wallpaper" ]] || return 0
+
+        geometry="$(preview_pane_geometry)" || return 0
+        read -r col width height <<< "$geometry"
+
+        idx="$(current_view_wallpaper_index)"
+        path="$(wallpaper_path "$idx")"
+        row=$PREVIEW_PANE_ROW
+
+        while IFS= read -r line; do
+            printf '\033[%d;%dH%s\033[0m' "$row" "$col" "$line"
+            ((row += 1))
+        done < <(thumbnail_lines "$path" "$width" "$height")
+
+        (( row > PREVIEW_PANE_ROW )) || return 0
+        printf '\033[%d;%dH%b%s%b' "$((row + 1))" "$col" "$COLOR_DIM" \
+            "$(ellipsize "$(image_dimensions "$path") • $(file_size_human "$path")" "$width")" "$COLOR_RESET"
+        printf '\033[%d;1H' "$(term_lines)"
     }
 
     repeat_char() {
@@ -1937,7 +2520,7 @@ interactive_select() {
 
     render_list() {
         local start end total cols width marker badge active
-        local i type key label idx
+        local i type key label idx pane_geometry pane_height footer_row=0
 
         build_view
         total="${#VIEW_TYPES[@]}"
@@ -1945,17 +2528,34 @@ interactive_select() {
         width="$(clamp_width "$((cols - 34))" 16 52)"
         active="$(current_wallpaper_name)"
 
+        if preview_pane_active; then
+            pane_geometry="$(preview_pane_geometry)"
+            pane_height="${pane_geometry##* }"
+            footer_row=$((PREVIEW_PANE_ROW + pane_height + 2))
+        fi
+
+        local pane_note=""
+        if ! has_chafa; then
+            pane_note=" • previews off: install chafa"
+        elif [[ "$UI_PREVIEW_PANE" != "on" ]]; then
+            pane_note=" • pane off"
+        fi
+
         printf '\033[H\033[2J'
         render_header \
             "Wallpaper Picker" \
-            "$(current_folder_label) • sort: $UI_SORT_MODE • $(marked_count) marked • current: ${active:-none}"
+            "$(current_folder_label) • sort: $UI_SORT_MODE • $(marked_count) marked • current: ${active:-none}$pane_note"
 
-        start=$((selected - list_window / 2))
+        local window=$list_window
+        (( footer_row > 0 )) && window=$((pane_height - 2))
+        (( window < 4 )) && window=4
+
+        start=$((selected - window / 2))
         (( start < 0 )) && start=0
-        end=$((start + list_window - 1))
+        end=$((start + window - 1))
         if (( end >= total )); then
             end=$((total - 1))
-            start=$((end - list_window + 1))
+            start=$((end - window + 1))
             (( start < 0 )) && start=0
         fi
 
@@ -1997,9 +2597,13 @@ interactive_select() {
             printf '\n  %b↓ %d more below%b\n' "$COLOR_DIM" "$((total - end - 1))" "$COLOR_RESET"
         fi
 
+        (( footer_row > 0 )) && printf '\033[%d;1H' "$footer_row"
+
         render_footer \
-            "$(render_kbd '↑↓') move  $(render_kbd 'Enter') open/apply  $(render_kbd 'Space') mark  $(render_kbd 'p') preview  $(render_kbd '/') jump  $(render_kbd 'm') move  $(render_kbd 's') sort" \
+            "$(render_kbd '↑↓') move  $(render_kbd 'Enter') open/apply  $(render_kbd 'Space') mark  $(render_kbd 'p') preview  $(render_kbd 'v') pane  $(render_kbd '/') jump  $(render_kbd 'm') move  $(render_kbd 's') sort" \
             "$(render_kbd 'n') rename  $(render_kbd 'd') folder  $(render_kbd '+') add  $(render_kbd '!') delete  $(render_kbd 'x') clear  $(render_kbd 'r') random  $(render_kbd 'q') quit"
+
+        render_preview_pane
     }
 
     render_help() {
@@ -2008,7 +2612,8 @@ interactive_select() {
         render_help_line "↑ / ↓" "Move through folders and wallpapers"
         render_help_line "Enter" "Enter folder or apply wallpaper"
         render_help_line "Space" "Mark or unmark the selected wallpaper"
-        render_help_line "p" "Toggle preview"
+        render_help_line "p" "Toggle the full preview screen"
+        render_help_line "v" "Toggle the live thumbnail pane (needs chafa)"
         render_help_line "/" "Fuzzy jump via fzf across folders and files"
         render_help_line "m" "Move marked wallpapers, or the selected one"
         render_help_line "n" "Rename the selected wallpaper"
@@ -2049,9 +2654,13 @@ render_preview() {
 
             if [[ -f "$path" ]]; then
                 if has_chafa; then
-                    chafa -s 64x16 "$path" 2>/dev/null || printf '%bPreview failed.%b\n' "$COLOR_DIM" "$COLOR_RESET"
+                    local view_w view_h
+                    view_w="$(clamp_width "$(($(term_cols) - 4))" 32 100)"
+                    view_h="$(clamp_width "$(($(term_lines) - 20))" 10 34)"
+                    chafa --size "${view_w}x${view_h}" --animate off "$path" 2>/dev/null \
+                        || printf '%bPreview failed.%b\n' "$COLOR_DIM" "$COLOR_RESET"
                 else
-                    printf '%bInstall chafa for inline previews.%b\n' "$COLOR_DIM" "$COLOR_RESET"
+                    printf '%bInstall chafa for inline previews: sudo pacman -S chafa%b\n' "$COLOR_DIM" "$COLOR_RESET"
                 fi
                 printf '\n%bPath:%b %s\n' "$COLOR_DIM" "$COLOR_RESET" "${WALLPAPER_FILES[$idx]}"
                 printf '%bType:%b %s\n' "$COLOR_DIM" "$COLOR_RESET" "$mime"
@@ -2168,6 +2777,15 @@ render_preview() {
                 read_manifest
                 build_view
                 ;;
+            v|V)
+                if [[ "$UI_PREVIEW_PANE" == "on" ]]; then
+                    UI_PREVIEW_PANE="off"
+                else
+                    UI_PREVIEW_PANE="on"
+                fi
+                mode="list"
+                save_ui_state
+                ;;
             p|P)
                 if [[ "$mode" == "preview" ]]; then
                     mode="list"
@@ -2242,8 +2860,11 @@ usage() {
     printf '  \033[36mmove\033[0m <dir> <names...>   Move one or more wallpapers to a folder\n'
     printf '  \033[36mrename\033[0m <old> <new> [--file name] [--folder dir]\n'
     printf '  \033[36mdelete\033[0m <names...>       Delete one or more wallpapers and prune empty folders\n'
-    printf '  \033[36mdownload\033[0m <url> [--folder dir] [--name label]\n'
+    printf '  \033[36mdownload\033[0m <url...> [--folder dir] [--name label] [--clip] [--apply]\n'
     printf '  \033[36madd\033[0m <url> ...           Alias for `download`\n'
+    printf '  \033[36mbrowse\033[0m [site] [query]   Open a wallpaper site in the browser\n'
+    printf '  \033[36msites\033[0m                   List known wallpaper sites\n'
+    printf '  \033[36msearch\033[0m <query> [--limit n] [--folder dir] [--resolution WxH] [--urls]\n'
     printf '  \033[36mimport\033[0m <path-or-url> ...  Import local files, folders, or URLs\n'
     printf '  \033[36mmeta\033[0m <name> ...          Edit tags/source/author/license metadata\n'
     printf '  \033[36mhelp\033[0m                    Show this help\n\n'
@@ -2265,7 +2886,11 @@ usage() {
     printf '  \033[32mwallpaper move archive/cozy alpha beta\033[0m\n'
     printf '  \033[32mwallpaper rename alpha evening-fuji --file evening-fuji.png --folder archive/cozy\033[0m\n'
     printf '  \033[32mwallpaper delete archive/cozy/alpha\033[0m\n'
-    printf '  \033[32mwallpaper download https://example.com/wall.png --folder anime --name sunset\033[0m\n\n'
+    printf '  \033[32mwallpaper download https://example.com/wall.png --folder anime --name sunset\033[0m\n'
+    printf '  \033[32mwallpaper browse wallhaven mount fuji\033[0m\n'
+    printf '  \033[32mwallpaper download https://wallhaven.cc/w/dgzy73 --folder fuji --apply\033[0m\n'
+    printf '  \033[32mwallpaper download --clip --folder inbox\033[0m\n'
+    printf '  \033[32mwallpaper search "mount fuji" --limit 5 --folder fuji\033[0m\n\n'
     printf '  \033[32mwallpaper rotate 300 --folder fuji\033[0m\n'
     printf '  \033[32mwallpaper status\033[0m\n'
     printf '  \033[32mwallpaper stop\033[0m\n\n'
@@ -2403,9 +3028,19 @@ main() {
             [[ $# -ge 1 ]] || die "delete needs at least one wallpaper name"
             delete_wallpaper_items "$@"
             ;;
-        download|add|--add|-a)
-            [[ $# -ge 1 ]] || die "download needs a URL"
+        download|add|get|--add|-a)
+            [[ $# -ge 1 ]] || die "download needs a URL (or --clip)"
             download_wallpaper_noninteractive "$@"
+            ;;
+        browse|open-site)
+            browse_wallpaper_site "$@"
+            ;;
+        sites)
+            list_wallpaper_sites
+            ;;
+        search|find)
+            [[ $# -ge 1 ]] || die "search needs a query"
+            search_wallhaven "$@"
             ;;
         import)
             [[ $# -ge 1 ]] || die "import needs a path or URL"

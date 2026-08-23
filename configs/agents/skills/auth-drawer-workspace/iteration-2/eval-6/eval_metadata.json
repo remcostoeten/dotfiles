@@ -1,0 +1,42 @@
+{
+  "eval_id": 6,
+  "eval_name": "firebase-react",
+  "prompt": "Add @remcostoeten/auth-drawer to my React app using Firebase Auth. I've initialized Firebase and have the `auth` instance. Wire it up so users can sign in/up with email+password and with Google. Show the drawer and a sign-out button when logged in.",
+  "assertions": [
+    {
+      "text": "Uses createFirebaseAdapter imported from '@remcostoeten/auth-drawer/adapters/firebase'",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Wraps the app in the real AuthProvider (from the package) with the adapter, and renders <AuthDrawer>",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Session/header uses useAuth() (the real hook) rather than a hand-rolled provider/hook",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Handles CSS correctly: relies on the package's out-of-the-box styles and does NOT present a manual styles.css import as required",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "No nonexistent/invented imports or props (no createAdapterError import, no invented hooks/flags)",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "createFirebaseAdapter is passed the `auth` instance AND the firebase/auth functions (createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, etc.) \u2014 not just a client object",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Google OAuth wired via providerFactory/GoogleAuthProvider + signInWithRedirect (per the firebase adapter's function-injection shape)",
+      "passed": null,
+      "evidence": ""
+    }
+  ]
+}

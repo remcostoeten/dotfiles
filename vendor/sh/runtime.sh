@@ -17,11 +17,9 @@ if dotfiles_shell_is_interactive; then
         . "$HOME/.secrets"
     fi
 
-    if [ -f "$HOME/.config/dotfiles/scripts/todo.js" ]; then
+    if [ -f "$HOME/.config/dotfiles/scripts/todo.mjs" ]; then
         if command -v bun >/dev/null 2>&1; then
-            bun "$HOME/.config/dotfiles/scripts/todo.js" shell-display 2>/dev/null
-        elif command -v node >/dev/null 2>&1; then
-            node "$HOME/.config/dotfiles/scripts/todo.js" shell-display 2>/dev/null
+            bun "$HOME/.config/dotfiles/scripts/todo.mjs" shell-display 2>/dev/null
         fi
     fi
 

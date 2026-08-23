@@ -1,0 +1,1785 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import curses
+import fnmatch
+import json
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field, replace
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    tomllib = None
+
+
+VERSION = "1.0.0"
+ANSI_PATTERN = re.compile(r"\033\[([0-9;]*)m")
+DEFAULT_IGNORES = [
+    ".git",
+    "node_modules",
+    ".next",
+    ".nuxt",
+    "dist",
+    "build",
+    "out",
+    "coverage",
+    "target",
+    "vendor",
+    "__pycache__",
+    ".pytest_cache",
+    ".cache",
+    ".parcel-cache",
+    ".turbo",
+    ".vercel",
+    ".netlify",
+    ".DS_Store",
+    "*.pyc",
+    "*.log",
+]
+BUILTIN_PRESETS = {
+    "default": {},
+    "code": {"depth": 4, "git-ignore": True, "default-ignore": True, "dirs-first": True},
+    "clean": {"depth": 3, "default-ignore": True, "plain": True},
+    "full": {"depth": None, "all": True, "default-ignore": False},
+    "raw": {"depth": None, "all": True, "default-ignore": False, "plain": True, "sort": "none"},
+    "docs": {"depth": 4, "include": ["*.md", "*.mdx", "*.txt", "*.rst"]},
+}
+
+
+@dataclass(frozen=True)
+class Argument:
+    name: str
+    long: str
+    short: str
+    description: str
+    value: str | None = None
+    values: tuple[str, ...] = ()
+    repeatable: bool = False
+
+
+ARGUMENTS = [
+    Argument("ui", "--ui", "-u", "Interactive tree UI"),
+    Argument("regular", "--regular", "-rg", "Regular terminal output"),
+    Argument("default-mode", "--default-mode", "-dm", "Persist the default mode", "mode", ("regular", "ui")),
+    Argument("help", "--help", "-h", "Show help"),
+    Argument("version", "--version", "-v", "Show version"),
+    Argument("setup", "--setup", "-st", "Run first-time setup"),
+    Argument("check", "--check", "-ch", "Check configuration"),
+    Argument("debug", "--debug", "-db", "Show diagnostic information"),
+    Argument("command", "--command", "-cmd", "Show resolved executable"),
+    Argument("quiet", "--quiet", "-q", "Suppress non-tree messages"),
+    Argument("path", "--path", "-P", "Set the tree root", "path"),
+    Argument("depth", "--depth", "-d", "Maximum traversal depth", "number|all"),
+    Argument("max", "--max", "-m", "Maximum displayed entries", "number"),
+    Argument("max-children", "--max-children", "-mc", "Maximum children per directory", "number"),
+    Argument("follow", "--follow", "-f", "Follow symbolic links"),
+    Argument("no-follow", "--no-follow", "-nf", "Do not follow symbolic links"),
+    Argument("watch", "--watch", "-w", "Refresh UI after filesystem changes"),
+    Argument("all", "--all", "-a", "Show hidden entries"),
+    Argument("raw", "--raw", "-rw", "Disable ignores and decoration"),
+    Argument("git-ignore", "--git-ignore", "-gi", "Respect .gitignore"),
+    Argument("no-git-ignore", "--no-git-ignore", "-ng", "Ignore .gitignore"),
+    Argument("default-ignore", "--default-ignore", "-di", "Use default ignores"),
+    Argument("no-default-ignore", "--no-default-ignore", "-ndi", "Disable default ignores"),
+    Argument("ignore", "--ignore", "-i", "Ignore matching entries", "glob", repeatable=True),
+    Argument("include", "--include", "-in", "Include matching entries", "glob", repeatable=True),
+    Argument("collapse", "--collapse", "-c", "Show directory without traversing", "glob", repeatable=True),
+    Argument("match", "--match", "-M", "Show matching entries", "glob", repeatable=True),
+    Argument("search", "--search", "-S", "Search entry names", "text"),
+    Argument("case-sensitive", "--case-sensitive", "-cs", "Use case-sensitive matching"),
+    Argument("dirs", "--dirs", "-D", "Show directories only"),
+    Argument("files", "--files", "-F", "Show files only"),
+    Argument("sort", "--sort", "-s", "Sort entries", "field", ("name", "size", "time", "modified", "created", "accessed", "extension", "type", "none")),
+    Argument("reverse", "--reverse", "-r", "Reverse sorting"),
+    Argument("dirs-first", "--dirs-first", "-df", "List directories first"),
+    Argument("files-first", "--files-first", "-ff", "List files first"),
+    Argument("mixed", "--mixed", "-mx", "Mix files and directories"),
+    Argument("plain", "--plain", "-p", "Plain copy-friendly output"),
+    Argument("ascii", "--ascii", "-A", "Use ASCII branches"),
+    Argument("icons", "--icons", "-I", "Show icons"),
+    Argument("no-icons", "--no-icons", "-ni", "Hide icons"),
+    Argument("color", "--color", "-C", "Use color"),
+    Argument("no-color", "--no-color", "-nc", "Disable color"),
+    Argument("long", "--long", "-l", "Show entry metadata"),
+    Argument("size", "--size", "-z", "Show entry sizes"),
+    Argument("size-format", "--size-format", "-sf", "Set size format", "format", ("bytes", "si", "binary")),
+    Argument("permissions", "--permissions", "-Pm", "Show permissions"),
+    Argument("time", "--time", "-t", "Show timestamps"),
+    Argument("time-field", "--time-field", "-tf", "Select timestamp field", "field", ("modified", "created", "accessed")),
+    Argument("git-status", "--git-status", "-g", "Show Git status"),
+    Argument("root", "--root", "-R", "Show root entry"),
+    Argument("no-root", "--no-root", "-nr", "Hide root entry"),
+    Argument("slash", "--slash", "-sl", "Append slash to directories"),
+    Argument("json", "--json", "-j", "Print JSON"),
+    Argument("jsonl", "--jsonl", "-jl", "Print JSON Lines"),
+    Argument("paths", "--paths", "-pt", "Print paths"),
+    Argument("count", "--count", "-n", "Print entry count"),
+    Argument("summary", "--summary", "-sm", "Print a summary"),
+    Argument("pager", "--pager", "-pg", "Page terminal output"),
+    Argument("no-pager", "--no-pager", "-np", "Never page terminal output"),
+    Argument("preset", "--preset", "-pr", "Apply a preset", "name"),
+    Argument("config", "--config", "-cf", "Use a configuration file", "path"),
+    Argument("no-config", "--no-config", "-ncF", "Disable configuration loading"),
+    Argument("show-config", "--show-config", "-sc", "Show resolved configuration"),
+    Argument("init", "--init", "-x", "Create a project configuration"),
+    Argument("force", "--force", "-y", "Overwrite an existing config"),
+    Argument("completion", "--completion", "-cp", "Print shell completion", "shell", ("fish", "bash")),
+    Argument("install-completion", "--install-completion", "-ic", "Install shell completion", "shell?", ("fish", "bash")),
+    Argument("remove-completion", "--remove-completion", "-rc", "Remove shell completion", "shell", ("fish", "bash")),
+]
+BY_TOKEN = {token: argument for argument in ARGUMENTS for token in (argument.name, argument.long, argument.short)}
+
+
+@dataclass
+class Options:
+    path: Path = Path(".")
+    mode: str = "regular"
+    explicit_mode: bool = False
+    depth: int | None = 3
+    max_entries: int | None = None
+    max_children: int | None = None
+    follow: bool = False
+    hidden: bool = False
+    git_ignore: bool = True
+    default_ignore: bool = True
+    ignore: list[str] = field(default_factory=list)
+    include: list[str] = field(default_factory=list)
+    collapse: list[str] = field(default_factory=list)
+    matches: list[str] = field(default_factory=list)
+    search: str | None = None
+    case_sensitive: bool = False
+    only: str | None = None
+    sort: str = "name"
+    reverse: bool = False
+    grouping: str = "dirs-first"
+    plain: bool = False
+    ascii: bool = False
+    icons: bool | str = "auto"
+    color: bool | str = "auto"
+    long: bool = False
+    size: bool = False
+    size_format: str = "binary"
+    permissions: bool = False
+    show_time: bool = False
+    time_field: str = "modified"
+    git_status: bool = False
+    show_root: bool = True
+    slash: bool = False
+    output: str = "tree"
+    summary: bool = False
+    pager: bool | str = "auto"
+    watch: bool = False
+    quiet: bool = False
+    preset: str | None = None
+    config_path: Path | None = None
+    no_config: bool = False
+    force: bool = False
+
+
+@dataclass
+class Node:
+    path: Path
+    depth: int
+    is_dir: bool
+    children: list["Node"] | None = None
+    error: str | None = None
+
+
+def user_config_path() -> Path:
+    root = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return root / "tree" / "config.toml"
+
+
+def read_toml(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    if tomllib is None:
+        raise ValueError("Python 3.11 or newer is required to read TOML configuration")
+    with path.open("rb") as handle:
+        value = tomllib.load(handle)
+    return value if isinstance(value, dict) else {}
+
+
+def find_project_config(start: Path) -> Path | None:
+    current = start.resolve()
+    if current.is_file():
+        current = current.parent
+    for directory in (current, *current.parents):
+        candidate = directory / ".tree.toml"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def toml_value(value: Any) -> str:
+    if value is None:
+        return json.dumps("all")
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(toml_value(item) for item in value) + "]"
+    return str(value)
+
+
+def write_config(path: Path, values: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"{key} = {toml_value(value)}" for key, value in values.items() if not isinstance(value, dict)]
+    presets = values.get("presets", {})
+    for name, preset in presets.items():
+        lines.extend(["", f"[presets.{name}]"])
+        lines.extend(f"{key} = {toml_value(value)}" for key, value in preset.items())
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def parse_depth(value: Any) -> int | None:
+    if value in (None, "all", "none", 0):
+        return None
+    depth = int(value)
+    if depth < 1:
+        raise ValueError("depth must be a positive number or 'all'")
+    return depth
+
+
+def apply_values(options: Options, values: dict[str, Any]) -> Options:
+    mappings = {
+        "mode": "mode", "depth": "depth", "max": "max_entries", "max-children": "max_children",
+        "follow": "follow", "all": "hidden", "git-ignore": "git_ignore", "default-ignore": "default_ignore",
+        "ignore": "ignore", "include": "include", "collapse": "collapse", "match": "matches", "search": "search",
+        "case-sensitive": "case_sensitive", "sort": "sort", "reverse": "reverse", "plain": "plain", "ascii": "ascii",
+        "icons": "icons", "color": "color", "long": "long", "size": "size", "size-format": "size_format",
+        "permissions": "permissions", "time": "show_time", "time-field": "time_field", "git-status": "git_status",
+        "root": "show_root", "slash": "slash", "watch": "watch", "pager": "pager",
+    }
+    for key, attribute in mappings.items():
+        if key not in values:
+            continue
+        value = parse_depth(values[key]) if key == "depth" else values[key]
+        if attribute in ("ignore", "include", "collapse", "matches"):
+            value = list(value) if isinstance(value, list) else [str(value)]
+        setattr(options, attribute, value)
+    if values.get("dirs-first"):
+        options.grouping = "dirs-first"
+    if values.get("files-first"):
+        options.grouping = "files-first"
+    if values.get("mixed"):
+        options.grouping = "mixed"
+    if values.get("dirs"):
+        options.only = "dirs"
+    if values.get("files"):
+        options.only = "files"
+    return options
+
+
+def prescan(argv: list[str]) -> dict[str, Any]:
+    result: dict[str, Any] = {"path": Path("."), "no_config": False, "config": None, "preset": None}
+    value_tokens = {"config", "--config", "-cf", "preset", "--preset", "-pr"}
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token in ("no-config", "--no-config", "-ncF"):
+            result["no_config"] = True
+        elif token in value_tokens and index + 1 < len(argv):
+            key = "config" if token in ("config", "--config", "-cf") else "preset"
+            result[key] = argv[index + 1]
+            index += 1
+        elif token not in BY_TOKEN and not token.startswith("-") and not Path(token).is_dir():
+            pass
+        elif token not in BY_TOKEN and not token.startswith("-"):
+            result["path"] = Path(token)
+        index += 1
+    return result
+
+
+def load_base_options(argv: list[str]) -> tuple[Options, dict[str, Any]]:
+    scan = prescan(argv)
+    options = Options(path=scan["path"])
+    merged: dict[str, Any] = {}
+    if not scan["no_config"]:
+        merged.update(read_toml(user_config_path()))
+        project = find_project_config(scan["path"])
+        if project:
+            project_values = read_toml(project)
+            merged.update({key: value for key, value in project_values.items() if key != "presets"})
+            combined_presets = dict(merged.get("presets", {}))
+            combined_presets.update(project_values.get("presets", {}))
+            merged["presets"] = combined_presets
+        if scan["config"]:
+            explicit_values = read_toml(Path(scan["config"]).expanduser())
+            merged.update(explicit_values)
+    options = apply_values(options, merged)
+    preset_name = scan["preset"]
+    if preset_name:
+        presets = dict(BUILTIN_PRESETS)
+        presets.update(merged.get("presets", {}))
+        if preset_name not in presets:
+            raise ValueError(f"unknown preset: {preset_name}")
+        options = apply_values(options, presets[preset_name])
+        options.preset = preset_name
+    options.no_config = scan["no_config"]
+    options.config_path = Path(scan["config"]).expanduser() if scan["config"] else None
+    return options, merged
+
+
+def require_value(argv: list[str], index: int, argument: Argument) -> tuple[str, int]:
+    if index + 1 >= len(argv):
+        raise ValueError(f"{argv[index]} requires {argument.value}")
+    return argv[index + 1], index + 2
+
+
+def parse_args(argv: list[str], options: Options) -> tuple[Options, str | None, str | None]:
+    action = None
+    action_value = None
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        argument = BY_TOKEN.get(token)
+        if argument is None:
+            if token.startswith("-"):
+                raise ValueError(f"unknown option: {token}")
+            path = Path(token).expanduser()
+            if path.exists():
+                options.path = path
+                index += 1
+                continue
+            raise ValueError(f"unknown command or missing path: {token}")
+        name = argument.name
+        value = None
+        if argument.value:
+            optional = argument.value.endswith("?")
+            if optional and (index + 1 >= len(argv) or argv[index + 1] in BY_TOKEN):
+                index += 1
+            else:
+                value, index = require_value(argv, index, argument)
+        else:
+            index += 1
+        if argument.values and value is not None and value not in argument.values:
+            raise ValueError(f"invalid {name}: {value}; choose {', '.join(argument.values)}")
+        if name in ("ui", "regular"):
+            options.mode = name
+            options.explicit_mode = True
+        elif name == "default-mode":
+            action, action_value = name, value
+        elif name in ("help", "version", "setup", "check", "debug", "command", "show-config", "init"):
+            action = name
+        elif name in ("completion", "install-completion", "remove-completion"):
+            action, action_value = name, value
+        elif name == "depth":
+            options.depth = parse_depth(value)
+        elif name == "path":
+            options.path = Path(value).expanduser()
+        elif name == "max":
+            options.max_entries = int(value)
+        elif name == "max-children":
+            options.max_children = int(value)
+        elif name == "follow":
+            options.follow = True
+        elif name == "no-follow":
+            options.follow = False
+        elif name == "watch":
+            options.watch = True
+        elif name == "all":
+            options.hidden = True
+        elif name == "raw":
+            options.hidden, options.default_ignore, options.git_ignore, options.plain = True, False, False, True
+            options.sort = "none"
+            options.depth = None
+        elif name == "git-ignore":
+            options.git_ignore = True
+        elif name == "no-git-ignore":
+            options.git_ignore = False
+        elif name == "default-ignore":
+            options.default_ignore = True
+        elif name == "no-default-ignore":
+            options.default_ignore = False
+        elif name in ("ignore", "include", "collapse", "match"):
+            attribute = {"ignore": "ignore", "include": "include", "collapse": "collapse", "match": "matches"}[name]
+            getattr(options, attribute).append(value)
+        elif name == "search":
+            options.search = value
+        elif name == "case-sensitive":
+            options.case_sensitive = True
+        elif name in ("dirs", "files"):
+            options.only = name
+        elif name == "sort":
+            options.sort = value
+        elif name == "reverse":
+            options.reverse = True
+        elif name in ("dirs-first", "files-first", "mixed"):
+            options.grouping = name
+        elif name in ("plain", "ascii", "long", "size", "permissions", "time", "git-status", "slash", "quiet", "force"):
+            attribute = {"time": "show_time", "git-status": "git_status", "force": "force"}.get(name, name)
+            setattr(options, attribute, True)
+        elif name == "icons":
+            options.icons = True
+        elif name == "no-icons":
+            options.icons = False
+        elif name == "color":
+            options.color = True
+        elif name == "no-color":
+            options.color = False
+        elif name == "size-format":
+            options.size_format = value
+        elif name == "time-field":
+            options.time_field = value
+        elif name == "root":
+            options.show_root = True
+        elif name == "no-root":
+            options.show_root = False
+        elif name in ("json", "jsonl", "paths", "count"):
+            options.output = name
+        elif name == "summary":
+            options.summary = True
+        elif name == "pager":
+            options.pager = True
+        elif name == "no-pager":
+            options.pager = False
+        elif name == "preset":
+            options.preset = value
+        elif name == "config":
+            options.config_path = Path(value).expanduser()
+        elif name == "no-config":
+            options.no_config = True
+    if options.mode not in ("regular", "ui"):
+        raise ValueError(f"invalid mode in configuration: {options.mode}")
+    if options.max_entries is not None and options.max_entries < 1:
+        raise ValueError("max must be a positive number")
+    if options.max_children is not None and options.max_children < 1:
+        raise ValueError("max-children must be a positive number")
+    return options, action, action_value
+
+
+def pattern_match(value: str, patterns: list[str], case_sensitive: bool) -> bool:
+    candidate = value if case_sensitive else value.lower()
+    return any(fnmatch.fnmatchcase(candidate, pattern if case_sensitive else pattern.lower()) for pattern in patterns)
+
+
+def git_patterns(root: Path) -> list[str]:
+    patterns: list[str] = []
+    for path in (root / ".gitignore", root / ".git" / "info" / "exclude"):
+        if not path.is_file():
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        patterns.extend(line.strip().lstrip("/") for line in lines if line.strip() and not line.lstrip().startswith(("#", "!")))
+    return patterns
+
+
+def is_ignored(path: Path, root: Path, options: Options, project_ignores: list[str]) -> bool:
+    relative = str(path.relative_to(root))
+    name = path.name
+    if not options.hidden and name.startswith("."):
+        return True
+    patterns = options.ignore[:]
+    if options.default_ignore:
+        patterns.extend(DEFAULT_IGNORES)
+    if options.git_ignore:
+        patterns.extend(project_ignores)
+    return pattern_match(name, patterns, options.case_sensitive) or pattern_match(relative, patterns, options.case_sensitive)
+
+
+def sort_key(path: Path, options: Options) -> Any:
+    try:
+        details = path.stat(follow_symlinks=options.follow)
+    except OSError:
+        details = None
+    value: Any
+    if options.sort == "size":
+        value = details.st_size if details else -1
+    elif options.sort in ("time", "modified"):
+        value = details.st_mtime if details else 0
+    elif options.sort == "created":
+        value = details.st_ctime if details else 0
+    elif options.sort == "accessed":
+        value = details.st_atime if details else 0
+    elif options.sort == "extension":
+        value = (path.suffix.lower(), path.name.lower())
+    elif options.sort == "type":
+        value = (path.suffix.lower(), path.name.lower())
+    else:
+        value = path.name.lower()
+    if options.grouping == "dirs-first":
+        return (not path.is_dir(), value)
+    if options.grouping == "files-first":
+        return (path.is_dir(), value)
+    return (value,)
+
+
+def list_children(path: Path, root: Path, options: Options, project_ignores: list[str]) -> tuple[list[Path], str | None]:
+    try:
+        children = list(path.iterdir())
+    except OSError as error:
+        return [], str(error)
+    children = [child for child in children if not is_ignored(child, root, options, project_ignores)]
+    if options.only == "dirs":
+        children = [child for child in children if child.is_dir()]
+    if options.include:
+        children = [child for child in children if child.is_dir() or pattern_match(child.name, options.include, options.case_sensitive)]
+    if options.matches:
+        children = [child for child in children if child.is_dir() or pattern_match(child.name, options.matches, options.case_sensitive)]
+    if options.search:
+        needle = options.search if options.case_sensitive else options.search.lower()
+        children = [child for child in children if child.is_dir() or needle in (child.name if options.case_sensitive else child.name.lower())]
+    if options.sort != "none":
+        children.sort(key=lambda item: sort_key(item, options), reverse=options.reverse)
+    elif options.reverse:
+        children.reverse()
+    if options.max_children is not None:
+        children = children[: options.max_children]
+    return children, None
+
+
+def build_tree(root: Path, options: Options) -> Node:
+    ignores = git_patterns(root) if options.git_ignore else []
+    count = 0
+    visited: set[Path] = set()
+
+    def visit(path: Path, depth: int) -> Node:
+        nonlocal count
+        node = Node(path=path, depth=depth, is_dir=path.is_dir())
+        if not node.is_dir or path.is_symlink() and not options.follow or (options.depth is not None and depth >= options.depth):
+            return node
+        resolved = path.resolve()
+        if resolved in visited:
+            return node
+        visited.add(resolved)
+        relative = str(path.relative_to(root)) if path != root else path.name
+        if path != root and pattern_match(relative, options.collapse, options.case_sensitive):
+            return node
+        children, node.error = list_children(path, root, options, ignores)
+        node.children = []
+        for child in children:
+            if options.max_entries is not None and count >= options.max_entries:
+                break
+            count += 1
+            node.children.append(visit(child, depth + 1))
+        return node
+
+    return visit(root, 0)
+
+
+def flatten(root: Node) -> list[Node]:
+    result: list[Node] = []
+
+    def visit(node: Node) -> None:
+        result.append(node)
+        for child in node.children or []:
+            visit(child)
+
+    visit(root)
+    return result
+
+
+def format_size(size: int, mode: str) -> str:
+    if mode == "bytes":
+        return str(size)
+    base = 1000 if mode == "si" else 1024
+    units = ["B", "kB", "MB", "GB", "TB"] if mode == "si" else ["B", "KiB", "MiB", "GiB", "TiB"]
+    value = float(size)
+    for unit in units:
+        if value < base or unit == units[-1]:
+            return f"{value:.0f}{unit}" if unit == "B" else f"{value:.1f}{unit}"
+        value /= base
+    return str(size)
+
+
+def metadata(path: Path, options: Options) -> str:
+    if not any((options.long, options.size, options.permissions, options.show_time)):
+        return ""
+    try:
+        details = path.stat(follow_symlinks=options.follow)
+    except OSError:
+        return ""
+    fields: list[str] = []
+    if options.permissions or options.long:
+        fields.append(stat.filemode(details.st_mode))
+    if options.size or options.long:
+        fields.append(format_size(details.st_size, options.size_format))
+    if options.show_time or options.long:
+        stamp = {"modified": details.st_mtime, "created": details.st_ctime, "accessed": details.st_atime}[options.time_field]
+        fields.append(datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M"))
+    return style("[" + "  ".join(fields) + "] ", "2;90", options)
+
+
+def color_enabled(options: Options) -> bool:
+    if options.plain:
+        return False
+    if options.color is True:
+        return True
+    if options.color is False or "NO_COLOR" in os.environ:
+        return False
+    return options.color == "auto" and sys.stdout.isatty()
+
+
+def options_ui_color_enabled(options: Options) -> bool:
+    if options.color is True:
+        return True
+    return options.color is not False and "NO_COLOR" not in os.environ
+
+
+def read_curses_key(screen: Any, timeout: int) -> int:
+    key = screen.getch()
+    if key != 27:
+        return key
+    sequences = {
+        "[1;2A": curses.KEY_SR,
+        "[1;2B": curses.KEY_SF,
+        "[2A": curses.KEY_SR,
+        "[2B": curses.KEY_SF,
+    }
+    collected: list[int] = []
+    screen.timeout(25)
+    try:
+        while len(collected) < 6:
+            following = screen.getch()
+            if following < 0:
+                break
+            collected.append(following)
+            value = "".join(chr(character) for character in collected if 0 <= character < 256)
+            if value in sequences:
+                return sequences[value]
+            if not any(sequence.startswith(value) for sequence in sequences):
+                break
+    finally:
+        screen.timeout(timeout)
+    for character in reversed(collected):
+        curses.ungetch(character)
+    return key
+
+
+def style(value: str, code: str, options: Options) -> str:
+    if not color_enabled(options):
+        return value
+    return f"\033[{code}m{value}\033[0m"
+
+
+def styled_path(path: Path, value: str, options: Options) -> str:
+    if path.is_symlink():
+        return style(value, "1;36", options)
+    if path.is_dir():
+        return style(value, "1;34", options)
+    try:
+        if path.stat(follow_symlinks=False).st_mode & stat.S_IXUSR:
+            return style(value, "1;32", options)
+    except OSError:
+        return value
+    extension_colors = {
+        ".py": "36", ".js": "33", ".jsx": "33", ".ts": "36", ".tsx": "36",
+        ".go": "36", ".rs": "33", ".sh": "32", ".bash": "32", ".fish": "32",
+        ".json": "35", ".toml": "35", ".yaml": "35", ".yml": "35",
+        ".md": "33", ".mdx": "33", ".txt": "37", ".pdf": "31",
+        ".png": "35", ".jpg": "35", ".jpeg": "35", ".gif": "35", ".svg": "35",
+        ".zip": "31", ".gz": "31", ".tar": "31", ".xz": "31",
+    }
+    code = extension_colors.get(path.suffix.lower())
+    return style(value, code, options) if code else value
+
+
+def icon(path: Path, options: Options) -> str:
+    enabled = options.icons is True or options.icons == "auto" and sys.stdout.isatty() and not options.plain
+    if not enabled:
+        return ""
+    if path.is_dir():
+        return "󰉋 "
+    return {".py": " ", ".js": " ", ".ts": " ", ".json": " ", ".md": " ", ".toml": " "}.get(path.suffix.lower(), "󰈔 ")
+
+
+def tree_lines(root: Node, options: Options) -> list[str]:
+    lines: list[str] = []
+    tee, elbow, pipe, blank = ("|-- ", "`-- ", "|   ", "    ") if options.ascii or options.plain else ("├── ", "└── ", "│   ", "    ")
+    if options.show_root:
+        suffix = "/" if options.slash and root.is_dir else ""
+        name = icon(root.path, options) + str(root.path) + suffix
+        lines.append(metadata(root.path, options) + styled_path(root.path, name, options))
+
+    if options.only == "files":
+        files = [node for node in flatten(root)[1:] if not node.is_dir]
+        for index, node in enumerate(files):
+            branch = elbow if index == len(files) - 1 else tee
+            name = icon(node.path, options) + str(node.path.relative_to(root.path))
+            lines.append(style(branch, "2;90", options) + metadata(node.path, options) + styled_path(node.path, name, options))
+        return lines
+
+    def visit(node: Node, prefixes: list[bool]) -> None:
+        children = node.children or []
+        for index, child in enumerate(children):
+            last = index == len(children) - 1
+            prefix = "".join(pipe if active else blank for active in prefixes)
+            suffix = "/" if options.slash and child.is_dir else ""
+            branch = style(prefix + (elbow if last else tee), "2;90", options)
+            name = icon(child.path, options) + child.path.name + suffix
+            lines.append(branch + metadata(child.path, options) + styled_path(child.path, name, options))
+            visit(child, prefixes + [not last])
+
+    visit(root, [])
+    return lines
+
+
+def node_object(node: Node, root: Path) -> dict[str, Any]:
+    return {
+        "path": str(node.path),
+        "name": node.path.name,
+        "relative": "." if node.path == root else str(node.path.relative_to(root)),
+        "type": "directory" if node.is_dir else "file",
+        "depth": node.depth,
+        "children": [node_object(child, root) for child in node.children or []],
+        **({"error": node.error} if node.error else {}),
+    }
+
+
+class RegularPager:
+    def __init__(self, output: str, options: Options, folder_count: int = 0, file_count: int = 0):
+        self.lines = output.splitlines()
+        self.options = options
+        self.folder_count = folder_count
+        self.file_count = file_count
+        self.offset = max(0, len(self.lines) - 1)
+        self.query = ""
+        self.matches: list[int] = []
+        self.active_match: int | None = None
+        self.message = ""
+        self.final_lines: list[str] = []
+        self.styles: dict[int, int] = {}
+        self.header_style = curses.A_REVERSE | curses.A_BOLD
+        self.muted_style = curses.A_DIM
+
+    def setup_theme(self) -> None:
+        if not options_ui_color_enabled(self.options) or not curses.has_colors():
+            return
+        curses.start_color()
+        curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
+        self.header_style = curses.color_pair(1) | curses.A_BOLD
+        colors = {
+            30: curses.COLOR_BLACK,
+            31: curses.COLOR_RED,
+            32: curses.COLOR_GREEN,
+            33: curses.COLOR_YELLOW,
+            34: curses.COLOR_BLUE,
+            35: curses.COLOR_MAGENTA,
+            36: curses.COLOR_CYAN,
+            37: curses.COLOR_WHITE,
+            90: curses.COLOR_WHITE,
+        }
+        for pair, (code, color) in enumerate(colors.items(), start=2):
+            curses.init_pair(pair, color, -1)
+            self.styles[code] = curses.color_pair(pair)
+        self.styles[90] |= curses.A_DIM
+        self.muted_style = self.styles[90]
+
+    def write(self, screen: Any, row: int, column: int, value: str, width: int, attribute: int = curses.A_NORMAL) -> None:
+        height, screen_width = screen.getmaxyx()
+        if row < 0 or row >= height or column < 0 or column >= screen_width or width < 1:
+            return
+        try:
+            screen.addnstr(row, column, value, min(width, screen_width - column - 1), attribute)
+        except curses.error:
+            return
+
+    def plain_line(self, value: str) -> str:
+        return ANSI_PATTERN.sub("", value)
+
+    def ansi_segments(self, value: str) -> list[tuple[str, int]]:
+        segments: list[tuple[str, int]] = []
+        position = 0
+        attribute = curses.A_NORMAL
+        for match in ANSI_PATTERN.finditer(value):
+            if match.start() > position:
+                segments.append((value[position:match.start()], attribute))
+            codes = [int(code) if code else 0 for code in match.group(1).split(";")]
+            for code in codes:
+                if code == 0:
+                    attribute = curses.A_NORMAL
+                elif code == 1:
+                    attribute |= curses.A_BOLD
+                elif code == 2:
+                    attribute |= curses.A_DIM
+                elif code == 22:
+                    attribute &= ~(curses.A_BOLD | curses.A_DIM)
+                elif code == 39:
+                    attribute &= ~curses.A_COLOR
+                elif code in self.styles:
+                    attribute = attribute & ~curses.A_COLOR | self.styles[code]
+            position = match.end()
+        if position < len(value):
+            segments.append((value[position:], attribute))
+        return segments
+
+    def draw_line(self, screen: Any, row: int, value: str, width: int, selected: bool) -> None:
+        column = 0
+        for text, attribute in self.ansi_segments(value):
+            if selected:
+                attribute |= curses.A_REVERSE | curses.A_BOLD
+            self.write(screen, row, column, text, width - column, attribute)
+            column += len(text)
+            if column >= width:
+                break
+
+    def fuzzy_score(self, value: str, query: str) -> int | None:
+        candidate = self.plain_line(value).lower()
+        needle = query.lower()
+        position = -1
+        score = 0
+        consecutive = 0
+        for character in needle:
+            found = candidate.find(character, position + 1)
+            if found < 0:
+                return None
+            if found == position + 1:
+                consecutive += 1
+                score += 8 * consecutive
+            else:
+                consecutive = 0
+                score -= found - position - 1
+            if found == 0 or candidate[found - 1] in " /_-.":
+                score += 12
+            position = found
+        return score - len(candidate) // 8
+
+    def search(self, query: str, viewport_height: int) -> None:
+        self.query = query
+        scored = [(index, self.fuzzy_score(line, query)) for index, line in enumerate(self.lines)]
+        available = [(index, score) for index, score in scored if score is not None]
+        self.matches = [index for index, _ in available]
+        if not available:
+            self.active_match = None
+            self.message = f"no fuzzy matches · {query}"
+            return
+        best = max(available, key=lambda item: item[1])[0]
+        self.active_match = best
+        self.offset = max(0, best - viewport_height // 2)
+        self.message = f"{len(self.matches)} fuzzy matches"
+
+    def jump_match(self, direction: int, viewport_height: int) -> None:
+        if not self.matches:
+            self.message = "start fuzzy search with /"
+            return
+        current = self.active_match if self.active_match is not None else self.offset
+        if direction > 0:
+            target = next((index for index in self.matches if index > current), self.matches[0])
+        else:
+            target = next((index for index in reversed(self.matches) if index < current), self.matches[-1])
+        self.active_match = target
+        self.offset = max(0, target - viewport_height // 2)
+
+    def prompt(self, screen: Any) -> str:
+        height, width = screen.getmaxyx()
+        curses.echo()
+        curses.curs_set(1)
+        self.write(screen, height - 1, 0, " " * (width - 1), width - 1, self.header_style)
+        self.write(screen, height - 1, 0, " fuzzy › ", width - 1, self.header_style)
+        try:
+            value = screen.getstr(height - 1, 9, max(1, width - 10)).decode(errors="replace")
+        finally:
+            curses.noecho()
+            curses.curs_set(0)
+        return value
+
+    def clamp(self, viewport_height: int) -> None:
+        maximum = max(0, len(self.lines) - viewport_height)
+        self.offset = max(0, min(self.offset, maximum))
+
+    def draw(self, screen: Any) -> tuple[int, int]:
+        screen.erase()
+        height, width = screen.getmaxyx()
+        if height < 6 or width < 36:
+            self.write(screen, height // 2, 1, "pager needs at least 36 × 6", width - 2, curses.A_BOLD)
+            screen.refresh()
+            return height, 1
+        viewport_height = height - 2
+        self.clamp(viewport_height)
+        end = min(len(self.lines), self.offset + viewport_height)
+        cursor = self.active_match if self.active_match is not None else self.offset
+        position = f"line {cursor + 1}/{len(self.lines)} · end {len(self.lines) - cursor}"
+        title = f" TREE  {self.options.path.resolve().name or self.options.path.resolve()}  ·  {self.folder_count} folders · {self.file_count} files"
+        search = f"  fuzzy: {self.query}  {len(self.matches)} matches" if self.query else ""
+        self.write(screen, 0, 0, " " * (width - 1), width - 1, self.header_style)
+        self.write(screen, 0, 1, title + search, width - len(position) - 3, self.header_style)
+        self.write(screen, 0, width - len(position) - 1, position, len(position), self.header_style)
+        for row, index in enumerate(range(self.offset, end), start=1):
+            self.draw_line(screen, row, self.lines[index], width - 1, index == self.active_match)
+        footer = self.message or "↑↓ line  ⇧↑↓ fast  g/G ends  Space/b page  / fuzzy  n/N matches  q close"
+        self.write(screen, height - 1, 0, " " * (width - 1), width - 1, self.muted_style)
+        self.write(screen, height - 1, 1, footer, width - 2, self.muted_style)
+        screen.refresh()
+        return height, viewport_height
+
+    def capture_view(self, viewport_height: int) -> None:
+        self.clamp(viewport_height)
+        self.final_lines = self.lines[self.offset:self.offset + viewport_height]
+
+    def run(self, screen: Any) -> None:
+        self.setup_theme()
+        curses.curs_set(0)
+        screen.keypad(True)
+        while True:
+            height, viewport_height = self.draw(screen)
+            key = read_curses_key(screen, -1)
+            page = max(1, round(height * 0.9))
+            fast_step = max(5, round(viewport_height * 0.5))
+            if key in (ord("q"), 27):
+                if key == 27 and self.query:
+                    self.query = ""
+                    self.matches = []
+                    self.active_match = None
+                    self.message = "fuzzy search cleared"
+                    continue
+                self.capture_view(viewport_height)
+                return
+            if key in (ord("g"), curses.KEY_HOME):
+                self.offset = 0
+            elif key in (ord("G"), curses.KEY_END):
+                self.offset = len(self.lines)
+            elif key in (ord(" "), curses.KEY_NPAGE):
+                self.offset += page
+            elif key in (ord("b"), curses.KEY_PPAGE):
+                self.offset -= page
+            elif key in (ord("j"), curses.KEY_DOWN):
+                self.offset += 1
+            elif key in (ord("k"), curses.KEY_UP):
+                self.offset -= 1
+            elif key == curses.KEY_SF:
+                self.offset += fast_step
+            elif key == curses.KEY_SR:
+                self.offset -= fast_step
+            elif key in (ord("/"), ord("f")):
+                query = self.prompt(screen)
+                if query:
+                    self.search(query, viewport_height)
+            elif key == ord("n"):
+                self.jump_match(1, viewport_height)
+            elif key == ord("N"):
+                self.jump_match(-1, viewport_height)
+            self.clamp(viewport_height)
+
+
+def page_regular_output(output: str, options: Options, folder_count: int = 0, file_count: int = 0) -> bool:
+    if options.quiet or options.pager is False or not sys.stdin.isatty() or not sys.stdout.isatty():
+        return False
+    rows = shutil.get_terminal_size((80, 24)).lines
+    line_count = len(output.splitlines())
+    if options.pager != True and line_count <= rows - 2:
+        return False
+    pager = RegularPager(output, options, folder_count, file_count)
+    try:
+        curses.wrapper(pager.run)
+    except KeyboardInterrupt:
+        return True
+    except curses.error:
+        return False
+    if pager.final_lines:
+        print("\n".join(pager.final_lines))
+    return True
+
+
+def print_regular(options: Options) -> int:
+    root = options.path.expanduser().resolve()
+    if not root.exists():
+        raise ValueError(f"path does not exist: {options.path}")
+    tree = build_tree(root, options)
+    nodes = flatten(tree)
+    visible = nodes if options.show_root else nodes[1:]
+    if options.only == "files":
+        visible = [node for node in visible if not node.is_dir]
+    elif options.only == "dirs":
+        visible = [node for node in visible if node.is_dir]
+    if options.output == "json":
+        print(json.dumps(node_object(tree, root), indent=2))
+    elif options.output == "jsonl":
+        for node in visible:
+            item = node_object(replace(node, children=[]), root)
+            print(json.dumps(item))
+    elif options.output == "paths":
+        for node in visible:
+            print(node.path)
+    elif options.output == "count":
+        print(len(visible))
+    else:
+        output = "\n".join(tree_lines(tree, options))
+        if options.summary:
+            files = sum(not node.is_dir for node in nodes[1:])
+            directories = sum(node.is_dir for node in nodes[1:])
+            output += f"\n\n{directories} directories, {files} files"
+        files = sum(not node.is_dir for node in nodes[1:])
+        directories = sum(node.is_dir for node in nodes[1:])
+        if not page_regular_output(output, options, directories, files):
+            print(output)
+        return 0
+    if options.summary and options.output != "json":
+        files = sum(not node.is_dir for node in nodes[1:])
+        directories = sum(node.is_dir for node in nodes[1:])
+        print(f"\n{directories} directories, {files} files")
+    return 0
+
+
+class TreeUI:
+    def __init__(self, options: Options):
+        self.options = options
+        self.root = options.path.expanduser().resolve()
+        self.ignores = git_patterns(self.root) if options.git_ignore else []
+        self.expanded = {self.root}
+        self.cache: dict[Path, tuple[list[Path], str | None]] = {}
+        self.selected = 0
+        self.offset = 0
+        self.sidebar = True
+        self.query = ""
+        self.message = ""
+        self.last_refresh = time.monotonic()
+        self.theme: dict[str, int] = {}
+        self.session_ignores: list[str] = []
+
+    def setup_theme(self) -> None:
+        self.theme = {name: curses.A_NORMAL for name in ("accent", "directory", "muted", "selected", "value", "warning")}
+        use_colors = options_ui_color_enabled(self.options) and curses.has_colors()
+        if not use_colors:
+            self.theme.update({"accent": curses.A_BOLD, "directory": curses.A_BOLD, "muted": curses.A_DIM, "selected": curses.A_REVERSE | curses.A_BOLD, "value": curses.A_BOLD, "warning": curses.A_BOLD})
+            return
+        curses.start_color()
+        curses.use_default_colors()
+        pairs = {
+            "accent": (curses.COLOR_CYAN, -1),
+            "directory": (curses.COLOR_BLUE, -1),
+            "muted": (curses.COLOR_WHITE, -1),
+            "selected": (curses.COLOR_BLACK, curses.COLOR_CYAN),
+            "value": (curses.COLOR_GREEN, -1),
+            "warning": (curses.COLOR_YELLOW, -1),
+        }
+        for index, (name, colors) in enumerate(pairs.items(), start=1):
+            curses.init_pair(index, *colors)
+            self.theme[name] = curses.color_pair(index)
+        self.theme["muted"] |= curses.A_DIM
+        self.theme["selected"] |= curses.A_BOLD
+
+    def write(self, screen: Any, row: int, column: int, value: str, width: int, attribute: int = curses.A_NORMAL) -> None:
+        height, screen_width = screen.getmaxyx()
+        if row < 0 or row >= height or column < 0 or column >= screen_width or width < 1:
+            return
+        try:
+            screen.addnstr(row, column, value, min(width, screen_width - column - 1), attribute)
+        except curses.error:
+            return
+
+    def children(self, path: Path) -> tuple[list[Path], str | None]:
+        if path not in self.cache:
+            self.cache[path] = list_children(path, self.root, self.options, self.ignores)
+        return self.cache[path]
+
+    def visible(self) -> list[tuple[Path, int]]:
+        result: list[tuple[Path, int]] = [(self.root, 0)]
+
+        def visit(path: Path, depth: int) -> None:
+            if path not in self.expanded:
+                return
+            if self.options.depth is not None and depth >= self.options.depth:
+                return
+            children, _ = self.children(path)
+            for child in children:
+                if self.query and self.query.lower() not in child.name.lower() and not child.is_dir():
+                    continue
+                result.append((child, depth + 1))
+                if child.is_dir():
+                    visit(child, depth + 1)
+
+        visit(self.root, 0)
+        return result
+
+    def refresh(self) -> None:
+        selected_path = self.visible()[self.selected][0] if self.visible() else self.root
+        self.cache.clear()
+        entries = self.visible()
+        self.selected = next((index for index, item in enumerate(entries) if item[0] == selected_path), min(self.selected, len(entries) - 1))
+        self.message = "refreshed"
+
+    def prompt(self, screen: Any, label: str) -> str:
+        height, width = screen.getmaxyx()
+        curses.echo()
+        curses.curs_set(1)
+        screen.addnstr(height - 2, 0, label, width - 1, curses.A_REVERSE)
+        screen.clrtoeol()
+        try:
+            value = screen.getstr(height - 2, len(label), max(1, width - len(label) - 1)).decode(errors="replace")
+        finally:
+            curses.noecho()
+            curses.curs_set(0)
+        return value
+
+    def copy(self, value: str, label: str = "content") -> None:
+        command = next((item for item in (["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]) if shutil.which(item[0])), None)
+        if not command:
+            self.message = "clipboard tool not found"
+            return
+        result = subprocess.run(command, input=value, text=True, check=False)
+        if result.returncode == 0:
+            self.message = f"copied {label} · {len(value.splitlines())} lines"
+        else:
+            self.message = f"clipboard command failed with exit {result.returncode}"
+
+    def menu(self, screen: Any, title: str, subtitle: str, items: list[tuple[str, str, str]]) -> str | None:
+        screen.erase()
+        height, width = screen.getmaxyx()
+        columns = 2 if len(items) > 6 and width >= 52 else 1
+        item_rows = (len(items) + columns - 1) // columns
+        box_width = min(92 if columns == 2 else 72, width - 4)
+        box_height = min(item_rows + 7, height - 2)
+        top = max(0, (height - box_height) // 2)
+        left = max(0, (width - box_width) // 2)
+        self.write(screen, top, left, "┌" + "─" * (box_width - 2) + "┐", box_width, self.theme["muted"])
+        for row in range(top + 1, top + box_height - 1):
+            self.write(screen, row, left, "│", 1, self.theme["muted"])
+            self.write(screen, row, left + box_width - 1, "│", 1, self.theme["muted"])
+        self.write(screen, top + box_height - 1, left, "└" + "─" * (box_width - 2) + "┘", box_width, self.theme["muted"])
+        self.write(screen, top + 1, left + 3, title, box_width - 6, self.theme["accent"] | curses.A_BOLD)
+        self.write(screen, top + 2, left + 3, subtitle, box_width - 6, self.theme["muted"])
+        column_width = (box_width - 6) // columns
+        for index, (key, label, description) in enumerate(items):
+            column = index // item_rows
+            offset = index % item_rows
+            row = top + 4 + offset
+            column_start = left + 3 + column * column_width
+            label_width = min(18, max(10, column_width // 2))
+            self.write(screen, row, column_start, key, 3, self.theme["accent"] | curses.A_BOLD)
+            self.write(screen, row, column_start + 4, label, label_width, curses.A_BOLD)
+            self.write(screen, row, column_start + 5 + label_width, description, column_width - label_width - 5, self.theme["muted"])
+        self.write(screen, top + box_height - 2, left + 3, "press a key to choose · esc closes", box_width - 6, self.theme["muted"])
+        screen.refresh()
+        valid = {ord(key): key for key, _, _ in items}
+        while True:
+            key = screen.getch()
+            if key in (27, ord("q")):
+                return None
+            if key in valid:
+                return valid[key]
+
+    def visible_tree_text(self) -> str:
+        entries = self.visible()
+        if not entries:
+            return ""
+        lines = [str(self.root)]
+        last_at_depth: dict[int, bool] = {}
+        for index, (path, depth) in enumerate(entries[1:], start=1):
+            next_same_or_shallower = next((candidate_depth for _, candidate_depth in entries[index + 1:] if candidate_depth <= depth), None)
+            last = next_same_or_shallower != depth
+            last_at_depth[depth] = last
+            prefix = "".join("    " if last_at_depth.get(level, False) else "│   " for level in range(1, depth))
+            lines.append(prefix + ("└── " if last else "├── ") + path.name)
+        return "\n".join(lines)
+
+    def rendered_tree_text(self, depth: int | None, unlimited: bool = False, root: Path | None = None) -> str:
+        tree_root = root or self.root
+        copy_options = replace(
+            self.options,
+            depth=depth,
+            color=False,
+            icons=False,
+            plain=True,
+            show_root=True,
+            max_entries=None if unlimited else self.options.max_entries,
+            max_children=None if unlimited else self.options.max_children,
+        )
+        return "\n".join(tree_lines(build_tree(tree_root, copy_options), copy_options))
+
+    def copy_menu(self, screen: Any, selected: Path) -> None:
+        depth = self.options.depth or "all"
+        choice = self.menu(screen, "COPY", "Choose exactly what goes to the clipboard.", [
+            ("p", "Selected path", "absolute path"),
+            ("r", "Relative path", "from the tree root"),
+            ("n", "Entry name", "name only"),
+            ("v", "Visible tree", "only expanded rows"),
+            ("l", "Visible paths", "relative path per line"),
+            ("s", "Selected subtree", f"selected root, depth {depth}"),
+            ("d", f"Tree · depth {depth}", "current filters and limit"),
+            ("m", "Custom depth", "choose a temporary limit"),
+            ("a", "Full tree", "all depths, current filters"),
+        ])
+        if choice == "p":
+            self.copy(str(selected), "selected path")
+        elif choice == "r":
+            value = "." if selected == self.root else str(selected.relative_to(self.root))
+            self.copy(value, "relative path")
+        elif choice == "n":
+            self.copy(selected.name, "entry name")
+        elif choice == "v":
+            self.copy(self.visible_tree_text(), "visible tree")
+        elif choice == "l":
+            paths = ["." if path == self.root else str(path.relative_to(self.root)) for path, _ in self.visible()]
+            self.copy("\n".join(paths), "visible paths")
+        elif choice == "s":
+            self.copy(self.rendered_tree_text(self.options.depth, root=selected), "selected subtree")
+        elif choice == "d":
+            self.copy(self.rendered_tree_text(self.options.depth), f"tree at depth {depth}")
+        elif choice == "m":
+            value = self.prompt(screen, " copy depth (number/all): ")
+            try:
+                custom_depth = parse_depth(value)
+            except ValueError as error:
+                self.message = str(error)
+            else:
+                self.copy(self.rendered_tree_text(custom_depth), f"tree at depth {custom_depth or 'all'}")
+        elif choice == "a":
+            self.copy(self.rendered_tree_text(None, unlimited=True), "full tree")
+
+    def add_exclusion(self, pattern: str) -> None:
+        if pattern in self.options.ignore:
+            self.message = f"already excluded · {pattern}"
+            return
+        self.options.ignore.append(pattern)
+        self.session_ignores.append(pattern)
+        self.refresh()
+        self.message = f"excluded · {pattern}"
+
+    def undo_exclusion(self) -> None:
+        if not self.session_ignores:
+            self.message = "no session exclusion to undo"
+            return
+        pattern = self.session_ignores.pop()
+        self.options.ignore.remove(pattern)
+        self.refresh()
+        self.message = f"restored · {pattern}"
+
+    def exclude_menu(self, screen: Any, selected: Path) -> None:
+        relative = "." if selected == self.root else str(selected.relative_to(self.root))
+        choice = self.menu(screen, "EXCLUDE", f"Selected · {relative}", [
+            ("x", "This entry", "exact relative path"),
+            ("n", "This name", "matching names everywhere"),
+            ("e", "This extension", "matching files everywhere"),
+            (".", "All dotfiles", "names beginning with a dot"),
+            ("g", "Custom glob", "enter any ignore pattern"),
+            ("u", "Undo last", "restore session exclusion"),
+            ("c", "Clear session", "restore all session exclusions"),
+        ])
+        if choice == "x":
+            if selected == self.root:
+                self.message = "the tree root cannot be excluded"
+            else:
+                self.add_exclusion(relative)
+        elif choice == "n":
+            if selected == self.root:
+                self.message = "the tree root cannot be excluded"
+            else:
+                self.add_exclusion(selected.name)
+        elif choice == "e":
+            if selected.is_dir() or not selected.suffix:
+                self.message = "select a file with an extension"
+            else:
+                self.add_exclusion(f"*{selected.suffix}")
+        elif choice == ".":
+            self.add_exclusion(".*")
+        elif choice == "g":
+            value = self.prompt(screen, " exclude glob: ")
+            if value:
+                self.add_exclusion(value)
+        elif choice == "u":
+            self.undo_exclusion()
+        elif choice == "c":
+            for pattern in self.session_ignores:
+                self.options.ignore.remove(pattern)
+            count = len(self.session_ignores)
+            self.session_ignores.clear()
+            self.refresh()
+            self.message = f"cleared {count} session exclusions"
+
+    def draw(self, screen: Any) -> None:
+        screen.erase()
+        height, width = screen.getmaxyx()
+        if height < 10 or width < 42:
+            message = "tree ui needs at least 42 × 10"
+            self.write(screen, height // 2, max(0, (width - len(message)) // 2), message, width - 1, self.theme["warning"])
+            screen.refresh()
+            return
+        entries = self.visible()
+        self.selected = max(0, min(self.selected, len(entries) - 1))
+        files = sum(not path.is_dir() for path, _ in entries)
+        dirs = sum(path.is_dir() for path, _ in entries) - 1
+        title = f" TREE  {self.root.name or self.root}"
+        stats = f"{max(0, dirs)} dirs   {files} files "
+        self.write(screen, 0, 0, title, width - 1, self.theme["accent"] | curses.A_BOLD)
+        if len(stats) < width:
+            self.write(screen, 0, width - len(stats), stats, len(stats), self.theme["muted"])
+        self.write(screen, 1, 1, str(self.root), width - 2, self.theme["muted"])
+        current = entries[self.selected][0] if entries else self.root
+        ancestry = (self.root.name, *current.relative_to(self.root).parts)
+        breadcrumb = "  ›  ".join(ancestry)
+        self.write(screen, 2, 0, " " * (width - 1), width - 1, self.theme["muted"])
+        self.write(screen, 2, 1, breadcrumb, width - 2, self.theme["accent"])
+        sidebar_width = min(30, width // 3) if self.sidebar and width >= 88 else 0
+        viewport_top = 3
+        viewport_height = max(1, height - 5)
+        if self.selected < self.offset:
+            self.offset = self.selected
+        if self.selected >= self.offset + viewport_height:
+            self.offset = self.selected - viewport_height + 1
+        if sidebar_width:
+            controls = [
+                ("Depth", str(self.options.depth or "all")),
+                ("Hidden", "on" if self.options.hidden else "off"),
+                ("Git ignore", "on" if self.options.git_ignore else "off"),
+                ("Default ignore", "on" if self.options.default_ignore else "off"),
+                ("Sort", self.options.sort),
+                ("Reverse", "on" if self.options.reverse else "off"),
+                ("Session excludes", str(len(self.session_ignores))),
+            ]
+            row = viewport_top
+            self.write(screen, row, 2, "FILTERS", sidebar_width - 4, self.theme["accent"] | curses.A_BOLD)
+            row += 2
+            for label, value in controls:
+                self.write(screen, row, 2, label, sidebar_width - 13, self.theme["muted"])
+                self.write(screen, row, sidebar_width - 10, value, 8, self.theme["value"])
+                row += 1
+            ignores = (DEFAULT_IGNORES if self.options.default_ignore else []) + self.options.ignore
+            if row < viewport_top + viewport_height - 2:
+                row += 1
+                self.write(screen, row, 2, "IGNORED", sidebar_width - 4, self.theme["accent"] | curses.A_BOLD)
+                row += 2
+            available = max(0, viewport_top + viewport_height - row)
+            shown = min(6, available, len(ignores))
+            for pattern in ignores[:shown]:
+                self.write(screen, row, 2, f"· {pattern}", sidebar_width - 4, self.theme["muted"])
+                row += 1
+            remaining = len(ignores) - shown
+            if remaining > 0 and row < viewport_top + viewport_height:
+                self.write(screen, row, 2, f"+ {remaining} more".ljust(sidebar_width - 4), sidebar_width - 4, self.theme["muted"])
+            for row in range(viewport_top, viewport_top + viewport_height):
+                self.write(screen, row, sidebar_width - 1, "│", 1, self.theme["muted"])
+        for row, (path, depth) in enumerate(entries[self.offset:self.offset + viewport_height], start=viewport_top):
+            absolute_index = self.offset + row - viewport_top
+            selected = absolute_index == self.selected
+            marker = "▾" if path.is_dir() and path in self.expanded else "▸" if path.is_dir() else "·"
+            rail = "▌" if selected else " "
+            text = f"{rail} {'  ' * depth}{marker}  {icon(path, self.options)}{path.name or str(path)}"
+            content_width = max(1, width - sidebar_width - 1)
+            if selected:
+                self.write(screen, row, sidebar_width, " " * content_width, content_width, self.theme["selected"])
+                attribute = self.theme["selected"]
+            elif path.is_dir():
+                attribute = self.theme["directory"] | curses.A_BOLD
+            else:
+                attribute = curses.A_NORMAL
+            self.write(screen, row, sidebar_width, text, content_width, attribute)
+        relative = "." if current == self.root else str(current.relative_to(self.root))
+        kind = "DIR" if current.is_dir() else current.suffix.lstrip(".").upper() or "FILE"
+        status = f" {kind:<5} {relative} · row {self.selected + 1}/{len(entries)} · end {len(entries) - self.selected}"
+        if self.message:
+            status = f" {self.message}"
+        self.write(screen, height - 2, 0, " " * (width - 1), width - 1, self.theme["muted"])
+        self.write(screen, height - 2, 0, status, width - 1, self.theme["warning"] if self.message else self.theme["muted"])
+        keys = " ↑↓ move   ⇧↑↓ fast   enter expand   c copy   x exclude   d depth   ? help   q quit"
+        self.write(screen, height - 1, 0, keys, width - 1, self.theme["muted"])
+        screen.refresh()
+
+    def help(self, screen: Any) -> None:
+        lines = [
+            ("NAVIGATE", "↑ k / ↓ j   shift ↑/↓ fast   PgUp / PgDn"),
+            ("EXPAND", "enter space →   collapse ←"),
+            ("FIND", "/ search   n / N next or previous"),
+            ("DEPTH", "d set   [ decrease   ] increase   0 unlimited"),
+            ("FILTER", "f panel   a hidden   g git ignore"),
+            ("EXCLUDE", "x menu   i custom glob   u undo last"),
+            ("CHANGE", "s sort   r refresh"),
+            ("COPY", "c copy menu   C copy visible tree"),
+            ("VIEW", "p plain preview   q close"),
+        ]
+        screen.erase()
+        height, width = screen.getmaxyx()
+        box_width = min(68, width - 4)
+        box_height = min(len(lines) + 6, height - 2)
+        top = max(0, (height - box_height) // 2)
+        left = max(0, (width - box_width) // 2)
+        self.write(screen, top, left, "┌" + "─" * (box_width - 2) + "┐", box_width, self.theme["muted"])
+        for row in range(top + 1, top + box_height - 1):
+            self.write(screen, row, left, "│", 1, self.theme["muted"])
+            self.write(screen, row, left + box_width - 1, "│", 1, self.theme["muted"])
+        self.write(screen, top + box_height - 1, left, "└" + "─" * (box_width - 2) + "┘", box_width, self.theme["muted"])
+        self.write(screen, top + 1, left + 3, "KEYBOARD MAP", box_width - 6, self.theme["accent"] | curses.A_BOLD)
+        self.write(screen, top + 2, left + 3, "Commands act on the selected row.", box_width - 6, self.theme["muted"])
+        for offset, (label, keys) in enumerate(lines[:max(0, box_height - 5)]):
+            row = top + 4 + offset
+            self.write(screen, row, left + 3, label, 10, self.theme["accent"])
+            self.write(screen, row, left + 14, keys, box_width - 17)
+        self.write(screen, top + box_height - 2, left + 3, "press any key to return", box_width - 6, self.theme["muted"])
+        screen.refresh()
+        screen.getch()
+
+    def run(self, screen: Any) -> None:
+        self.setup_theme()
+        curses.curs_set(0)
+        screen.keypad(True)
+        key_timeout = 500 if self.options.watch else -1
+        screen.timeout(key_timeout)
+        while True:
+            self.draw(screen)
+            key = read_curses_key(screen, key_timeout)
+            entries = self.visible()
+            page = max(1, screen.getmaxyx()[0] - 4)
+            fast_step = max(5, round(page * 0.5))
+            if key in (ord("q"), 27):
+                return
+            if key in (curses.KEY_DOWN, ord("j")):
+                self.message = ""
+                self.selected = min(len(entries) - 1, self.selected + 1)
+            elif key in (curses.KEY_UP, ord("k")):
+                self.message = ""
+                self.selected = max(0, self.selected - 1)
+            elif key == curses.KEY_SF:
+                self.message = ""
+                self.selected = min(len(entries) - 1, self.selected + fast_step)
+            elif key == curses.KEY_SR:
+                self.message = ""
+                self.selected = max(0, self.selected - fast_step)
+            elif key == curses.KEY_NPAGE:
+                self.selected = min(len(entries) - 1, self.selected + page)
+            elif key == curses.KEY_PPAGE:
+                self.selected = max(0, self.selected - page)
+            elif key == curses.KEY_HOME:
+                self.selected = 0
+            elif key == curses.KEY_END:
+                self.selected = len(entries) - 1
+            elif key in (curses.KEY_ENTER, 10, 13, ord(" "), curses.KEY_RIGHT):
+                path = entries[self.selected][0]
+                if path.is_dir():
+                    if path in self.expanded and key != curses.KEY_RIGHT:
+                        self.expanded.remove(path)
+                    else:
+                        self.expanded.add(path)
+            elif key == curses.KEY_LEFT:
+                path = entries[self.selected][0]
+                if path in self.expanded and path != self.root:
+                    self.expanded.remove(path)
+                elif path != self.root:
+                    parent = path.parent
+                    self.selected = next((index for index, item in enumerate(entries) if item[0] == parent), self.selected)
+            elif key == ord("f"):
+                if screen.getmaxyx()[1] < 88:
+                    self.message = "filters need a terminal at least 88 columns wide"
+                else:
+                    self.sidebar = not self.sidebar
+            elif key == ord("/"):
+                self.query = self.prompt(screen, " search: ")
+                self.selected = 0
+                self.offset = 0
+            elif key == ord("n") and self.query:
+                self.selected = min(len(entries) - 1, self.selected + 1)
+            elif key == ord("N") and self.query:
+                self.selected = max(0, self.selected - 1)
+            elif key == ord("d"):
+                value = self.prompt(screen, " depth (number/all): ")
+                try:
+                    self.options.depth = parse_depth(value)
+                except ValueError as error:
+                    self.message = str(error)
+                else:
+                    self.message = f"depth · {self.options.depth or 'all'}"
+            elif key == ord("]"):
+                if self.options.depth is None:
+                    self.message = "depth is already unlimited"
+                else:
+                    self.options.depth += 1
+                    self.message = f"depth · {self.options.depth}"
+            elif key == ord("["):
+                if self.options.depth is None:
+                    self.message = "set a numeric depth with d"
+                elif self.options.depth == 1:
+                    self.message = "depth is already at minimum 1"
+                else:
+                    self.options.depth -= 1
+                    self.message = f"depth · {self.options.depth}"
+            elif key == ord("0"):
+                self.options.depth = None
+                self.message = "depth · all"
+            elif key == ord("a"):
+                self.options.hidden = not self.options.hidden
+                self.refresh()
+            elif key == ord("g"):
+                self.options.git_ignore = not self.options.git_ignore
+                self.ignores = git_patterns(self.root) if self.options.git_ignore else []
+                self.refresh()
+            elif key == ord("i"):
+                value = self.prompt(screen, " ignore glob: ")
+                if value:
+                    self.add_exclusion(value)
+            elif key == ord("c"):
+                self.copy_menu(screen, entries[self.selected][0])
+            elif key == ord("C"):
+                self.copy(self.visible_tree_text(), "visible tree")
+            elif key == ord("x"):
+                self.exclude_menu(screen, entries[self.selected][0])
+            elif key == ord("u"):
+                self.undo_exclusion()
+            elif key == ord("p"):
+                preview = replace(self.options, plain=not self.options.plain)
+                self.message = "plain preview on" if preview.plain else "plain preview off"
+                self.options = preview
+            elif key == ord("s"):
+                order = ["name", "size", "modified", "extension", "type", "none"]
+                self.options.sort = order[(order.index(self.options.sort) + 1) % len(order)] if self.options.sort in order else "name"
+                self.refresh()
+            elif key == ord("r"):
+                self.refresh()
+            elif key == ord("?"):
+                self.help(screen)
+            elif key == -1 and self.options.watch and time.monotonic() - self.last_refresh >= 1:
+                self.refresh()
+                self.last_refresh = time.monotonic()
+
+
+def print_help() -> None:
+    print("tree — configurable filesystem tree and interactive browser")
+    print("\nUsage: tree [PATH] [MODE] [OPTIONS]")
+    groups = {
+        "Mode": {"ui", "regular", "default-mode"},
+        "General": {"help", "version", "setup", "check", "debug", "command", "quiet"},
+        "Traversal": {"path", "depth", "max", "max-children", "follow", "no-follow", "watch"},
+        "Visibility and filtering": {"all", "raw", "git-ignore", "no-git-ignore", "default-ignore", "no-default-ignore", "ignore", "include", "collapse", "match", "search", "case-sensitive", "dirs", "files"},
+        "Ordering and display": {"sort", "reverse", "dirs-first", "files-first", "mixed", "plain", "ascii", "icons", "no-icons", "color", "no-color", "long", "size", "size-format", "permissions", "time", "time-field", "git-status", "root", "no-root", "slash"},
+        "Output": {"json", "jsonl", "paths", "count", "summary", "pager", "no-pager"},
+        "Config": {"preset", "config", "no-config", "show-config", "init", "force"},
+        "Completion": {"completion", "install-completion", "remove-completion"},
+    }
+    for title, names in groups.items():
+        print(f"\n{title}:")
+        for argument in ARGUMENTS:
+            if argument.name not in names:
+                continue
+            value = f" <{argument.value.rstrip('?')}>" if argument.value else ""
+            if argument.value and argument.value.endswith("?"):
+                value = f" [{argument.value.rstrip('?')}]"
+            forms = f"{argument.name}{value}, {argument.long}{value}, {argument.short}{value}"
+            print(f"  {forms:<62} {argument.description}")
+
+
+def config_object(options: Options) -> dict[str, Any]:
+    return {
+        "mode": options.mode, "path": str(options.path), "depth": options.depth or "all", "git-ignore": options.git_ignore,
+        "default-ignore": options.default_ignore, "dirs-first": options.grouping == "dirs-first", "icons": options.icons,
+        "color": options.color, "sort": options.sort, "pager": options.pager, "preset": options.preset or "none",
+    }
+
+
+def show_config(options: Options) -> None:
+    for key, value in config_object(options).items():
+        print(f"{key:<18} {str(value).lower() if isinstance(value, bool) else value}")
+
+
+def configured_presets() -> list[str]:
+    try:
+        values = read_toml(user_config_path())
+    except (OSError, ValueError):
+        values = {}
+    project = find_project_config(Path.cwd())
+    if project:
+        try:
+            project_presets = read_toml(project).get("presets", {})
+        except (OSError, ValueError):
+            project_presets = {}
+        values["presets"] = {**values.get("presets", {}), **project_presets}
+    return sorted(set(BUILTIN_PRESETS) | set(values.get("presets", {})))
+
+
+def fish_completion() -> str:
+    value_tokens = " ".join(token for argument in ARGUMENTS if argument.value for token in (argument.name, argument.long, argument.short))
+    lines = [
+        "complete -c tree -e",
+        "function __tree_presets",
+        "    tree _complete presets",
+        "end",
+        "function __tree_previous_is",
+        "    set -l tokens (commandline -opc)",
+        "    test (count $tokens) -gt 1; and contains -- $tokens[-1] $argv",
+        "end",
+        "function __tree_requires_value",
+        f"    __tree_previous_is {value_tokens}",
+        "end",
+    ]
+    for argument in ARGUMENTS:
+        for token in (argument.name, argument.long, argument.short):
+            lines.append(f"complete -c tree -f -n 'not __tree_requires_value' -a '{token}' -d '{argument.description}'")
+        condition = f"__tree_previous_is {argument.name} {argument.long} {argument.short}"
+        if argument.values:
+            lines.append(f"complete -c tree -f -n '{condition}' -a '{' '.join(argument.values)}'")
+        elif argument.name == "preset":
+            lines.append(f"complete -c tree -f -n '{condition}' -a '(__tree_presets)'")
+        elif argument.name == "ignore":
+            lines.append(f"complete -c tree -f -n '{condition}' -a 'node_modules .git .next dist build coverage target vendor'")
+        elif argument.name == "collapse":
+            lines.append(f"complete -c tree -f -n '{condition}' -a '(__fish_complete_directories)'")
+        elif argument.value == "path":
+            lines.append(f"complete -c tree -f -n '{condition}' -a '(__fish_complete_directories)'")
+    lines.append("complete -c tree -n 'not __tree_requires_value' -a '(__fish_complete_directories)' -d Directory")
+    return "\n".join(lines) + "\n"
+
+
+def bash_completion() -> str:
+    static = " ".join(token for argument in ARGUMENTS for token in (argument.name, argument.long, argument.short))
+    cases = []
+    for argument in ARGUMENTS:
+        if argument.values:
+            cases.append(f"        {argument.name}|{argument.long}|{argument.short}) values=\"{' '.join(argument.values)}\" ;;")
+    enum_cases = "\n".join(cases)
+    return f'''_tree_completion() {{
+    local current previous values
+    COMPREPLY=()
+    current="${{COMP_WORDS[COMP_CWORD]}}"
+    previous="${{COMP_WORDS[COMP_CWORD-1]}}"
+    case "$previous" in
+        preset|--preset|-pr) values="$(tree _complete presets)" ;;
+        ignore|--ignore|-i) values="node_modules .git .next dist build coverage target vendor" ;;
+        collapse|--collapse|-c|path|--path|-P) COMPREPLY=( $(compgen -d -- "$current") ); return ;;
+{enum_cases}
+    esac
+    if [[ -n "$values" ]]; then
+        COMPREPLY=( $(compgen -W "$values" -- "$current") )
+    elif [[ "$current" == -* || "$COMP_CWORD" -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "{static}" -- "$current") )
+    else
+        COMPREPLY=( $(compgen -d -- "$current") )
+    fi
+}}
+complete -F _tree_completion tree
+'''
+
+
+def completion_script(shell: str) -> str:
+    if shell == "fish":
+        return fish_completion()
+    if shell == "bash":
+        return bash_completion()
+    raise ValueError("supported completion shells: fish, bash")
+
+
+def detect_shell() -> str | None:
+    shell = Path(os.environ.get("SHELL", "")).name
+    return shell if shell in ("fish", "bash") else None
+
+
+def completion_path(shell: str) -> Path:
+    if shell == "fish":
+        return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "fish" / "completions" / "tree.fish"
+    if shell == "bash":
+        return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "bash-completion" / "completions" / "tree"
+    raise ValueError("supported completion shells: fish, bash")
+
+
+def install_completion(shell: str | None) -> None:
+    resolved = shell or detect_shell()
+    if not resolved:
+        raise ValueError("could not detect shell; choose fish or bash")
+    path = completion_path(resolved)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(completion_script(resolved), encoding="utf-8")
+    print(f"installed {resolved} completion: {path}")
+
+
+def remove_completion(shell: str | None) -> None:
+    if not shell:
+        raise ValueError("remove-completion requires fish or bash")
+    path = completion_path(shell)
+    if path.exists():
+        path.unlink()
+        print(f"removed {path}")
+    else:
+        print(f"completion is not installed: {path}")
+
+
+def set_default_mode(mode: str | None) -> None:
+    if mode not in ("regular", "ui"):
+        raise ValueError("default mode must be regular or ui")
+    path = user_config_path()
+    values = read_toml(path)
+    values["mode"] = mode
+    write_config(path, values)
+    print(f"default mode set to {mode}")
+
+
+def setup() -> None:
+    if not sys.stdin.isatty():
+        raise ValueError("setup requires an interactive terminal")
+    print("Default mode:\n  1. Regular tree\n  2. Interactive UI")
+    selected = input("Choice [1]: ").strip() or "1"
+    mode = "ui" if selected == "2" else "regular"
+    depth_value = input("Default depth [3]: ").strip() or "3"
+    git_ignore = (input("Respect .gitignore? [Y/n]: ").strip().lower() or "y").startswith("y")
+    values = {"mode": mode, "depth": parse_depth(depth_value), "git-ignore": git_ignore, "default-ignore": True, "dirs-first": True, "icons": "auto", "color": "auto"}
+    write_config(user_config_path(), values)
+    print(f"wrote {user_config_path()}")
+
+
+def init_project(options: Options) -> None:
+    path = options.path.resolve() / ".tree.toml"
+    if path.exists() and not options.force:
+        raise ValueError(f"{path} already exists; use force, --force, or -y")
+    write_config(path, {"mode": "regular", "depth": 3, "git-ignore": True, "default-ignore": True, "dirs-first": True})
+    print(f"wrote {path}")
+
+
+def run_action(action: str | None, value: str | None, options: Options) -> int | None:
+    if action is None:
+        return None
+    if action == "help":
+        print_help()
+    elif action == "version":
+        print(f"tree {VERSION}")
+    elif action == "command":
+        print(Path(__file__).resolve())
+    elif action == "show-config":
+        show_config(options)
+    elif action == "default-mode":
+        set_default_mode(value)
+    elif action == "setup":
+        setup()
+    elif action == "init":
+        init_project(options)
+    elif action == "completion":
+        if not value:
+            raise ValueError("completion requires fish or bash")
+        print(completion_script(value), end="")
+    elif action == "install-completion":
+        install_completion(value)
+    elif action == "remove-completion":
+        remove_completion(value)
+    elif action == "check":
+        print(f"configuration OK: {user_config_path()}")
+    elif action == "debug":
+        print(json.dumps({"version": VERSION, "python": sys.version.split()[0], "executable": str(Path(__file__).resolve()), "config": str(user_config_path()), "resolved": config_object(options)}, indent=2))
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if argv and argv[0] == "_complete":
+        if len(argv) > 1 and argv[1] == "presets":
+            print("\n".join(configured_presets()))
+        return 0
+    options, _ = load_base_options(argv)
+    options, action, action_value = parse_args(argv, options)
+    result = run_action(action, action_value, options)
+    if result is not None:
+        return result
+    if options.mode == "ui":
+        if not sys.stdout.isatty() or not sys.stdin.isatty():
+            if options.explicit_mode:
+                raise ValueError("UI mode requires an interactive terminal")
+            options.mode = "regular"
+        else:
+            curses.wrapper(TreeUI(options).run)
+            return 0
+    return print_regular(options)
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main(sys.argv[1:]))
+    except (OSError, ValueError) as error:
+        print(f"tree: {error}", file=sys.stderr)
+        raise SystemExit(2)

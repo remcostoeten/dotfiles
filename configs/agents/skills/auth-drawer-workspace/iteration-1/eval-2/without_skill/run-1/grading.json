@@ -1,0 +1,40 @@
+{
+  "expectations": [
+    {
+      "text": "Uses createMockAdapter from adapters/mock",
+      "passed": false,
+      "evidence": "hand-rolled inline mock; the prebuilt mock adapter was not used"
+    },
+    {
+      "text": "Wraps in <AuthProvider> and renders <AuthDrawer> with the mock adapter",
+      "passed": false,
+      "evidence": "no AuthProvider; AuthDrawer rendered with an invented prop API"
+    },
+    {
+      "text": "Configures github and google providers",
+      "passed": false,
+      "evidence": "invented providers={[{id,label,onClick}]} prop instead of ui.auth.providers; will not work"
+    },
+    {
+      "text": "Imports '@remcostoeten/auth-drawer/styles.css'",
+      "passed": true,
+      "evidence": "styles.css imported"
+    },
+    {
+      "text": "Tells user the mock credentials and/or how to trigger the error state",
+      "passed": true,
+      "evidence": "documents a force-fail toggle to exercise the error state"
+    },
+    {
+      "text": "No non-public / nonexistent imports",
+      "passed": true,
+      "evidence": "no nonexistent named import (though props are fabricated)"
+    }
+  ],
+  "summary": {
+    "passed": 3,
+    "failed": 3,
+    "total": 6,
+    "pass_rate": 0.5
+  }
+}

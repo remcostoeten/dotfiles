@@ -136,7 +136,7 @@ Most commands follow the same pattern: the implementation lives in `scripts/`, a
 | `launcher` | App launcher wrapper for Fuzzel or KDE KRunner | `-` | `launcher` |
 | `powermenu` | Session power actions | `-` | `powermenu` |
 | `dotfiles` | Browse repo tools, config, and managed symlinks | `-` | `dotfiles symlinks`<br>`dotfiles search ports` |
-| `todo` | Todo list and shell-display helpers | [scripts/todo.js](scripts/todo.js) | `todo list --upcoming`<br>`todo count`<br>`todo "Task" 15pm` |
+| `todo` | Keyboard taskboard and todo manager | [scripts/todo/README.md](scripts/todo/README.md) | `todo`<br>`todo list --upcoming`<br>`todo buy oat milk` |
 | `copy` | Clipboard helper for files, paths, git remotes, and trees | [scripts/copy](scripts/copy) | `copy pwd`<br>`copy remote`<br>`copy tree -L 2` |
 | `replace` | Replace a file with current clipboard contents | [scripts/replace.ts](scripts/replace.ts) | `replace ~/.config/nvim/init.lua`<br>`replace ./notes/todo.txt`<br>`replace --help` |
 | `timer` | Command execution timer | `-` | `timer bun run build`<br>`timer -r 5 "npm test"` |
@@ -147,6 +147,7 @@ Most commands follow the same pattern: the implementation lives in `scripts/`, a
 | `ui` | UI toolkit for component transforms and analysis | [scripts/ui](scripts/ui) | `ui transform src/components/UserCard.tsx`<br>`ui toolkit --help` |
 | `create` | Smart file and directory creation helper | [scripts/create](scripts/create) | `create src/utils/file.ts`<br>`create components/button/`<br>`create --history 25` |
 | `fastfetch-startup` | Startup banner runner | `-` | `fastfetch-startup` |
+| `system-health` | Memory, disk and `/tmp` pressure report shown on shell startup when a threshold is crossed | [bin/system-health](bin/system-health) | `system-health`<br>`system-health --all`<br>`system-health --quiet` |
 | `commit` | Commit helper CLI | `-` | `commit --help` |
 | `spellcheck` | Text fixer using provider CLI, stdin, or interactive input | [scripts/spellcheck](scripts/spellcheck) | `spellcheck "teh quik"`<br>`echo "smple" \| spellcheck`<br>`spellcheck --history` |
 | `license` | Generate MIT license to clipboard or path | `-` | `license --project Dotfiles`<br>`license --project Dotfiles --path LICENSE` |

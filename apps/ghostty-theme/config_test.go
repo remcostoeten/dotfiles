@@ -67,3 +67,44 @@ func TestMappedThemeUpdatesBackgroundImage(t *testing.T) {
 		t.Fatalf("old image was retained:\n%s", rendered)
 	}
 }
+
+func TestExplicitBackgroundWinsOverThemeImage(t *testing.T) {
+	cfg := defaultSettings()
+	cfg.Theme, cfg.Background, cfg.ImageOpacity = "pastel-dark", "/themes/assets/graphite.png", 70
+	rendered := string(renderConfigWithAssets([]byte("background-image = /old.png\nbackground-image-opacity = 0.5\n"), cfg, "/themes/assets"))
+	for _, want := range []string{"background-image = /themes/assets/graphite.png", "background-image-opacity = 0.70"} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("missing %q in:\n%s", want, rendered)
+		}
+	}
+	if strings.Contains(rendered, "pastel-dark-bg.png") || strings.Count(rendered, "background-image =") != 1 {
+		t.Fatalf("theme image leaked or duplicated:\n%s", rendered)
+	}
+}
+
+func TestLoadSettingsReadsBackground(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	if err := os.WriteFile(path, []byte("background-image = /x/y.png\nbackground-image-opacity = 0.35\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := loadSettings(path)
+	if err != nil || cfg.Background != "/x/y.png" || cfg.ImageOpacity != 35 {
+		t.Fatalf("unexpected: %#v %v", cfg, err)
+	}
+}
+
+func TestDiscoverBackgrounds(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"warm-sunset-bg.png", "b.jpg", "notes.txt", "zeta.PNG"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := discoverBackgrounds(dir)
+	if len(got) != 3 || got[0].Name != "b" || got[1].Name != "warm-sunset" || got[2].Name != "zeta" {
+		t.Fatalf("unexpected: %#v", got)
+	}
+	if b, ok := findBackground(got, "Warm-Sunset"); !ok || filepath.Base(b.Path) != "warm-sunset-bg.png" {
+		t.Fatalf("lookup failed: %#v %v", b, ok)
+	}
+}

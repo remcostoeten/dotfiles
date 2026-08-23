@@ -1,0 +1,16 @@
+{
+  "name": "dotfiles-todo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build todo.ts --target=bun --outfile=../todo.mjs",
+    "dev": "bun todo.ts",
+    "start": "bun todo.ts",
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
+  }
+}

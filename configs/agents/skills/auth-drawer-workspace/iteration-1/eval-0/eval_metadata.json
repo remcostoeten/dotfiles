@@ -1,0 +1,14 @@
+{
+  "eval_id": 0,
+  "eval_name": "supabase-nextjs",
+  "prompt": "I'm adding authentication UI to my Next.js 15 (App Router) app using the @remcostoeten/auth-drawer package, which is already installed. My Supabase browser client is exported as `supabase` from `@/lib/supabase`. Set it up end to end: put the provider at the app root, render the auth drawer, and add a header with a 'Sign in' button when logged out and the user's email + a 'Sign out' button when logged in. Write the actual files.",
+  "assertions": [
+    { "text": "Imports the stylesheet '@remcostoeten/auth-drawer/styles.css' once at the app root", "passed": null, "evidence": "" },
+    { "text": "Wraps the app tree in <AuthProvider adapter={...}>", "passed": null, "evidence": "" },
+    { "text": "Renders <AuthDrawer> with the adapter passed in", "passed": null, "evidence": "" },
+    { "text": "Uses createSupabaseAdapter imported from '@remcostoeten/auth-drawer/adapters/supabase' with the supabase client", "passed": null, "evidence": "" },
+    { "text": "Header uses useAuth() (user / openDrawer / signOut) rather than hand-rolled session state", "passed": null, "evidence": "" },
+    { "text": "Provider/drawer/header components carry a 'use client' directive (Next.js App Router)", "passed": null, "evidence": "" },
+    { "text": "Does NOT import any non-public symbol (e.g. createAdapterError) or a non-existent subpath", "passed": null, "evidence": "" }
+  ]
+}

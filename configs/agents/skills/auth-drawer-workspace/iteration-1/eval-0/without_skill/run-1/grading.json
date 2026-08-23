@@ -1,0 +1,45 @@
+{
+  "expectations": [
+    {
+      "text": "Imports '@remcostoeten/auth-drawer/styles.css' once at the app root",
+      "passed": true,
+      "evidence": "styles.css imported in layout"
+    },
+    {
+      "text": "Wraps the app tree in the real AuthProvider with the adapter",
+      "passed": false,
+      "evidence": "uses invented AuthDrawerProvider component, not the package AuthProvider"
+    },
+    {
+      "text": "Renders <AuthDrawer> with the adapter",
+      "passed": true,
+      "evidence": "<AuthDrawer> rendered"
+    },
+    {
+      "text": "Uses createSupabaseAdapter from adapters/supabase with the supabase client",
+      "passed": true,
+      "evidence": "guessed the conventional adapters/supabase subpath correctly"
+    },
+    {
+      "text": "Header uses useAuth() (user/openDrawer/signOut)",
+      "passed": false,
+      "evidence": "uses invented useAuthDrawer() hook instead of useAuth()"
+    },
+    {
+      "text": "'use client' directive present (Next App Router)",
+      "passed": true,
+      "evidence": "present in providers + header"
+    },
+    {
+      "text": "No non-public / nonexistent imports",
+      "passed": false,
+      "evidence": "imports AuthDrawerProvider and useAuthDrawer which do not exist in the package"
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 3,
+    "total": 7,
+    "pass_rate": 0.5714
+  }
+}

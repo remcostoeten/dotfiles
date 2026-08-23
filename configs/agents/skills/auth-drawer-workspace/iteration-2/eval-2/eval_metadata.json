@@ -1,0 +1,42 @@
+{
+  "eval_id": 2,
+  "eval_name": "mock-demo-vite",
+  "prompt": "Before our auth backend is ready I want to demo the @remcostoeten/auth-drawer login UI in our Vite React app. Use a fake/mock backend so I can click through sign-in, see the loading state, and trigger an error state. Show GitHub and Google buttons. Keep it minimal \u2014 one file is fine.",
+  "assertions": [
+    {
+      "text": "Uses createMockAdapter imported from '@remcostoeten/auth-drawer/adapters/mock'",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Wraps the app in the real AuthProvider (from the package) with the adapter, and renders <AuthDrawer>",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Session/header uses useAuth() (the real hook) rather than a hand-rolled provider/hook",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Handles CSS correctly: relies on the package's out-of-the-box styles and does NOT present a manual styles.css import as required",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "No nonexistent/invented imports or props (no createAdapterError import, no invented hooks/flags)",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Configures github and google providers",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Tells the user the real mock credentials (admin@example.com / password) and/or how to trigger the error (spam@example.com)",
+      "passed": null,
+      "evidence": ""
+    }
+  ]
+}

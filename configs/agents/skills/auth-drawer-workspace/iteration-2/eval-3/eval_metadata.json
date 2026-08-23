@@ -1,0 +1,37 @@
+{
+  "eval_id": 3,
+  "eval_name": "better-auth-nextjs",
+  "prompt": "Add @remcostoeten/auth-drawer to my Next.js app. I use Better Auth \u2014 my client is created in `lib/auth-client.ts` and exported as `authClient` (it has signIn.email, signIn.social, signUp.email, useSession, and github+google social providers configured). Wire up the provider, the drawer, and a navbar that shows sign-in when logged out and the user + sign-out when logged in.",
+  "assertions": [
+    {
+      "text": "Uses createBetterAuthAdapter imported from '@remcostoeten/auth-drawer/adapters/better-auth'",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Wraps the app in the real AuthProvider (from the package) with the adapter, and renders <AuthDrawer>",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Session/header uses useAuth() (the real hook) rather than a hand-rolled provider/hook",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "Handles CSS correctly: relies on the package's out-of-the-box styles and does NOT present a manual styles.css import as required",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "No nonexistent/invented imports or props (no createAdapterError import, no invented hooks/flags)",
+      "passed": null,
+      "evidence": ""
+    },
+    {
+      "text": "createBetterAuthAdapter receives { client: authClient }; 'use client' on client components",
+      "passed": null,
+      "evidence": ""
+    }
+  ]
+}

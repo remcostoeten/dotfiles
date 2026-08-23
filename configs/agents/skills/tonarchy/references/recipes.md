@@ -1,0 +1,159 @@
+# Tonarchy recipes
+
+Each recipe lists **every** file that must change together. Missing one is the
+usual cause of "I added it but it didn't show up on the installed system".
+
+---
+
+## Add a package to an existing install mode
+
+One line. `src/tonarchy.c:28` (`XFCE_PACKAGES`) or `:30` (`OXWM_PACKAGES`) —
+space-separated string, appended to `pacstrap -K /mnt`.
+
+Checks before you add:
+- Is it in `core`/`extra`? The ISO's `pacman.conf` has no `multilib` and no AUR.
+  An AUR package needs a `git clone` + `makepkg` inside the chroot instead
+  (`chroot_exec_as_user_fmt`), which is a different and slower change.
+- Does it need a service enabled? Add `chroot_exec("systemctl enable X")` in
+  `configure_system_impl` (system-wide) or the mode's `configure_*` (mode-specific).
+- Does it need config? That's the next recipe.
+
+Verify with `make build && make test`, install to the VM, then `make test-disk`
+and confirm the binary exists on the installed system.
+
+---
+
+## Add a config file / dotfile to installed systems
+
+Two sub-cases.
+
+**Small, static, inline content** → `Dotfile` array. In `configure_xfce`
+(`:1506`) or `configure_oxwm` (`:1584`):
+
+```c
+Dotfile dotfiles[] = {
+    { ".xinitrc",      "exec startxfce4\n", 0755 },
+    { ".bash_profile", BASH_PROFILE_CONTENT, 0644 },
+    { ".bashrc",       BASHRC_CONTENT,       0644 },
+    { ".config/foo/foo.conf", FOO_CONTENT,   0644 },   // parent dir must exist first
+};
+```
+
+`create_user_dotfile` writes to `/mnt/home/$USER/<filename>` and chowns to the
+user. It does **not** create parent directories — `create_directory("/mnt/home/…/.config/foo", 0755)`
+first if nesting. Define content as a `static const char *NAME_CONTENT` near
+`BASHRC_CONTENT` (`:1466`), not inline in the array.
+
+**Anything bigger, or binary** → ship it in `assets/`:
+
+1. Drop the file/dir in `assets/yourthing/`.
+2. Nothing to change in `build_iso.c` — it copies `assets/*` wholesale to
+   `/usr/share/tonarchy/` on the ISO.
+3. Copy it out in `setup_common_configs` (both modes) or the mode's
+   `configure_*` (one mode):
+
+```c
+snprintf(cmd, sizeof(cmd),
+    "cp -r /usr/share/tonarchy/yourthing /mnt/home/%s/.config/yourthing", username);
+system(cmd);
+```
+
+4. Make sure a `chown -R %s:%s /home/%s/.config` runs after it. Both
+   `configure_*` already end with one — add yours before that line, or add
+   your own.
+
+Vendored third-party assets should get a `.gitattributes` `linguist-vendored`
+entry, matching `Tokyonight-Dark` and the Firefox extensions.
+
+---
+
+## Add a whole new install mode (e.g. Wayland/Niri, MangoWC, DIY)
+
+Four places, in this order:
+
+1. **Package list** — new `static const char *NIRI_PACKAGES = "…";` next to the
+   other two at `src/tonarchy.c:28`. Start from `OXWM_PACKAGES` and strip the
+   Xorg half; a Wayland mode needs no `xorg-server`/`xinit`/`picom`/`xwallpaper`,
+   and probably wants `seatd` or `greetd` plus `xdg-desktop-portal-*`.
+
+2. **Enum** — extend `enum Install_Option` at `:17`. It is index-mapped to the
+   menu, so order must match.
+
+3. **Menu** — add the label to `levels[]` in `main()` (`:1627`) and bump the
+   `select_from_menu(levels, 2)` count.
+
+4. **Configurator** — `static int configure_niri(const char *username)` modelled
+   on `configure_oxwm` (`:1526`). Call `setup_common_configs(username)` for the
+   shared theme/Firefox/nvim layer, then mode-specific config, then dotfiles,
+   then `setup_autologin(username)`.
+
+Then the branch in `main()` (`:1650`). **Do not copy the existing branch's
+`CHECK_OR_FAIL` usage** — see known-issues; use a helper that returns properly,
+or check explicitly and `return 1`.
+
+Wayland-specific: `BASH_PROFILE_CONTENT` hardcodes `exec startx`. A Wayland mode
+needs its own profile constant (`exec niri-session` or similar), not the shared one.
+
+For a **DIY mode**, wire up `walls/packages/*.txt` rather than adding a fourth
+hardcoded string — that's what those files are for. You'd read the chosen `.txt`
+files, concatenate lines into a package list, and feed `install_packages_impl`.
+Note they'd need to be shipped into the ISO first (they currently are not — add
+them to `prepare_airootfs` staging, or move them under `assets/`).
+
+---
+
+## Change what's on the live ISO (not the installed system)
+
+- Package available while the installer runs → `iso/packages.x86_64`.
+  Anything the installer shells out to (`fzf`, `nmcli`, `sgdisk`, `parted`,
+  `arch-chroot`, `blkid`, `ping`) must be here or the step dies at runtime.
+- File present in the live env → `iso/airootfs/<abs path>`. Non-default
+  permissions must also be declared in `profiledef.sh`'s `file_permissions`.
+- Boot behaviour / kernel params → `iso/syslinux/syslinux.cfg` (BIOS) **and**
+  `iso/efiboot/loader/entries/tonarchy.conf` (UEFI). Change both.
+- Console font, keyring init, what runs at login →
+  `iso/airootfs/root/.automated_script.sh`.
+
+Never edit `iso/airootfs/usr/` — it's regenerated by `build_iso` and gitignored.
+
+---
+
+## Change the disk layout
+
+`partition_disk` (`:925`). Two independent branches — **edit both or explicitly
+scope your change to one and say so.**
+
+If you change partition *numbering*, you must also update:
+- the `part_path(partN, …)` calls at `:936-939`
+- every mount/format/swapon in both branches
+- `get_root_uuid` (`:1238`) which hardcodes partition **3**
+- BIOS `grub-install` target
+
+For encrypted disk support you additionally need `cryptsetup` in
+`iso/packages.x86_64` *and* in the mode's package list, an `encrypt` hook added
+to the installed system's `mkinitcpio.conf` (currently untouched by the
+installer — you'd add a `write_file` + `chroot_exec("mkinitcpio -P")`), and
+`cryptdevice=` in the boot entry at `:1315`.
+
+---
+
+## Change the TUI
+
+`draw_menu`/`select_from_menu`/`draw_form`/`show_message`, `:366-444` and
+`:573-853`. Rules:
+
+- Absolute cursor positioning only, always `fflush(stdout)` after.
+- Get your left margin from `get_logo_start(cols)` and your top row from
+  `get_menu_start_row(cols)` — never hardcode, even though most existing screens
+  do (that's the bug, not the pattern).
+- Anything that reads keys must `enable_raw_mode()` / `disable_raw_mode()`
+  around it, on **every** exit path.
+- Adding a form field means updating three parallel structures in lockstep: the
+  `Tui_Field[]` in `draw_form` (`:594`), the `Form_Field[]` in `get_form_input`
+  (`:733`), and the review-loop bound `c >= '0' && c <= '5'` (`:814`). The
+  password special-cases at `:758-772` are index-based (`current_field == 1`,
+  `== 2`, jump to `3`) and will need renumbering if you insert before them.
+
+Test TUI work with `make && ./tonarchy` on the host — no VM needed until you go
+past disk selection. Resize the terminal below 45 and 75 columns to exercise all
+three logo tiers.

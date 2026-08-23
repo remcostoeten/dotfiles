@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+#
+# system-health — report memory, disk and /tmp pressure.
+#
+# Usage:
+#   system-health              only prints the resources that crossed a threshold
+#   system-health --all        prints every resource regardless of thresholds
+#   system-health --quiet      exit 1 when something is over threshold, print nothing
+#
+# Thresholds (percent) can be overridden through the environment:
+#   SYSHEALTH_MEM_THRESHOLD   default 75
+#   SYSHEALTH_DISK_THRESHOLD  default 90
+#   SYSHEALTH_TMP_THRESHOLD   default 70
+#   SYSHEALTH_CRITICAL_MARGIN default 5   (over threshold + margin renders red)
+
+set -uo pipefail
+
+MEM_THRESHOLD="${SYSHEALTH_MEM_THRESHOLD:-75}"
+DISK_THRESHOLD="${SYSHEALTH_DISK_THRESHOLD:-90}"
+TMP_THRESHOLD="${SYSHEALTH_TMP_THRESHOLD:-70}"
+CRITICAL_MARGIN="${SYSHEALTH_CRITICAL_MARGIN:-5}"
+
+mode="startup"
+case "${1:-}" in
+    -a | --all) mode="all" ;;
+    -q | --quiet) mode="quiet" ;;
+    -h | --help)
+        awk 'NR > 2 { if ($0 !~ /^#/) exit; sub(/^# ?/, ""); print }' "$0"
+        exit 0
+        ;;
+esac
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    DIM=$'\e[2m'
+    BOLD=$'\e[1m'
+    RESET=$'\e[0m'
+    GREEN=$'\e[38;5;114m'
+    YELLOW=$'\e[38;5;179m'
+    RED=$'\e[38;5;203m'
+else
+    DIM='' BOLD='' RESET='' GREEN='' YELLOW='' RED=''
+fi
+
+segments=()
+worst_color="$GREEN"
+worst_pct=-1
+tripped=0
+
+function human_bytes {
+    awk -v b="$1" '
+        BEGIN {
+            split("B K M G T P", unit, " ")
+            i = 1
+            while (b >= 1024 && i < 6) { b /= 1024; i++ }
+            printf (b >= 100 || i <= 2 ? "%.0f%s" : "%.1f%s"), b, unit[i]
+        }'
+}
+
+function color_for {
+    local pct=$1 threshold=$2
+    if ((pct >= threshold + CRITICAL_MARGIN)); then
+        printf '%s' "$RED"
+    elif ((pct >= threshold)); then
+        printf '%s' "$YELLOW"
+    else
+        printf '%s' "$GREEN"
+    fi
+}
+
+function add_row {
+    local label=$1 used=$2 total=$3 threshold=$4
+    ((total > 0)) || return 0
+
+    local pct=$((used * 100 / total))
+    local over=0
+    ((pct >= threshold)) && over=1 && tripped=1
+    [[ $mode == "startup" || $mode == "quiet" ]] && ((over == 0)) && return 0
+
+    local color
+    color=$(color_for "$pct" "$threshold")
+    if ((pct > worst_pct)); then
+        worst_pct=$pct
+        worst_color=$color
+    fi
+
+    local used_human total_human
+    used_human=$(human_bytes "$used")
+    total_human=$(human_bytes "$total")
+    [[ ${used_human: -1} == "${total_human: -1}" ]] && used_human=${used_human%?}
+
+    segments+=("$(printf '%s%s%s %s%d%%%s %s%s/%s%s' \
+        "$BOLD" "$label" "$RESET" \
+        "$color" "$pct" "$RESET" \
+        "$DIM" "$used_human" "$total_human" "$RESET")")
+}
+
+function collect_memory {
+    [[ -r /proc/meminfo ]] || return 0
+    local total available
+    total=$(awk '/^MemTotal:/ {print $2 * 1024; exit}' /proc/meminfo)
+    available=$(awk '/^MemAvailable:/ {print $2 * 1024; exit}' /proc/meminfo)
+    [[ -n $total && -n $available ]] || return 0
+    add_row "mem" "$((total - available))" "$total" "$MEM_THRESHOLD"
+}
+
+function collect_disks {
+    local source target size used
+    local -A seen=()
+    while read -r source target _ size used; do
+        [[ -n ${seen[$source]:-} ]] && continue
+        seen[$source]=1
+        add_row "$target" "$used" "$size" "$DISK_THRESHOLD"
+    done < <(df -B1 --output=source,target,fstype,size,used \
+        -t ext2 -t ext3 -t ext4 -t btrfs -t xfs -t f2fs -t zfs -t vfat -t exfat -t ntfs3 2>/dev/null |
+        tail -n +2 | sort -k2,2)
+}
+
+function collect_tmp {
+    local size used
+    read -r size used < <(df -B1 --output=size,used /tmp 2>/dev/null | tail -n 1)
+    [[ -n ${size:-} && -n ${used:-} ]] || return 0
+    add_row "/tmp" "$used" "$size" "$TMP_THRESHOLD"
+}
+
+collect_memory
+collect_disks
+collect_tmp
+
+if [[ $mode == "quiet" ]]; then
+    exit $((tripped ? 1 : 0))
+fi
+
+((${#segments[@]} == 0)) && exit 0
+
+line=${segments[0]}
+for segment in "${segments[@]:1}"; do
+    line+="${DIM}  ·  ${RESET}${segment}"
+done
+
+marker="●"
+((tripped)) && marker="▲"
+
+printf '  %s%s%s  %s\n' "$worst_color" "$marker" "$RESET" "$line"

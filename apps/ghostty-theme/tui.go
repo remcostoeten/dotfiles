@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -15,18 +18,21 @@ type section int
 
 const (
 	sectionThemes section = iota
+	sectionBackgrounds
 	sectionFonts
 	sectionType
 	sectionWindow
 )
 
-var sectionNames = []string{"Themes", "Fonts", "Typography", "Window"}
+var sectionNames = []string{"Themes", "Backgrounds", "Fonts", "Typography", "Window"}
 
 type model struct {
 	paths        paths
 	cfg          settings
 	baseline     []byte
 	themes       []theme
+	backgrounds  []background
+	swatches     map[string][]string
 	fonts        []string
 	favorites    []string
 	recents      []string
@@ -47,8 +53,10 @@ type model struct {
 func newModel(p paths, cfg settings, raw []byte) model {
 	m := model{
 		paths: p, cfg: cfg, baseline: raw,
-		themes: discoverThemes(p.customThemes, p.systemThemes),
-		fonts:  discoverFonts(), favorites: readLines(statePath("favorites")), recents: readLines(statePath("recents")),
+		themes:      discoverThemes(p.customThemes, p.systemThemes),
+		backgrounds: append([]background{{Name: "none"}}, discoverBackgrounds(p.assets)...),
+		swatches:    map[string][]string{},
+		fonts:       discoverFonts(), favorites: readLines(statePath("favorites")), recents: readLines(statePath("recents")),
 		live: true,
 	}
 	m.cursor = m.currentIndex()
@@ -101,6 +109,20 @@ func (m *model) filteredThemes() []theme {
 	return out
 }
 
+func (m *model) filteredBackgrounds() []background {
+	if m.query == "" {
+		return m.backgrounds
+	}
+	query := strings.ToLower(m.query)
+	var out []background
+	for _, b := range m.backgrounds {
+		if strings.Contains(strings.ToLower(b.Name), query) {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
 func (m *model) filteredFonts() []string {
 	if m.query == "" {
 		return m.fonts
@@ -119,12 +141,14 @@ func (m *model) itemCount() int {
 	switch m.section {
 	case sectionThemes:
 		return len(m.filteredThemes())
+	case sectionBackgrounds:
+		return len(m.filteredBackgrounds())
 	case sectionFonts:
 		return len(m.filteredFonts())
 	case sectionType:
 		return 3
 	default:
-		return 4
+		return 5
 	}
 }
 
@@ -133,6 +157,12 @@ func (m *model) currentIndex() int {
 	case sectionThemes:
 		for i, t := range m.filteredThemes() {
 			if t.Name == m.cfg.Theme {
+				return i
+			}
+		}
+	case sectionBackgrounds:
+		for i, b := range m.filteredBackgrounds() {
+			if b.Path == m.cfg.Background {
 				return i
 			}
 		}
@@ -166,6 +196,14 @@ func (m *model) selectCurrent() tea.Cmd {
 		items := m.filteredThemes()
 		if len(items) > 0 {
 			m.cfg.Theme = items[m.cursor].Name
+			if image, ok := themeImage(m.cfg.Theme, m.paths.assets); ok {
+				m.cfg.Background = image
+			}
+		}
+	case sectionBackgrounds:
+		items := m.filteredBackgrounds()
+		if len(items) > 0 {
+			m.cfg.Background = items[m.cursor].Path
 		}
 	case sectionFonts:
 		items := m.filteredFonts()
@@ -180,16 +218,14 @@ func (m *model) selectCurrent() tea.Cmd {
 }
 
 func (m *model) preview() tea.Cmd {
-	assets := filepath.Join(filepath.Dir(m.paths.customThemes), "assets")
-	if err := writeAtomic(m.paths.config, renderConfigWithAssets(m.baseline, m.cfg, assets)); err != nil {
+	if err := writeAtomic(m.paths.config, renderConfigWithAssets(m.baseline, m.cfg, m.paths.assets)); err != nil {
 		return m.flash("Could not update config: "+err.Error(), true)
 	}
 	return func() tea.Msg { reloadGhostty(); return nil }
 }
 
 func (m *model) commit() tea.Cmd {
-	assets := filepath.Join(filepath.Dir(m.paths.customThemes), "assets")
-	data := renderConfigWithAssets(m.baseline, m.cfg, assets)
+	data := renderConfigWithAssets(m.baseline, m.cfg, m.paths.assets)
 	if err := writeAtomic(m.paths.config, data); err != nil {
 		return m.flash("Apply failed: "+err.Error(), true)
 	}
@@ -210,7 +246,7 @@ func (m *model) changeSection(delta int) tea.Cmd {
 
 func (m *model) changeValue(delta int) tea.Cmd {
 	switch m.section {
-	case sectionThemes, sectionFonts:
+	case sectionThemes, sectionBackgrounds, sectionFonts:
 		m.cursor += delta
 		m.clampCursor()
 		return m.selectCurrent()
@@ -233,6 +269,8 @@ func (m *model) changeValue(delta int) tea.Cmd {
 			m.cfg.Padding = clamp(m.cfg.Padding+delta*2, 0, 40)
 		case 3:
 			m.cfg.Decorations = !m.cfg.Decorations
+		case 4:
+			m.cfg.ImageOpacity = clamp(m.cfg.ImageOpacity+delta*5, 0, 100)
 		}
 	}
 	if m.live {
@@ -324,7 +362,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clampCursor()
 			return m, m.selectCurrent()
 		case "/":
-			if m.section == sectionThemes || m.section == sectionFonts {
+			if m.section == sectionThemes || m.section == sectionBackgrounds || m.section == sectionFonts {
 				m.searching, m.query = true, ""
 			}
 		case "enter":
@@ -456,6 +494,10 @@ func (m model) listView(width, height int, s uiStyles) string {
 			}
 			items = append(items, star+t.Name+suffix)
 		}
+	case sectionBackgrounds:
+		for _, b := range m.filteredBackgrounds() {
+			items = append(items, b.Name)
+		}
 	case sectionFonts:
 		items = m.filteredFonts()
 	case sectionType:
@@ -465,7 +507,7 @@ func (m model) listView(width, height int, s uiStyles) string {
 		if m.cfg.Decorations {
 			deco = "system"
 		}
-		items = []string{fmt.Sprintf("Background         %d%%", m.cfg.Opacity), fmt.Sprintf("Backdrop blur      %d", m.cfg.Blur), fmt.Sprintf("Window padding     %d px", m.cfg.Padding), fmt.Sprintf("Decorations        %s", deco)}
+		items = []string{fmt.Sprintf("Background         %d%%", m.cfg.Opacity), fmt.Sprintf("Backdrop blur      %d", m.cfg.Blur), fmt.Sprintf("Window padding     %d px", m.cfg.Padding), fmt.Sprintf("Decorations        %s", deco), fmt.Sprintf("Image opacity      %d%%", m.cfg.ImageOpacity)}
 	}
 	available := max(1, height-len(lines))
 	start := 0
@@ -516,8 +558,57 @@ func (m model) previewView(width, height int, s uiStyles, t theme) string {
 		}
 		swatches = append(swatches, lipgloss.NewStyle().Background(lipgloss.Color(color)).Render("   "))
 	}
-	lines = append(lines, strings.Join(swatches[:8], ""), strings.Join(swatches[8:], ""))
+	lines = append(lines, strings.Join(swatches[:8], ""), strings.Join(swatches[8:], ""), "")
+	lines = append(lines, m.backgroundView(width, s)...)
 	return strings.Join(lines, "\n")
+}
+
+func (m model) backgroundView(width int, s uiStyles) []string {
+	if m.cfg.Background == "" {
+		return []string{s.help.Render("Background  none")}
+	}
+	name := backgroundName(m.cfg.Background)
+	label := s.help.Render(fmt.Sprintf("Background  %s  ·  %d%%", name, m.cfg.ImageOpacity))
+	cells := max(8, min(width-2, 48))
+	colors, ok := m.swatches[m.cfg.Background]
+	if !ok {
+		colors = sampleImage(m.cfg.Background, cells)
+		m.swatches[m.cfg.Background] = colors
+	}
+	if len(colors) == 0 {
+		return []string{label, s.help.Render("(could not read image)")}
+	}
+	var bar strings.Builder
+	for _, c := range colors {
+		bar.WriteString(lipgloss.NewStyle().Background(lipgloss.Color(c)).Render(" "))
+	}
+	return []string{label, bar.String()}
+}
+
+/*
+sampleImage decodes an image and returns n hex colors sampled along its
+top-left → bottom-right diagonal, enough to suggest the gradient in a terminal.
+*/
+func sampleImage(path string, n int) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return nil
+	}
+	b := img.Bounds()
+	out := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		t := float64(i) / float64(max(1, n-1))
+		x := b.Min.X + int(t*float64(b.Dx()-1))
+		y := b.Min.Y + int(t*float64(b.Dy()-1))
+		r, g, bl, _ := img.At(x, y).RGBA()
+		out = append(out, fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, bl>>8))
+	}
+	return out
 }
 
 func spreadLines(lines []string) []string {

@@ -87,3 +87,37 @@ func contains(lines []string, value string) bool {
 	}
 	return false
 }
+
+type background struct{ Name, Path string }
+
+var imageExtensions = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true}
+
+/*
+discoverBackgrounds lists every image in the assets directory, sorted by name.
+*/
+func discoverBackgrounds(assetsDir string) []background {
+	entries, _ := os.ReadDir(assetsDir)
+	var out []background
+	for _, entry := range entries {
+		if entry.IsDir() || !imageExtensions[strings.ToLower(filepath.Ext(entry.Name()))] {
+			continue
+		}
+		out = append(out, background{Name: backgroundName(entry.Name()), Path: filepath.Join(assetsDir, entry.Name())})
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out
+}
+
+func backgroundName(file string) string {
+	base := strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
+	return strings.TrimSuffix(strings.TrimSuffix(base, "-bg"), "-gradient")
+}
+
+func findBackground(list []background, query string) (background, bool) {
+	for _, b := range list {
+		if strings.EqualFold(b.Name, query) || strings.EqualFold(filepath.Base(b.Path), query) || b.Path == query {
+			return b, true
+		}
+	}
+	return background{}, false
+}

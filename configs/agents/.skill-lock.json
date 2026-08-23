@@ -20,13 +20,13 @@
       "updatedAt": "2026-05-21T18:47:58.671Z"
     },
     "emil-design-eng": {
-      "source": "emilkowalski/skill",
+      "source": "emilkowalski/skills",
       "sourceType": "github",
-      "sourceUrl": "https://github.com/emilkowalski/skill.git",
+      "sourceUrl": "https://github.com/emilkowalski/skills.git",
       "skillPath": "skills/emil-design-eng/SKILL.md",
-      "skillFolderHash": "0e6f8d7223a0abe73f81e890b3ec76257029a834",
+      "skillFolderHash": "175725745e70946d891b93a1694d7c9ebb71b69d",
       "installedAt": "2026-05-22T12:58:12.820Z",
-      "updatedAt": "2026-05-22T12:58:12.820Z"
+      "updatedAt": "2026-08-16T00:48:59.988Z"
     },
     "wails": {
       "source": "codegirl-007/aiplatform",
@@ -155,9 +155,54 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/emilkowalski/skills.git",
       "skillPath": "skills/review-animations/SKILL.md",
-      "skillFolderHash": "0012fc43a25cce5df019102ab28bb6a68ad9db3d",
+      "skillFolderHash": "82571acae75a97764fa7899f10bd21d93a4f1414",
       "installedAt": "2026-07-13T23:27:22.978Z",
-      "updatedAt": "2026-07-13T23:27:22.978Z"
+      "updatedAt": "2026-08-16T00:49:26.177Z"
+    },
+    "animation-vocabulary": {
+      "source": "emilkowalski/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/emilkowalski/skills.git",
+      "skillPath": "skills/animation-vocabulary/SKILL.md",
+      "skillFolderHash": "e6dc24ca1ff1e70c9677df9a1d2d1c80415cbb3c",
+      "installedAt": "2026-08-16T00:49:33.992Z",
+      "updatedAt": "2026-08-16T00:49:33.992Z"
+    },
+    "improve-animations": {
+      "source": "emilkowalski/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/emilkowalski/skills.git",
+      "skillPath": "skills/improve-animations/SKILL.md",
+      "skillFolderHash": "2ff93ddb9833df45f5e83080de838bb668530820",
+      "installedAt": "2026-08-16T00:49:40.731Z",
+      "updatedAt": "2026-08-16T00:49:40.731Z"
+    },
+    "prototype": {
+      "source": "emilkowalski/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/emilkowalski/skills.git",
+      "skillPath": "skills/prototype/SKILL.md",
+      "skillFolderHash": "564cf82ef5b17f5e018b439dc7fd1e392dcf6188",
+      "installedAt": "2026-08-16T00:50:14.317Z",
+      "updatedAt": "2026-08-16T00:50:14.317Z"
+    },
+    "find-animation-opportunities": {
+      "source": "emilkowalski/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/emilkowalski/skills.git",
+      "skillPath": "skills/find-animation-opportunities/SKILL.md",
+      "skillFolderHash": "502f891c05c9cade7e7bd815e3f228fdd20b61b6",
+      "installedAt": "2026-08-16T00:50:31.695Z",
+      "updatedAt": "2026-08-16T00:50:31.695Z"
+    },
+    "animate": {
+      "source": "emilkowalski/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/emilkowalski/skills.git",
+      "skillPath": "skills/animate/SKILL.md",
+      "skillFolderHash": "c56eac3ec48a97c254dc3a2a42915f22f96a5401",
+      "installedAt": "2026-08-16T00:50:37.607Z",
+      "updatedAt": "2026-08-16T00:50:37.607Z"
     }
   },
   "dismissed": {

@@ -1,0 +1,544 @@
+#!/usr/bin/env fish
+# rjl — manage the app profile stacks in ~/dev/work/website-2022
+
+set -g _rjl_project ~/dev/work/website-2022
+set -g _rjl_jira_base https://concreetgeregeld.atlassian.net
+set -g _rjl_board_url "$_rjl_jira_base/jira/software/projects/DCR/boards/8?filter=&groupBy=epic"
+set -g _rjl_workspace_url https://bitbucket.org/concreetgeregeld/workspace/overview/
+set -g _rjl_apps regeljelease
+
+function _rjl_compose
+    set -l flags
+    for app in $_rjl_apps
+        set -a flags --profile $app
+    end
+    docker compose --project-directory $_rjl_project $flags $argv
+end
+
+function _rjl_label
+    string join ' + ' $_rjl_apps
+end
+
+function _rjl_select_app
+    switch "$argv[1]"
+        case vdwv vdw vanderwalvans walvans
+            set -g _rjl_apps vanderwalvans
+        case rjl rj regeljelease
+            set -g _rjl_apps regeljelease
+        case all both
+            set -g _rjl_apps regeljelease vanderwalvans
+        case '*'
+            return 1
+    end
+end
+
+set -g _rjl_shared
+
+function _rjl_shared_services
+    if test (count $_rjl_shared) -eq 0
+        set -g _rjl_shared (docker compose --project-directory $_rjl_project config --services 2>/dev/null)
+    end
+    printf '%s\n' $_rjl_shared
+end
+
+function _rjl_app_services --argument app
+    docker compose --project-directory $_rjl_project --profile $app config --services 2>/dev/null \
+        | string match -re "^$app-"
+end
+
+function _rjl_foreign_services
+    set -l shared (_rjl_shared_services)
+    set -l mine (string join '|' $_rjl_apps)
+    docker compose --project-directory $_rjl_project ps --format '{{.Service}}' 2>/dev/null \
+        | string match -rv "^($mine)-" \
+        | string match -rv '^('(string join '|' $shared)')$'
+end
+
+function _rjl_down
+    set -l services
+    for app in $_rjl_apps
+        set -a services (_rjl_app_services $app)
+    end
+    _rjl_compose down $argv $services; or return 1
+    set -l foreign (_rjl_foreign_services)
+    if test (count $foreign) -eq 0
+        _rjl_compose down $argv
+    else
+        echo -s '  ' (set_color brblack) 'kept ' (string join ', ' (_rjl_shared_services)) \
+            ' running for ' (string join ', ' $foreign) (set_color normal)
+    end
+end
+
+function _rjl_other_app
+    if not contains vanderwalvans $_rjl_apps
+        echo vanderwalvans
+    else if not contains regeljelease $_rjl_apps
+        echo regeljelease
+    end
+end
+
+function _rjl_open
+    set -l label $argv[1]
+    set -l url $argv[2]
+    echo -s '  ↗ opening ' (set_color cyan) $url (set_color normal) " ($label)"
+    xdg-open $url >/dev/null 2>&1 &
+    disown
+end
+
+function _rjl_branch
+    git -C $_rjl_project rev-parse --abbrev-ref HEAD 2>/dev/null
+end
+
+function _rjl_repo_url
+    set -l remote (git -C $_rjl_project remote get-url origin 2>/dev/null)
+    if test -z "$remote"
+        echo -s (set_color red) '✖' (set_color normal) ' no git remote found in ' $_rjl_project >&2
+        return 1
+    end
+    echo -s 'https://bitbucket.org/' (string replace -r '^(git@bitbucket\.org:|https://(.*@)?bitbucket\.org/)' '' -- $remote | string replace -r '\.git$' '')
+end
+
+function _rjl_jira
+    set -l branch (_rjl_branch)
+    set -l ticket (string match -r -i 'DCR-[0-9]+' -- $branch | string upper)
+    if test -z "$ticket"
+        echo -s (set_color red) '✖' (set_color normal) " no DCR ticket in branch '$branch'"
+        return 1
+    end
+    _rjl_open "jira $ticket" "$_rjl_jira_base/browse/$ticket"
+end
+
+function _rjl_pr
+    set -l repo (_rjl_repo_url); or return 1
+    set -l branch (_rjl_branch)
+    if test -z "$branch"
+        echo -s (set_color red) '✖' (set_color normal) ' could not determine current branch'
+        return 1
+    end
+    if test "$argv[1]" = new
+        _rjl_open "create PR from $branch" "$repo/pull-requests/new?source=$branch&t=1"
+    else
+        _rjl_open "branch $branch → its PR" "$repo/branch/$branch"
+    end
+end
+
+function _rjl_rows
+    set -l shared (_rjl_shared_services)
+    set -l mine (string join '|' $_rjl_apps)
+    _rjl_compose ps --format json 2>/dev/null | jq -r 'if type == "array" then .[] else . end
+        | [.Service, .State, (.Health // ""), .Status,
+           ([.Publishers[]? | select(.PublishedPort > 0) | .PublishedPort] | unique | map("localhost:\(.)") | join(", "))]
+        | @tsv' | while read -l row
+        set -l service (string split -m1 \t -- $row)[1]
+        if contains -- $service $shared; or string match -qr "^($mine)-" -- $service
+            echo $row
+        end
+    end
+end
+
+function _rjl_is_reload_only
+    string match -q '*-js' -- $argv[1]
+end
+
+function _rjl_status
+    if not type -q jq
+        _rjl_compose ps
+        return
+    end
+    set -l rows $argv
+    test (count $rows) -gt 0; or set rows (_rjl_rows)
+    if test (count $rows) -eq 0
+        echo "  (no containers)"
+        return
+    end
+    set -l name_w (string length -- SERVICE)
+    set -l status_w (string length -- STATUS)
+    set -l url_w (string length -- ADDRESS)
+    for row in $rows
+        set -l f (string split \t -- $row)
+        test (string length -- $f[1]) -gt $name_w; and set name_w (string length -- $f[1])
+        test (string length -- $f[4]) -gt $status_w; and set status_w (string length -- $f[4])
+        test (string length -- "$f[5]") -gt $url_w; and set url_w (string length -- "$f[5]")
+    end
+    echo -s '  ' (set_color brblack) '#' (set_color normal) '   ' \
+        (string pad --right -w $name_w -- SERVICE) '  ' \
+        (set_color brblack) (string pad --right -w $status_w -- STATUS) (set_color normal) '  ' \
+        (set_color --bold blue) ADDRESS (set_color normal)
+    echo -s '  ' (set_color brblack) (string repeat -n 1 -- ─) '   ' \
+        (string repeat -n $name_w -- ─) '  ' \
+        (string repeat -n $status_w -- ─) '  ' \
+        (string repeat -n $url_w -- ─) (set_color normal)
+    set -l i 0
+    for row in $rows
+        set i (math $i + 1)
+        set -l f (string split \t -- $row)
+        set -l color green
+        if test "$f[2]" != running
+            set color red
+        else if test -n "$f[3]" -a "$f[3]" != healthy
+            set color yellow
+        end
+        set -l health (string match -r '\((healthy|unhealthy|health: starting|starting)\)$' -- $f[4])[1]
+        set -l uptime (string replace -r ' \((healthy|unhealthy|health: starting|starting)\)$' '' -- $f[4])
+        set -l pad (string repeat -n (math $status_w - (string length -- $f[4])) ' ')
+        echo -sn '  ' (set_color brblack) $i (set_color normal) ' ' (set_color $color) '●' (set_color normal) ' ' \
+            (string pad --right -w $name_w -- $f[1]) '  ' \
+            (set_color brblack) $uptime (set_color normal)
+        test -n "$health"; and echo -sn ' ' (set_color $color) $health (set_color normal)
+        if _rjl_is_reload_only $f[1]
+            echo -sn $pad '  ' (set_color brblack) (string pad --right -w $url_w -- "$f[5]") \
+                '   live-reload only' (set_color normal)
+        else
+            echo -sn $pad '  ' (set_color --bold blue) (string pad --right -w $url_w -- "$f[5]") (set_color normal)
+            test -n "$f[5]"; and echo -sn '  ' (_rjl_kbd "o$i")
+        end
+        echo
+    end
+end
+
+set -g _rjl_gutter 9
+set -g _rjl_cell 16
+
+function _rjl_kbd
+    echo -sn (set_color --bold --background=brblack white) ' ' (string pad --right -w 2 -- $argv[1]) ' ' (set_color normal)
+end
+
+function _rjl_legend
+    set -l other (_rjl_other_app)
+    set -l other_desc 'both live'
+    switch "$other"
+        case vanderwalvans
+            set other_desc 'vdwv up'
+        case regeljelease
+            set other_desc 'rjl up'
+    end
+    set -l keys_stack 'r#' f d v s q
+    set -l desc_stack restart flush down $other_desc status quit
+    set -l keys_links j b p n l w
+    set -l desc_links jira board pr 'new pr' pipelines workspace
+    set -l n (count $desc_stack)
+
+    set -l per_row 1
+    set -l widths
+    for cand in 6 3 2 1
+        set -l w
+        set -l total (math $_rjl_gutter + 2)
+        for p in (seq $cand)
+            set -l m 0
+            for i in (seq $p $cand $n)
+                for d in $desc_stack[$i] $desc_links[$i]
+                    test (string length -- $d) -gt $m; and set m (string length -- $d)
+                end
+            end
+            set -a w $m
+            set total (math $total + 7 + $m)
+        end
+        if test $total -le $COLUMNS
+            set per_row $cand
+            set widths $w
+            break
+        end
+    end
+
+    echo
+    for group in stack links
+        set -l keys $keys_stack
+        set -l descs $desc_stack
+        if test $group = links
+            set keys $keys_links
+            set descs $desc_links
+        end
+        echo -sn '  ' (set_color brblack) (string pad --right -w $_rjl_gutter -- $group) (set_color normal)
+        for i in (seq $n)
+            set -l p (math "($i - 1) % $per_row + 1")
+            if test $i -gt 1 -a $p -eq 1
+                echo -en '\n  '(string repeat -n $_rjl_gutter ' ')
+            end
+            echo -sn (_rjl_kbd $keys[$i]) ' ' \
+                (set_color brblack) (string pad --right -w $widths[$p] -- $descs[$i]) (set_color normal)
+            test $p -lt $per_row; and echo -sn '  '
+        end
+        echo
+    end
+end
+
+set -g _rjl_cancelled 0
+set -g _rjl_stty
+
+function _rjl_on_sigint --on-signal SIGINT
+    set -g _rjl_cancelled 1
+end
+
+function _rjl_restore_tty --on-event fish_exit
+    test -n "$_rjl_stty"; and stty $_rjl_stty 2>/dev/null
+    set -g _rjl_stty
+end
+
+# Reads a single keypress in raw mode with terminal signal generation disabled,
+# so ctrl-c arrives as a literal 0x03 that cancels the pending action instead of
+# killing rjl. Returns 1 on esc, ctrl-c, ctrl-d or EOF; the key lands in $_rjl_key.
+function _rjl_read_key --argument prompt
+    set -g _rjl_key ''
+    set -g _rjl_cancelled 0
+    test -n "$prompt"; and echo -sn $prompt
+    if not isatty stdin
+        read -l --nchars 1 key; or return 1
+        set -g _rjl_key $key
+        return 0
+    end
+    set -g _rjl_stty (stty -g 2>/dev/null)
+    stty raw -echo -isig 2>/dev/null
+    set -l key (dd bs=1 count=1 2>/dev/null | string collect)
+    switch "$key"
+        case \e
+            dd bs=1 count=8 iflag=nonblock >/dev/null 2>&1
+    end
+    _rjl_restore_tty
+    set -g _rjl_key $key
+    switch "$key"
+        case '' \e \cC \cD
+            return 1
+    end
+    echo -sn $key
+end
+
+function _rjl_menu
+    isatty stdin; and isatty stdout; or return 0
+    type -q jq; or return 0
+    set -l rows (_rjl_rows)
+    test (count $rows) -gt 0; or return 0
+    _rjl_legend
+    while true
+        if not _rjl_read_key '  ❯ '
+            echo
+            return 0
+        end
+        set -l key $_rjl_key
+        switch "$key"
+            case o O r R
+            case '*'
+                echo
+        end
+        switch "$key"
+            case q Q '' \e
+                return 0
+            case s S
+                set rows (_rjl_rows)
+                _rjl_status $rows
+            case f F
+                _rjl_flush
+            case d D
+                echo -s '  ⏹ stopping ' (_rjl_label) ' stack...'
+                if _rjl_down
+                    echo -s '  ' (set_color green) '✔' (set_color normal) ' ' (_rjl_label) ' stack stopped'
+                else
+                    echo -s '  ' (set_color red) '✖' (set_color normal) ' failed to stop ' (_rjl_label) ' stack'
+                end
+                return 0
+            case v V
+                set -l other (_rjl_other_app)
+                if test -z "$other"
+                    echo -s '  ' (set_color brblack) 'both stacks are already selected' (set_color normal)
+                    continue
+                end
+                set -g _rjl_apps $_rjl_apps $other
+                echo -s '  ▶ starting ' $other ' (detached)...'
+                if _rjl_compose up -d
+                    set rows (_rjl_rows)
+                    echo -s '  ' (set_color green) '✔' (set_color normal) ' ' (_rjl_label) ' is up:'
+                    _rjl_status $rows
+                    _rjl_legend
+                else
+                    echo -s '  ' (set_color red) '✖' (set_color normal) ' failed to start ' $other
+                end
+            case j J
+                _rjl_jira
+            case b B
+                _rjl_open 'jira board' $_rjl_board_url
+            case p P
+                _rjl_pr
+            case n N
+                _rjl_pr new
+            case l L
+                set -l repo (_rjl_repo_url)
+                and _rjl_open pipelines "$repo/pipelines"
+            case w W
+                _rjl_open 'bitbucket workspace' $_rjl_workspace_url
+            case o O r R
+                echo -sn (set_color brblack) 'service 1-' (count $rows) ' · esc cancels  ' (set_color normal)
+                if not _rjl_read_key ''
+                    echo -s (set_color brblack) '↩ cancelled' (set_color normal)
+                    continue
+                end
+                set -l num $_rjl_key
+                echo
+                if not string match -qr '^[1-9]$' -- "$num"; or test $num -gt (count $rows)
+                    echo -s (set_color brblack) '  expected a service number 1-' (count $rows) (set_color normal)
+                    continue
+                end
+                set -l f (string split \t -- $rows[$num])
+                if test "$key" = o -o "$key" = O
+                    set -l target (string split ', ' -- $f[5])[1]
+                    if test -z "$target"
+                        echo "  $f[1] has no published port"
+                        continue
+                    end
+                    echo -s '  ↗ opening ' (set_color cyan) "http://$target" (set_color normal) " ($f[1])"
+                    xdg-open "http://$target" >/dev/null 2>&1 &
+                    disown
+                else
+                    echo -s '  ↻ restarting ' $f[1] '...'
+                    if _rjl_compose restart $f[1]
+                        set rows (_rjl_rows)
+                        echo -s '  ' (set_color green) '✔' (set_color normal) ' ' $f[1] ' restarted'
+                        _rjl_status $rows
+                    else
+                        echo -s '  ' (set_color red) '✖' (set_color normal) ' failed to restart ' $f[1]
+                    end
+                end
+            case '*'
+                _rjl_legend
+        end
+    end
+end
+
+function _rjl_help_section
+    echo
+    echo -s '  ' (set_color --bold yellow) $argv[1] (set_color normal)
+end
+
+function _rjl_help_row
+    echo -s '    ' (set_color cyan) (string pad --right -w 16 -- $argv[1]) (set_color normal) $argv[2] \
+        (set_color brblack) (test -n "$argv[3]"; and echo -s '  (' $argv[3] ')') (set_color normal)
+end
+
+function _rjl_help
+    echo
+    echo -s '  ' (set_color --bold) 'rjl' (set_color normal) ' — website-2022 app stacks  ' \
+        (set_color brblack) $_rjl_project (set_color normal)
+    _rjl_help_section 'Apps  — an app selector may prefix any command'
+    _rjl_help_row 'rjl <cmd>' 'target the regeljelease profile (default)' 'rj, regeljelease'
+    _rjl_help_row 'rjl vdwv <cmd>' 'target the vanderwalvans profile' 'vdw, vanderwalvans'
+    _rjl_help_row 'rjl all <cmd>' 'target both profiles at once' 'both'
+    _rjl_help_section Stack
+    _rjl_help_row 'rjl' 'start detached, or show status + menu if already running'
+    _rjl_help_row 'rjl --verbose' 'start attached, streaming logs in the foreground'
+    _rjl_help_row 'rjl stop' 'stop the stack' 'also: --stop, -s, down'
+    _rjl_help_row 'rjl stop all' 'stop ALL running docker containers' 'also: stopall'
+    _rjl_help_row 'rjl flush' 'flush the Symfony cache via bin/console cache:clear' 'also: --flush, -f, cache'
+    _rjl_help_section 'Jira & Bitbucket  — follows the current branch'
+    _rjl_help_row 'rjl jira' "open the branch's DCR ticket" 'j'
+    _rjl_help_row 'rjl board' 'open the DCR Jira board' 'b'
+    _rjl_help_row 'rjl pr' 'open the branch on Bitbucket, links to its PR' 'p'
+    _rjl_help_row 'rjl pr new' 'create a PR from the branch' 'newpr, n'
+    _rjl_help_row 'rjl pipelines' "open the repo's Bitbucket pipelines" 'l'
+    _rjl_help_row 'rjl workspace' 'open the Bitbucket workspace overview' 'w'
+    _rjl_help_section 'Interactive menu  — shown while the stack runs'
+    _rjl_help_row 'o<n> / r<n>' 'open service n in the browser / restart it'
+    _rjl_help_row 'f' 'flush the Symfony cache'
+    _rjl_help_row 'v' 'also spin up the other app (vdwv / rjl)'
+    _rjl_help_row 'd' 'stop the stack'
+    _rjl_help_row 'j b p n l w' 'same shortcuts as above'
+    _rjl_help_row 's / q' 'reprint status / quit'
+    echo
+    echo -s '  ' (set_color brblack) 'Extra arguments are passed through to docker compose.' (set_color normal)
+    echo
+end
+
+function _rjl_flush
+    set -l failed 0
+    for app in $_rjl_apps
+        set -l service $app-php
+        if not _rjl_compose ps --quiet $service 2>/dev/null | string length -q
+            echo -s (set_color red) '✖' (set_color normal) " $service is not running — start the stack first with rjl"
+            set failed 1
+            continue
+        end
+        echo -s '  ↺ flushing Symfony cache for ' $app ' (' (set_color brblack) 'bin/console cache:clear' (set_color normal) ')...'
+        if _rjl_compose exec $service bin/console cache:clear $argv
+            echo -s '  ' (set_color green) '✔' (set_color normal) ' ' $app ' cache flushed'
+        else
+            echo -s '  ' (set_color red) '✖' (set_color normal) ' ' $app ' cache flush failed'
+            set failed 1
+        end
+    end
+    return $failed
+end
+
+function _rjl_stop_all
+    set -l running (docker ps -q)
+    if test -z "$running"
+        echo "  no running containers"
+        return 0
+    end
+    echo -s '  ⏹ stopping ' (count $running) ' running containers...'
+    for name in (docker ps --format '{{.Names}}')
+        echo -s '    ' (set_color brblack) $name (set_color normal)
+    end
+    if docker stop $running >/dev/null
+        echo -s '  ' (set_color green) '✔' (set_color normal) ' all containers stopped'
+    else
+        echo -s '  ' (set_color red) '✖' (set_color normal) ' failed to stop some containers'
+        return 1
+    end
+end
+
+function _rjl_main
+    if _rjl_select_app "$argv[1]"
+        set argv $argv[2..]
+    end
+    switch "$argv[1]"
+        case help --help -h
+            _rjl_help
+        case stop --stop -s down
+            if test "$argv[2]" = all
+                _rjl_stop_all
+            else
+                _rjl_down $argv[2..]
+            end
+        case stopall stop-all --stop-all
+            _rjl_stop_all
+        case flush --flush -f cache
+            _rjl_flush $argv[2..]
+        case jira j
+            _rjl_jira
+        case board b
+            _rjl_open 'jira board' $_rjl_board_url
+        case pr p
+            _rjl_pr $argv[2..]
+        case newpr new-pr n
+            _rjl_pr new
+        case pipelines pipeline l
+            set -l repo (_rjl_repo_url); or return 1
+            _rjl_open pipelines "$repo/pipelines"
+        case workspace ws w
+            _rjl_open 'bitbucket workspace' $_rjl_workspace_url
+        case '*'
+            set -l running (_rjl_compose ps --quiet 2>/dev/null)
+            if test -n "$running"
+                echo -s (set_color green) '●' (set_color normal) ' ' (_rjl_label) ' stack already running (' (count $running) ' containers):'
+                _rjl_status
+                _rjl_menu
+                return 0
+            end
+            set -l rest $argv
+            if contains -- --verbose $argv
+                set rest (string match -v -- --verbose $argv)
+                _rjl_compose up $rest
+                return $status
+            end
+            echo -s '▶ Starting ' (_rjl_label) ' stack (detached)...'
+            _rjl_compose up -d $rest
+            set -l up_status $status
+            if test $up_status -eq 0
+                echo -s (set_color green) '✔' (set_color normal) ' ' (_rjl_label) ' stack is up:'
+                _rjl_status
+                _rjl_menu
+            else
+                echo -s '✖ Failed to start ' (_rjl_label) " stack (exit $up_status)"
+            end
+            return $up_status
+    end
+end
+
+_rjl_main $argv

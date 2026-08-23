@@ -1,0 +1,1060 @@
+#!/usr/bin/env bun
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
+
+const NVIBRANT = join(homedir(), ".local/bin/nvibrant")
+const CONFIG_DIR = join(homedir(), ".config/nvibrant-tui")
+const CONFIG_PATH = join(CONFIG_DIR, "config.json")
+const SERVICE_PATH = join(homedir(), ".config/systemd/user/nvibrant.service")
+const HEAD_COUNT = 6
+
+const ESC = "\x1b"
+const C = {
+	reset: `${ESC}[0m`,
+	bold: `${ESC}[1m`,
+	dim: `${ESC}[2m`,
+	green: `${ESC}[38;5;73m`,
+	bright: `${ESC}[38;5;80m`,
+	darkGreen: `${ESC}[38;5;24m`,
+	midGreen: `${ESC}[38;5;30m`,
+	yellow: `${ESC}[38;5;222m`,
+	red: `${ESC}[38;5;167m`,
+	invert: `${ESC}[48;5;73m${ESC}[38;5;235m`,
+	invertBright: `${ESC}[48;5;80m${ESC}[38;5;235m${ESC}[1m`,
+}
+
+type THeadState = { vibrance: number; dithering: number; ditherMode: number; ditherDepth: number }
+type TColorSnapshot = { hdr: boolean; wcg: boolean; sdrBrightness: number; brightness: number }
+type TPreset = { heads: THeadState[]; head: number; color?: TColorSnapshot }
+type TConfig = { head: number; heads: THeadState[]; presets: Record<string, TPreset>; activePreset: string | null }
+
+type TMode = { id: string; name: string; refreshRate: number }
+type TOutputState = {
+	name: string
+	enabled: boolean
+	hdr: boolean
+	wcg: boolean
+	sdrBrightness: number
+	brightness: number
+	scale: number
+	currentModeId: string
+	modes: TMode[]
+	rotation: number
+	overscan: number
+	rgbRange: number
+	sdrGamut: number
+	dimming: number
+	colorPower: number
+	posX: number
+	posY: number
+	width: number
+}
+
+type TPending = {
+	hdr?: boolean
+	wcg?: boolean
+	sdrBrightness?: number
+	brightness?: number
+	modeId?: string
+	scale?: number
+	rotation?: number
+	overscan?: number
+	rgbRange?: number
+	sdrGamut?: number
+	dimming?: number
+	colorPower?: number
+	enabled?: boolean
+}
+
+type TItem = {
+	id: string
+	label: string
+	kind: "slider" | "enum" | "toggle" | "choice"
+	min: number
+	max: number
+	step: number
+	big: number
+	options?: string[]
+	live: boolean
+	get: () => number
+	set: (value: number) => void
+	format: (value: number) => string
+	describe: string
+	range: string
+}
+
+type TApp = {
+	config: TConfig
+	outputs: TOutputState[]
+	output: TOutputState
+	pending: TPending
+	sysInfo: string[]
+	panel: number
+	category: number
+	item: number
+	preset: number
+	mode: "main" | "save"
+	input: string
+	status: string
+	statusColor: string
+	dirty: boolean
+}
+
+function defaultHead(): THeadState {
+	return { vibrance: 0, dithering: 0, ditherMode: 0, ditherDepth: 0 }
+}
+
+function defaultPreset(head: number): TPreset {
+	return {
+		heads: Array.from({ length: HEAD_COUNT }, () => defaultHead()),
+		head,
+		color: { hdr: false, wcg: false, sdrBrightness: 450, brightness: 100 },
+	}
+}
+
+function ensureDefaultPreset(config: TConfig): TConfig {
+	if (config.presets.default) return config
+	return { ...config, presets: { default: defaultPreset(config.head), ...config.presets } }
+}
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.min(max, Math.max(min, value))
+}
+
+function loadConfig(): TConfig {
+	const base: TConfig = {
+		head: 4,
+		heads: Array.from({ length: HEAD_COUNT }, () => defaultHead()),
+		presets: {},
+		activePreset: null,
+	}
+	try {
+		const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8"))
+		const presets: Record<string, TPreset> = {}
+		for (const [name, value] of Object.entries(raw.presets ?? {})) {
+			if (Array.isArray(value)) presets[name] = { heads: value as THeadState[], head: raw.head ?? 4 }
+			else presets[name] = value as TPreset
+		}
+		return {
+			head: typeof raw.head === "number" ? raw.head : base.head,
+			heads: Array.isArray(raw.heads) ? base.heads.map((h, i) => ({ ...h, ...(raw.heads[i] ?? {}) })) : base.heads,
+			presets,
+			activePreset: raw.activePreset ?? null,
+		}
+	} catch {
+		return base
+	}
+}
+
+function saveConfig(config: TConfig) {
+	mkdirSync(CONFIG_DIR, { recursive: true })
+	writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
+}
+
+function runNvibrant(attribute: string, values: number[]): string {
+	const proc = Bun.spawnSync([NVIBRANT, ...values.map(String)], {
+		env: { ...process.env, ATTRIBUTE: attribute },
+	})
+	return proc.stdout.toString() + proc.stderr.toString()
+}
+
+function applyNvibrant(config: TConfig): { ok: boolean; message: string } {
+	const out = runNvibrant("vibrance", config.heads.map((h) => h.vibrance))
+	runNvibrant("dithering", config.heads.map((h) => h.dithering))
+	runNvibrant("dithering-mode", config.heads.map((h) => h.ditherMode))
+	runNvibrant("dithering-depth", config.heads.map((h) => h.ditherDepth))
+	if (out.includes("ioctl failed")) return { ok: false, message: "driver mismatch — run nvibrant-rebuild" }
+	return { ok: true, message: "vibrance applied" }
+}
+
+type TOutputExtras = { overscan: number; rgbRange: number; sdrGamut: number; dimming: number; colorPower: number }
+
+function readOutputExtras(): Record<string, TOutputExtras> {
+	const proc = Bun.spawnSync(["kscreen-doctor", "-o"])
+	const text = proc.stdout.toString().replace(/\x1b\[[0-9;]*m/g, "")
+	const extras: Record<string, TOutputExtras> = {}
+	let current: TOutputExtras | null = null
+	for (const line of text.split("\n")) {
+		const header = line.match(/^Output: \d+ (\S+)/)
+		if (header) {
+			current = { overscan: 0, rgbRange: 0, sdrGamut: 100, dimming: 100, colorPower: 0 }
+			extras[header[1]] = current
+			continue
+		}
+		if (!current) continue
+		const overscan = line.match(/Overscan: (\d+)/)
+		if (overscan) current.overscan = Number(overscan[1])
+		const rgb = line.match(/RgbRange: (\w+)/)
+		if (rgb) current.rgbRange = rgb[1] === "full" ? 1 : rgb[1] === "limited" ? 2 : 0
+		const gamut = line.match(/SDR gamut wideness: (\d+)%/)
+		if (gamut) current.sdrGamut = Number(gamut[1])
+		const dim = line.match(/dimming to (\d+)%/)
+		if (dim) current.dimming = Number(dim[1])
+		if (line.includes("Color power preference: prefer efficiency")) current.colorPower = 1
+	}
+	return extras
+}
+
+function readOutputs(): TOutputState[] {
+	const proc = Bun.spawnSync(["kscreen-doctor", "-j"])
+	const data = JSON.parse(proc.stdout.toString())
+	const extras = readOutputExtras()
+	const outputs = data.outputs
+		.filter((o: any) => o.connected)
+		.map((output: any): TOutputState => ({
+			name: output.name,
+			enabled: !!output.enabled,
+			hdr: !!output.hdr,
+			wcg: !!output.wcg,
+			sdrBrightness: output["sdr-brightness"] ?? 450,
+			brightness: Math.round((output.brightness ?? 1) * 100),
+			scale: output.scale ?? 1,
+			currentModeId: String(output.currentModeId),
+			modes: output.modes.map((m: any) => ({ id: String(m.id), name: m.name, refreshRate: m.refreshRate })),
+			rotation: output.rotation ?? 1,
+			posX: output.pos?.x ?? 0,
+			posY: output.pos?.y ?? 0,
+			width: output.size?.width ?? 0,
+			...(extras[output.name] ?? { overscan: 0, rgbRange: 0, sdrGamut: 100, dimming: 100, colorPower: 0 }),
+		}))
+	outputs.sort((a: TOutputState, b: TOutputState) => Number(b.enabled) - Number(a.enabled))
+	if (outputs.length === 0) throw new Error("no connected outputs")
+	return outputs
+}
+
+const ROTATION_TOKENS: Record<number, string> = { 1: "none", 2: "left", 8: "right", 4: "inverted" }
+const RGB_RANGE_TOKENS = ["automatic", "full", "limited"]
+
+function applyKscreen(output: TOutputState, pending: TPending, outputs: TOutputState[]): { ok: boolean; message: string } {
+	const args: string[] = []
+	const o = `output.${output.name}`
+	if (pending.hdr !== undefined) args.push(`${o}.hdr.${pending.hdr ? "enable" : "disable"}`)
+	if (pending.wcg !== undefined) args.push(`${o}.wcg.${pending.wcg ? "enable" : "disable"}`)
+	if (pending.sdrBrightness !== undefined) args.push(`${o}.sdr-brightness.${pending.sdrBrightness}`)
+	if (pending.brightness !== undefined) args.push(`${o}.brightness.${pending.brightness}`)
+	if (pending.modeId !== undefined) args.push(`${o}.mode.${pending.modeId}`)
+	if (pending.scale !== undefined) args.push(`${o}.scale.${pending.scale}`)
+	if (pending.rotation !== undefined) args.push(`${o}.rotation.${ROTATION_TOKENS[pending.rotation] ?? "none"}`)
+	if (pending.overscan !== undefined) args.push(`${o}.overscan.${pending.overscan}`)
+	if (pending.rgbRange !== undefined) args.push(`${o}.rgbrange.${RGB_RANGE_TOKENS[pending.rgbRange]}`)
+	if (pending.sdrGamut !== undefined) args.push(`${o}.sdrGamut.${pending.sdrGamut}`)
+	if (pending.dimming !== undefined) args.push(`${o}.dimming.${pending.dimming}`)
+	if (pending.colorPower !== undefined) args.push(`${o}.colorPowerTradeoff.${pending.colorPower ? "preferEfficiency" : "preferAccuracy"}`)
+	if (pending.enabled !== undefined) {
+		const others = outputs.filter((other) => other.name !== output.name && other.enabled)
+		if (!pending.enabled && others.length === 0) return { ok: false, message: "refusing to disable the only enabled output" }
+		args.push(`${o}.${pending.enabled ? "enable" : "disable"}`)
+		if (pending.enabled) {
+			const overlap = others.find((other) => other.posX === output.posX && other.posY === output.posY)
+			if (overlap) args.push(`${o}.position.${overlap.posX + overlap.width},${overlap.posY}`)
+		}
+	}
+	if (args.length === 0) return { ok: true, message: "nothing to apply" }
+	const proc = Bun.spawnSync(["kscreen-doctor", ...args])
+	const err = proc.stderr.toString()
+	if (proc.exitCode !== 0) return { ok: false, message: `kscreen: ${err.slice(0, 60)}` }
+	return { ok: true, message: `display settings applied (${args.length})` }
+}
+
+type TEnableChange = { name: string; enabled: boolean }
+
+function applyEnable(outputs: TOutputState[], changes: TEnableChange[]): { ok: boolean; message: string } {
+	const next = new Map(outputs.map((o) => [o.name, o.enabled]))
+	for (const change of changes) next.set(change.name, change.enabled)
+	if (![...next.values()].some(Boolean)) return { ok: false, message: "refusing to disable every output" }
+
+	const changed = changes.filter((change) => {
+		const output = outputs.find((o) => o.name === change.name)
+		return output && output.enabled !== change.enabled
+	})
+	if (changed.length === 0) return { ok: true, message: "already in that state" }
+
+	const staysOn = outputs.filter((o) => o.enabled && next.get(o.name))
+	const args: string[] = []
+	for (const change of changed) {
+		const output = outputs.find((o) => o.name === change.name) as TOutputState
+		args.push(`output.${change.name}.${change.enabled ? "enable" : "disable"}`)
+		if (!change.enabled) continue
+		const overlap = staysOn.find((other) => other.posX === output.posX && other.posY === output.posY)
+		if (overlap) args.push(`output.${change.name}.position.${overlap.posX + overlap.width},${overlap.posY}`)
+	}
+
+	const proc = Bun.spawnSync(["kscreen-doctor", ...args])
+	if (proc.exitCode !== 0) return { ok: false, message: `kscreen: ${proc.stderr.toString().trim().slice(0, 160)}` }
+	return { ok: true, message: changed.map((c) => `${c.name} ${c.enabled ? "on" : "off"}`).join(", ") }
+}
+
+function readSysInfo(output: TOutputState): string[] {
+	const proc = Bun.spawnSync([
+		"nvidia-smi",
+		"--query-gpu=name,driver_version,memory.total,temperature.gpu,power.draw,clocks.gr",
+		"--format=csv,noheader",
+	])
+	const parts = proc.stdout.toString().trim().split(", ")
+	const gpu = (parts[0] ?? "unknown").replace("NVIDIA GeForce ", "")
+	const mode = output.modes.find((m) => m.id === output.currentModeId)
+	return [
+		`GPU    : ${gpu}`,
+		`Driver : ${parts[1] ?? "?"}`,
+		`VRAM   : ${parts[2] ?? "?"}`,
+		`Temp   : ${parts[3] ?? "?"}°C  ${parts[4] ?? ""}`,
+		`Clock  : ${parts[5] ?? "?"}`,
+		`Display: ${output.name}`,
+		`Mode   : ${mode?.name ?? "?"}`,
+		`HDR    : ${output.hdr ? "Enabled" : "Disabled"}  WCG: ${output.wcg ? "On" : "Off"}`,
+		`Scale  : ${output.scale}x`,
+	]
+}
+
+function writeBootService(config: TConfig): string {
+	const arg = (pick: (h: THeadState) => number) => config.heads.map(pick).join(" ")
+	const unit = [
+		"[Unit]",
+		"Description=Apply NVIDIA digital vibrance",
+		"After=graphical-session.target",
+		"",
+		"[Service]",
+		"Type=oneshot",
+		"ExecStartPre=/bin/sleep 5",
+		`ExecStart=/usr/bin/env ATTRIBUTE=vibrance %h/.local/bin/nvibrant ${arg((h) => h.vibrance)}`,
+		`ExecStart=/usr/bin/env ATTRIBUTE=dithering %h/.local/bin/nvibrant ${arg((h) => h.dithering)}`,
+		`ExecStart=/usr/bin/env ATTRIBUTE=dithering-mode %h/.local/bin/nvibrant ${arg((h) => h.ditherMode)}`,
+		`ExecStart=/usr/bin/env ATTRIBUTE=dithering-depth %h/.local/bin/nvibrant ${arg((h) => h.ditherDepth)}`,
+		"",
+		"[Install]",
+		"WantedBy=default.target",
+		"",
+	].join("\n")
+	writeFileSync(SERVICE_PATH, unit)
+	Bun.spawnSync(["systemctl", "--user", "daemon-reload"])
+	Bun.spawnSync(["systemctl", "--user", "enable", "nvibrant.service"])
+	return "boot service updated — values persist across reboots"
+}
+
+const SCALE_CHOICES = [1, 1.25, 1.5, 1.75, 2]
+const ROTATION_ORDER = [1, 2, 8, 4]
+const ROTATION_LABELS = ["Landscape", "Portrait Left", "Portrait Right", "Upside Down"]
+
+function buildItems(app: TApp): { name: string; items: TItem[] }[] {
+	const head = () => app.config.heads[app.config.head]
+	const modes = app.output.modes
+
+	function nv(partial: Omit<TItem, "live">): TItem {
+		return { ...partial, live: true }
+	}
+	function ks(partial: Omit<TItem, "live">): TItem {
+		return { ...partial, live: false }
+	}
+
+	return [
+		{
+			name: "Display",
+			items: [
+				nv({
+					id: "vibrance", label: "Digital Vibrance", kind: "slider",
+					min: -1024, max: 1023, step: 16, big: 128,
+					get: () => head().vibrance,
+					set: (v) => { head().vibrance = clamp(v, -1024, 1023) },
+					format: (v) => `${v} · ${Math.round(((v + 1024) / 2047) * 200)}%`,
+					describe: "GPU-level color saturation applied after everything else — affects games and desktop alike. 0 is neutral, 1023 doubles saturation, -1024 is grayscale. CS players typically run 512-1023 so enemies pop against the map palette. Applies live as you slide.",
+					range: "[ -1024 — 1023 ]",
+				}),
+				nv({
+					id: "dithering", label: "Dithering", kind: "enum",
+					min: 0, max: 2, step: 1, big: 1, options: ["Auto", "Enabled", "Disabled"],
+					get: () => head().dithering,
+					set: (v) => { head().dithering = clamp(v, 0, 2) },
+					format: (v) => ["Auto", "Enabled", "Disabled"][v],
+					describe: "Whether the GPU dithers the image before sending it to the monitor. Hides color banding in gradients (skies, smoke) at the cost of imperceptible noise. Auto lets the driver decide; pick Disabled if your panel shimmers.",
+					range: "[ Auto / Enabled / Disabled ]",
+				}),
+				nv({
+					id: "ditherMode", label: "Dither Mode", kind: "enum",
+					min: 0, max: 3, step: 1, big: 1, options: ["None", "Dynamic 2x2", "Static 2x2", "Temporal"],
+					get: () => head().ditherMode,
+					set: (v) => { head().ditherMode = clamp(v, 0, 3) },
+					format: (v) => ["None", "Dynamic 2x2", "Static 2x2", "Temporal"][v],
+					describe: "Pattern used when dithering is enabled. Dynamic 2x2 varies a tiny pattern per frame (good default). Static 2x2 never flickers. Temporal spreads error over time — smoothest gradients, most likely to shimmer on sensitive panels.",
+					range: "[ None / Dynamic / Static / Temporal ]",
+				}),
+				nv({
+					id: "ditherDepth", label: "Dither Depth", kind: "enum",
+					min: 0, max: 3, step: 1, big: 1, options: ["Auto", "6-bit", "8-bit", "10-bit"],
+					get: () => head().ditherDepth,
+					set: (v) => { head().ditherDepth = clamp(v, 0, 3) },
+					format: (v) => ["Auto", "6-bit", "8-bit", "10-bit"][v],
+					describe: "Bit depth the dithering targets. Match your panel: 6-bit for cheap TN, 8-bit for most monitors, 10-bit for HDR/wide-gamut panels like this one. Auto reads the monitor's EDID.",
+					range: "[ Auto / 6 / 8 / 10-bit ]",
+				}),
+			],
+		},
+		{
+			name: "Color",
+			items: [
+				ks({
+					id: "hdr", label: "HDR", kind: "toggle",
+					min: 0, max: 1, step: 1, big: 1, options: ["Disabled", "Enabled"],
+					get: () => Number(app.pending.hdr ?? app.output.hdr),
+					set: (v) => { app.pending.hdr = v === 1 },
+					format: (v) => (v ? "Enabled" : "Disabled"),
+					describe: "High dynamic range output. Your monitor supports ~456 nits peak. When on, SDR content is mapped using the SDR Brightness value below. Press Enter to apply.",
+					range: "[ Enabled / Disabled ]",
+				}),
+				ks({
+					id: "wcg", label: "Wide Color Gamut", kind: "toggle",
+					min: 0, max: 1, step: 1, big: 1, options: ["Disabled", "Enabled"],
+					get: () => Number(app.pending.wcg ?? app.output.wcg),
+					set: (v) => { app.pending.wcg = v === 1 },
+					format: (v) => (v ? "Enabled" : "Disabled"),
+					describe: "Use the monitor's full native gamut instead of sRGB. Already stretches colors — if vibrance feels like too much on top, disable this first. Press Enter to apply.",
+					range: "[ Enabled / Disabled ]",
+				}),
+				ks({
+					id: "sdrBrightness", label: "SDR Brightness", kind: "slider",
+					min: 100, max: 1000, step: 10, big: 50,
+					get: () => app.pending.sdrBrightness ?? app.output.sdrBrightness,
+					set: (v) => { app.pending.sdrBrightness = clamp(v, 100, 1000) },
+					format: (v) => `${v} nits`,
+					describe: "How bright SDR content (games, desktop) renders while HDR is enabled. Your panel peaks around 456 nits — values above that just clip. Press Enter to apply.",
+					range: "[ 100 — 1000 nits ]",
+				}),
+				ks({
+					id: "brightness", label: "Brightness", kind: "slider",
+					min: 0, max: 100, step: 5, big: 20,
+					get: () => app.pending.brightness ?? app.output.brightness,
+					set: (v) => { app.pending.brightness = clamp(v, 0, 100) },
+					format: (v) => `${v}%`,
+					describe: "KDE's software/DDC brightness for this output. 100% is passthrough. Press Enter to apply.",
+					range: "[ 0 — 100% ]",
+				}),
+				ks({
+					id: "dimming", label: "Dimming", kind: "slider",
+					min: 0, max: 100, step: 5, big: 20,
+					get: () => app.pending.dimming ?? app.output.dimming,
+					set: (v) => { app.pending.dimming = clamp(v, 0, 100) },
+					format: (v) => `${v}%`,
+					describe: "Compositor-side dimming multiplied on top of brightness. Useful when a monitor's minimum DDC brightness is still too bright at night. 100% is off. Press Enter to apply.",
+					range: "[ 0 — 100% ]",
+				}),
+				ks({
+					id: "sdrGamut", label: "SDR Gamut Wideness", kind: "slider",
+					min: 0, max: 100, step: 5, big: 20,
+					get: () => app.pending.sdrGamut ?? app.output.sdrGamut,
+					set: (v) => { app.pending.sdrGamut = clamp(v, 0, 100) },
+					format: (v) => `${v}%`,
+					describe: "While HDR is on, how far SDR content is stretched into the monitor's wide gamut. 0% keeps sRGB accurate; 100% uses the full native gamut — a softer alternative to vibrance. Press Enter to apply.",
+					range: "[ 0 — 100% ]",
+				}),
+				ks({
+					id: "colorPower", label: "Color Power Pref", kind: "toggle",
+					min: 0, max: 1, step: 1, big: 1, options: ["Accuracy", "Efficiency"],
+					get: () => app.pending.colorPower ?? app.output.colorPower,
+					set: (v) => { app.pending.colorPower = clamp(v, 0, 1) },
+					format: (v) => (v ? "Prefer Efficiency" : "Prefer Accuracy"),
+					describe: "Trade color accuracy against GPU power. Accuracy keeps full color pipelines active; Efficiency lets KWin cut color-transform work to save power. Desktops want Accuracy. Press Enter to apply.",
+					range: "[ Accuracy / Efficiency ]",
+				}),
+			],
+		},
+		{
+			name: "Screen",
+			items: [
+				ks({
+					id: "output", label: "Output", kind: "choice",
+					min: 0, max: app.outputs.length - 1, step: 1, big: 1,
+					get: () => Math.max(0, app.outputs.indexOf(app.output)),
+					set: (v) => { app.output = app.outputs[clamp(v, 0, app.outputs.length - 1)] },
+					format: (v) => `${app.outputs[v]?.name ?? "?"}${app.outputs[v]?.enabled ? "" : " (off)"}`,
+					describe: "Which connected monitor the Color and Screen settings below edit. Switching drops any pending (unapplied) changes. Vibrance/dithering are per GPU head, not per output — set those under Advanced.",
+					range: `[ ${app.outputs.length} connected ]`,
+				}),
+				ks({
+					id: "mode", label: "Resolution", kind: "choice",
+					min: 0, max: modes.length - 1, step: 1, big: 1,
+					get: () => {
+						const id = app.pending.modeId ?? app.output.currentModeId
+						return Math.max(0, modes.findIndex((m) => m.id === id))
+					},
+					set: (v) => { app.pending.modeId = modes[clamp(v, 0, modes.length - 1)].id },
+					format: (v) => modes[v]?.name ?? "?",
+					describe: "Display mode (resolution @ refresh rate). Some CS players drop to 1080p for higher FPS or stretched-res feel. Press Enter to apply — the screen will re-modeset.",
+					range: `[ ${modes.length} modes ]`,
+				}),
+				ks({
+					id: "scale", label: "Scale", kind: "choice",
+					min: 0, max: SCALE_CHOICES.length - 1, step: 1, big: 1,
+					get: () => {
+						const current = app.pending.scale ?? app.output.scale
+						let best = 0
+						SCALE_CHOICES.forEach((s, i) => { if (Math.abs(s - current) < Math.abs(SCALE_CHOICES[best] - current)) best = i })
+						return best
+					},
+					set: (v) => { app.pending.scale = SCALE_CHOICES[clamp(v, 0, SCALE_CHOICES.length - 1)] },
+					format: (v) => `${SCALE_CHOICES[v] * 100}%`,
+					describe: "Wayland fractional scaling for this output. Only affects the desktop — fullscreen games render at native resolution regardless. Press Enter to apply.",
+					range: "[ 100 — 200% ]",
+				}),
+				ks({
+					id: "rotation", label: "Rotation", kind: "choice",
+					min: 0, max: ROTATION_ORDER.length - 1, step: 1, big: 1,
+					get: () => Math.max(0, ROTATION_ORDER.indexOf(app.pending.rotation ?? app.output.rotation)),
+					set: (v) => { app.pending.rotation = ROTATION_ORDER[clamp(v, 0, ROTATION_ORDER.length - 1)] },
+					format: (v) => ROTATION_LABELS[v],
+					describe: "Output orientation. Portrait Left/Right rotate 90° for vertical monitors; Upside Down flips 180°. Press Enter to apply — the screen re-modesets.",
+					range: "[ Landscape / Portrait L / Portrait R / Flipped ]",
+				}),
+				ks({
+					id: "overscan", label: "Overscan", kind: "slider",
+					min: 0, max: 100, step: 1, big: 10,
+					get: () => app.pending.overscan ?? app.output.overscan,
+					set: (v) => { app.pending.overscan = clamp(v, 0, 100) },
+					format: (v) => `${v}%`,
+					describe: "Shrinks the image inside the panel edge — only for TVs that crop the picture. Leave at 0 for monitors. Press Enter to apply.",
+					range: "[ 0 — 100% ]",
+				}),
+				ks({
+					id: "rgbRange", label: "RGB Range", kind: "enum",
+					min: 0, max: 2, step: 1, big: 1, options: ["Automatic", "Full", "Limited"],
+					get: () => app.pending.rgbRange ?? app.output.rgbRange,
+					set: (v) => { app.pending.rgbRange = clamp(v, 0, 2) },
+					format: (v) => ["Automatic", "Full", "Limited"][v],
+					describe: "Signal range sent over the cable. Full (0-255) for monitors; Limited (16-235) for some TVs. Wrong setting = washed-out or crushed blacks. Automatic reads the EDID. Press Enter to apply.",
+					range: "[ Automatic / Full / Limited ]",
+				}),
+				ks({
+					id: "enabled", label: "Output Enabled", kind: "toggle",
+					min: 0, max: 1, step: 1, big: 1, options: ["Disabled", "Enabled"],
+					get: () => Number(app.pending.enabled ?? app.output.enabled),
+					set: (v) => { app.pending.enabled = v === 1 },
+					format: (v) => (v ? "Enabled" : "Disabled"),
+					describe: "Turn this monitor on or off. Enabling a screen that overlaps another auto-positions it to the right. Disabling your last enabled output is blocked. Press Enter to apply.",
+					range: "[ Enabled / Disabled ]",
+				}),
+			],
+		},
+		{
+			name: "Advanced",
+			items: [
+				nv({
+					id: "headSel", label: "GPU Head", kind: "slider",
+					min: 0, max: HEAD_COUNT - 1, step: 1, big: 1,
+					get: () => app.config.head,
+					set: (v) => { app.config.head = clamp(v, 0, HEAD_COUNT - 1) },
+					format: (v) => `${v}${v === 4 ? " (DP-2, your monitor)" : v === 3 ? " (phantom — ignore)" : ""}`,
+					describe: "Which physical GPU connector the vibrance/dithering settings edit. The driver numbers ports itself; your 4K monitor (DP-2) is head 4. Head 3 is a phantom HDMI that always reports Failed.",
+					range: "[ 0 — 5 ]",
+				}),
+			],
+		},
+	]
+}
+
+function visibleLength(text: string): number {
+	return text.replace(/\x1b\[[0-9;]*m/g, "").length
+}
+
+function padAnsi(text: string, width: number): string {
+	const len = visibleLength(text)
+	if (len >= width) return text
+	return text + " ".repeat(width - len)
+}
+
+function truncAnsi(text: string, width: number): string {
+	if (visibleLength(text) <= width) return text
+	let out = ""
+	let len = 0
+	let i = 0
+	while (i < text.length && len < width - 1) {
+		const match = text.slice(i).match(/^\x1b\[[0-9;]*m/)
+		if (match) { out += match[0]; i += match[0].length; continue }
+		out += text[i]; len++; i++
+	}
+	return out + "…" + C.reset
+}
+
+function panelBox(title: string, lines: string[], width: number, height: number, focused: boolean): string[] {
+	const border = focused ? C.bright : C.darkGreen
+	const titleColor = focused ? `${C.invertBright}` : `${C.bold}${C.green}`
+	const inner = width - 2
+	const out: string[] = []
+	const titleText = ` ${title} `
+	const fill = "─".repeat(Math.max(0, inner - titleText.length - 1))
+	out.push(`${border}┌─${titleColor}${titleText}${C.reset}${border}${fill}┐${C.reset}`)
+	for (let i = 0; i < height - 2; i++) {
+		const line = lines[i] ?? ""
+		out.push(`${border}│${C.reset}${padAnsi(truncAnsi(line, inner), inner)}${border}│${C.reset}`)
+	}
+	out.push(`${border}└${"─".repeat(inner)}┘${C.reset}`)
+	return out
+}
+
+function renderSlider(value: number, min: number, max: number, width: number, selected: boolean): string {
+	const ratio = (value - min) / (max - min)
+	const filled = clamp(Math.round(ratio * width), 0, width)
+	const on = selected ? C.bright : C.green
+	return `${on}${"■".repeat(filled)}${C.reset}${C.darkGreen}${"╌".repeat(width - filled)}${C.reset}`
+}
+
+function drawApp(app: TApp) {
+	const cols = process.stdout.columns ?? 120
+	const rows = process.stdout.rows ?? 34
+	const categories = buildItems(app)
+	const leftW = 26
+	const rightW = 30
+	const centerW = Math.max(44, cols - leftW - rightW)
+	const bodyH = Math.max(20, rows - 5)
+
+	const catLines = categories.map((cat, i) => {
+		const selected = i === app.category
+		const marker = selected ? (app.panel === 0 ? C.invertBright : C.invert) : ""
+		const arrow = selected ? " ›" : ""
+		return ` ${marker} ${cat.name.padEnd(leftW - 8)}${arrow} ${C.reset}`
+	})
+	const catBoxH = categories.length + 3
+	const sysBoxH = bodyH - catBoxH
+	const left = [
+		...panelBox("CATEGORIES", catLines, leftW, catBoxH, app.panel === 0),
+		...panelBox("SYSTEM INFO", app.sysInfo.map((l) => ` ${C.green}${l}${C.reset}`), leftW, sysBoxH, false),
+	]
+
+	const cat = categories[app.category]
+	app.item = clamp(app.item, 0, cat.items.length - 1)
+	const sliderW = Math.max(16, centerW - 42)
+	const itemLines: string[] = [""]
+	cat.items.forEach((item, i) => {
+		const selected = i === app.item && app.panel === 1
+		const value = item.get()
+		const isPending = !item.live && (app.pending as Record<string, unknown>)[item.id === "mode" ? "modeId" : item.id] !== undefined
+		const label = selected
+			? `${C.invertBright} ${item.label.padEnd(18)}${C.reset}`
+			: ` ${C.green}${item.label.padEnd(18)}${C.reset}`
+		const pendingMark = isPending ? `${C.yellow}*${C.reset}` : " "
+		let control: string
+		if (item.kind === "slider") {
+			control = `${C.dim}‹${C.reset} ${renderSlider(value, item.min, item.max, sliderW, selected)} ${C.dim}›${C.reset}`
+		} else {
+			const text = item.format(value)
+			control = `${C.dim}‹${C.reset}  ${selected ? C.invert : C.green} ${text} ${C.reset}${" ".repeat(Math.max(0, sliderW - text.length - 4))}${C.dim}›${C.reset}`
+		}
+		const valueText = `${selected ? C.bright + C.bold : C.green}${item.format(value)}${C.reset}`
+		itemLines.push(`${label}${pendingMark}${control}  ${valueText}`)
+		itemLines.push("")
+	})
+	const active = cat.items[app.item]
+	const descSeparatorAt = bodyH - 8
+	while (itemLines.length < descSeparatorAt) itemLines.push("")
+	itemLines.push(`${C.darkGreen}${"╌".repeat(centerW - 4)}${C.reset}`)
+	itemLines.push(` ${C.bright}${C.bold}${active.label}${C.reset}  ${C.dim}${active.range}${C.reset}`)
+	const descWidth = centerW - 6
+	for (const line of wrapText(active.describe, descWidth).slice(0, 3)) {
+		itemLines.push(` ${C.green}${line}${C.reset}`)
+	}
+	const center = panelBox(`DISPLAY SETTINGS — ${cat.name.toUpperCase()}`, itemLines, centerW, bodyH, app.panel === 1)
+
+	const presetNames = Object.keys(app.config.presets)
+	app.preset = clamp(app.preset, 0, Math.max(0, presetNames.length - 1))
+	const presetLines: string[] = [""]
+	if (presetNames.length === 0) presetLines.push(` ${C.dim}none yet — press S${C.reset}`)
+	presetNames.forEach((name, i) => {
+		const isActive = name === app.config.activePreset
+		const selected = i === app.preset && app.panel === 2
+		const star = isActive ? `${C.bright}★${C.reset}` : `${C.dim}○${C.reset}`
+		const text = selected ? `${C.invertBright} ${name.padEnd(rightW - 8)}${C.reset}` : ` ${C.green}${name.padEnd(rightW - 8)}${C.reset}`
+		presetLines.push(` ${star}${text}`)
+	})
+	presetLines.push("")
+	presetLines.push(` ${C.dim}Active: ${C.reset}${C.bright}${app.config.activePreset ?? "—"}${C.reset}`)
+	const presetBoxH = Math.max(8, bodyH - 10)
+	const actionLines = [
+		"",
+		` ${C.invert} S ${C.reset} ${C.green}Save Template${C.reset}`,
+		` ${C.invert} ↵ ${C.reset} ${C.green}Apply Pending${C.reset}`,
+		` ${C.invert} B ${C.reset} ${C.green}Boot Persist${C.reset}`,
+		` ${C.invert} D ${C.reset} ${C.green}Delete Preset${C.reset}`,
+		` ${C.red} R ${C.reset} ${C.red}Reset All${C.reset}`,
+	]
+	const right = [
+		...panelBox("PROFILES / TEMPLATES", presetLines, rightW, presetBoxH, app.panel === 2),
+		...panelBox("ACTIONS", actionLines, rightW, bodyH - presetBoxH, false),
+	]
+
+	const header = `${C.invertBright}  ⬢ GPU Settings TUI  ${C.reset}${C.bright}  RTX 3060 Ti  ${C.dim}|${C.reset}${C.bright}  Driver 610.43.02  ${C.dim}|${C.reset}${C.bright}  ${app.output.name} Wayland  ${C.reset}`
+
+	const lines: string[] = [padAnsi(header, cols)]
+	for (let i = 0; i < bodyH; i++) {
+		lines.push(`${left[i] ?? " ".repeat(leftW)}${center[i] ?? " ".repeat(centerW)}${right[i] ?? " ".repeat(rightW)}`)
+	}
+
+	if (app.mode === "save") {
+		lines.push(` ${C.bright}${C.bold}Save template as:${C.reset} ${C.green}${app.input}${C.invert} ${C.reset}   ${C.dim}enter save · esc cancel${C.reset}`)
+	} else {
+		lines.push(
+			` ${C.invert} ⇥ ${C.reset} Panel  ${C.invert} ↑↓ ${C.reset} Navigate  ${C.invert} ←→ ${C.reset} Adjust  ${C.invert} [] ${C.reset} Coarse  ${C.invert} ↵ ${C.reset} Apply  ${C.invert} S ${C.reset} Save  ${C.red} R ${C.reset} Reset  ${C.invert} Q ${C.reset} Quit`,
+		)
+	}
+	const dirtyText = app.dirty
+		? `${C.yellow}Changes: Unsaved (↵ to apply)${C.reset}`
+		: `${C.green}Changes: Applied${C.reset}`
+	const statusText = app.status ? `${app.statusColor}${app.status}${C.reset}` : ""
+	lines.push(padAnsi(` ${C.dim}Status:${C.reset} ${statusText}`, cols - 40) + `${C.dim}Profile: ${C.reset}${C.green}${app.config.activePreset ?? "custom"}${C.reset}  ${C.dim}|${C.reset}  ${dirtyText}`)
+
+	process.stdout.write(`${ESC}[2J${ESC}[H${lines.join("\n")}`)
+}
+
+function wrapText(text: string, width: number): string[] {
+	const words = text.split(" ")
+	const lines: string[] = []
+	let line = ""
+	for (const word of words) {
+		if ((line + " " + word).trim().length > width) {
+			lines.push(line.trim())
+			line = word
+		} else line = `${line} ${word}`
+	}
+	if (line.trim()) lines.push(line.trim())
+	return lines
+}
+
+let applyTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleNvibrant(app: TApp) {
+	if (applyTimer) clearTimeout(applyTimer)
+	applyTimer = setTimeout(() => {
+		const result = applyNvibrant(app.config)
+		app.status = result.message
+		app.statusColor = result.ok ? C.green : C.red
+		saveConfig(app.config)
+		drawApp(app)
+	}, 90)
+}
+
+function adjustItem(app: TApp, item: TItem, direction: number, big: boolean) {
+	if (item.id === "output") {
+		item.set(item.get() + direction)
+		app.pending = {}
+		app.dirty = false
+		app.sysInfo = readSysInfo(app.output)
+		app.status = `editing ${app.output.name}`
+		app.statusColor = C.green
+		return
+	}
+	item.set(item.get() + direction * (big ? item.big : item.step))
+	app.config.activePreset = null
+	if (item.live) scheduleNvibrant(app)
+	else app.dirty = true
+}
+
+function refreshOutputs(app: TApp) {
+	const name = app.output.name
+	app.outputs = readOutputs()
+	app.output = app.outputs.find((o) => o.name === name) ?? app.outputs[0]
+	app.sysInfo = readSysInfo(app.output)
+}
+
+function applyPending(app: TApp) {
+	const result = applyKscreen(app.output, app.pending, app.outputs)
+	app.status = result.message
+	app.statusColor = result.ok ? C.green : C.red
+	if (result.ok) {
+		app.pending = {}
+		app.dirty = false
+		try {
+			refreshOutputs(app)
+		} catch {
+			app.status = "applied, but re-reading display state failed"
+			app.statusColor = C.yellow
+		}
+	}
+}
+
+function colorSnapshot(app: TApp): TColorSnapshot {
+	return {
+		hdr: app.pending.hdr ?? app.output.hdr,
+		wcg: app.pending.wcg ?? app.output.wcg,
+		sdrBrightness: app.pending.sdrBrightness ?? app.output.sdrBrightness,
+		brightness: app.pending.brightness ?? app.output.brightness,
+	}
+}
+
+function loadPreset(app: TApp, name: string) {
+	const preset = app.config.presets[name]
+	if (!preset) return
+	app.config.heads = preset.heads.map((h) => ({ ...h }))
+	app.config.head = preset.head ?? app.config.head
+	app.config.activePreset = name
+	if (preset.color) {
+		app.pending = {
+			hdr: preset.color.hdr,
+			wcg: preset.color.wcg,
+			sdrBrightness: preset.color.sdrBrightness,
+			brightness: preset.color.brightness,
+		}
+		applyPending(app)
+	}
+	const result = applyNvibrant(app.config)
+	app.status = `profile "${name}" loaded · ${result.message}`
+	app.statusColor = result.ok ? C.bright : C.red
+	saveConfig(app.config)
+}
+
+function handleKey(app: TApp, key: string, raw: string) {
+	if (app.mode === "save") {
+		if (key === "escape") app.mode = "main"
+		else if (key === "enter") {
+			const name = app.input.trim()
+			if (name) {
+				app.config.presets[name] = {
+					heads: app.config.heads.map((h) => ({ ...h })),
+					head: app.config.head,
+					color: colorSnapshot(app),
+				}
+				app.config.activePreset = name
+				saveConfig(app.config)
+				app.status = `template "${name}" saved`
+				app.statusColor = C.bright
+			}
+			app.mode = "main"
+		} else if (key === "backspace") app.input = app.input.slice(0, -1)
+		else if (raw.length === 1 && raw >= " " && raw <= "~") app.input += raw
+		return
+	}
+
+	const categories = buildItems(app)
+	const cat = categories[app.category]
+	const presetNames = Object.keys(app.config.presets)
+
+	if (key === "tab") { app.panel = (app.panel + 1) % 3; return }
+	if (key === "s") { app.mode = "save"; app.input = ""; return }
+	if (key === "b") {
+		app.status = writeBootService(app.config)
+		app.statusColor = C.bright
+		saveConfig(app.config)
+		return
+	}
+	if (key === "r") {
+		app.config.heads = Array.from({ length: HEAD_COUNT }, () => defaultHead())
+		app.config.activePreset = null
+		app.pending = {}
+		app.dirty = false
+		app.status = "vibrance & dithering reset to driver defaults"
+		app.statusColor = C.yellow
+		scheduleNvibrant(app)
+		return
+	}
+
+	if (app.panel === 0) {
+		if (key === "up") app.category = (app.category + categories.length - 1) % categories.length
+		else if (key === "down") app.category = (app.category + 1) % categories.length
+		else if (key === "right" || key === "enter") app.panel = 1
+		if (key === "up" || key === "down") app.item = 0
+	} else if (app.panel === 1) {
+		const item = cat.items[app.item]
+		if (key === "up") app.item = (app.item + cat.items.length - 1) % cat.items.length
+		else if (key === "down") app.item = (app.item + 1) % cat.items.length
+		else if (key === "left") adjustItem(app, item, -1, false)
+		else if (key === "right") adjustItem(app, item, 1, false)
+		else if (key === "[" || key === "shift-left") adjustItem(app, item, -1, true)
+		else if (key === "]" || key === "shift-right") adjustItem(app, item, 1, true)
+		else if (key === "x" && item.id !== "output") { item.set(item.max); app.config.activePreset = null; item.live ? scheduleNvibrant(app) : (app.dirty = true) }
+		else if (key === "z" && item.id !== "output") { item.set(0); app.config.activePreset = null; item.live ? scheduleNvibrant(app) : (app.dirty = true) }
+		else if (key === "enter") applyPending(app)
+		else if (key === "escape") app.panel = 0
+	} else {
+		if (key === "up" && presetNames.length) app.preset = (app.preset + presetNames.length - 1) % presetNames.length
+		else if (key === "down" && presetNames.length) app.preset = (app.preset + 1) % presetNames.length
+		else if (key === "enter" && presetNames.length) loadPreset(app, presetNames[app.preset])
+		else if (key === "d" && presetNames.length) {
+			const name = presetNames[app.preset]
+			delete app.config.presets[name]
+			if (app.config.activePreset === name) app.config.activePreset = null
+			saveConfig(app.config)
+			app.status = `template "${name}" deleted`
+			app.statusColor = C.yellow
+		} else if (key === "escape") app.panel = 1
+	}
+}
+
+function parseKeys(data: string): { key: string; raw: string }[] {
+	const keys: { key: string; raw: string }[] = []
+	let i = 0
+	while (i < data.length) {
+		const rest = data.slice(i)
+		if (rest.startsWith(`${ESC}[1;2C`)) { keys.push({ key: "shift-right", raw: "" }); i += 6 }
+		else if (rest.startsWith(`${ESC}[1;2D`)) { keys.push({ key: "shift-left", raw: "" }); i += 6 }
+		else if (rest.startsWith(`${ESC}[A`)) { keys.push({ key: "up", raw: "" }); i += 3 }
+		else if (rest.startsWith(`${ESC}[B`)) { keys.push({ key: "down", raw: "" }); i += 3 }
+		else if (rest.startsWith(`${ESC}[C`)) { keys.push({ key: "right", raw: "" }); i += 3 }
+		else if (rest.startsWith(`${ESC}[D`)) { keys.push({ key: "left", raw: "" }); i += 3 }
+		else if (rest.startsWith(`${ESC}[Z`)) { keys.push({ key: "tab", raw: "" }); i += 3 }
+		else if (rest.startsWith(ESC)) { keys.push({ key: "escape", raw: "" }); i += 1 }
+		else {
+			const ch = rest[0]
+			if (ch === "\t") keys.push({ key: "tab", raw: ch })
+			else if (ch === "\r" || ch === "\n") keys.push({ key: "enter", raw: ch })
+			else if (ch === "\x7f" || ch === "\b") keys.push({ key: "backspace", raw: ch })
+			else if (ch === "\x03") keys.push({ key: "quit", raw: ch })
+			else keys.push({ key: ch.toLowerCase(), raw: ch })
+			i += 1
+		}
+	}
+	return keys
+}
+
+function quit(app: TApp) {
+	saveConfig(app.config)
+	process.stdout.write(`${ESC}[?25h${ESC}[?1049l`)
+	process.stdin.setRawMode?.(false)
+	process.exit(0)
+}
+
+const USAGE = `display — GPU & monitor control
+
+  display                      open the TUI
+  display list                 show connected outputs and their state
+  display on <output>...       turn outputs on (or "all")
+  display off <output>...      turn outputs off
+  display toggle <output>...   flip outputs on/off
+  display only <output>...     turn the named outputs on, everything else off
+  display help                 this text
+
+Output names match loosely, so "display off hdmi" hits HDMI-A-2.
+The last enabled output is protected — turning it off is refused.`
+
+function resolveOutput(outputs: TOutputState[], query: string): TOutputState {
+	const needle = query.toLowerCase()
+	const exact = outputs.find((o) => o.name.toLowerCase() === needle)
+	if (exact) return exact
+	const partial = outputs.filter((o) => o.name.toLowerCase().includes(needle))
+	if (partial.length === 1) return partial[0]
+	const names = outputs.map((o) => o.name).join(", ")
+	if (partial.length > 1) throw new Error(`"${query}" is ambiguous — matches ${partial.map((o) => o.name).join(", ")}`)
+	throw new Error(`no connected output matching "${query}" — have ${names}`)
+}
+
+function formatOutputRow(output: TOutputState): string {
+	const paint = process.stdout.isTTY
+	const mode = output.modes.find((m) => m.id === output.currentModeId)
+	const state = output.enabled ? "on " : "off"
+	const label = paint ? `${output.enabled ? C.green : C.dim}${state}${C.reset}` : state
+	const geometry = output.enabled ? `@ ${output.posX},${output.posY}` : ""
+	return ` ${label}  ${output.name.padEnd(12)} ${(mode?.name ?? "?").padEnd(20)} ${geometry}`.trimEnd()
+}
+
+function runCli(argv: string[]): number {
+	const [command, ...rest] = argv
+	if (command === "help" || command === "--help" || command === "-h") {
+		console.log(USAGE)
+		return 0
+	}
+
+	let outputs: TOutputState[]
+	try {
+		outputs = readOutputs()
+	} catch (error) {
+		console.error(`display: ${(error as Error).message}`)
+		return 1
+	}
+
+	if (command === "list" || command === "ls") {
+		for (const output of outputs) console.log(formatOutputRow(output))
+		return 0
+	}
+
+	if (command !== "on" && command !== "off" && command !== "toggle" && command !== "only") {
+		console.error(`display: unknown command "${command}"\n\n${USAGE}`)
+		return 1
+	}
+	if (rest.length === 0) {
+		console.error(`display: "${command}" needs an output name — try "display list"`)
+		return 1
+	}
+
+	let changes: TEnableChange[]
+	if (command === "on" && rest[0] === "all") {
+		changes = outputs.map((o) => ({ name: o.name, enabled: true }))
+	} else {
+		let targets: TOutputState[]
+		try {
+			targets = rest.map((name) => resolveOutput(outputs, name))
+		} catch (error) {
+			console.error(`display: ${(error as Error).message}`)
+			return 1
+		}
+		changes = command === "only"
+			? outputs.map((o) => ({ name: o.name, enabled: targets.some((t) => t.name === o.name) }))
+			: targets.map((t) => ({ name: t.name, enabled: command === "toggle" ? !t.enabled : command === "on" }))
+	}
+
+	const result = applyEnable(outputs, changes)
+	if (!result.ok) {
+		console.error(`display: ${result.message}`)
+		return 1
+	}
+	console.log(result.message)
+	return 0
+}
+
+function main() {
+	const config = ensureDefaultPreset(loadConfig())
+	saveConfig(config)
+
+	const argv = process.argv.slice(2)
+	if (argv.length > 0) process.exit(runCli(argv))
+
+	if (!process.stdin.isTTY) {
+		const result = applyNvibrant(config)
+		console.log(JSON.stringify({ head: config.head, state: config.heads[config.head], status: result.message }, null, 2))
+		process.exit(result.ok ? 0 : 1)
+	}
+
+	let outputs: TOutputState[]
+	try {
+		outputs = readOutputs()
+	} catch {
+		outputs = [{
+			name: "DP-2", enabled: true, hdr: false, wcg: false, sdrBrightness: 450, brightness: 100, scale: 1,
+			currentModeId: "1", modes: [{ id: "1", name: "unknown", refreshRate: 0 }],
+			rotation: 1, overscan: 0, rgbRange: 0, sdrGamut: 100, dimming: 100, colorPower: 0, posX: 0, posY: 0, width: 3840,
+		}]
+	}
+
+	const app: TApp = {
+		config,
+		outputs,
+		output: outputs[0],
+		pending: {},
+		sysInfo: readSysInfo(outputs[0]),
+		panel: 1,
+		category: 0,
+		item: 0,
+		preset: 0,
+		mode: "main",
+		input: "",
+		status: "",
+		statusColor: C.green,
+	dirty: false,
+	}
+
+	const startup = applyNvibrant(config)
+	app.status = startup.message
+	app.statusColor = startup.ok ? C.green : C.red
+
+	process.stdout.write(`${ESC}[?1049h${ESC}[?25l`)
+	process.stdin.setRawMode(true)
+	process.stdin.resume()
+	process.stdin.setEncoding("utf8")
+
+	process.stdin.on("data", (data: string) => {
+		for (const { key, raw } of parseKeys(data)) {
+			if (key === "quit" || (app.mode === "main" && key === "q")) return quit(app)
+			handleKey(app, key, raw)
+		}
+		drawApp(app)
+	})
+
+	process.stdout.on("resize", () => drawApp(app))
+	drawApp(app)
+}
+
+main()

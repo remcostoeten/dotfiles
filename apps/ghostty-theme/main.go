@@ -12,7 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type paths struct{ config, customThemes, systemThemes string }
+type paths struct{ config, customThemes, systemThemes, assets string }
 
 func resolvePaths() paths {
 	home, _ := os.UserHomeDir()
@@ -24,6 +24,7 @@ func resolvePaths() paths {
 		config:       filepath.Join(root, "configs", "ghostty", "config"),
 		customThemes: filepath.Join(root, "configs", "ghostty", "themes"),
 		systemThemes: "/usr/share/ghostty/themes",
+		assets:       filepath.Join(root, "configs", "ghostty", "assets"),
 	}
 }
 
@@ -57,6 +58,17 @@ func applyOne(p paths, key, value string) error {
 	switch key {
 	case "theme":
 		cfg.Theme = value
+		if image, ok := themeImage(value, p.assets); ok {
+			cfg.Background = image
+		}
+	case "bg":
+		cfg.Background = value
+	case "image-opacity":
+		n, e := strconv.ParseFloat(value, 64)
+		if e != nil || n < 0 || n > 1 {
+			return errors.New("image opacity must be between 0 and 1")
+		}
+		cfg.ImageOpacity = int(n*100 + .5)
 	case "font":
 		cfg.Font = value
 	case "opacity":
@@ -74,8 +86,7 @@ func applyOne(p paths, key, value string) error {
 	default:
 		return fmt.Errorf("unknown setting %q", key)
 	}
-	assets := filepath.Join(filepath.Dir(p.customThemes), "assets")
-	if err := writeAtomic(p.config, renderConfigWithAssets(raw, cfg, assets)); err != nil {
+	if err := writeAtomic(p.config, renderConfigWithAssets(raw, cfg, p.assets)); err != nil {
 		return err
 	}
 	if key == "theme" {
@@ -98,6 +109,11 @@ func usage() {
   ghostty-theme line-height N%  set cell height adjustment
   ghostty-theme letter-spacing N% set cell width adjustment
   ghostty-theme decorations     toggle window decorations
+  ghostty-theme bg              list background images (* = active)
+  ghostty-theme bg <name>       set background image from configs/ghostty/assets
+  ghostty-theme bg toggle       cycle background images
+  ghostty-theme bg none         remove background image
+  ghostty-theme bg-opacity 0..1 set background-image-opacity
 `)
 }
 
@@ -152,6 +168,14 @@ func main() {
 		}
 	case "decorations":
 		err = applyOne(p, "decorations", "")
+	case "bg", "background":
+		err = runBackground(p, args[1:])
+	case "bg-opacity", "image-opacity":
+		if len(args) < 2 {
+			err = fmt.Errorf("%s needs a value", args[0])
+		} else {
+			err = applyOne(p, "image-opacity", args[1])
+		}
 	default:
 		if nameExists(args[0]) {
 			err = applyOne(p, "theme", args[0])
@@ -163,4 +187,50 @@ func main() {
 		fmt.Fprintln(os.Stderr, "ghostty-theme:", err)
 		os.Exit(1)
 	}
+}
+
+func runBackground(p paths, args []string) error {
+	backgrounds := discoverBackgrounds(p.assets)
+	cfg, _, err := loadSettings(p.config)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 || args[0] == "list" {
+		for _, b := range backgrounds {
+			marker := "  "
+			if b.Path == cfg.Background {
+				marker = "* "
+			}
+			fmt.Println(marker + b.Name)
+		}
+		return nil
+	}
+	switch args[0] {
+	case "none", "off", "clear":
+		return applyOne(p, "bg", "")
+	case "toggle", "next":
+		if len(backgrounds) == 0 {
+			return errors.New("no images in " + p.assets)
+		}
+		next := backgrounds[0]
+		for i, b := range backgrounds {
+			if b.Path == cfg.Background {
+				next = backgrounds[(i+1)%len(backgrounds)]
+			}
+		}
+		if err := applyOne(p, "bg", next.Path); err != nil {
+			return err
+		}
+		fmt.Println(next.Name)
+		return nil
+	}
+	query := strings.Join(args, " ")
+	if b, ok := findBackground(backgrounds, query); ok {
+		return applyOne(p, "bg", b.Path)
+	}
+	if _, statErr := os.Stat(query); statErr == nil {
+		abs, _ := filepath.Abs(query)
+		return applyOne(p, "bg", abs)
+	}
+	return fmt.Errorf("unknown background %q (see: ghostty-theme bg)", query)
 }

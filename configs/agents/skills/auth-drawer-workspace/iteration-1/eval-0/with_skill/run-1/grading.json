@@ -1,0 +1,45 @@
+{
+  "expectations": [
+    {
+      "text": "Imports '@remcostoeten/auth-drawer/styles.css' once at the app root",
+      "passed": true,
+      "evidence": "app-layout.tsx imports styles.css in the server root layout"
+    },
+    {
+      "text": "Wraps the app tree in the real AuthProvider with the adapter",
+      "passed": true,
+      "evidence": "auth-provider.tsx: import { AuthProvider as AuthDrawerProvider } from the package; local wrapper passes adapter"
+    },
+    {
+      "text": "Renders <AuthDrawer> with the adapter",
+      "passed": true,
+      "evidence": "<AuthDrawer adapter={authAdapter} hideTrigger /> in auth-provider.tsx"
+    },
+    {
+      "text": "Uses createSupabaseAdapter from adapters/supabase with the supabase client",
+      "passed": true,
+      "evidence": "auth-adapter.ts imports from @remcostoeten/auth-drawer/adapters/supabase"
+    },
+    {
+      "text": "Header uses useAuth() (user/openDrawer/signOut)",
+      "passed": true,
+      "evidence": "site-header.tsx uses useAuth() 3x"
+    },
+    {
+      "text": "'use client' directive present (Next App Router)",
+      "passed": true,
+      "evidence": "present in auth-provider.tsx and site-header.tsx"
+    },
+    {
+      "text": "No non-public / nonexistent imports",
+      "passed": true,
+      "evidence": "only real exports; createAdapterError absent"
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  }
+}

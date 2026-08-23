@@ -1,0 +1,45 @@
+{
+  "expectations": [
+    {
+      "text": "Uses custom-jwt adapter from adapters/custom-jwt (or createAdapter) on the REST endpoints",
+      "passed": false,
+      "evidence": "hand-rolled adapter object; neither the prebuilt custom-jwt adapter nor createAdapter used"
+    },
+    {
+      "text": "Sets presentation.variant to 'modal'",
+      "passed": true,
+      "evidence": "variant=\"modal\" used"
+    },
+    {
+      "text": "Disables OAuth via providers: [] (or omitting signInWithOAuth), not an invented flag",
+      "passed": false,
+      "evidence": "used invented showSocial={false} prop"
+    },
+    {
+      "text": "Creates shared store via createAuthTriggerStore and passes it to AuthDrawer (triggerStore)",
+      "passed": false,
+      "evidence": "built own AuthProvider context + modal state; no trigger store"
+    },
+    {
+      "text": "Wires scroll via useScrollOpenTrigger and emits {kind:'scrollOpen',progress}",
+      "passed": false,
+      "evidence": "invented a useScrollTrigger hook; package's scroll API not used"
+    },
+    {
+      "text": "Declares triggers.scrollOpen ~0.33 and passes hideTrigger",
+      "passed": false,
+      "evidence": "no triggers config; no hideTrigger"
+    },
+    {
+      "text": "No non-public / nonexistent imports",
+      "passed": false,
+      "evidence": "invented showSocial prop and reimplemented AuthProvider/useAuth locally"
+    }
+  ],
+  "summary": {
+    "passed": 1,
+    "failed": 6,
+    "total": 7,
+    "pass_rate": 0.1429
+  }
+}
