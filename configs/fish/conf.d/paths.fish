@@ -19,3 +19,12 @@ end
 if test -d "$HOME/.cargo/bin"
     fish_add_path "$HOME/.cargo/bin"
 end
+
+if test -d "$HOME/.local/bin"
+    fish_add_path "$HOME/.local/bin"
+end
+
+# Self-managed Deno (canary) — prepended so it shadows the pacman build
+if test -d "$HOME/.deno/bin"
+    fish_add_path --prepend "$HOME/.deno/bin"
+end

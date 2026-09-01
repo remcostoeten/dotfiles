@@ -7,13 +7,13 @@ background-opacity = 1.00
 background-opacity-cells = false
 background-blur = 100
 
-background-image = /home/remcostoeten/.config/dotfiles/configs/ghostty/assets/graphite.png
+background-image = /home/remcostoeten/.config/dotfiles/configs/ghostty/assets/rice-nord-polar.png
 background-image-opacity = 0.50
 background-image-fit = cover
 
 
 # Theme
-theme = Fahrenheit
+theme = Highway
 
 
 # Window Appearance
@@ -26,8 +26,8 @@ window-padding-x = 16
 
 
 # Font & Typography
-font-family = "ComicShannsMono Nerd Font Mono"
-font-size = 31
+font-family = "Geist Mono ExtraBold"
+font-size = 32
 adjust-cell-height = 20%
 adjust-cell-width = 18%
 

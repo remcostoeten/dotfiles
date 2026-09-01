@@ -3,7 +3,3 @@
 # All actual configuration is maintained in ~/.config/dotfiles/cfg
 
 source ~/.config/dotfiles/cfg
-# Added by tunnel installer
-fish_add_path $HOME/.local/bin
-# Self-managed Deno (canary) — prepended so it shadows the pacman build
-fish_add_path --prepend $HOME/.deno/bin
