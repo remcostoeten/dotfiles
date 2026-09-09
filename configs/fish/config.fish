@@ -7,3 +7,6 @@ source ~/.config/dotfiles/cfg
 fish_add_path $HOME/.local/bin
 # Self-managed Deno (canary) — prepended so it shadows the pacman build
 fish_add_path --prepend $HOME/.deno/bin
+
+# Added by Antigravity CLI installer
+set -gx PATH "/home/remcostoeten/.local/bin" $PATH

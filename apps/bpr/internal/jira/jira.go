@@ -54,6 +54,15 @@ type Issue struct {
 		} `json:"priority"`
 		Updated     string          `json:"updated"`
 		Description json.RawMessage `json:"description"`
+		Project     struct {
+			Key string `json:"key"`
+		} `json:"project"`
+		Parent *struct {
+			Key    string `json:"key"`
+			Fields struct {
+				Summary string `json:"summary"`
+			} `json:"fields"`
+		} `json:"parent"`
 	} `json:"fields"`
 }
 
@@ -149,7 +158,32 @@ func apiError(code int, data []byte) error {
 
 // --- reads ---
 
-const issueFields = "summary,status,assignee,issuetype,priority,updated,description"
+const issueFields = "summary,status,assignee,issuetype,priority,updated,description,project,parent"
+
+// ProjectKey returns the project key of an issue, falling back to the prefix of
+// its key when the project field was not requested.
+func (i Issue) ProjectKey() string {
+	if i.Fields.Project.Key != "" {
+		return i.Fields.Project.Key
+	}
+	return ProjectOf(i.Key)
+}
+
+// ParentKey returns the key of the issue this one hangs under, or "".
+func (i Issue) ParentKey() string {
+	if i.Fields.Parent == nil {
+		return ""
+	}
+	return i.Fields.Parent.Key
+}
+
+// ProjectOf extracts the project key from an issue key ("DCR-42" -> "DCR").
+func ProjectOf(key string) string {
+	if i := strings.LastIndex(key, "-"); i > 0 {
+		return key[:i]
+	}
+	return key
+}
 
 // MyIssues returns the current user's unresolved issues, newest first. When
 // project is non-empty the search is scoped to that project key.
@@ -158,17 +192,57 @@ func (c *Client) MyIssues(ctx context.Context, project string) ([]Issue, error) 
 	if project != "" {
 		jql = fmt.Sprintf("project = %q AND %s", project, jql)
 	}
-	jql += " ORDER BY updated DESC"
+	return c.Search(ctx, jql+" ORDER BY updated DESC", 50)
+}
+
+// Search runs a JQL query and returns the matching issues.
+func (c *Client) Search(ctx context.Context, jql string, limit int) ([]Issue, error) {
 	body := map[string]any{
 		"jql":        jql,
 		"fields":     strings.Split(issueFields, ","),
-		"maxResults": 50,
+		"maxResults": limit,
 	}
 	var r struct {
 		Issues []Issue `json:"issues"`
 	}
 	err := c.do(ctx, http.MethodPost, "/rest/api/3/search/jql", body, &r)
 	return r.Issues, err
+}
+
+// Children returns the issues whose parent is key — subtasks of a standard
+// issue, or the child issues of an epic.
+func (c *Client) Children(ctx context.Context, key string) ([]Issue, error) {
+	return c.Search(ctx, fmt.Sprintf("parent = %q ORDER BY created ASC", key), 100)
+}
+
+// IssueType is one issue type available in a project.
+type IssueType struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Subtask bool   `json:"subtask"`
+}
+
+// IssueTypes lists the issue types configured for a project.
+func (c *Client) IssueTypes(ctx context.Context, project string) ([]IssueType, error) {
+	var r struct {
+		IssueTypes []IssueType `json:"issueTypes"`
+	}
+	err := c.do(ctx, http.MethodGet, "/rest/api/3/project/"+project, nil, &r)
+	return r.IssueTypes, err
+}
+
+// SubtaskType returns the project's subtask issue type.
+func (c *Client) SubtaskType(ctx context.Context, project string) (IssueType, error) {
+	types, err := c.IssueTypes(ctx, project)
+	if err != nil {
+		return IssueType{}, err
+	}
+	for _, t := range types {
+		if t.Subtask {
+			return t, nil
+		}
+	}
+	return IssueType{}, fmt.Errorf("project %s has no subtask issue type", project)
 }
 
 // Myself returns the display name of the authenticated user, or an error if
@@ -205,19 +279,124 @@ func (c *Client) Transition(ctx context.Context, key, transitionID string) error
 }
 
 func (c *Client) AddComment(ctx context.Context, key, text string) error {
-	body := map[string]any{
-		"body": map[string]any{
-			"type":    "doc",
-			"version": 1,
-			"content": []any{
-				map[string]any{
-					"type":    "paragraph",
-					"content": []any{map[string]string{"type": "text", "text": text}},
-				},
-			},
-		},
-	}
+	body := map[string]any{"body": adfDoc(text)}
 	return c.do(ctx, http.MethodPost, "/rest/api/3/issue/"+key+"/comment", body, nil)
+}
+
+// adfDoc wraps plain text (newline-separated) in an Atlassian Document Format
+// document, the only body format the v3 API accepts.
+func adfDoc(text string) map[string]any {
+	var content []any
+	for _, line := range strings.Split(text, "\n") {
+		p := map[string]any{"type": "paragraph"}
+		if line != "" {
+			p["content"] = []any{map[string]string{"type": "text", "text": line}}
+		}
+		content = append(content, p)
+	}
+	return map[string]any{"type": "doc", "version": 1, "content": content}
+}
+
+// NewIssue describes an issue to create. Parent set makes it a subtask (or an
+// epic's child); TypeID and TypeName are alternative ways to pick the type and
+// may both be empty, in which case the project's default is used.
+type NewIssue struct {
+	Project     string
+	Summary     string
+	Description string
+	TypeID      string
+	TypeName    string
+	Parent      string
+}
+
+// Create files a new issue and returns its key. Issues created without a sprint
+// land in the project's backlog.
+func (c *Client) Create(ctx context.Context, n NewIssue) (string, error) {
+	if n.Project == "" {
+		return "", fmt.Errorf("no Jira project — set jira_project in the bpr config")
+	}
+	if n.Summary == "" {
+		return "", fmt.Errorf("a summary is required")
+	}
+	fields := map[string]any{
+		"project": map[string]string{"key": n.Project},
+		"summary": n.Summary,
+	}
+	switch {
+	case n.TypeID != "":
+		fields["issuetype"] = map[string]string{"id": n.TypeID}
+	case n.TypeName != "":
+		fields["issuetype"] = map[string]string{"name": n.TypeName}
+	default:
+		t, err := c.defaultType(ctx, n.Project)
+		if err != nil {
+			return "", err
+		}
+		fields["issuetype"] = map[string]string{"id": t.ID}
+	}
+	if n.Description != "" {
+		fields["description"] = adfDoc(n.Description)
+	}
+	if n.Parent != "" {
+		fields["parent"] = map[string]string{"key": n.Parent}
+	}
+	var r struct {
+		Key string `json:"key"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/rest/api/3/issue", map[string]any{"fields": fields}, &r); err != nil {
+		return "", err
+	}
+	return r.Key, nil
+}
+
+// CreateSubtask files a subtask under parent, resolving the project and the
+// subtask issue type from the parent issue.
+func (c *Client) CreateSubtask(ctx context.Context, parent, summary, description string) (string, error) {
+	p, err := c.Issue(ctx, parent)
+	if err != nil {
+		return "", err
+	}
+	project := p.ProjectKey()
+	t, err := c.SubtaskType(ctx, project)
+	if err != nil {
+		return "", err
+	}
+	return c.Create(ctx, NewIssue{
+		Project:     project,
+		Summary:     summary,
+		Description: description,
+		TypeID:      t.ID,
+		Parent:      p.Key,
+	})
+}
+
+// defaultType picks the first non-subtask type of a project, preferring Task.
+func (c *Client) defaultType(ctx context.Context, project string) (IssueType, error) {
+	types, err := c.IssueTypes(ctx, project)
+	if err != nil {
+		return IssueType{}, err
+	}
+	var first IssueType
+	for _, t := range types {
+		if t.Subtask {
+			continue
+		}
+		if strings.EqualFold(t.Name, "Task") {
+			return t, nil
+		}
+		if first.ID == "" {
+			first = t
+		}
+	}
+	if first.ID == "" {
+		return IssueType{}, fmt.Errorf("project %s has no usable issue type", project)
+	}
+	return first, nil
+}
+
+// Delete removes an issue permanently. Subtasks of the issue go with it.
+func (c *Client) Delete(ctx context.Context, key string) error {
+	return c.do(ctx, http.MethodDelete, "/rest/api/3/issue/"+key+"?deleteSubtasks=true", nil, nil)
 }
 
 // BrowseURL returns the human-facing URL for an issue key.

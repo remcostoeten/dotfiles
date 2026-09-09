@@ -1,5 +1,6 @@
 import { formatShellDisplayLimit, normalizeShellDisplayLimit, parseShellDisplayLimit } from "../domain/shell-display-limit";
 import type { TodoConfig } from "../domain/task";
+import { UnknownTokenError } from "../domain/unknown-token-error";
 import { UserInputError } from "../domain/user-input-error";
 import type { TodoPlugin } from "./types";
 
@@ -44,13 +45,23 @@ const SETTINGS: ConfigSetting[] = [
       return { ...config, showCompletedTasksByDefault: parseBoolean(value) };
     },
   },
+  {
+    name: "autocorrect",
+    description: "Suggest and learn corrections for mistyped commands and options (on/off)",
+    read(config) {
+      return formatBoolean(config.autocorrect);
+    },
+    apply(config, value) {
+      return { ...config, autocorrect: parseBoolean(value) };
+    },
+  },
 ];
 
 export const configPlugin: TodoPlugin = {
   name: "config",
   description: "Reads and writes persisted settings.",
   register(app) {
-    app.command("config", "Show settings, or set one with 'todo config <key> <value>'.", async ({ args, store, stdout }) => {
+    app.command("config", "Read or change persisted settings.", async ({ args, store, stdout }) => {
       const config = await store.loadConfig();
       const [name, ...valueParts] = stripVerb(args);
 
@@ -70,6 +81,20 @@ export const configPlugin: TodoPlugin = {
       const updated = setting.apply(config, valueParts.join(" "));
       await store.saveConfig(updated);
       stdout.write(`${setting.name} = ${setting.read(updated)}\n`);
+    }, {
+      group: "Settings",
+      usage: ["todo config", "todo config <key>", "todo config <key> <value>"],
+      details: [
+        "Settings live in ~/.dotfiles/todo/config.json. An optional set/get verb is accepted.",
+        ...SETTINGS.map((setting) => `${setting.name.padEnd(22)} ${setting.description}`),
+      ],
+      examples: [
+        { command: "todo config shell-limit 15" },
+        { command: "todo config shell-limit all" },
+        { command: "todo config startup-notifications off" },
+        { command: "todo config autocorrect off" },
+      ],
+      positional: "any",
     });
   },
 };
@@ -81,7 +106,8 @@ function stripVerb(args: string[]): string[] {
 function findSetting(name: string): ConfigSetting {
   const setting = SETTINGS.find((candidate) => candidate.name === name);
   if (setting === undefined) {
-    throw new UserInputError(`Unknown setting: ${name}. Known settings: ${SETTINGS.map((candidate) => candidate.name).join(", ")}`);
+    const names = SETTINGS.map((candidate) => candidate.name);
+    throw new UnknownTokenError(`Unknown setting: ${name}. Known settings: ${names.join(", ")}`, name, names, "setting");
   }
   return setting;
 }
@@ -90,7 +116,7 @@ function parseBoolean(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   if (["on", "true", "yes", "1"].includes(normalized)) return true;
   if (["off", "false", "no", "0"].includes(normalized)) return false;
-  throw new UserInputError(`Invalid boolean: ${value}. Use on or off.`);
+  throw new UnknownTokenError(`Invalid boolean: ${value}. Use on or off.`, value, ["on", "off"], "value");
 }
 
 function formatBoolean(value: boolean): string {

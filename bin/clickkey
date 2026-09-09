@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+DOTFILES_ROOT="$(dirname "$SCRIPT_DIR")"
+
+CONF="$DOTFILES_ROOT/configs/patches/keyd-zoom65-ctrl-capslock-swap.conf"
+LIVE="/etc/keyd/zoom65.conf"
+
+BEGIN_MARK="# >>> clickkey (managed block — use the \`clickkey\` CLI, do not hand-edit) >>>"
+END_MARK="# <<< clickkey <<<"
+STATE_PREFIX="# clickkey-state:"
+
+DEFAULT_KEY="right"
+DEFAULT_BUTTON="leftmouse"
+
+if [[ -t 1 ]]; then
+    BOLD=$'\033[1m'; DIM=$'\033[2m'; GREEN=$'\033[0;32m'; RED=$'\033[0;31m'
+    YELLOW=$'\033[0;33m'; NC=$'\033[0m'
+else
+    BOLD=""; DIM=""; GREEN=""; RED=""; YELLOW=""; NC=""
+fi
+
+usage() {
+    cat <<EOF
+Turn a physical key on the Zoom65 into a mouse click.
+
+Usage: clickkey [command] [args]
+
+Commands:
+  status              Show the current binding and whether it is live (default)
+  on                  Enable the remap
+  off                 Disable it (the key goes back to its normal function)
+  toggle              Flip between on and off
+  set <key> [button]  Rebind to any key, e.g. 'set rightalt', 'set f13 middlemouse'
+  button <button>     Change only the mouse button
+  keys [filter]       List valid keyd key names, optionally filtered
+  edit                Open the keyd config in \$EDITOR
+
+Keys:    any name from 'clickkey keys' (right, f13, rightalt, scrolllock, ...)
+Buttons: left, middle, right (or raw: leftmouse, middlemouse, rightmouse,
+         mouse1, mouse2, mouseback, mouseforward)
+
+Config: $CONF
+EOF
+}
+
+die() { printf '%serror:%s %s\n' "$RED" "$NC" "$1" >&2; exit 1; }
+
+normalize_button() {
+    case "$1" in
+        left|leftmouse|mouse0) printf 'leftmouse' ;;
+        middle|middlemouse) printf 'middlemouse' ;;
+        right|rightmouse) printf 'rightmouse' ;;
+        mouse1|mouse2|mouseback|mouseforward) printf '%s' "$1" ;;
+        *) return 1 ;;
+    esac
+}
+
+valid_key() {
+    keyd list-keys 2>/dev/null | grep -qxF "$1"
+}
+
+# keyd resolves duplicate left-hand sides unpredictably, so a key already bound
+# elsewhere in [main] must be rejected rather than silently shadowed.
+conflicting_key() {
+    awk -v key="$1" -v begin="$BEGIN_MARK" -v end="$END_MARK" '
+        $0 == begin { skip = 1; next }
+        $0 == end   { skip = 0; next }
+        skip { next }
+        /^\[/ { section = tolower($0); next }
+        section == "[main]" && /=/ {
+            lhs = $0
+            sub(/[ \t]*=.*$/, "", lhs)
+            gsub(/^[ \t]+|[ \t]+$/, "", lhs)
+            if (lhs == key) { found = 1 }
+        }
+        END { exit !found }
+    ' "$CONF"
+}
+
+read_state() {
+    local field="$1" line
+    line="$(grep -m1 -F "$STATE_PREFIX" "$CONF" 2>/dev/null || true)"
+    [[ -n "$line" ]] || return 1
+    [[ "$line" =~ (^|[[:space:]])"$field"=([^[:space:]]+) ]] || return 1
+    printf '%s' "${BASH_REMATCH[2]}"
+}
+
+state_key()     { read_state key     || printf '%s' "$DEFAULT_KEY"; }
+state_button()  { read_state button  || printf '%s' "$DEFAULT_BUTTON"; }
+state_enabled() { read_state enabled || printf 'yes'; }
+
+write_block() {
+    local key="$1" button="$2" enabled="$3" block tmp backup
+
+    block="$BEGIN_MARK"$'\n'
+    block+="$STATE_PREFIX key=$key button=$button enabled=$enabled"$'\n'
+    if [[ "$enabled" == yes ]]; then
+        block+="$key = $button"$'\n'
+    else
+        block+="# $key = $button   (disabled)"$'\n'
+    fi
+    block+="$END_MARK"$'\n'
+
+    tmp="$(mktemp)"
+    backup="$(mktemp)"
+    cp "$CONF" "$backup"
+
+    awk -v block="$block" -v begin="$BEGIN_MARK" -v end="$END_MARK" '
+        function flush() { for (i = 0; i < pending; i++) print ""; pending = 0 }
+        $0 == begin { skip = 1; next }
+        $0 == end   { skip = 0; next }
+        skip { next }
+        /^[ \t]*$/ { pending++; next }
+        /^\[/ {
+            if (inmain && !done) { printf "%s\n", block; done = 1; pending = 0 }
+            inmain = (tolower($0) == "[main]")
+        }
+        { flush(); print }
+        END {
+            if (!done) {
+                if (!inmain) { print ""; print "[main]" }
+                printf "%s", block
+            } else {
+                flush()
+            }
+        }
+    ' "$backup" > "$tmp"
+
+    cat "$tmp" > "$CONF"
+    rm -f "$tmp"
+
+    if ! sudo keyd check "$CONF" >/dev/null 2>&1; then
+        cat "$backup" > "$CONF"
+        rm -f "$backup"
+        die "keyd rejected the new config; reverted. Run: sudo keyd check $CONF"
+    fi
+    rm -f "$backup"
+
+    reload
+}
+
+reload() {
+    if [[ ! -e "$LIVE" ]]; then
+        printf '%snote:%s %s does not exist — patch not installed.\n' "$YELLOW" "$NC" "$LIVE"
+        printf '      Run: sudo %s/configs/patches/install.sh\n' "$DOTFILES_ROOT"
+        return 0
+    fi
+    sudo keyd reload
+}
+
+status() {
+    local key button enabled live_state
+    key="$(state_key)"; button="$(state_button)"; enabled="$(state_enabled)"
+
+    if [[ "$enabled" == yes ]]; then
+        live_state="${GREEN}on${NC}"
+    else
+        live_state="${DIM}off${NC}"
+    fi
+
+    printf '%sclickkey%s  %b\n\n' "$BOLD" "$NC" "$live_state"
+    printf '  key     %s\n' "$key"
+    printf '  button  %s\n' "$button"
+    printf '  scope   Zoom65 only (usb 1ea7:7777)\n'
+    printf '  config  %s\n' "$CONF"
+
+    if [[ ! -e "$LIVE" ]]; then
+        printf '\n  %snot installed%s — %s is missing\n' "$YELLOW" "$NC" "$LIVE"
+    elif [[ "$(readlink -f "$LIVE")" != "$(readlink -f "$CONF")" ]]; then
+        printf '\n  %swarning%s — %s does not point at this config\n' "$YELLOW" "$NC" "$LIVE"
+    fi
+}
+
+[[ -f "$CONF" ]] || die "config not found: $CONF"
+
+case "${1:-status}" in
+    status|"")
+        status
+        ;;
+    on)
+        write_block "$(state_key)" "$(state_button)" yes
+        status
+        ;;
+    off)
+        write_block "$(state_key)" "$(state_button)" no
+        status
+        ;;
+    toggle)
+        if [[ "$(state_enabled)" == yes ]]; then
+            write_block "$(state_key)" "$(state_button)" no
+        else
+            write_block "$(state_key)" "$(state_button)" yes
+        fi
+        status
+        ;;
+    set)
+        [[ $# -ge 2 ]] || die "usage: clickkey set <key> [button]"
+        new_key="$2"
+        valid_key "$new_key" || die "'$new_key' is not a valid keyd key. Try: clickkey keys $new_key"
+        conflicting_key "$new_key" && die "'$new_key' is already bound elsewhere in [main]; pick another key."
+        if [[ $# -ge 3 ]]; then
+            new_button="$(normalize_button "$3")" || die "'$3' is not a mouse button (left|middle|right)"
+        else
+            new_button="$(state_button)"
+        fi
+        write_block "$new_key" "$new_button" "$(state_enabled)"
+        status
+        ;;
+    button)
+        [[ $# -ge 2 ]] || die "usage: clickkey button <left|middle|right>"
+        new_button="$(normalize_button "$2")" || die "'$2' is not a mouse button (left|middle|right)"
+        write_block "$(state_key)" "$new_button" "$(state_enabled)"
+        status
+        ;;
+    keys)
+        if [[ $# -ge 2 ]]; then
+            keyd list-keys | grep -i -- "$2" || die "no key names match '$2'"
+        else
+            keyd list-keys
+        fi
+        ;;
+    edit)
+        "${EDITOR:-nano}" "$CONF"
+        sudo keyd check "$CONF" >/dev/null 2>&1 || die "config has errors. Run: sudo keyd check $CONF"
+        reload
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+    *)
+        usage >&2
+        exit 1
+        ;;
+esac

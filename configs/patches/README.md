@@ -50,6 +50,51 @@ a proper held modifier, so Caps+C correctly produces Ctrl+C.
 Because the firmware already swapped them, swapping them a second time here puts
 each key back to what its label says.
 
+The same file also carries two unrelated fixes for this board: `rightalt = esc`
+(the physical Esc key is broken), and a *click key* — a key that sends a mouse
+button instead of its normal keystroke.
+
+---
+
+## The click key — `clickkey`
+
+The physical Esc key being dead is not the only casualty on this board; the click
+key exists so a mouse button is reachable from the keyboard. It defaults to the
+right arrow sending a left click, but the key and the button are both changeable,
+and the whole thing can be switched off without touching the config by hand.
+
+```bash
+clickkey                      # status
+clickkey off                  # right arrow goes back to being an arrow
+clickkey on
+clickkey toggle
+clickkey set rightalt         # rebind to any key
+clickkey set f13 middlemouse  # ...and any button
+clickkey button right         # change only the button
+clickkey keys mouse           # list valid keyd key names, filtered
+```
+
+`clickkey` owns a marked region inside the `.conf`:
+
+```
+# >>> clickkey (managed block — use the `clickkey` CLI, do not hand-edit) >>>
+# clickkey-state: key=right button=leftmouse enabled=yes
+right = leftmouse
+# <<< clickkey <<<
+```
+
+Edit the rest of the file freely; just leave that block to the CLI. Turning the
+remap off comments the mapping out but keeps the state line, so `clickkey on`
+restores the same key and button.
+
+Every change is validated with `keyd check` before `keyd reload`, and the previous
+file is restored if keyd rejects it — a typo can't leave you with a dead keyboard.
+`set` also refuses a key already bound elsewhere in `[main]` (keyd resolves
+duplicate left-hand sides unpredictably) and any name `keyd list-keys` doesn't know.
+
+Editing the file is unprivileged since it lives in dotfiles; only the reload needs
+root, which `clickkey` calls via `sudo` on its own.
+
 ---
 
 ## Install

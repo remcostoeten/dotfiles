@@ -124,6 +124,19 @@ func cmdTodo(ctx context.Context, a *app) error {
 }
 
 func cmdIssue(ctx context.Context, a *app, args []string) error {
+	if len(args) > 0 {
+		switch strings.ToLower(args[0]) {
+		case "new", "create", "add":
+			return cmdTicketNew(ctx, a, args[1:])
+		case "sub", "subs", "subtask", "subtasks":
+			return cmdSubtasks(ctx, a, args[1:])
+		case "rm", "remove", "delete":
+			if err := ensureJira(ctx, a); err != nil {
+				return err
+			}
+			return subtaskRemove(ctx, a, args[1:])
+		}
+	}
 	if err := ensureJira(ctx, a); err != nil {
 		return err
 	}
@@ -155,8 +168,18 @@ func printIssue(cl *jira.Client, is *jira.Issue) {
 	if is.Fields.Assignee != nil {
 		fmt.Printf("  assignee  %s\n", is.Fields.Assignee.DisplayName)
 	}
+	if parent := is.ParentKey(); parent != "" {
+		fmt.Printf("  parent    %s\n", cBlue.Render(parent))
+	}
 	if desc := is.DescriptionText(); desc != "" {
 		fmt.Printf("\n%s\n", desc)
+	}
+	if subs, err := cl.Children(context.Background(), is.Key); err == nil && len(subs) > 0 {
+		fmt.Printf("\n  %s\n", cBold.Render("subtasks"))
+		for _, s := range subs {
+			color := issueStatusColor(s.Fields.Status.Category.Key)
+			fmt.Printf("    %s  %s  %s\n", cBlue.Render(s.Key), color(fmt.Sprintf("[%s]", s.Status())), s.Summary())
+		}
 	}
 	fmt.Printf("\n  %s\n\n", cDim.Render(cl.BrowseURL(is.Key)))
 }

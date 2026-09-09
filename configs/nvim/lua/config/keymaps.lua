@@ -32,6 +32,13 @@ map("v", "<C-c>", '"+y', { desc = "Copy to clipboard" })
 -- Ctrl-X to clear file without overwriting clipboard
 map("n", "<C-x>", "gg\"_dG", { desc = "Clear file (no clipboard)" })
 
+map("n", "<leader>ac", function()
+  Snacks.terminal({ "claude" }, { win = { position = "right", width = 0.45 } })
+end, { desc = "Claude Code" })
+map("n", "<leader>ao", function()
+  Snacks.terminal({ "codex" }, { win = { position = "right", width = 0.45 } })
+end, { desc = "Codex" })
+
 -- Ctrl-Shift-Up/Down to extend selection line-wise
 map("n", "<C-S-Up>", "V<Up>", { desc = "Extend selection up" })
 map("n", "<C-S-Down>", "V<Down>", { desc = "Extend selection down" })

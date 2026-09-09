@@ -3,26 +3,33 @@ command = /usr/bin/fish
 
 
 # Background
-background-opacity = 1.00
+background-opacity = 0.92
 background-opacity-cells = false
 background-blur = 100
 
-background-image = /home/remcostoeten/.config/dotfiles/configs/ghostty/assets/graphite.png
-background-image-opacity = 0.50
+background-image = /home/remcostoeten/.config/dotfiles/configs/ghostty/assets/rice-lilac-ridges.png
+background-image-opacity = 0.60
 background-image-fit = cover
 
 
 # Theme
-theme = Fahrenheit
+theme = rice
+cursor-style = bar
+cursor-style-blink = false
+bold-is-bright = false
+minimum-contrast = 1.1
+unfocused-split-opacity = 0.85
 
 
 # Window Appearance
 window-decoration = auto
-gtk-titlebar = false
-window-show-tab-bar = never
+gtk-titlebar = true
+window-show-tab-bar = auto
 gtk-toolbar-style = flat
 gtk-custom-css = gtk.css
-window-padding-x = 16
+window-padding-x = 20
+window-padding-y = 14
+window-padding-balance = true
 
 
 # Font & Typography

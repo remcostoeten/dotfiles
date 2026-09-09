@@ -59,6 +59,12 @@ type model struct {
 	transitions []jira.Transition
 	loadingSub  bool // detail sub-resource loading
 
+	subView     bool // subtask panel for the selected ticket
+	subParent   string
+	subs        []jira.Issue
+	subCursor   int
+	subsLoading bool
+
 	input      *inputState
 	choosing   []choice // transition picker
 	chCursor   int
@@ -94,6 +100,11 @@ type issuesMsg struct {
 type commentsMsg struct {
 	comments []bitbucket.Comment
 	err      error
+}
+type subsMsg struct {
+	parent string
+	subs   []jira.Issue
+	err    error
 }
 type transitionsMsg struct {
 	transitions []jira.Transition
@@ -144,6 +155,14 @@ func (m *model) loadComments(id int) tea.Cmd {
 	return func() tea.Msg {
 		cs, err := a.bb.Comments(ctx, a.slug, id)
 		return commentsMsg{cs, err}
+	}
+}
+
+func (m *model) loadSubs(key string) tea.Cmd {
+	a, ctx := m.a, m.ctx
+	return func() tea.Msg {
+		subs, err := a.jira.Children(ctx, key)
+		return subsMsg{parent: key, subs: subs, err: err}
 	}
 }
 
@@ -302,6 +321,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.adjustIsOffset()
 		return m, nil
 
+	case subsMsg:
+		m.subsLoading = false
+		if msg.err != nil {
+			m.errMsg = msg.err.Error()
+			return m, nil
+		}
+		m.subParent = msg.parent
+		m.subs = msg.subs
+		m.subCursor = clamp(m.subCursor, 0, max(len(m.subs)-1, 0))
+		return m, nil
+
 	case commentsMsg:
 		m.loadingSub = false
 		m.comments = msg.comments
@@ -434,17 +464,26 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "enter":
 			ch := m.choosing[m.chCursor]
 			key := ""
-			if is := m.curIssue(); is != nil {
+			after := m.loadIssues()
+			if s := m.curSub(); s != nil {
+				key = s.Key
+				after = m.loadSubs(m.subParent)
+			} else if is := m.curIssue(); is != nil {
 				key = is.Key
 			}
 			m.choosing = nil
 			if key != "" {
 				return m, act("moved "+key+" → "+ch.label,
 					func() error { return m.a.jira.Transition(m.ctx, key, ch.id) },
-					m.loadIssues())
+					after)
 			}
 		}
 		return m, nil
+	}
+
+	// Subtask panel mode.
+	if m.subView {
+		return m.subAction(msg)
 	}
 
 	switch msg.String() {
@@ -708,6 +747,103 @@ func (m model) issueAction(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		branch := key + "-" + slugify(is.Summary())
 		return m, act("created branch "+branch,
 			func() error { _, err := git(m.a.dir, "checkout", "-b", branch); return err }, nil)
+	case "s":
+		m.subView = true
+		m.subsLoading = true
+		m.subParent = key
+		m.subs = nil
+		m.subCursor = 0
+		return m, m.loadSubs(key)
+	case "n":
+		m.input = &inputState{
+			prompt: "New ticket in " + m.a.settings.JiraProject,
+			submit: func(mm *model, val string) tea.Cmd {
+				return act("created ticket", func() error {
+					_, err := mm.a.jira.Create(mm.ctx, jira.NewIssue{
+						Project: mm.a.settings.JiraProject,
+						Summary: val,
+					})
+					return err
+				}, mm.loadIssues())
+			},
+		}
+		return m, nil
+	}
+	return m, nil
+}
+
+// curSub is the subtask under the cursor in the subtask panel.
+func (m *model) curSub() *jira.Issue {
+	if !m.subView || m.subCursor < 0 || m.subCursor >= len(m.subs) {
+		return nil
+	}
+	return &m.subs[m.subCursor]
+}
+
+func (m model) subAction(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	parent := m.subParent
+	switch msg.String() {
+	case "q", "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc", "backspace", "left", "h", "s":
+		m.subView = false
+		m.subs = nil
+		return m, nil
+	case "up", "k":
+		m.subCursor = clamp(m.subCursor-1, 0, max(len(m.subs)-1, 0))
+		return m, nil
+	case "down", "j":
+		m.subCursor = clamp(m.subCursor+1, 0, max(len(m.subs)-1, 0))
+		return m, nil
+	case "r":
+		m.subsLoading = true
+		return m, m.loadSubs(parent)
+	case "n", "a":
+		m.input = &inputState{
+			prompt: "New subtask under " + parent,
+			submit: func(mm *model, val string) tea.Cmd {
+				return act("added subtask to "+parent, func() error {
+					_, err := mm.a.jira.CreateSubtask(mm.ctx, parent, val, "")
+					return err
+				}, mm.loadSubs(parent))
+			},
+		}
+		return m, nil
+	case "o":
+		if s := m.curSub(); s != nil {
+			openURL(m.a.jira.BrowseURL(s.Key))
+			m.status = "opened " + s.Key + " in browser"
+		}
+		return m, nil
+	case "t":
+		if s := m.curSub(); s != nil {
+			m.wantPicker = true
+			m.loadingSub = true
+			m.choosing = []choice{}
+			m.status = "loading transitions…"
+			return m, m.loadTransitions(s.Key)
+		}
+		return m, nil
+	case "d", "x", "delete":
+		s := m.curSub()
+		if s == nil {
+			return m, nil
+		}
+		key := s.Key
+		m.input = &inputState{
+			prompt: "Delete " + key + " permanently? type y",
+			submit: func(mm *model, val string) tea.Cmd {
+				if strings.ToLower(val) != "y" && !strings.EqualFold(val, "yes") {
+					mm.status = "cancelled"
+					return nil
+				}
+				return act("deleted "+key, func() error {
+					return mm.a.jira.Delete(mm.ctx, key)
+				}, mm.loadSubs(parent))
+			},
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -745,6 +881,8 @@ func (m model) View() string {
 
 	if m.choosing != nil {
 		b.WriteString(m.pickerView())
+	} else if m.subView {
+		b.WriteString(m.subsView())
 	} else if m.detail {
 		b.WriteString(m.detailView())
 	} else if m.tab == tabPRs {
@@ -947,6 +1085,29 @@ func (m model) detailView() string {
 	return b.String()
 }
 
+func (m model) subsView() string {
+	var b strings.Builder
+	b.WriteString(cDim.Render("  subtasks of ") + cBold.Render(cKey.Render(m.subParent)) + "\n\n")
+	if m.subsLoading {
+		return b.String() + cDim.Render("  loading subtasks…")
+	}
+	if len(m.subs) == 0 {
+		return b.String() + cDim.Render("  none yet — press n to add one")
+	}
+	for i, s := range m.subs {
+		cursor := "  "
+		summary := s.Summary()
+		if i == m.subCursor {
+			cursor = selRow.Render("▶ ")
+			summary = selRow.Render(summary)
+		}
+		color := issueStatusColor(s.Fields.Status.Category.Key)
+		b.WriteString(fmt.Sprintf("%s%s  %s  %s\n",
+			cursor, cKey.Render(s.Key), color(trunc(s.Status(), 13)), summary))
+	}
+	return b.String()
+}
+
 func (m model) pickerView() string {
 	var b strings.Builder
 	b.WriteString(cBold.Render("Move to…") + "\n\n")
@@ -977,12 +1138,14 @@ func (m model) footer() string {
 	var keys string
 	if m.choosing != nil {
 		keys = "↑↓ move · enter select · esc cancel"
+	} else if m.subView {
+		keys = "↑↓ · n add · d delete · t transition · o web · r refresh · esc back"
 	} else if m.detail {
 		keys = "esc/←/⌫ back · o open · r refresh · q quit"
 	} else if m.tab == tabPRs {
 		keys = "↑↓ · 1-9 jump · / filter · enter detail · a approve · u unappr · m merge · d decline · c comment · e edit · ? help"
 	} else {
-		keys = "↑↓ · 1-9 jump · / filter · enter detail · t transition · c comment · b branch · o web · ? help"
+		keys = "↑↓ · / filter · enter detail · t transition · c comment · s subtasks · n new · b branch · o web · ? help"
 	}
 	line := cDim.Render(keys)
 	if m.status != "" {

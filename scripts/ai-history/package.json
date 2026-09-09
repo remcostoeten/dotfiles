@@ -1,0 +1,14 @@
+{
+  "name": "dotfiles-ai-history",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun ai-history.ts",
+    "dev": "bun ai-history.ts",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
+  }
+}

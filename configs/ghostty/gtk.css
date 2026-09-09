@@ -3,7 +3,7 @@ window.background {
 }
 
 tabbar {
-  background: rgba(20, 22, 23, 0.2);
+  background: rgba(26, 23, 38, 0.6);
   padding: 10px 12px 0 12px;
 }
 
@@ -16,26 +16,26 @@ tabbar tabbox tab {
   margin: 0 8px 8px 0;
   padding: 0 12px;
   border-radius: 10px;
-  border: 1px solid rgba(215, 208, 199, 0.08);
-  background: rgba(215, 208, 199, 0.03);
-  color: #b9b2aa;
+  border: 1px solid rgba(200, 182, 255, 0.12);
+  background: rgba(42, 37, 64, 0.5);
+  color: #6f6a85;
   box-shadow: none;
 }
 
 tabbar tabbox tab:hover {
-  background: rgba(209, 191, 151, 0.08);
-  border-color: rgba(209, 191, 151, 0.16);
-  color: #ddd6cd;
+  background: rgba(200, 182, 255, 0.10);
+  border-color: rgba(200, 182, 255, 0.25);
+  color: #e8e3f0;
 }
 
 tabbar tabbox tab:selected {
-  background: rgba(209, 191, 151, 0.12);
-  border-color: rgba(209, 191, 151, 0.22);
-  color: #f2ece4;
+  background: rgba(200, 182, 255, 0.18);
+  border-color: rgba(200, 182, 255, 0.35);
+  color: #e8e3f0;
 }
 
 tabbar tabbox tab:selected:hover {
-  background: rgba(209, 191, 151, 0.16);
+  background: rgba(200, 182, 255, 0.25);
 }
 
 tabbar tabbox tab label {

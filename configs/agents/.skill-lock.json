@@ -203,6 +203,24 @@
       "skillFolderHash": "c56eac3ec48a97c254dc3a2a42915f22f96a5401",
       "installedAt": "2026-08-16T00:50:37.607Z",
       "updatedAt": "2026-08-16T00:50:37.607Z"
+    },
+    "diffs": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/pierrecomputer/pierre.git",
+      "skillPath": "skills/diffs/SKILL.md",
+      "skillFolderHash": "f60aa90c470939672dbddf929e44237caca6d759",
+      "installedAt": "2026-08-30T16:52:02.554Z",
+      "updatedAt": "2026-08-30T16:52:02.554Z"
+    },
+    "install-anti-slop": {
+      "source": "dmmulroy/anti-slop",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/dmmulroy/anti-slop.git",
+      "skillPath": "skills/install-anti-slop/SKILL.md",
+      "skillFolderHash": "44a970ae13bc32ef7391b681208a384e1aae669b",
+      "installedAt": "2026-09-03T23:30:53.509Z",
+      "updatedAt": "2026-09-03T23:30:53.509Z"
     }
   },
   "dismissed": {

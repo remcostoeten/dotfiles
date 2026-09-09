@@ -30,7 +30,7 @@ repo_info() {
         *) die "Origin is not a Bitbucket repository: $url" ;;
     esac
     WORKSPACE="$(printf '%s' "$url" | sed -E 's#.*bitbucket.org[:/]([^/]+)/.*#\1#')"
-    REPO="$(printf '%s' "$url" | sed -E 's#.*bitbucket.org[:/][^/]+/([^/.]+)(\.git)?$#\1#')"
+    REPO="$(printf '%s' "$url" | sed -E 's#\.git$##; s#.*bitbucket\.org[:/][^/]+/##')"
     [ -n "$WORKSPACE" ] && [ -n "$REPO" ] || die "Could not parse workspace/repo from: $url"
 }
 

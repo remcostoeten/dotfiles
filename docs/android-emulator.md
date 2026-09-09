@@ -257,6 +257,14 @@ $emulator_path -avd "$selected_device" \
 | `packages [filter]` | List/search installed packages |
 | `logcat` | Show live device logs |
 | `screenshot` | Take device screenshot |
+| `apps [filter]` | List installed apps (`-a` includes system apps) |
+| `app-info <pkg>` | Show version, APK size and paths for an app |
+| `install <apk>` | Install an APK file |
+| `uninstall <pkg>` | Uninstall an app (asks for confirmation) |
+| `clear <pkg>` | Clear an app's data and cache |
+| `storage` | Show device storage usage and breakdown |
+| `avd-info [avd]` | Show AVD config (RAM, disk size, on-disk usage) |
+| `resize <GB> [avd]` | Set the AVD's data partition size |
 | `feeld` | Launch Feeld app |
 | `govee` | Launch Govee Home app |
 | `whatsapp` | Launch WhatsApp (Desktop) |

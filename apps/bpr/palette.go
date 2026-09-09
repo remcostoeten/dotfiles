@@ -191,6 +191,16 @@ func runPalette(a *app) {
 			}
 			pause()
 		}},
+		{label: "New ticket", desc: "File a ticket in the backlog", run: func() {
+			if err := cmdTicketNew(ctx, a, nil); err != nil {
+				fmt.Fprintln(os.Stderr, cRed.Render("error: "+err.Error()))
+			}
+			pause()
+		}},
+		{label: "Subtasks", desc: "List, add or remove subtasks of a ticket", run: func() {
+			interactiveSubtasks(ctx, a)
+			pause()
+		}},
 		{label: "Auth", desc: "Configure credentials", run: func() {
 			if err := cmdAuth(); err != nil {
 				die(err)
@@ -224,6 +234,48 @@ func pause() {
 	fmt.Println()
 	fmt.Print(cDim.Render("  Press Enter to return to menu..."))
 	fmt.Scanln()
+}
+
+// interactiveSubtasks lists a ticket's subtasks and loops on add/remove.
+func interactiveSubtasks(ctx context.Context, a *app) {
+	if err := ensureJira(ctx, a); err != nil {
+		fmt.Fprintln(os.Stderr, cRed.Render("error: "+err.Error()))
+		return
+	}
+	key := branchTicket(currentBranch(a.dir))
+	if k := prompt(fmt.Sprintf("Ticket key [%s]: ", key)); k != "" {
+		key = strings.ToUpper(k)
+	}
+	if key == "" {
+		fmt.Fprintln(os.Stderr, cRed.Render("error: no ticket key"))
+		return
+	}
+
+	for {
+		subs, err := a.jira.Children(ctx, key)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, cRed.Render("error: "+err.Error()))
+			return
+		}
+		printSubtasks(a.jira, key, subs)
+
+		switch prompt("[a]dd  [r]emove  [q]uit: ") {
+		case "a", "add":
+			if err := subtaskAdd(ctx, a, []string{key}); err != nil {
+				fmt.Fprintln(os.Stderr, cRed.Render("error: "+err.Error()))
+			}
+		case "r", "remove", "rm":
+			sub := strings.ToUpper(prompt("Subtask key to delete: "))
+			if sub == "" {
+				continue
+			}
+			if err := subtaskRemove(ctx, a, []string{sub}); err != nil {
+				fmt.Fprintln(os.Stderr, cRed.Render("error: "+err.Error()))
+			}
+		default:
+			return
+		}
+	}
 }
 
 func interactiveCreate(ctx context.Context, a *app) {

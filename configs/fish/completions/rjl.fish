@@ -2,10 +2,12 @@ complete -c rjl -f
 
 complete -c rjl -n __fish_use_subcommand -a vdwv -d 'Target the vanderwalvans profile'
 complete -c rjl -n __fish_use_subcommand -a vanderwalvans -d 'Target the vanderwalvans profile'
-complete -c rjl -n __fish_use_subcommand -a all -d 'Target both app profiles'
-complete -c rjl -n __fish_use_subcommand -a both -d 'Target both app profiles'
+complete -c rjl -n __fish_use_subcommand -a rjaf -d 'Target the rjaf (regeljeautofinanciering) profile'
+complete -c rjl -n __fish_use_subcommand -a af -d 'Target the rjaf (regeljeautofinanciering) profile'
+complete -c rjl -n __fish_use_subcommand -a all -d 'Target every app profile'
+complete -c rjl -n __fish_use_subcommand -a both -d 'Target every app profile'
 
-complete -c rjl -n '__fish_seen_subcommand_from vdwv vdw vanderwalvans rjl rj regeljelease all both' \
+complete -c rjl -n '__fish_seen_subcommand_from vdwv vdw vanderwalvans rjl rj regeljelease rjaf af autofinanciering regeljeautofinanciering all both' \
     -a 'stop down flush jira board pr newpr pipelines workspace help' -d 'Command for the selected app'
 
 complete -c rjl -n __fish_use_subcommand -a stop -d 'Stop the stack'

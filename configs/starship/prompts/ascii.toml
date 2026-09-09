@@ -1,0 +1,125 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+add_newline = true
+command_timeout = 800
+
+palette = "amber"
+
+format = """
+[$time](muted) [::](muted) $directory$git_branch$git_status$git_state$nodejs$bun$rust$golang$python$php$cmd_duration
+$character"""
+
+right_format = "$jobs$status"
+
+[palettes.amber]
+text  = "#d7c9a7"
+muted = "#6b6350"
+amber = "#e8b339"
+green = "#8fbf6f"
+cyan  = "#7fb3b0"
+red   = "#d9614c"
+
+[directory]
+style = "fg:amber bold"
+read_only_style = "fg:red"
+format = "[$path]($style)[$read_only]($read_only_style)"
+truncation_length = 3
+truncate_to_repo = false
+truncation_symbol = ".../"
+read_only = " [ro]"
+home_symbol = "~"
+
+[git_branch]
+symbol = ""
+style = "fg:cyan"
+format = " [on $branch]($style)"
+
+[git_status]
+style = "fg:muted"
+format = "( [$all_status$ahead_behind]($style))"
+conflicted = "!$count "
+staged = "+$count "
+modified = "*$count "
+renamed = ">$count "
+deleted = "-$count "
+untracked = "?$count "
+stashed = "\\$$count "
+ahead = "^$count "
+behind = "v$count "
+diverged = "^$ahead_count v$behind_count "
+up_to_date = ""
+
+[git_state]
+style = "fg:red"
+format = " [<$state( $progress_current/$progress_total)>]($style)"
+rebase = "rebase"
+merge = "merge"
+cherry_pick = "pick"
+
+[nodejs]
+symbol = "node:"
+style = "fg:green"
+format = " [$symbol$version]($style)"
+version_format = "${major}.${minor}"
+detect_files = ["package.json", ".node-version", ".nvmrc"]
+detect_folders = ["node_modules"]
+
+[bun]
+symbol = "bun:"
+style = "fg:amber"
+format = " [$symbol$version]($style)"
+version_format = "${major}.${minor}"
+
+[rust]
+symbol = "rs:"
+style = "fg:red"
+format = " [$symbol$version]($style)"
+version_format = "${major}.${minor}"
+
+[golang]
+symbol = "go:"
+style = "fg:cyan"
+format = " [$symbol$version]($style)"
+version_format = "${major}.${minor}"
+
+[python]
+symbol = "py:"
+style = "fg:green"
+format = " [$symbol($version)( \\($virtualenv\\))]($style)"
+version_format = "${major}.${minor}"
+
+[php]
+symbol = "php:"
+style = "fg:muted"
+format = " [$symbol$version]($style)"
+version_format = "${major}.${minor}"
+
+[cmd_duration]
+min_time = 2_000
+style = "fg:muted"
+format = " [+$duration]($style)"
+
+[jobs]
+symbol = "jobs:"
+style = "fg:amber"
+format = "[$symbol$number]($style) "
+
+[status]
+disabled = false
+symbol = "exit:"
+style = "fg:red"
+format = "[$symbol$status]($style)"
+
+[time]
+disabled = false
+time_format = "%H:%M:%S"
+style = "fg:muted"
+format = "[$time]($style)"
+
+[character]
+success_symbol = "[\\$](bold green)"
+error_symbol = "[\\$](bold red)"
+vimcmd_symbol = "[:](bold cyan)"
+vimcmd_replace_one_symbol = "[:](bold amber)"
+vimcmd_replace_symbol = "[:](bold amber)"
+vimcmd_visual_symbol = "[:](bold amber)"

@@ -64,6 +64,10 @@ deployed = "~/.config/fastfetch"
 repository = "configs/fastfetch"
 
 [[deployment]]
+deployed = "~/.config/fish/completions/ai-history.fish"
+repository = "configs/fish/completions/ai-history.fish"
+
+[[deployment]]
 deployed = "~/.config/fish/completions/kill.fish"
 repository = "configs/fish/completions/kill.fish"
 

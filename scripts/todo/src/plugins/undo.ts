@@ -25,9 +25,14 @@ export const undoPlugin: TodoPlugin = {
       await store.saveTasks([...tasks, ...restoredTasks]);
       await store.clearUndo();
       stdout.write(`${GREEN}Restored ${restoredTasks.length} task(s)${RESET}\n`);
+    }, {
+      group: "Remove",
+      aliases: ["revert", "restore"],
+      usage: ["todo undo"],
+      details: ["Only the most recent rm, rmall, or taskboard delete is kept. Restored tasks get fresh IDs."],
     });
 
-    app.command("snooze", "Snooze a task: todo snooze <id> <1h|tomorrow|monday>.", async ({ args, store, stdout }) => {
+    app.command("snooze", "Push a task's due date forward.", async ({ args, store, stdout }) => {
       if (args.length < 2) throw new UserInputError("Usage: todo snooze <id> <1h|30m|tomorrow|monday|next week|16/08/2026>");
       const id = args[0];
       if (id === undefined) throw new UserInputError("Missing task ID");
@@ -39,16 +44,38 @@ export const undoPlugin: TodoPlugin = {
       if (task === undefined) throw new UserInputError(`Task not found: ${id}`);
       task.dueDate = dueDate;
       task.updatedAt = Date.now();
+      if (task.reminder !== undefined) task.reminder.dueAt = dueDate;
       resetNotificationState(task);
       await store.saveTasks(tasks);
       stdout.write(`${GREEN}Snoozed #${task.id}${RESET}\n`);
+    }, {
+      group: "Change",
+      positional: "task-id",
+      usage: ["todo snooze <id> <time>"],
+      details: ["Sets a new due date and resets reminder notifications for the task."],
+      examples: [
+        { command: "todo snooze 4 1h" },
+        { command: "todo snooze 4 tomorrow" },
+        { command: "todo snooze 4 next week" },
+        { command: "todo snooze 4 16/08/2026" },
+      ],
     });
   },
 };
 
+/** Re-inserts deleted tasks with fresh IDs, keeping parent links inside the restored set and to still-existing tasks. */
 export function restoreTasks(tasks: Task[], deletedTasks: Task[]): Task[] {
   let nextId = getNextId(tasks);
-  return deletedTasks.map((task) => ({ ...task, id: `${nextId++}`, updatedAt: Date.now() }));
+  const existingIds = new Set(tasks.map((task) => task.id));
+  const idMap = new Map(deletedTasks.map((task) => [task.id, `${nextId++}`]));
+  const now = Date.now();
+  return deletedTasks.map((task) => {
+    const restored: Task = { ...task, id: idMap.get(task.id) ?? task.id, updatedAt: now };
+    const parentId = task.parentId === undefined ? undefined : idMap.get(task.parentId) ?? (existingIds.has(task.parentId) ? task.parentId : undefined);
+    if (parentId === undefined) delete restored.parentId;
+    else restored.parentId = parentId;
+    return restored;
+  });
 }
 
 function getNextId(tasks: Task[]): number {

@@ -39,10 +39,6 @@ if dotfiles_shell_is_interactive
         end
     end
 
-    if command -v bun >/dev/null 2>&1; and test -f $HOME/.config/dotfiles/scripts/greeting.mjs
-        bun $HOME/.config/dotfiles/scripts/greeting.mjs 2>/dev/null
-    end
-
     dotfiles_source_fish_function show_todos_startup
     if functions -q show_todos_startup
         show_todos_startup

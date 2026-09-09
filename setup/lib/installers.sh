@@ -701,6 +701,7 @@ setup_config_symlinks() {
         "git/ignore:$home_config_dir/git/ignore"
         "kxkbrc:$home_config_dir/kxkbrc"
         "sxhkd:$home_config_dir/sxhkd"
+        "kde/plasma-workspace/env:$home_config_dir/plasma-workspace/env"
     )
     
     for item in "${configs[@]}"; do
