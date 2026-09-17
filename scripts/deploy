@@ -1,0 +1,296 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    BOLD=$'\e[1m'
+    DIM=$'\e[2m'
+    RED=$'\e[31m'
+    GREEN=$'\e[32m'
+    YELLOW=$'\e[33m'
+    CYAN=$'\e[36m'
+    RESET=$'\e[0m'
+else
+    BOLD=''
+    DIM=''
+    RED=''
+    GREEN=''
+    YELLOW=''
+    CYAN=''
+    RESET=''
+fi
+
+info() { printf '%s\n' "${CYAN}›${RESET} $*"; }
+ok() { printf '%s\n' "${GREEN}✔${RESET} $*"; }
+warn() { printf '%s\n' "${YELLOW}⚠${RESET} $*"; }
+fail() { printf '%s\n' "${RED}✖${RESET} $*" >&2; }
+
+usage() {
+    cat <<EOF
+${BOLD}deploy${RESET} — deploy the current Git project to Vercel or Cloudflare
+
+Usage: deploy [--vercel|--cloudflare] [--yes]
+
+  --vercel       deploy with Vercel
+  --cloudflare   deploy with Wrangler
+  --yes          skip the branch and working-tree confirmation
+  -h, --help     show this help
+EOF
+}
+
+confirm() {
+    local answer
+    if [ ! -t 0 ]; then
+        fail "Confirmation requires an interactive terminal. Re-run with --yes to override."
+        return 1
+    fi
+    printf '%s [y/N] ' "$1"
+    read -r answer
+    case "$answer" in
+        y | Y | yes | YES) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+pick_host() {
+    local choice selection
+    if [ ! -t 0 ]; then
+        fail "No host configuration found. Run interactively to set up Vercel or Cloudflare."
+        return 1
+    fi
+
+    if command -v fzf >/dev/null 2>&1; then
+        selection="$(printf '%s\n' \
+            'vercel	Vercel — deploy the linked application' \
+            'cloudflare	Cloudflare — deploy with Wrangler' | \
+            fzf --height=10 --layout=reverse --border=rounded --prompt='Deploy with › ' \
+                --header='Select a hosting provider' --delimiter=$'\t' --with-nth=2.. )" || return 1
+        printf '%s' "${selection%%$'\t'*}"
+        return 0
+    fi
+
+    printf '%s\n' "${BOLD}Select a hosting provider${RESET}" >&2
+    printf '%s\n' '  [v] Vercel' '  [c] Cloudflare' '  [q] Quit' >&2
+    read -r -n 1 -p 'Deploy with > ' choice
+    printf '\n' >&2
+    case "$choice" in
+        v | V) printf '%s' 'vercel' ;;
+        c | C) printf '%s' 'cloudflare' ;;
+        *) return 1 ;;
+    esac
+}
+
+open_url() {
+    local url=$1
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$url" >/dev/null 2>&1 &
+        return 0
+    fi
+    if command -v open >/dev/null 2>&1; then
+        open "$url" >/dev/null 2>&1 &
+        return 0
+    fi
+    warn "No browser opener found. Open this URL manually: $url"
+}
+
+default_branch() {
+    local branch
+    branch="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+    if [ -n "$branch" ]; then
+        printf '%s' "${branch#origin/}"
+    elif git show-ref --verify --quiet refs/heads/main; then
+        printf '%s' 'main'
+    elif git show-ref --verify --quiet refs/heads/master; then
+        printf '%s' 'master'
+    else
+        printf '%s' 'main'
+    fi
+}
+
+commit_count() {
+    git rev-list --count '@{upstream}..HEAD' 2>/dev/null || printf '%s' '0'
+}
+
+dirty_count() {
+    git status --porcelain | wc -l | tr -d '[:space:]'
+}
+
+cloudflare_config() {
+    find . -maxdepth 3 -type f \( -name wrangler.toml -o -name wrangler.json -o -name wrangler.jsonc \) \
+        -not -path './node_modules/*' -not -path './.git/*' -print -quit
+}
+
+has_vercel() {
+    [ -f .vercel/project.json ] || [ -f vercel.json ]
+}
+
+has_package_script() {
+    local name=$1
+    [ -f package.json ] && jq -e --arg name "$name" '.scripts[$name] != null' package.json >/dev/null 2>&1
+}
+
+run_build() {
+    if ! has_package_script build; then
+        return 0
+    fi
+
+    info 'Running project build...'
+    if [ -f bun.lock ] || [ -f bun.lockb ]; then
+        command -v bun >/dev/null 2>&1 || { fail 'Bun lockfile found, but bun is unavailable.'; return 1; }
+        bun run build
+    elif [ -f pnpm-lock.yaml ]; then
+        command -v pnpm >/dev/null 2>&1 || { fail 'pnpm lockfile found, but pnpm is unavailable.'; return 1; }
+        pnpm build
+    elif [ -f yarn.lock ]; then
+        command -v yarn >/dev/null 2>&1 || { fail 'yarn lockfile found, but yarn is unavailable.'; return 1; }
+        yarn build
+    else
+        command -v npm >/dev/null 2>&1 || { fail 'npm is unavailable.'; return 1; }
+        npm run build
+    fi
+}
+
+run_wrangler() {
+    local wrangler_bin
+    wrangler_bin="$(type -P wrangler || true)"
+    if [ -n "$wrangler_bin" ]; then
+        "$wrangler_bin" "$@"
+    elif [ -x node_modules/.bin/wrangler ]; then
+        node_modules/.bin/wrangler "$@"
+    elif command -v bunx >/dev/null 2>&1; then
+        bunx --no-install wrangler "$@"
+    else
+        fail 'Wrangler is required. Install it with bun add -d wrangler or npm install -D wrangler.'
+        return 127
+    fi
+}
+
+stream() {
+    local output=$1
+    shift
+    "$@" 2>&1 | tee "$output"
+    return "${PIPESTATUS[0]}"
+}
+
+deployment_url() {
+    grep -Eo "https?://[^[:space:]\\\"'<>)]+" "$1" | tail -n 1 || true
+}
+
+prompt_open() {
+    local url=$1 key
+    [ -n "$url" ] || return 0
+    ok "Deployment available at ${CYAN}${url}${RESET}"
+    [ -t 0 ] || return 0
+    read -r -n 1 -p 'Press o to open it, or any other key to finish. ' key
+    printf '\n'
+    case "$key" in
+        o | O) open_url "$url" ;;
+    esac
+}
+
+setup_host() {
+    local host
+    warn 'No Vercel or Cloudflare project configuration was found.'
+    host="$(pick_host)" || { warn 'No hosting provider selected.'; return 1; }
+
+    case "$host" in
+        vercel)
+            command -v vercel >/dev/null 2>&1 || { fail 'Vercel CLI is unavailable. Install it with npm install -g vercel.'; return 127; }
+            info 'Linking this directory to a Vercel project...'
+            vercel link
+            ok 'Vercel is configured. Run deploy again when you are ready.'
+            ;;
+        cloudflare)
+            info 'Starting Wrangler project setup...'
+            run_wrangler init
+            ok 'Cloudflare is configured. Run deploy again when you are ready.'
+            ;;
+    esac
+}
+
+host=''
+assume_yes=false
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --vercel) host=vercel ;;
+        --cloudflare) host=cloudflare ;;
+        --yes) assume_yes=true ;;
+        -h | --help) usage; exit 0 ;;
+        *) fail "Unknown option: $1"; usage; exit 64 ;;
+    esac
+    shift
+done
+
+root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -n "$root" ] || { fail 'Run deploy from inside a Git repository.'; exit 1; }
+cd "$root"
+
+cf_config="$(cloudflare_config)"
+
+if [ -z "$host" ]; then
+    if has_vercel && [ -n "$cf_config" ]; then
+        if [ -f .vercel/project.json ]; then
+            host=vercel
+            info 'Detected a linked Vercel project. Use --cloudflare to deploy the Worker.'
+        elif [ "$(dirname "$cf_config")" = '.' ]; then
+            host=cloudflare
+            info 'Detected a root Cloudflare configuration. Use --vercel to override.'
+        else
+            host="$(pick_host)" || { warn 'No hosting provider selected.'; exit 1; }
+        fi
+    elif has_vercel; then
+        host=vercel
+    elif [ -n "$cf_config" ]; then
+        host=cloudflare
+    else
+        setup_host
+        exit $?
+    fi
+fi
+
+case "$host" in
+    vercel)
+        has_vercel || { fail 'No Vercel configuration found. Run deploy without --vercel to set it up.'; exit 1; }
+        command -v vercel >/dev/null 2>&1 || { fail 'Vercel CLI is unavailable. Install it with npm install -g vercel.'; exit 127; }
+        ;;
+    cloudflare)
+        [ -n "$cf_config" ] || { fail 'No Wrangler configuration found. Run deploy without --cloudflare to set it up.'; exit 1; }
+        ;;
+esac
+
+branch="$(git branch --show-current 2>/dev/null || true)"
+branch="${branch:-detached at $(git rev-parse --short HEAD)}"
+default="$(default_branch)"
+dirty="$(dirty_count)"
+commits="$(commit_count)"
+
+if [ "$branch" != "$default" ] || [ "$dirty" -gt 0 ]; then
+    warn "Branch: ${BOLD}${branch}${RESET} (default: ${default})"
+    [ "$dirty" -eq 0 ] || warn "Uncommitted changes: ${dirty}"
+    [ "$commits" -eq 0 ] || warn "Commits ahead of upstream: ${commits}"
+    if [ "$assume_yes" = false ]; then
+        confirm 'Continue with this deployment?' || { warn 'Deployment cancelled.'; exit 1; }
+    fi
+fi
+
+output="$(mktemp "${TMPDIR:-/tmp}/deploy.XXXXXX")"
+trap 'rm -f "$output"' EXIT
+
+case "$host" in
+    vercel)
+        if [ "$branch" = "$default" ]; then
+            info 'Deploying Vercel production...'
+            stream "$output" vercel deploy --prod --yes --logs || { fail 'Vercel deployment failed.'; exit 1; }
+        else
+            info 'Deploying Vercel preview...'
+            stream "$output" vercel deploy --yes --logs || { fail 'Vercel deployment failed.'; exit 1; }
+        fi
+        ;;
+    cloudflare)
+        run_build || exit 1
+        info "Deploying Cloudflare with ${cf_config#./}..."
+        stream "$output" run_wrangler deploy --config "${cf_config#./}" || { fail 'Cloudflare deployment failed.'; exit 1; }
+        ;;
+esac
+
+prompt_open "$(deployment_url "$output")"

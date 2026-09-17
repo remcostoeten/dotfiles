@@ -8,6 +8,8 @@ export async function sendDueNotifications(store: TodoStore, now = Date.now()): 
 
   for (const task of tasks) {
     if (task.status !== "pending" || task.dueDate === undefined) continue;
+    // A `todo due` schedule owns its own delivery; the offset reminders below would double-fire it.
+    if (task.reminder !== undefined) continue;
 
     if (task.dueDate < now && !task.notificationsSent.overdue) {
       sendNotification("Task Overdue", `${task.description} - due ${formatDueDate(task.dueDate)}`);
@@ -41,4 +43,5 @@ function formatDueDate(timestamp: number): string {
 
 export function resetNotificationState(task: Task): void {
   task.notificationsSent = { reminders: [], overdue: false };
+  if (task.reminder !== undefined) delete task.reminder.firedAt;
 }

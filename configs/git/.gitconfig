@@ -25,9 +25,20 @@
 
 [rebase]
 	autoStash = true
+	updateRefs = true
+
+[rerere]
+	enabled = true
+
+[branch]
+	sort = -committerdate
+
+[help]
+	autocorrect = prompt
 
 [commit]
 	gpgsign = false
+	verbose = true
 
 [tag]
 	gpgsign = false
@@ -52,13 +63,12 @@
 [diff]
 	color = auto
 	wordDiff = color
+	algorithm = histogram
+	colorMoved = default
 
 [merge]
-	conflictstyle = diff3
+	conflictstyle = zdiff3
 	tool = nvim
-
-[credential]
-	helper = store
 [url "git@gitlab.com:"]
 	insteadOf = https://gitlab.com/
 

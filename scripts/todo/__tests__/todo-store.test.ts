@@ -40,7 +40,7 @@ test("uses the documented defaults when configuration does not exist", async () 
   expect(await store.loadConfig()).toEqual(DEFAULT_CONFIG);
 });
 
-test("uses a five-second undo window for existing configuration", async () => {
+test("honours the configured undo window", async () => {
   const dataDirectory = await mkdtemp(join(tmpdir(), "dotfiles-todo-"));
   temporaryDirectories.push(dataDirectory);
   const paths = getTodoPaths(dataDirectory);
@@ -51,7 +51,7 @@ test("uses a five-second undo window for existing configuration", async () => {
   await store.saveUndo([]);
 
   const undo = JSON.parse(await readFile(paths.undoFile, "utf8")) as { timestamp: number; expiresAt: number };
-  expect(undo.expiresAt - undo.timestamp).toBe(5_000);
+  expect(undo.expiresAt - undo.timestamp).toBe(30_000);
 });
 
 test("normalizes tasks written by the legacy command", async () => {

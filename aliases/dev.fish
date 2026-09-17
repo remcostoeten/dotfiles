@@ -53,9 +53,6 @@ end
 # DOCSTRING: Run `bun dev:all
 alias da "bun dev:all"
 
-# DOCSTRING: Deploy to Vercel
-alias deploy "vercel deploy"
-
 # DOCSTRING: Deploy to Vercel production
 alias prod "vercel deploy --prod"
 

@@ -24,6 +24,7 @@ except ModuleNotFoundError:
 
 
 VERSION = "1.0.0"
+FREE_CHORD_SECONDS = 0.35
 ANSI_PATTERN = re.compile(r"\033\[([0-9;]*)m")
 DEFAULT_IGNORES = [
     ".git",
@@ -70,6 +71,7 @@ class Argument:
 
 ARGUMENTS = [
     Argument("ui", "--ui", "-u", "Interactive tree UI"),
+    Argument("free", "--free", "-fr", "Type-to-search tree UI with timed folder shortcuts"),
     Argument("regular", "--regular", "-rg", "Regular terminal output"),
     Argument("default-mode", "--default-mode", "-dm", "Persist the default mode", "mode", ("regular", "ui")),
     Argument("help", "--help", "-h", "Show help"),
@@ -146,6 +148,7 @@ class Options:
     path: Path = Path(".")
     mode: str = "regular"
     explicit_mode: bool = False
+    free_mode: bool = False
     depth: int | None = 3
     max_entries: int | None = None
     max_children: int | None = None
@@ -370,6 +373,10 @@ def parse_args(argv: list[str], options: Options) -> tuple[Options, str | None, 
         if name in ("ui", "regular"):
             options.mode = name
             options.explicit_mode = True
+        elif name == "free":
+            options.mode = "ui"
+            options.explicit_mode = True
+            options.free_mode = True
         elif name == "default-mode":
             action, action_value = name, value
         elif name in ("help", "version", "setup", "check", "debug", "command", "show-config", "init"):
@@ -1041,6 +1048,10 @@ class TreeUI:
         self.last_refresh = time.monotonic()
         self.theme: dict[str, int] = {}
         self.session_ignores: list[str] = []
+        self.last_typed_character = ""
+        self.last_typed_at = 0.0
+        if options.free_mode:
+            self.expanded = self.expandable_folders()
 
     def setup_theme(self) -> None:
         self.theme = {name: curses.A_NORMAL for name in ("accent", "directory", "muted", "selected", "value", "warning")}
@@ -1078,24 +1089,163 @@ class TreeUI:
             self.cache[path] = list_children(path, self.root, self.options, self.ignores)
         return self.cache[path]
 
-    def visible(self) -> list[tuple[Path, int]]:
+    def unfiltered_visible(self) -> list[tuple[Path, int]]:
         result: list[tuple[Path, int]] = [(self.root, 0)]
 
         def visit(path: Path, depth: int) -> None:
             if path not in self.expanded:
                 return
+            if path.is_symlink() and not self.options.follow:
+                return
             if self.options.depth is not None and depth >= self.options.depth:
                 return
             children, _ = self.children(path)
             for child in children:
-                if self.query and self.query.lower() not in child.name.lower() and not child.is_dir():
-                    continue
                 result.append((child, depth + 1))
                 if child.is_dir():
                     visit(child, depth + 1)
 
         visit(self.root, 0)
         return result
+
+    def fuzzy_score(self, value: str, query: str) -> int | None:
+        candidate = value if self.options.case_sensitive else value.lower()
+        needle = query if self.options.case_sensitive else query.lower()
+        position = -1
+        for character in needle:
+            position = candidate.find(character, position + 1)
+            if position < 0:
+                return None
+        return len(candidate) - len(needle)
+
+    def visible(self) -> list[tuple[Path, int]]:
+        entries = self.unfiltered_visible()
+        if not self.query:
+            return entries
+        if not self.options.free_mode:
+            needle = self.query if self.options.case_sensitive else self.query.lower()
+            return [
+                entry
+                for entry in entries
+                if entry[0].is_dir()
+                or needle in (entry[0].name if self.options.case_sensitive else entry[0].name.lower())
+            ]
+        matching = {
+            path
+            for path, _ in entries
+            if path != self.root and self.fuzzy_score(str(path.relative_to(self.root)), self.query) is not None
+        }
+        included = {self.root}
+        for path in matching:
+            included.add(path)
+            included.update(parent for parent in path.parents if parent == self.root or self.root in parent.parents)
+        return [entry for entry in entries if entry[0] in included]
+
+    def numbered_folders(self) -> list[Path]:
+        children, _ = self.children(self.root)
+        return [path for path in children if path.is_dir() and not path.name.startswith(".")]
+
+    def toggle_numbered_folder(self, number: int) -> None:
+        folders = self.numbered_folders()
+        if number < 1 or number > len(folders):
+            self.message = f"folder {number} is not available"
+            return
+        path = folders[number - 1]
+        if path in self.expanded:
+            self.expanded.remove(path)
+            state = "collapsed"
+        else:
+            self.expanded.add(path)
+            state = "expanded"
+        self.message = f"{number} · {path.name} {state}"
+
+    def expandable_folders(self) -> set[Path]:
+        folders: set[Path] = {self.root}
+        visited: set[Path] = set()
+
+        def visit(path: Path, depth: int) -> None:
+            if self.options.depth is not None and depth >= self.options.depth:
+                return
+            try:
+                resolved = path.resolve()
+            except OSError:
+                return
+            if resolved in visited:
+                return
+            visited.add(resolved)
+            children, _ = self.children(path)
+            for child in children:
+                if not child.is_dir():
+                    continue
+                folders.add(child)
+                visit(child, depth + 1)
+
+        visit(self.root, 0)
+        return folders
+
+    def toggle_all_folders(self) -> None:
+        folders = self.expandable_folders()
+        if folders.issubset(self.expanded):
+            self.expanded = {self.root}
+            self.message = "collapsed all folders"
+        else:
+            self.expanded = folders
+            self.message = f"expanded {max(0, len(folders) - 1)} folders"
+
+    def type_free_character(self, character: str, now: float) -> bool:
+        within_chord = now - self.last_typed_at <= FREE_CHORD_SECONDS
+        if character == " " and within_chord and self.last_typed_character == " " and self.query.endswith(" "):
+            self.query = self.query[:-1]
+            self.last_typed_character = ""
+            self.last_typed_at = 0.0
+            self.toggle_all_folders()
+            return True
+        if character == " " and within_chord and self.last_typed_character.isdigit():
+            match = re.search(r"(\d+)$", self.query)
+            if match:
+                number = int(match.group(1))
+                self.query = self.query[:match.start()]
+                self.last_typed_character = ""
+                self.last_typed_at = 0.0
+                self.toggle_numbered_folder(number)
+                return True
+        self.query += character
+        self.last_typed_character = character
+        self.last_typed_at = now
+        self.message = ""
+        return False
+
+    def handle_free_key(self, key: int) -> bool:
+        entries = self.visible()
+        if key == 3:
+            return False
+        if key in (curses.KEY_DOWN, curses.KEY_UP):
+            self.last_typed_character = ""
+            direction = 1 if key == curses.KEY_DOWN else -1
+            self.selected = max(0, min(len(entries) - 1, self.selected + direction))
+        elif key in (curses.KEY_ENTER, 10, 13, curses.KEY_RIGHT):
+            self.last_typed_character = ""
+            path = entries[self.selected][0]
+            if path.is_dir():
+                if path in self.expanded and key != curses.KEY_RIGHT:
+                    self.expanded.remove(path)
+                else:
+                    self.expanded.add(path)
+        elif key == curses.KEY_LEFT:
+            self.last_typed_character = ""
+            path = entries[self.selected][0]
+            if path in self.expanded and path != self.root:
+                self.expanded.remove(path)
+            elif path != self.root:
+                parent = path.parent
+                self.selected = next((index for index, item in enumerate(entries) if item[0] == parent), self.selected)
+        elif key in (curses.KEY_BACKSPACE, 127, 8):
+            self.query = self.query[:-1]
+            self.last_typed_character = ""
+            self.message = ""
+        elif 32 <= key <= 126:
+            self.type_free_character(chr(key), time.monotonic())
+        return True
 
     def refresh(self) -> None:
         selected_path = self.visible()[self.selected][0] if self.visible() else self.root
@@ -1359,7 +1509,11 @@ class TreeUI:
             selected = absolute_index == self.selected
             marker = "▾" if path.is_dir() and path in self.expanded else "▸" if path.is_dir() else "·"
             rail = "▌" if selected else " "
-            text = f"{rail} {'  ' * depth}{marker}  {icon(path, self.options)}{path.name or str(path)}"
+            number = ""
+            numbered_folders = self.numbered_folders() if self.options.free_mode and depth == 1 else []
+            if path in numbered_folders:
+                number = f"{numbered_folders.index(path) + 1} "
+            text = f"{rail} {'  ' * depth}{number}{marker}  {icon(path, self.options)}{path.name or str(path)}"
             content_width = max(1, width - sidebar_width - 1)
             if selected:
                 self.write(screen, row, sidebar_width, " " * content_width, content_width, self.theme["selected"])
@@ -1371,27 +1525,48 @@ class TreeUI:
             self.write(screen, row, sidebar_width, text, content_width, attribute)
         relative = "." if current == self.root else str(current.relative_to(self.root))
         kind = "DIR" if current.is_dir() else current.suffix.lstrip(".").upper() or "FILE"
-        status = f" {kind:<5} {relative} · row {self.selected + 1}/{len(entries)} · end {len(entries) - self.selected}"
+        if self.options.free_mode:
+            status = f" fuzzy › {self.query}"
+        else:
+            status = f" {kind:<5} {relative} · row {self.selected + 1}/{len(entries)} · end {len(entries) - self.selected}"
         if self.message:
             status = f" {self.message}"
         self.write(screen, height - 2, 0, " " * (width - 1), width - 1, self.theme["muted"])
         self.write(screen, height - 2, 0, status, width - 1, self.theme["warning"] if self.message else self.theme["muted"])
-        keys = " ↑↓ move   ⇧↑↓ fast   enter expand   c copy   x exclude   d depth   ? help   q quit"
+        if self.options.free_mode:
+            keys = " F1 help   type to fuzzy-search   number+space toggle folder   space+space toggle all   ↑↓ move   enter expand"
+        else:
+            keys = " ↑↓ move   ⇧↑↓ fast   enter expand   c copy   x exclude   d depth   ? help   q quit"
         self.write(screen, height - 1, 0, keys, width - 1, self.theme["muted"])
         screen.refresh()
 
     def help(self, screen: Any) -> None:
-        lines = [
-            ("NAVIGATE", "↑ k / ↓ j   shift ↑/↓ fast   PgUp / PgDn"),
-            ("EXPAND", "enter space →   collapse ←"),
-            ("FIND", "/ search   n / N next or previous"),
-            ("DEPTH", "d set   [ decrease   ] increase   0 unlimited"),
-            ("FILTER", "f panel   a hidden   g git ignore"),
-            ("EXCLUDE", "x menu   i custom glob   u undo last"),
-            ("CHANGE", "s sort   r refresh"),
-            ("COPY", "c copy menu   C copy visible tree"),
-            ("VIEW", "p plain preview   q close"),
-        ]
+        if self.options.free_mode:
+            lines = [
+                ("SEARCH", "type normally; Backspace removes one character"),
+                ("FOLDER", "number then Space within 350 ms toggles that folder"),
+                ("ALL", "Space twice within 350 ms expands or collapses all"),
+                ("LITERAL", "slower number/space sequences stay in the search"),
+                ("NUMBERING", "top-level dot folders do not receive numbers"),
+                ("NAVIGATE", "↑ / ↓ select   ← collapse   → expand"),
+                ("TOGGLE", "Enter toggles the selected directory"),
+                ("CLEAR", "Escape clears a search; Escape again quits"),
+                ("QUIT", "Ctrl-C quits immediately   F1 opens this help"),
+            ]
+            subtitle = "Typing searches; only completed timed gestures become commands."
+        else:
+            lines = [
+                ("NAVIGATE", "↑ k / ↓ j   shift ↑/↓ fast   PgUp / PgDn"),
+                ("EXPAND", "enter space →   collapse ←"),
+                ("FIND", "/ search   n / N next or previous"),
+                ("DEPTH", "d set   [ decrease   ] increase   0 unlimited"),
+                ("FILTER", "f panel   a hidden   g git ignore"),
+                ("EXCLUDE", "x menu   i custom glob   u undo last"),
+                ("CHANGE", "s sort   r refresh"),
+                ("COPY", "c copy menu   C copy visible tree"),
+                ("VIEW", "p plain preview   q close"),
+            ]
+            subtitle = "Commands act on the selected row."
         screen.erase()
         height, width = screen.getmaxyx()
         box_width = min(68, width - 4)
@@ -1404,7 +1579,7 @@ class TreeUI:
             self.write(screen, row, left + box_width - 1, "│", 1, self.theme["muted"])
         self.write(screen, top + box_height - 1, left, "└" + "─" * (box_width - 2) + "┘", box_width, self.theme["muted"])
         self.write(screen, top + 1, left + 3, "KEYBOARD MAP", box_width - 6, self.theme["accent"] | curses.A_BOLD)
-        self.write(screen, top + 2, left + 3, "Commands act on the selected row.", box_width - 6, self.theme["muted"])
+        self.write(screen, top + 2, left + 3, subtitle, box_width - 6, self.theme["muted"])
         for offset, (label, keys) in enumerate(lines[:max(0, box_height - 5)]):
             row = top + 4 + offset
             self.write(screen, row, left + 3, label, 10, self.theme["accent"])
@@ -1425,6 +1600,23 @@ class TreeUI:
             entries = self.visible()
             page = max(1, screen.getmaxyx()[0] - 4)
             fast_step = max(5, round(page * 0.5))
+            if self.options.free_mode:
+                if key == curses.KEY_F1:
+                    self.help(screen)
+                    continue
+                if key == 27:
+                    if self.query:
+                        self.query = ""
+                        self.selected = 0
+                        self.offset = 0
+                        self.message = "fuzzy search cleared"
+                        continue
+                    return
+                if not self.handle_free_key(key):
+                    return
+                entries = self.visible()
+                self.selected = max(0, min(self.selected, len(entries) - 1))
+                continue
             if key in (ord("q"), 27):
                 return
             if key in (curses.KEY_DOWN, ord("j")):
@@ -1535,11 +1727,49 @@ class TreeUI:
                 self.last_refresh = time.monotonic()
 
 
+def print_free_help() -> None:
+    print("free — type-to-search interactive filesystem tree")
+    print("\nUsage: free [PATH] [TREE OPTIONS]")
+    print("       tree free [PATH] [TREE OPTIONS]")
+    print("\nSearch and folder gestures:")
+    print("  text                 Fuzzy-search visible paths as you type")
+    print("  Backspace            Remove the last search character")
+    print("  <number> Space       Toggle that numbered top-level folder")
+    print("  Space Space          Expand or collapse every folder in scope")
+    print("\nTimed gestures:")
+    print("  The keys in a gesture must be no more than 350 ms apart.")
+    print("  A completed gesture is removed from the fuzzy-search query.")
+    print("  A slower sequence remains literal search text.")
+    print("  Numbering skips dot-prefixed folders, even when --all is active.")
+    print("\nNavigation:")
+    print("  Up / Down            Select the previous or next visible entry")
+    print("  Enter                Toggle the selected directory")
+    print("  Left / Right         Collapse or expand the selected directory")
+    print("  Escape               Clear the query; press again to quit")
+    print("  Ctrl-C                Quit immediately")
+    print("  F1                    Show the in-app help menu")
+    print("\nUseful tree options:")
+    print("  -d, --depth N|all    Set the expansion and traversal depth")
+    print("  -a, --all            Include dot-prefixed entries")
+    print("  -i, --ignore GLOB    Exclude a matching entry; repeatable")
+    print("  -s, --sort FIELD     Sort by name, size, time, extension, or type")
+    print("  -r, --reverse        Reverse the selected sort order")
+    print("  -I, --icons          Force icons on")
+    print("  -ni, --no-icons      Force icons off")
+    print("  -h, --help           Show this help menu")
+    print("\nExamples:")
+    print("  free")
+    print("  free ~/projects --depth 4")
+    print("  free . --all --ignore '*.log'")
+    print("  tree free src --depth all")
+    print("\nRun 'tree --help' for the complete underlying option reference.")
+
+
 def print_help() -> None:
     print("tree — configurable filesystem tree and interactive browser")
     print("\nUsage: tree [PATH] [MODE] [OPTIONS]")
     groups = {
-        "Mode": {"ui", "regular", "default-mode"},
+        "Mode": {"ui", "free", "regular", "default-mode"},
         "General": {"help", "version", "setup", "check", "debug", "command", "quiet"},
         "Traversal": {"path", "depth", "max", "max-children", "follow", "no-follow", "watch"},
         "Visibility and filtering": {"all", "raw", "git-ignore", "no-git-ignore", "default-ignore", "no-default-ignore", "ignore", "include", "collapse", "match", "search", "case-sensitive", "dirs", "files"},
@@ -1728,7 +1958,10 @@ def run_action(action: str | None, value: str | None, options: Options) -> int |
     if action is None:
         return None
     if action == "help":
-        print_help()
+        if options.free_mode:
+            print_free_help()
+        else:
+            print_help()
     elif action == "version":
         print(f"tree {VERSION}")
     elif action == "command":

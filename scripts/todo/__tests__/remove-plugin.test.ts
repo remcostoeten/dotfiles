@@ -21,6 +21,20 @@ test("rm removes comma-separated IDs and inclusive ranges", async () => {
   expect((await store.loadTasks()).map((task) => task.id)).toEqual(["2", "3", "4", "16"]);
 });
 
+test("rm removes space-separated IDs, mixed with commas and ranges", async () => {
+  const store = await createStore([1, 2, 3, 4, 5, 6, 7, 8].map((id) => createTask(id)));
+
+  expect(await runCommand("rm", ["1", "2", "3,4", "6-7"], store)).toContain("Deleted 6 task(s)");
+  expect((await store.loadTasks()).map((task) => task.id)).toEqual(["5", "8"]);
+});
+
+test("rm all with extra arguments is rejected", async () => {
+  const store = await createStore([createTask(1)]);
+
+  await expect(runCommand("rm", ["all", "1"], store)).rejects.toThrow("Invalid task ID: all");
+  expect((await store.loadTasks()).map((task) => task.id)).toEqual(["1"]);
+});
+
 test("delete is an alias for rm", async () => {
   const store = await createStore([createTask(1), createTask(2), createTask(3), createTask(4)]);
 

@@ -1,0 +1,76 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+add_newline = true
+command_timeout = 800
+
+palette = "ink"
+
+format = "$directory$git_branch$git_status$git_state$cmd_duration$character"
+
+right_format = "$jobs$status"
+
+[palettes.ink]
+text  = "#cfcad8"
+muted = "#585268"
+dim   = "#3d3950"
+accent = "#a8e6cf"
+warn  = "#e9d8a6"
+red   = "#ff6b81"
+
+[directory]
+style = "fg:text"
+read_only_style = "fg:red"
+format = "[$path]($style)[$read_only]($read_only_style) "
+truncation_length = 2
+truncate_to_repo = true
+truncation_symbol = "…/"
+read_only = " ro"
+home_symbol = "~"
+
+[git_branch]
+symbol = ""
+style = "fg:muted"
+format = "[$branch]($style)"
+
+[git_status]
+style = "fg:dim"
+format = "([$all_status$ahead_behind]($style)) "
+conflicted = "!"
+staged = "+"
+modified = "~"
+renamed = "»"
+deleted = "-"
+untracked = "?"
+stashed = "$"
+ahead = "↑"
+behind = "↓"
+diverged = "↕"
+up_to_date = ""
+
+[git_state]
+style = "fg:warn"
+format = "[$state]($style) "
+
+[cmd_duration]
+min_time = 3_000
+style = "fg:dim"
+format = "[$duration]($style) "
+
+[jobs]
+symbol = "&"
+style = "fg:warn"
+format = "[$symbol$number]($style) "
+
+[status]
+disabled = false
+symbol = ""
+style = "fg:red"
+format = "[$status]($style)"
+
+[character]
+success_symbol = "[›](fg:#a8e6cf)"
+error_symbol = "[›](fg:#ff6b81)"
+vimcmd_symbol = "[‹](fg:#c8b6ff)"
+vimcmd_replace_one_symbol = "[‹](fg:#f7c59f)"
+vimcmd_replace_symbol = "[‹](fg:#f7c59f)"
+vimcmd_visual_symbol = "[‹](fg:#e9d8a6)"

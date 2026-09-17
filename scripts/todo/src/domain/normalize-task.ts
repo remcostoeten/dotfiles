@@ -1,4 +1,4 @@
-import type { NotificationState, Task, TaskPriority, TaskStatus } from "./task";
+import type { NotificationState, SoundMode, Task, TaskKind, TaskPriority, TaskReminder, TaskStatus } from "./task";
 
 export function normalizeTasks(value: unknown): Task[] {
   if (!Array.isArray(value)) {
@@ -27,13 +27,57 @@ function normalizeTask(value: unknown, index: number): Task {
   if (typeof value.dueDate === "number" && Number.isFinite(value.dueDate)) {
     task.dueDate = value.dueDate;
   }
+  if (typeof value.parentId === "string" && value.parentId.length > 0) {
+    task.parentId = value.parentId;
+  }
+  const kind = readKind(value.kind);
+  if (kind !== undefined) task.kind = kind;
+  if (value.hidden === true) task.hidden = true;
+
+  const reminder = readReminder(value.reminder);
+  if (reminder !== undefined) {
+    task.reminder = reminder;
+    task.dueDate = reminder.dueAt;
+  }
 
   return task;
+}
+
+/** A malformed reminder is dropped rather than thrown on, so a bad entry can never wedge the scheduler. */
+function readReminder(value: unknown): TaskReminder | undefined {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.id !== "string" || value.id.length === 0) return undefined;
+  if (typeof value.dueAt !== "number" || !Number.isFinite(value.dueAt)) return undefined;
+
+  const reminder: TaskReminder = {
+    id: value.id,
+    dueAt: value.dueAt,
+    expression: typeof value.expression === "string" ? value.expression : "",
+    createdAt: typeof value.createdAt === "number" && Number.isFinite(value.createdAt) ? value.createdAt : value.dueAt,
+    soundMode: readSoundMode(value.soundMode),
+  };
+
+  if (typeof value.soundPath === "string" && value.soundPath.length > 0) reminder.soundPath = value.soundPath;
+  if (typeof value.run === "string" && value.run.length > 0) reminder.run = value.run;
+  if (typeof value.cwd === "string" && value.cwd.length > 0) reminder.cwd = value.cwd;
+  if (typeof value.firedAt === "number" && Number.isFinite(value.firedAt)) reminder.firedAt = value.firedAt;
+  if (typeof value.soundError === "string") reminder.soundError = value.soundError;
+  if (typeof value.runExitCode === "number" && Number.isFinite(value.runExitCode)) reminder.runExitCode = value.runExitCode;
+  if (typeof value.runError === "string") reminder.runError = value.runError;
+  return reminder;
+}
+
+function readSoundMode(value: unknown): SoundMode {
+  return value === "none" || value === "custom" ? value : "default";
 }
 
 function readStatus(value: unknown, index: number): TaskStatus {
   if (value === "pending" || value === "completed") return value;
   throw new Error(`Task at index ${index} has an invalid status`);
+}
+
+function readKind(value: unknown): TaskKind | undefined {
+  return value === "epic" ? "epic" : undefined;
 }
 
 function readPriority(value: unknown): TaskPriority {

@@ -42,6 +42,12 @@ test("splits comma-separated descriptions without preserving comma whitespace", 
   ]);
 });
 
+test("preserves commas inside one quoted description argument", () => {
+  expect(parseAddArguments(["create sdk plans (TS, Hono, React, NextJS, Rust)"])).toEqual([
+    { description: "create sdk plans (TS, Hono, React, NextJS, Rust)", priority: "none" },
+  ]);
+});
+
 test("persists the complete unquoted description", async () => {
   const dataDirectory = await mkdtemp(join(tmpdir(), "dotfiles-todo-"));
   temporaryDirectories.push(dataDirectory);

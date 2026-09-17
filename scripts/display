@@ -29,7 +29,7 @@ type TColorSnapshot = { hdr: boolean; wcg: boolean; sdrBrightness: number; brigh
 type TPreset = { heads: THeadState[]; head: number; color?: TColorSnapshot }
 type TConfig = { head: number; heads: THeadState[]; presets: Record<string, TPreset>; activePreset: string | null }
 
-type TMode = { id: string; name: string; refreshRate: number }
+type TMode = { id: string; name: string; refreshRate: number; width: number; height: number }
 type TOutputState = {
 	name: string
 	enabled: boolean
@@ -211,7 +211,13 @@ function readOutputs(): TOutputState[] {
 			brightness: Math.round((output.brightness ?? 1) * 100),
 			scale: output.scale ?? 1,
 			currentModeId: String(output.currentModeId),
-			modes: output.modes.map((m: any) => ({ id: String(m.id), name: m.name, refreshRate: m.refreshRate })),
+			modes: output.modes.map((m: any) => ({
+				id: String(m.id),
+				name: m.name,
+				refreshRate: m.refreshRate,
+				width: m.size?.width ?? 0,
+				height: m.size?.height ?? 0,
+			})),
 			rotation: output.rotation ?? 1,
 			posX: output.pos?.x ?? 0,
 			posY: output.pos?.y ?? 0,
@@ -283,6 +289,94 @@ function applyEnable(outputs: TOutputState[], changes: TEnableChange[]): { ok: b
 	const proc = Bun.spawnSync(["kscreen-doctor", ...args])
 	if (proc.exitCode !== 0) return { ok: false, message: `kscreen: ${proc.stderr.toString().trim().slice(0, 160)}` }
 	return { ok: true, message: changed.map((c) => `${c.name} ${c.enabled ? "on" : "off"}`).join(", ") }
+}
+
+const STRETCH_RATIO = 4 / 3
+
+function nativeMode(output: TOutputState): TMode {
+	return [...output.modes].sort((a, b) => b.width * b.height - a.width * a.height || b.refreshRate - a.refreshRate)[0]
+}
+
+function modeMatching(output: TOutputState, width: number, height: number): TMode | undefined {
+	return output.modes
+		.filter((m) => m.width === width && m.height === height)
+		.sort((a, b) => b.refreshRate - a.refreshRate)[0]
+}
+
+function addCustomMode(name: string, width: number, height: number, milliHz: number, blanking: "reduced" | "full"): boolean {
+	const proc = Bun.spawnSync(["kscreen-doctor", `output.${name}.addCustomMode.${width}.${height}.${milliHz}.${blanking}`])
+	return proc.exitCode === 0
+}
+
+type TModePlan = { output: TOutputState; outputs: TOutputState[]; mode: TMode; note: string }
+
+function stretchTarget(output: TOutputState): { width: number; height: number; milliHz: number } {
+	const native = nativeMode(output)
+	return {
+		width: Math.round((native.height * STRETCH_RATIO) / 8) * 8,
+		height: native.height,
+		milliHz: Math.round(native.refreshRate * 1000),
+	}
+}
+
+function resolveStretchMode(outputs: TOutputState[], output: TOutputState): TModePlan {
+	const { width, height, milliHz } = stretchTarget(output)
+
+	const existing = modeMatching(output, width, height)
+	if (existing) return { output, outputs, mode: existing, note: "already available" }
+
+	for (const blanking of ["reduced", "full"] as const) {
+		if (!addCustomMode(output.name, width, height, milliHz, blanking)) continue
+		const refreshed = readOutputs()
+		const target = refreshed.find((o) => o.name === output.name)
+		const mode = target && modeMatching(target, width, height)
+		if (target && mode) return { output: target, outputs: refreshed, mode, note: `custom mode, ${blanking} blanking` }
+	}
+
+	const fallback = output.modes
+		.filter((m) => Math.abs(m.width / m.height - STRETCH_RATIO) < 0.01)
+		.sort((a, b) => b.width * b.height - a.width * a.height || b.refreshRate - a.refreshRate)[0]
+	if (fallback) return { output, outputs, mode: fallback, note: `${width}x${height} refused by the driver — largest built-in 4:3 mode instead` }
+	throw new Error(`no 4:3 mode available on ${output.name}`)
+}
+
+function confirmKeep(seconds: number): Promise<boolean> {
+	if (!process.stdin.isTTY) return Promise.resolve(true)
+	process.stdout.write(`keep it? [y/N] — reverting in ${seconds}s `)
+	return new Promise((resolve) => {
+		function finish(keep: boolean) {
+			clearTimeout(timer)
+			process.stdin.removeListener("data", onData)
+			process.stdin.setRawMode?.(false)
+			process.stdin.pause()
+			process.stdout.write("\n")
+			resolve(keep)
+		}
+		const onData = (data: string) => finish(data.toLowerCase().startsWith("y"))
+		const timer = setTimeout(() => finish(false), seconds * 1000)
+		process.stdin.setRawMode?.(true)
+		process.stdin.setEncoding("utf8")
+		process.stdin.resume()
+		process.stdin.on("data", onData)
+	})
+}
+
+async function applyModePlan(plan: TModePlan, force: boolean): Promise<number> {
+	const previous = plan.output.modes.find((m) => m.id === plan.output.currentModeId)
+	if (plan.mode.id === plan.output.currentModeId) {
+		console.log(`${plan.output.name} already on ${plan.mode.name}`)
+		return 0
+	}
+	const result = applyKscreen(plan.output, { modeId: plan.mode.id }, plan.outputs)
+	if (!result.ok) {
+		console.error(`display: ${result.message}`)
+		return 1
+	}
+	console.log(`${plan.output.name} → ${plan.mode.name} (${plan.note})`)
+	if (force || (await confirmKeep(15))) return 0
+	if (previous) applyKscreen(plan.output, { modeId: previous.id }, plan.outputs)
+	console.log(`reverted to ${previous?.name ?? "the previous mode"}`)
+	return 1
 }
 
 function readSysInfo(output: TOutputState): string[] {
@@ -916,10 +1010,17 @@ const USAGE = `display — GPU & monitor control
   display off <output>...      turn outputs off
   display toggle <output>...   flip outputs on/off
   display only <output>...     turn the named outputs on, everything else off
+  display stretch [output]     switch to the largest 4:3 mode (stretched res)
+  display native [output]      switch back to the panel's native mode
   display help                 this text
 
 Output names match loosely, so "display off hdmi" hits HDMI-A-2.
-The last enabled output is protected — turning it off is refused.`
+The last enabled output is protected — turning it off is refused.
+
+stretch/native default to the first enabled output and ask for confirmation,
+reverting after 15s if the screen goes dark. -f skips the prompt, -n only
+prints what it would do. Whether a 4:3 signal fills the panel or gets pillar
+bars is the monitor's own scaler — set its OSD aspect option to Full/Stretch.`
 
 function resolveOutput(outputs: TOutputState[], query: string): TOutputState {
 	const needle = query.toLowerCase()
@@ -941,7 +1042,7 @@ function formatOutputRow(output: TOutputState): string {
 	return ` ${label}  ${output.name.padEnd(12)} ${(mode?.name ?? "?").padEnd(20)} ${geometry}`.trimEnd()
 }
 
-function runCli(argv: string[]): number {
+async function runCli(argv: string[]): Promise<number> {
 	const [command, ...rest] = argv
 	if (command === "help" || command === "--help" || command === "-h") {
 		console.log(USAGE)
@@ -959,6 +1060,40 @@ function runCli(argv: string[]): number {
 	if (command === "list" || command === "ls") {
 		for (const output of outputs) console.log(formatOutputRow(output))
 		return 0
+	}
+
+	if (command === "stretch" || command === "native") {
+		const flags = rest.filter((arg) => arg.startsWith("-"))
+		const names = rest.filter((arg) => !arg.startsWith("-"))
+		const force = flags.some((f) => f === "-f" || f === "--force")
+		const dryRun = flags.some((f) => f === "-n" || f === "--dry-run")
+		let target: TOutputState
+		try {
+			target = names.length ? resolveOutput(outputs, names[0]) : outputs.find((o) => o.enabled) ?? outputs[0]
+		} catch (error) {
+			console.error(`display: ${(error as Error).message}`)
+			return 1
+		}
+		if (!target.enabled) {
+			console.error(`display: ${target.name} is off — turn it on first`)
+			return 1
+		}
+		if (dryRun) {
+			const mode = command === "stretch" ? stretchTarget(target) : nativeMode(target)
+			const hz = command === "stretch" ? (mode as { milliHz: number }).milliHz / 1000 : (mode as TMode).refreshRate
+			console.log(`${target.name} would switch to ${mode.width}x${mode.height}@${Math.round(hz)}`)
+			return 0
+		}
+		let plan: TModePlan
+		try {
+			plan = command === "stretch"
+				? resolveStretchMode(outputs, target)
+				: { output: target, outputs, mode: nativeMode(target), note: "native" }
+		} catch (error) {
+			console.error(`display: ${(error as Error).message}`)
+			return 1
+		}
+		return applyModePlan(plan, force)
 	}
 
 	if (command !== "on" && command !== "off" && command !== "toggle" && command !== "only") {
@@ -995,12 +1130,12 @@ function runCli(argv: string[]): number {
 	return 0
 }
 
-function main() {
+async function main() {
 	const config = ensureDefaultPreset(loadConfig())
 	saveConfig(config)
 
 	const argv = process.argv.slice(2)
-	if (argv.length > 0) process.exit(runCli(argv))
+	if (argv.length > 0) process.exit(await runCli(argv))
 
 	if (!process.stdin.isTTY) {
 		const result = applyNvibrant(config)
@@ -1014,7 +1149,7 @@ function main() {
 	} catch {
 		outputs = [{
 			name: "DP-2", enabled: true, hdr: false, wcg: false, sdrBrightness: 450, brightness: 100, scale: 1,
-			currentModeId: "1", modes: [{ id: "1", name: "unknown", refreshRate: 0 }],
+			currentModeId: "1", modes: [{ id: "1", name: "unknown", refreshRate: 0, width: 3840, height: 2160 }],
 			rotation: 1, overscan: 0, rgbRange: 0, sdrGamut: 100, dimming: 100, colorPower: 0, posX: 0, posY: 0, width: 3840,
 		}]
 	}

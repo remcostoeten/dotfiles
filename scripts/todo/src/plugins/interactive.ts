@@ -1,8 +1,9 @@
 import { emitKeypressEvents } from "node:readline";
 import type { Task } from "../domain/task";
+import { buildTaskTreeRows, collectDescendantIds, collectSubtreeIds, completeSubtrees, moveTask, type TaskTreeRow } from "../domain/task-tree";
 import { UserInputError } from "../domain/user-input-error";
-import { getVisibleLength, isOverdue, isUpcoming } from "../presentation/task-format";
-import { createTasks } from "./add";
+import { formatProgressBadge, formatTreePrefix, getVisibleLength, isOverdue, isUpcoming } from "../presentation/task-format";
+import { createTasks, type CreateTaskDefaults } from "./add";
 import { resetNotificationState } from "../notifications";
 import { tryParseDueDate } from "../domain/due-date";
 import { restoreTasks } from "./undo";
@@ -19,7 +20,8 @@ const SELECTED = "\u001B[48;5;60m";
 const PANEL_WIDTH = 72;
 const VISIBLE_TASK_COUNT = 8;
 
-type Mode = "normal" | "adding" | "editing" | "snoozing" | "setting-due" | "searching" | "confirming-delete" | "help";
+type Mode = "normal" | "adding" | "adding-subtask" | "adding-epic" | "editing" | "snoozing" | "setting-due" | "searching" | "confirming-delete" | "help";
+const ADD_MODES: ReadonlySet<Mode> = new Set(["adding", "adding-subtask", "adding-epic"]);
 type TaskView = "pending" | "archive";
 type Focus = "workspaces" | "tasks";
 
@@ -46,17 +48,24 @@ export const interactivePlugin: TodoPlugin = {
   name: "interactive",
   description: "Open the keyboard-controlled taskboard.",
   register(app) {
-    app.command("interactive", "Open the keyboard-controlled taskboard.", async ({ store }) => {
+    app.command("interactive", "Open the keyboard-driven taskboard.", async ({ store }) => {
       const taskboard = new Taskboard(store);
       await taskboard.start();
+    }, {
+      group: "View",
+      aliases: ["i", "-i", "--interactive"],
+      usage: ["todo interactive", "todo i", "todo -i", "todo --interactive", "todo"],
+      details: ["Opens automatically when todo runs with no arguments in a terminal. Press ? inside for the key map."],
     });
   },
 };
 
 class Taskboard {
   private tasks: Task[] = [];
+  private rows: TaskTreeRow[] = [];
   private sourceTasks: Task[] = [];
   private allTasks: Task[] = [];
+  private collapsedIds = new Set<string>();
   private selectedIndex = 0;
   private scrollOffset = 0;
   private mode: Mode = "normal";
@@ -107,7 +116,7 @@ class Taskboard {
       return;
     }
 
-    if (this.mode === "adding" || this.mode === "editing" || this.mode === "snoozing" || this.mode === "setting-due") {
+    if (ADD_MODES.has(this.mode) || this.mode === "editing" || this.mode === "snoozing" || this.mode === "setting-due") {
       await this.processAddKeypress(key);
       return;
     }
@@ -152,9 +161,19 @@ class Taskboard {
     } else if (key.name === "return" || key.name === "space") {
       await this.completeSelectedTask();
     } else if (key.sequence === "a") {
-      this.mode = "adding";
-      this.draft = "";
-      this.message = "";
+      this.startAdding("adding");
+    } else if (key.sequence === "A") {
+      if (this.selectedTask !== undefined && this.view === "pending") this.startAdding("adding-subtask");
+    } else if (key.sequence === "E") {
+      this.startAdding("adding-epic");
+    } else if (key.name === "left" || key.sequence === "h") {
+      this.collapseOrAscend();
+    } else if (key.name === "right" || key.sequence === "l") {
+      this.expandOrDescend();
+    } else if (key.sequence === ">") {
+      await this.indentSelectedTask();
+    } else if (key.sequence === "<") {
+      await this.outdentSelectedTask();
     } else if (key.sequence === "d") {
       if (this.selectedTask !== undefined) this.mode = "confirming-delete";
     } else if (key.sequence === "e") {
@@ -196,7 +215,7 @@ class Taskboard {
     } else if (key.name === "backspace") {
       this.draft = this.draft.slice(0, -1);
     } else if (key.name === "return") {
-      if (this.mode === "adding") await this.addDraft();
+      if (ADD_MODES.has(this.mode)) await this.addDraft();
       else if (this.mode === "editing") await this.saveEditedTask();
       else if (this.mode === "snoozing") await this.saveSnoozedTask();
       else await this.saveDueDate();
@@ -221,6 +240,77 @@ class Taskboard {
       this.applySearch();
     }
     this.draw();
+  }
+
+  private startAdding(mode: "adding" | "adding-subtask" | "adding-epic"): void {
+    this.mode = mode;
+    this.draft = "";
+    this.message = "";
+  }
+
+  private collapseOrAscend(): void {
+    const row = this.selectedRow;
+    if (row === undefined) return;
+    if (row.hasChildren && !row.collapsed) {
+      this.collapsedIds.add(row.task.id);
+      this.rebuildRows(row.task.id);
+      return;
+    }
+    const parentIndex = this.rows.findIndex((candidate) => candidate.task.id === row.task.parentId);
+    if (parentIndex !== -1) {
+      this.selectedIndex = parentIndex;
+      this.ensureSelectedTaskIsVisible();
+    }
+  }
+
+  private expandOrDescend(): void {
+    const row = this.selectedRow;
+    if (row === undefined || !row.hasChildren) return;
+    if (row.collapsed) {
+      this.collapsedIds.delete(row.task.id);
+      this.rebuildRows(row.task.id);
+      return;
+    }
+    this.moveSelection(1);
+  }
+
+  private async indentSelectedTask(): Promise<void> {
+    const row = this.selectedRow;
+    if (row === undefined || this.view === "archive") return;
+    let target: Task | undefined;
+    for (let index = this.selectedIndex - 1; index >= 0; index -= 1) {
+      const candidate = this.rows[index];
+      if (candidate === undefined || candidate.depth < row.depth) break;
+      if (candidate.depth === row.depth) {
+        target = candidate.task;
+        break;
+      }
+    }
+    if (target === undefined) {
+      this.message = "No task above to nest under";
+      return;
+    }
+    await this.reparent(row.task.id, target.id);
+  }
+
+  private async outdentSelectedTask(): Promise<void> {
+    const row = this.selectedRow;
+    if (row === undefined || this.view === "archive") return;
+    if (row.task.parentId === undefined) {
+      this.message = "Already at the top level";
+      return;
+    }
+    const parent = this.allTasks.find((candidate) => candidate.id === row.task.parentId);
+    await this.reparent(row.task.id, parent?.parentId);
+  }
+
+  private async reparent(id: string, parentId: string | undefined): Promise<void> {
+    const tasks = await this.store.loadTasks();
+    moveTask(tasks, id, parentId);
+    await this.store.saveTasks(tasks);
+    if (parentId !== undefined) this.collapsedIds.delete(parentId);
+    this.message = parentId === undefined ? `Moved #${id} to the top level` : `Moved #${id} under #${parentId}`;
+    await this.refresh(id);
   }
 
   private editSelectedTask(): void {
@@ -345,15 +435,10 @@ class Taskboard {
     const ids = this.selectedTaskIds.size > 0 ? this.selectedTaskIds : new Set(selectedTask === undefined ? [] : [selectedTask.id]);
     if (ids.size === 0) return;
     const tasks = await this.store.loadTasks();
-    const now = Date.now();
-    for (const task of tasks) {
-      if (!ids.has(task.id)) continue;
-      task.status = "completed";
-      task.updatedAt = now;
-    }
+    const completed = completeSubtrees(tasks, ids);
     await this.store.saveTasks(tasks);
     this.selectedTaskIds.clear();
-    this.message = `Completed ${ids.size} task${ids.size === 1 ? "" : "s"}`;
+    this.message = `Completed ${completed} task${completed === 1 ? "" : "s"}`;
     await this.refresh();
   }
 
@@ -390,14 +475,23 @@ class Taskboard {
     }
 
     try {
-      const addedTasks = await createTasks(this.store, input.split(/\s+/));
+      const defaults = this.addDefaults();
+      const addedTasks = await createTasks(this.store, input.split(/\s+/), defaults);
       this.mode = "normal";
       this.draft = "";
-      this.message = `Added ${addedTasks.length} task${addedTasks.length === 1 ? "" : "s"}`;
+      if (defaults.parentId !== undefined) this.collapsedIds.delete(defaults.parentId);
+      const noun = defaults.kind === "epic" ? "epic" : defaults.parentId === undefined ? "task" : "subtask";
+      this.message = `Added ${addedTasks.length} ${noun}${addedTasks.length === 1 ? "" : "s"}`;
       await this.refresh(addedTasks[0]?.id);
     } catch (error: unknown) {
       this.message = error instanceof UserInputError ? error.message : "Could not add task";
     }
+  }
+
+  private addDefaults(): CreateTaskDefaults {
+    if (this.mode === "adding-epic") return { kind: "epic" };
+    if (this.mode === "adding-subtask" && this.selectedTask !== undefined) return { parentId: this.selectedTask.id };
+    return {};
   }
 
   private async completeSelectedTask(): Promise<void> {
@@ -410,12 +504,12 @@ class Taskboard {
 
     if (this.view === "archive") {
       task.status = "pending";
+      task.updatedAt = Date.now();
       this.message = `Restored #${task.id}`;
     } else {
-      task.status = "completed";
-      this.message = `Completed #${task.id}`;
+      const completed = completeSubtrees(tasks, [task.id]);
+      this.message = completed > 1 ? `Completed #${task.id} and ${completed - 1} subtask${completed === 2 ? "" : "s"}` : `Completed #${task.id}`;
     }
-    task.updatedAt = Date.now();
     await this.store.saveTasks(tasks);
     await this.refresh();
   }
@@ -425,31 +519,45 @@ class Taskboard {
     if (selectedTask === undefined) return;
 
     const tasks = await this.store.loadTasks();
-    await this.store.saveUndo([selectedTask]);
-    await this.store.saveTasks(tasks.filter((task) => task.id !== selectedTask.id));
+    const subtreeIds = collectSubtreeIds(tasks, [selectedTask.id]);
+    await this.store.saveUndo(tasks.filter((task) => subtreeIds.has(task.id)));
+    await this.store.saveTasks(tasks.filter((task) => !subtreeIds.has(task.id)));
     this.mode = "normal";
-    this.message = `Deleted #${selectedTask.id} · u/Ctrl+Z to undo (5s)`;
+    const subtaskText = subtreeIds.size > 1 ? ` and ${subtreeIds.size - 1} subtask${subtreeIds.size === 2 ? "" : "s"}` : "";
+    this.message = `Deleted #${selectedTask.id}${subtaskText} · u/Ctrl+Z to undo (5s)`;
     await this.refresh();
+  }
+
+  private subtaskCountOf(id: string): number {
+    return collectDescendantIds(this.allTasks, [id]).size;
   }
 
   private async refresh(selectedId?: string): Promise<void> {
     this.allTasks = await this.store.loadTasks();
-    this.sourceTasks = filterWorkspaceTasks(this.allTasks, this.workspace.key).sort(compareTasks);
+    this.sourceTasks = filterWorkspaceTasks(this.allTasks, this.workspace.key);
     this.applySearch();
-    if (selectedId !== undefined) {
-      const matchingIndex = this.tasks.findIndex((task) => task.id === selectedId);
-      if (matchingIndex !== -1) this.selectedIndex = matchingIndex;
-    }
-    this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.tasks.length - 1));
-    this.scrollOffset = Math.min(this.scrollOffset, Math.max(0, this.tasks.length - VISIBLE_TASK_COUNT));
+    if (selectedId !== undefined) this.selectRow(selectedId);
+    this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.rows.length - 1));
+    this.scrollOffset = Math.min(this.scrollOffset, Math.max(0, this.rows.length - VISIBLE_TASK_COUNT));
     this.ensureSelectedTaskIsVisible();
   }
 
   private applySearch(): void {
     const query = this.searchQuery.trim().toLowerCase();
     this.tasks = query.length === 0 ? [...this.sourceTasks] : this.sourceTasks.filter((task) => task.description.toLowerCase().includes(query));
-    this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.tasks.length - 1));
+    this.rebuildRows();
+  }
+
+  private rebuildRows(selectedId?: string): void {
+    this.rows = buildTaskTreeRows(this.tasks, this.allTasks, { compare: compareTasks, collapsedIds: this.collapsedIds });
+    if (selectedId !== undefined) this.selectRow(selectedId);
+    this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.rows.length - 1));
     this.ensureSelectedTaskIsVisible();
+  }
+
+  private selectRow(id: string): void {
+    const matchingIndex = this.rows.findIndex((row) => row.task.id === id);
+    if (matchingIndex !== -1) this.selectedIndex = matchingIndex;
   }
 
   private async toggleView(): Promise<void> {
@@ -463,7 +571,7 @@ class Taskboard {
   }
 
   private moveSelection(offset: number): void {
-    this.selectedIndex = Math.max(0, Math.min(this.selectedIndex + offset, this.tasks.length - 1));
+    this.selectedIndex = Math.max(0, Math.min(this.selectedIndex + offset, this.rows.length - 1));
     this.ensureSelectedTaskIsVisible();
   }
 
@@ -488,8 +596,12 @@ class Taskboard {
     }
   }
 
+  private get selectedRow(): TaskTreeRow | undefined {
+    return this.rows[this.selectedIndex];
+  }
+
   private get selectedTask(): Task | undefined {
-    return this.tasks[this.selectedIndex];
+    return this.selectedRow?.task;
   }
 
   private draw(): void {
@@ -547,56 +659,70 @@ class Taskboard {
 
   private workspaceTaskLines(width: number): string[] {
     if (this.mode === "help") return this.helpLines();
-    if (this.mode === "adding") return [`${GREEN}new task${RESET}`, `${DIM}>${RESET} ${this.draft}${BRIGHT}▏${RESET}`, `${DIM}Enter to save · Esc to cancel${RESET}`];
+    if (ADD_MODES.has(this.mode)) return this.addPromptLines();
     if (this.mode === "editing") return [`${GREEN}edit #${this.selectedTask?.id ?? ""}${RESET}`, `${DIM}>${RESET} ${this.draft}${BRIGHT}▏${RESET}`, `${DIM}Enter to save · Esc to cancel${RESET}`];
     if (this.mode === "snoozing") return [`${GREEN}snooze #${this.selectedTask?.id ?? ""}${RESET}`, `${DIM}>${RESET} ${this.draft}${BRIGHT}▏${RESET}`, `${DIM}30m · 1h · tomorrow · monday · next week${RESET}`];
     if (this.mode === "setting-due") return [`${GREEN}due date #${this.selectedTask?.id ?? ""}${RESET}`, `${DIM}>${RESET} ${this.draft}${BRIGHT}▏${RESET}`, `${DIM}30m · 1h · tomorrow · monday · next week · none${RESET}`];
     if (this.mode === "searching") return [`${GREEN}search${RESET}`, `${DIM}/${RESET} ${this.searchQuery}${BRIGHT}▏${RESET}`, `${DIM}Enter to keep filter · Esc to clear${RESET}`];
-    if (this.mode === "confirming-delete") return [`${RED}Delete #${this.selectedTask?.id ?? ""}?${RESET}`, `${DIM}Press y to delete · n or Esc to cancel${RESET}`];
-    if (this.tasks.length === 0) return [`${GREEN}✓ All caught up${RESET}`, `${DIM}Press a to add a task${RESET}`];
+    if (this.mode === "confirming-delete") return this.deletePromptLines();
+    if (this.rows.length === 0) return [`${GREEN}✓ All caught up${RESET}`, `${DIM}Press a to add a task · E for an epic${RESET}`];
 
     const header = `${DIM}PRI  ID    TITLE${" ".repeat(Math.max(1, width - 53))}CREATED       UPDATED       DUE${RESET}`;
-    const rows = this.tasks.slice(this.scrollOffset, this.scrollOffset + VISIBLE_TASK_COUNT).map((task, index) => {
+    const rows = this.rows.slice(this.scrollOffset, this.scrollOffset + VISIBLE_TASK_COUNT).map((row, index) => {
       const selected = this.scrollOffset + index === this.selectedIndex;
-      const marked = this.selectedTaskIds.has(task.id);
+      const marked = this.selectedTaskIds.has(row.task.id);
       const marker = selected ? `${GREEN}›${RESET}` : marked ? `${GREEN}✓${RESET}` : `${DIM}·${RESET}`;
-      const content = `${marker} ${formatWorkspaceTask(task, width - 2)}`;
+      const content = `${marker} ${formatWorkspaceTask(row, width - 2)}`;
       return selected && this.focus === "tasks" ? highlight(fit(content, width)) : content;
     });
     return [header, ...rows];
   }
 
   private taskLines(): string[] {
-    if (this.mode === "adding") return [`${GREEN}add task${RESET}`, `${DIM}>${RESET} ${this.draft}${BRIGHT}▏${RESET}`, `${DIM}Enter to save · Esc to cancel${RESET}`];
+    if (ADD_MODES.has(this.mode)) return this.addPromptLines();
     if (this.mode === "editing") return [`${GREEN}edit #${this.selectedTask?.id ?? ""}${RESET}`, `${DIM}>${RESET} ${this.draft}${BRIGHT}▏${RESET}`, `${DIM}Enter to save · Esc to cancel${RESET}`];
     if (this.mode === "snoozing") return [`${GREEN}snooze #${this.selectedTask?.id ?? ""}${RESET}`, `${DIM}>${RESET} ${this.draft}${BRIGHT}▏${RESET}`, `${DIM}30m · 1h · tomorrow · monday · next week${RESET}`];
     if (this.mode === "setting-due") return [`${GREEN}due date #${this.selectedTask?.id ?? ""}${RESET}`, `${DIM}>${RESET} ${this.draft}${BRIGHT}▏${RESET}`, `${DIM}30m · 1h · tomorrow · monday · next week · none${RESET}`];
     if (this.mode === "searching") return [`${GREEN}search${RESET}`, `${DIM}/${RESET} ${this.searchQuery}${BRIGHT}▏${RESET}`, `${DIM}Enter to keep filter · Esc to clear${RESET}`];
-    if (this.mode === "confirming-delete") return [`${RED}Delete #${this.selectedTask?.id ?? ""}?${RESET}`, `${DIM}Press y to delete · n or Esc to cancel${RESET}`];
-    if (this.tasks.length === 0) {
-      const emptyAction = this.view === "pending" ? "Press a to add a task" : "Press v to return to open tasks";
+    if (this.mode === "confirming-delete") return this.deletePromptLines();
+    if (this.rows.length === 0) {
+      const emptyAction = this.view === "pending" ? "Press a to add a task · E for an epic" : "Press v to return to open tasks";
       return [`${GREEN}✓ All caught up${RESET}`, `${DIM}${emptyAction}${RESET}`];
     }
 
     const header = formatCompactHeader(PANEL_WIDTH - 3);
-    const visibleTasks = this.tasks.slice(this.scrollOffset, this.scrollOffset + VISIBLE_TASK_COUNT);
-    const rows = visibleTasks.map((task, index) => {
+    const visibleRows = this.rows.slice(this.scrollOffset, this.scrollOffset + VISIBLE_TASK_COUNT);
+    const rows = visibleRows.map((row, index) => {
       const selected = this.scrollOffset + index === this.selectedIndex;
-      const marked = this.selectedTaskIds.has(task.id);
+      const marked = this.selectedTaskIds.has(row.task.id);
       const marker = selected ? `${GREEN}›${RESET}` : marked ? `${GREEN}✓${RESET}` : `${DIM}·${RESET}`;
-      const content = `${marker} ${formatCompactTask(task, PANEL_WIDTH - 3)}`;
+      const content = `${marker} ${formatCompactTask(row, PANEL_WIDTH - 3)}`;
       return selected ? highlight(fit(content, PANEL_WIDTH - 1)) : content;
     });
     return [header, ...rows];
   }
 
+  private addPromptLines(): string[] {
+    const title = this.mode === "adding-epic" ? "new epic" : this.mode === "adding-subtask" ? `new subtask under #${this.selectedTask?.id ?? ""}` : "new task";
+    return [`${GREEN}${title}${RESET}`, `${DIM}>${RESET} ${this.draft}${BRIGHT}▏${RESET}`, `${DIM}Enter to save · comma separates several · Esc to cancel${RESET}`];
+  }
+
+  private deletePromptLines(): string[] {
+    const id = this.selectedTask?.id ?? "";
+    const subtaskCount = id.length > 0 ? this.subtaskCountOf(id) : 0;
+    const subtaskText = subtaskCount > 0 ? ` and ${subtaskCount} subtask${subtaskCount === 1 ? "" : "s"}` : "";
+    return [`${RED}Delete #${id}${subtaskText}?${RESET}`, `${DIM}Press y to delete · n or Esc to cancel${RESET}`];
+  }
+
   private helpLines(): string[] {
     return [
       `${GREEN}↑/k  ↓/j${RESET}  move selection`,
-      `${GREEN}Enter${RESET}  complete selected task`,
-      `${GREEN}a${RESET}  add task`,
+      `${GREEN}←/h  →/l${RESET}  collapse or expand · jump to parent/child`,
+      `${GREEN}Enter${RESET}  complete selected task (and its subtasks)`,
+      `${GREEN}a${RESET}  add task    ${GREEN}A${RESET}  add subtask under selected    ${GREEN}E${RESET}  add epic`,
+      `${GREEN}>${RESET}  nest under the task above    ${GREEN}<${RESET}  move up one level`,
       `${GREEN}e${RESET}  edit selected task`,
-      `${GREEN}d${RESET}  delete selected task`,
+      `${GREEN}d${RESET}  delete selected task and its subtasks`,
       `${GREEN}u / Ctrl+Z${RESET}  undo last deletion (within 5s)`,
       `${GREEN}s${RESET}  snooze selected task`,
       `${GREEN}p${RESET}  cycle priority`,
@@ -621,7 +747,7 @@ class Taskboard {
 
   private get footerRight(): string {
     if (this.mode === "help") return `${DIM}q${RESET} close`;
-    return `${DIM}e${RESET} edit · ${DIM}v${RESET} archive · ${DIM}?${RESET} help · ${DIM}q${RESET} quit`;
+    return `${DIM}A${RESET} sub · ${DIM}E${RESET} epic · ${DIM}?${RESET} help · ${DIM}q${RESET} quit`;
   }
 
   private close(): void {
@@ -665,7 +791,18 @@ function isToday(timestamp: number): boolean {
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
 }
 
-function formatWorkspaceTask(task: Task, width: number): string {
+function formatTreeLabel(row: TaskTreeRow, width: number): string {
+  const prefix = formatTreePrefix(row);
+  const toggle = row.hasChildren ? (row.collapsed ? `${MAUVE}▸${RESET} ` : `${DIM}▾${RESET} `) : "";
+  const badge = formatProgressBadge(row);
+  const descriptionWidth = Math.max(8, width - getVisibleLength(prefix) - getVisibleLength(toggle) - getVisibleLength(badge));
+  const description = truncateTaskDescription(row.task.description, descriptionWidth);
+  const emphasized = row.hasChildren || row.task.kind === "epic" ? `${BRIGHT}${description}${RESET}` : description;
+  return `${prefix}${toggle}${emphasized}${badge}`;
+}
+
+function formatWorkspaceTask(row: TaskTreeRow, width: number): string {
+  const task = row.task;
   const priority = task.priority === "high" ? `${RED}high${RESET}` : task.priority === "medium" ? `${MAUVE}med${RESET}` : task.priority === "low" ? `${BLUE}low${RESET}` : `${DIM}—${RESET}`;
   const id = `${DIM}#${task.id.padStart(2, "0")}${RESET}`;
   const createdAt = formatTaskDate(task.createdAt);
@@ -673,18 +810,19 @@ function formatWorkspaceTask(task: Task, width: number): string {
   const due = formatDueLabel(task);
   const metadataWidth = getVisibleLength(priority) + getVisibleLength(id) + getVisibleLength(createdAt) + getVisibleLength(updatedAt) + getVisibleLength(due) + 12;
   const descriptionWidth = Math.max(12, width - metadataWidth);
-  const description = truncateTaskDescription(task.description, descriptionWidth);
+  const description = formatTreeLabel(row, descriptionWidth);
   const content = `${fit(priority, 4)} ${id}  ${description}`;
   const padding = " ".repeat(Math.max(1, width - getVisibleLength(content) - getVisibleLength(createdAt) - getVisibleLength(updatedAt) - getVisibleLength(due) - 6));
   return `${content}${padding}${createdAt}  ${updatedAt}  ${due}`;
 }
 
-function formatCompactTask(task: Task, width: number): string {
+function formatCompactTask(row: TaskTreeRow, width: number): string {
+  const task = row.task;
   const id = `${DIM}#${task.id.padStart(2, "0")}${RESET}`;
   const updatedAt = `${DIM}${formatRelativeTime(task.updatedAt)}${RESET}`;
   const due = formatDueLabel(task);
   const fixedWidth = 4 + 2 + 9 + 2 + 12;
-  const description = truncateTaskDescription(task.description, Math.max(12, width - fixedWidth));
+  const description = formatTreeLabel(row, Math.max(12, width - fixedWidth));
   return `${fit(id, 4)}  ${fit(description, Math.max(12, width - fixedWidth))}  ${fit(updatedAt, 9)}  ${fit(due, 12)}`;
 }
 

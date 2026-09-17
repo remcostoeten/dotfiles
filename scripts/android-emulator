@@ -34,6 +34,7 @@ fi
 
 # Preferred devices in order of preference
 preferred_devices=(
+    "Pixel_6_API_35_Dev"
     "Pixel_6_API_35"
     "Pixel_9_Pro_Fold"
     "Pixel_9_Pro"
@@ -142,57 +143,58 @@ show_banner() {
     echo ""
 }
 
+menu_section() {
+    echo -e "${CYAN}$1${NC}"
+}
+
+menu_item() {
+    printf "  ${GREEN}%-20s${NC} %s\n" "$1" "$2"
+}
+
 show_menu() {
     show_banner
-    echo -e "${YELLOW}📱 Android Emulator Management Tool${NC}"
+    echo -e "${GREEN}Usage:${NC} android-emulator <command> [args]"
     echo ""
 
-    echo -e "${GREEN}Usage:${NC} android-emulator <command>"
-    echo ""
-    echo -e "${CYAN}🔧 Core Commands:${NC}"
-    echo ""
-
-    echo -e "  ${GREEN}launch${NC}          Open Android Studio + boot the phone"
-    echo -e "  ${GREEN}launch -po${NC}      Boot only the phone, skip Android Studio"
-    echo -e "  ${GREEN}studio${NC}          Open Android Studio only"
-    echo -e "  ${GREEN}start${NC}           Start Android emulator (smart device detection)"
-    echo -e "  ${GREEN}stop${NC}            Stop running emulator"
-    echo -e "  ${GREEN}restart${NC}         Stop and restart emulator"
-    echo -e "  ${GREEN}status${NC}          Check emulator status"
-    echo -e "  ${GREEN}list${NC}            List available AVDs"
-    echo -e "  ${GREEN}devices${NC}          List connected devices"
+    menu_section "🔧 Emulator"
+    menu_item "launch"            "Open Android Studio + boot the phone (-po: phone only)"
+    menu_item "studio"            "Open Android Studio only"
+    menu_item "start [avd]"       "Start emulator (smart device detection, or a named AVD)"
+    menu_item "stop"              "Stop running emulator"
+    menu_item "restart"           "Stop and restart emulator"
+    menu_item "status"            "Show emulator and device status"
+    menu_item "list"              "List available AVDs"
+    menu_item "devices"           "List connected devices"
     echo ""
 
-    echo -e "${CYAN}📋 Device Management:${NC}"
+    menu_section "📦 Apps"
+    menu_item "apps [filter]"     "List installed apps (-a: include system apps)"
+    menu_item "app-info <pkg>"    "Show version, size and paths for an app"
+    menu_item "install <apk>"     "Install an APK file"
+    menu_item "uninstall <pkg>"   "Uninstall an app"
+    menu_item "clear <pkg>"       "Clear an app's data and cache"
+    menu_item "packages [filter]" "List raw package names"
     echo ""
 
-    echo -e "  ${GREEN}packages${NC}        List installed packages"
-    echo -e "  ${GREEN}logcat${NC}          Show device logs (live)"
-    echo -e "  ${GREEN}screenshot${NC}     Take screenshot"
+    menu_section "💾 Storage"
+    menu_item "storage"           "Show device storage usage per partition"
+    menu_item "avd-info [avd]"    "Show AVD config: RAM, disk size, on-disk usage"
+    menu_item "resize <GB> [avd]" "Set AVD data partition size (e.g. resize 16)"
     echo ""
 
-    echo -e "${CYAN}🚀 Quick App Launchers:${NC}"
+    menu_section "🔍 Debugging"
+    menu_item "logcat"            "Show device logs (live)"
+    menu_item "screenshot"        "Take screenshot (saved to ~)"
     echo ""
 
-    echo -e "  ${GREEN}feeld${NC}           Launch Feeld app (Android)"
-    echo -e "  ${GREEN}govee${NC}           Launch Govee app (Android)"
-    echo -e "  ${GREEN}whatsapp${NC}        Launch WhatsApp (Desktop)"
-    echo -e "  ${GREEN}spotify${NC}         Launch Spotify (Desktop)"
+    menu_section "🚀 Quick Launchers"
+    menu_item "feeld"             "Launch Feeld (Android)"
+    menu_item "govee"             "Launch Govee (Android)"
+    menu_item "whatsapp"          "Launch WhatsApp (Desktop)"
+    menu_item "spotify"           "Launch Spotify (Desktop)"
     echo ""
 
-    echo -e "${YELLOW}💡 Features:${NC}"
-    echo -e "   • ${GREEN}Smart device detection${NC} - Automatically finds your Pixel 9 Pro Fold"
-    echo -e "   • ${GREEN}Enhanced error messages${NC} - Clear guidance for troubleshooting"
-    echo -e "   • ${GREEN}Fallback options${NC} - Prompts for device selection if preferred not found"
-    echo ""
-
-    echo -e "${YELLOW}💡 Examples:${NC}"
-    echo -e "   • ${CYAN}android-emulator start${NC}                    # Start with auto-detection"
-    echo -e "   • ${CYAN}DEBUG=1 android-emulator start${NC}            # Start with debug output"
-    echo -e "   • ${CYAN}NON_INTERACTIVE=1 android-emulator start${NC}  # Non-interactive mode"
-    echo ""
-
-    echo -e "${YELLOW}💡 Run without arguments to show this menu${NC}"
+    echo -e "${YELLOW}💡 Env vars: ${CYAN}DEBUG=1${NC} verbose output  •  ${CYAN}NON_INTERACTIVE=1${NC} no prompts"
 }
 
 check_adb() {
@@ -359,11 +361,21 @@ cmd_start() {
         return 0
     fi
 
-    # Smart device selection
-    log_info "Looking for available Android emulators..."
+    local requested_device=""
+    if [ "$1" = "start" ]; then
+        requested_device="$2"
+    fi
+
     local selected_device
-    selected_device=$(find_best_device)
-    local device_selection_result=$?
+    local device_selection_result
+    if [ -n "$requested_device" ]; then
+        selected_device=$(resolve_avd_name "$requested_device") || return 1
+        device_selection_result=0
+    else
+        log_info "Looking for available Android emulators..."
+        selected_device=$(find_best_device)
+        device_selection_result=$?
+    fi
 
     case $device_selection_result in
         1)
@@ -648,9 +660,382 @@ cmd_screenshot() {
     fi
 }
 
+require_running() {
+    if ! check_adb; then
+        return 1
+    fi
+
+    if ! is_emulator_running; then
+        log_error "No emulator running"
+        echo -e "${YELLOW}💡 Start one first: ${CYAN}android-emulator start${NC}"
+        return 1
+    fi
+    return 0
+}
+
+get_avd_home() {
+    if [ -n "$ANDROID_AVD_HOME" ] && [ -d "$ANDROID_AVD_HOME" ]; then
+        echo "$ANDROID_AVD_HOME"
+    elif [ -d "$HOME/.android/avd" ]; then
+        echo "$HOME/.android/avd"
+    else
+        return 1
+    fi
+}
+
+resolve_avd_name() {
+    local requested="$1"
+    local avds
+    avds=$(get_available_avds) || return 1
+
+    if [ -n "$requested" ]; then
+        if echo "$avds" | grep -q "^$requested$"; then
+            echo "$requested"
+            return 0
+        fi
+        log_error "AVD not found: $requested"
+        echo -e "${YELLOW}Available AVDs:${NC}" >&2
+        echo "$avds" >&2
+        return 1
+    fi
+
+    local count
+    count=$(echo "$avds" | wc -l)
+    if [ "$count" -eq 1 ]; then
+        echo "$avds"
+        return 0
+    fi
+
+    if [ "${NON_INTERACTIVE:-0}" = "1" ]; then
+        log_error "Multiple AVDs found; specify one explicitly"
+        echo "$avds" >&2
+        return 1
+    fi
+
+    echo "" >&2
+    echo -e "${CYAN}📱 Select an AVD:${NC}" >&2
+    local i=1
+    while IFS= read -r avd; do
+        echo -e "   ${BLUE}$i)${NC} $avd" >&2
+        i=$((i + 1))
+    done <<< "$avds"
+    echo "" >&2
+    printf "Enter number (1-%d): " $((i - 1)) >&2
+    read -r choice
+
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -lt "$i" ]; then
+        echo "$avds" | sed -n "${choice}p"
+        return 0
+    fi
+
+    log_error "Invalid selection"
+    return 1
+}
+
+cmd_apps() {
+    require_running || return 1
+
+    local include_system=0
+    local filter=""
+    shift
+    for arg in "$@"; do
+        case "$arg" in
+            -a|--all) include_system=1 ;;
+            *) filter="$arg" ;;
+        esac
+    done
+
+    local pm_flags="-3"
+    if [ "$include_system" -eq 1 ]; then
+        pm_flags=""
+    fi
+
+    echo -e "${CYAN}📦 Installed Apps:${NC}"
+    echo ""
+
+    local packages
+    packages=$($adb_path shell pm list packages $pm_flags 2>/dev/null | cut -d: -f2 | tr -d '\r' | sort)
+
+    if [ -n "$filter" ]; then
+        packages=$(echo "$packages" | grep -i "$filter")
+    fi
+
+    if [ -z "$packages" ]; then
+        log_warning "No apps found${filter:+ matching '$filter'}"
+        return 0
+    fi
+
+    echo "$packages" | while IFS= read -r pkg; do
+        echo -e "   • ${GREEN}$pkg${NC}"
+    done
+
+    echo ""
+    local count
+    count=$(echo "$packages" | wc -l)
+    echo -e "${YELLOW}Total: $count app(s)${NC}"
+    echo -e "${YELLOW}💡 Details: ${CYAN}android-emulator app-info <package>${NC}"
+}
+
+cmd_app_info() {
+    require_running || return 1
+
+    local pkg="$2"
+    if [ -z "$pkg" ]; then
+        log_error "Usage: android-emulator app-info <package>"
+        return 1
+    fi
+
+    if ! $adb_path shell pm list packages 2>/dev/null | tr -d '\r' | grep -q "^package:$pkg$"; then
+        log_error "Package not installed: $pkg"
+        return 1
+    fi
+
+    echo -e "${CYAN}📦 App Info: ${GREEN}$pkg${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    local dump
+    dump=$($adb_path shell dumpsys package "$pkg" 2>/dev/null | tr -d '\r')
+
+    local version
+    version=$(echo "$dump" | grep -m1 'versionName=' | sed 's/.*versionName=//')
+    echo -e "   Version:      ${GREEN}${version:-unknown}${NC}"
+
+    local sdk
+    sdk=$(echo "$dump" | grep -m1 'targetSdk=' | sed 's/.*targetSdk=\([0-9]*\).*/\1/')
+    echo -e "   Target SDK:   ${GREEN}${sdk:-unknown}${NC}"
+
+    local installed
+    installed=$(echo "$dump" | grep -m1 'firstInstallTime=' | sed 's/.*firstInstallTime=//')
+    echo -e "   Installed:    ${GREEN}${installed:-unknown}${NC}"
+
+    local apk_path
+    apk_path=$($adb_path shell pm path "$pkg" 2>/dev/null | head -n1 | cut -d: -f2 | tr -d '\r')
+    if [ -n "$apk_path" ]; then
+        local apk_size
+        apk_size=$($adb_path shell "du -h '$apk_path' 2>/dev/null | cut -f1" | tr -d '\r')
+        echo -e "   APK:          ${BLUE}$apk_path${NC} (${GREEN}${apk_size:-?}${NC})"
+    fi
+
+    local data_dir
+    data_dir=$(echo "$dump" | grep -m1 'dataDir=' | sed 's/.*dataDir=//')
+    if [ -n "$data_dir" ]; then
+        echo -e "   Data dir:     ${BLUE}$data_dir${NC}"
+    fi
+}
+
+cmd_install() {
+    require_running || return 1
+
+    local apk="$2"
+    if [ -z "$apk" ]; then
+        log_error "Usage: android-emulator install <path-to-apk>"
+        return 1
+    fi
+
+    if [ ! -f "$apk" ]; then
+        log_error "APK file not found: $apk"
+        return 1
+    fi
+
+    log_info "Installing $(basename "$apk")..."
+    if $adb_path install -r "$apk"; then
+        log_success "Installed $(basename "$apk")"
+    else
+        log_error "Install failed"
+        return 1
+    fi
+}
+
+cmd_uninstall() {
+    require_running || return 1
+
+    local pkg="$2"
+    if [ -z "$pkg" ]; then
+        log_error "Usage: android-emulator uninstall <package>"
+        echo -e "${YELLOW}💡 Find packages with: ${CYAN}android-emulator apps${NC}"
+        return 1
+    fi
+
+    if ! $adb_path shell pm list packages 2>/dev/null | tr -d '\r' | grep -q "^package:$pkg$"; then
+        log_error "Package not installed: $pkg"
+        return 1
+    fi
+
+    if [ "${NON_INTERACTIVE:-0}" != "1" ]; then
+        printf "Uninstall %s? [y/N] " "$pkg"
+        read -r confirm
+        case "$confirm" in
+            y|Y|yes) ;;
+            *) log_info "Aborted"; return 0 ;;
+        esac
+    fi
+
+    if $adb_path uninstall "$pkg" >/dev/null 2>&1; then
+        log_success "Uninstalled $pkg"
+    else
+        log_error "Failed to uninstall $pkg (system apps can't be removed)"
+        return 1
+    fi
+}
+
+cmd_clear() {
+    require_running || return 1
+
+    local pkg="$2"
+    if [ -z "$pkg" ]; then
+        log_error "Usage: android-emulator clear <package>"
+        return 1
+    fi
+
+    if [ "${NON_INTERACTIVE:-0}" != "1" ]; then
+        printf "Clear all data and cache for %s? [y/N] " "$pkg"
+        read -r confirm
+        case "$confirm" in
+            y|Y|yes) ;;
+            *) log_info "Aborted"; return 0 ;;
+        esac
+    fi
+
+    local result
+    result=$($adb_path shell pm clear "$pkg" 2>/dev/null | tr -d '\r')
+    if [ "$result" = "Success" ]; then
+        log_success "Cleared data for $pkg"
+    else
+        log_error "Failed to clear data for $pkg"
+        return 1
+    fi
+}
+
+cmd_storage() {
+    require_running || return 1
+
+    echo -e "${CYAN}💾 Device Storage${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    echo -e "${YELLOW}Partitions:${NC}"
+    $adb_path shell df -h /data /storage/emulated 2>/dev/null | tr -d '\r'
+    echo ""
+
+    echo -e "${YELLOW}Data usage breakdown:${NC}"
+    $adb_path shell dumpsys diskstats 2>/dev/null | tr -d '\r' | grep -E '^(Data-Free|Cache-Free|App Size|App Data Size|App Cache Size|Photos Size|Videos Size|Audio Size|Downloads Size|System Size|Other Size):' | while IFS= read -r line; do
+        echo -e "   $line"
+    done
+    echo ""
+    echo -e "${YELLOW}💡 Resize data partition: ${CYAN}android-emulator resize <GB>${NC}"
+}
+
+cmd_avd_info() {
+    if ! check_emulator; then
+        return 1
+    fi
+
+    local avd_home
+    avd_home=$(get_avd_home)
+    if [ $? -ne 0 ]; then
+        log_error "AVD home directory not found"
+        return 1
+    fi
+
+    local requested="$2"
+    local avds
+    avds=$(get_available_avds) || return 1
+
+    if [ -n "$requested" ]; then
+        avds="$requested"
+    fi
+
+    while IFS= read -r avd; do
+        local config="$avd_home/$avd.avd/config.ini"
+        if [ ! -f "$config" ]; then
+            log_error "Config not found for AVD: $avd"
+            continue
+        fi
+
+        echo -e "${CYAN}📱 ${GREEN}$avd${NC}"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+        local ram heap data_size resolution api
+        ram=$(grep -m1 '^hw.ramSize' "$config" | cut -d= -f2 | tr -d ' ')
+        heap=$(grep -m1 '^vm.heapSize' "$config" | cut -d= -f2 | tr -d ' ')
+        data_size=$(grep -m1 '^disk.dataPartition.size' "$config" | cut -d= -f2 | tr -d ' ')
+        resolution="$(grep -m1 '^hw.lcd.width' "$config" | cut -d= -f2 | tr -d ' ')x$(grep -m1 '^hw.lcd.height' "$config" | cut -d= -f2 | tr -d ' ')"
+        api=$(grep -m1 '^image.sysdir.1' "$config" | grep -o 'android-[0-9]*' | head -n1)
+
+        echo -e "   RAM:            ${GREEN}${ram:-?} MB${NC}"
+        echo -e "   VM heap:        ${GREEN}${heap:-?} MB${NC}"
+        echo -e "   Data partition: ${GREEN}${data_size:-default}${NC}"
+        echo -e "   Resolution:     ${GREEN}${resolution}${NC}"
+        echo -e "   System image:   ${GREEN}${api:-unknown}${NC}"
+
+        local on_disk
+        on_disk=$(du -sh "$avd_home/$avd.avd" 2>/dev/null | cut -f1)
+        echo -e "   On-disk size:   ${GREEN}${on_disk:-?}${NC} ${BLUE}($avd_home/$avd.avd)${NC}"
+        echo ""
+    done <<< "$avds"
+}
+
+cmd_resize() {
+    if ! check_emulator; then
+        return 1
+    fi
+
+    local size_gb="$2"
+    if [ -z "$size_gb" ] || ! [[ "$size_gb" =~ ^[0-9]+$ ]] || [ "$size_gb" -lt 2 ]; then
+        log_error "Usage: android-emulator resize <GB> [avd]  (minimum 2 GB)"
+        echo -e "${YELLOW}💡 Example: ${CYAN}android-emulator resize 16${NC}"
+        return 1
+    fi
+
+    local avd
+    avd=$(resolve_avd_name "$3") || return 1
+
+    local avd_home
+    avd_home=$(get_avd_home)
+    if [ $? -ne 0 ]; then
+        log_error "AVD home directory not found"
+        return 1
+    fi
+
+    local config="$avd_home/$avd.avd/config.ini"
+    if [ ! -f "$config" ]; then
+        log_error "Config not found: $config"
+        return 1
+    fi
+
+    if is_emulator_running; then
+        log_error "Stop the emulator first: android-emulator stop"
+        return 1
+    fi
+
+    local current
+    current=$(grep -m1 '^disk.dataPartition.size' "$config" | cut -d= -f2 | tr -d ' ')
+    log_info "AVD: $avd"
+    log_info "Current data partition size: ${current:-default}"
+
+    if grep -q '^disk.dataPartition.size' "$config"; then
+        sed -i "s/^disk.dataPartition.size.*/disk.dataPartition.size=${size_gb}G/" "$config"
+    else
+        echo "disk.dataPartition.size=${size_gb}G" >> "$config"
+    fi
+
+    log_success "Data partition size set to ${size_gb}G"
+    echo ""
+    log_warning "The emulator grows the partition on next boot. If the new size"
+    log_warning "doesn't apply (especially when shrinking), wipe user data:"
+    echo -e "   ${CYAN}$emulator_path -avd $avd -wipe-data${NC}"
+    echo -e "   ${RED}(wipe-data erases all apps and data on the device)${NC}"
+}
+
+feeld_avd="Pixel_6_API_35"
+feeld_package="co.feeld"
+
 cmd_feeld() {
-    # Use the feeld function (must be available in fish shell)
-    fish -c "feeld"
+    if ! is_emulator_running; then
+        cmd_start start "$feeld_avd" || return 1
+    fi
+    log_info "Launching Feeld"
+    $adb_path shell monkey -p "$feeld_package" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 }
 
 cmd_govee() {
@@ -741,6 +1126,30 @@ case "$command" in
         ;;
     screenshot)
         cmd_screenshot "$@"
+        ;;
+    apps)
+        cmd_apps "$@"
+        ;;
+    app-info|appinfo)
+        cmd_app_info "$@"
+        ;;
+    install)
+        cmd_install "$@"
+        ;;
+    uninstall|remove)
+        cmd_uninstall "$@"
+        ;;
+    clear)
+        cmd_clear "$@"
+        ;;
+    storage|disk)
+        cmd_storage "$@"
+        ;;
+    avd-info|avdinfo)
+        cmd_avd_info "$@"
+        ;;
+    resize)
+        cmd_resize "$@"
         ;;
     feeld)
         cmd_feeld "$@"

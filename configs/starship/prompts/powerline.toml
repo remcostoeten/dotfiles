@@ -1,0 +1,155 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+add_newline = true
+command_timeout = 800
+
+palette = "neon"
+
+format = """
+[](sky)$os$username[](fg:sky bg:lilac)$directory[](fg:lilac bg:surface)$git_branch$git_status$git_state[](fg:surface bg:deep)$nodejs$bun$deno$rust$golang$python$php[](fg:deep)
+$character"""
+
+right_format = "$cmd_duration$jobs$status$time"
+
+[palettes.neon]
+deep    = "#241f36"
+surface = "#332c4d"
+text    = "#0f0d17"
+soft    = "#e8e3f0"
+muted   = "#6f6a85"
+sky     = "#8ecae6"
+lilac   = "#c8b6ff"
+mint    = "#a8e6cf"
+peach   = "#f7c59f"
+sun     = "#e9d8a6"
+rose    = "#f5a3b7"
+red     = "#ff6b81"
+
+[os]
+disabled = false
+style = "bg:sky fg:text bold"
+format = "[ $symbol ]($style)"
+
+[os.symbols]
+Arch = "󰣇"
+Linux = ""
+Macos = ""
+
+[username]
+disabled = true
+style_user = "bg:sky fg:text bold"
+style_root = "bg:red fg:text bold"
+format = "[$user ]($style)"
+
+[directory]
+style = "bg:lilac fg:text bold"
+read_only_style = "bg:lilac fg:red bold"
+format = "[ $path ]($style)[$read_only]($read_only_style)"
+truncation_length = 3
+truncate_to_repo = false
+truncation_symbol = "…/"
+read_only = "󰌾 "
+home_symbol = "~"
+
+[directory.substitutions]
+"~/dev" = "󰲋 dev"
+"~/.config/dotfiles" = " dotfiles"
+"~/.config" = " config"
+
+[git_branch]
+symbol = " "
+style = "bg:surface fg:lilac"
+format = "[ $symbol$branch ]($style)"
+
+[git_status]
+style = "bg:surface fg:sun"
+format = "([$all_status$ahead_behind ]($style))"
+conflicted = "!$count "
+staged = "+$count "
+modified = "~$count "
+renamed = "»$count "
+deleted = "-$count "
+untracked = "?$count "
+stashed = "$$count "
+ahead = "↑$count "
+behind = "↓$count "
+diverged = "↕$ahead_count/$behind_count "
+up_to_date = ""
+
+[git_state]
+style = "bg:surface fg:peach"
+format = "[$state( $progress_current/$progress_total) ]($style)"
+
+[nodejs]
+symbol = " "
+style = "bg:deep fg:mint"
+format = "[ $symbol$version ]($style)"
+version_format = "${major}.${minor}"
+detect_files = ["package.json", ".node-version", ".nvmrc"]
+detect_folders = ["node_modules"]
+
+[bun]
+symbol = "󰛦 "
+style = "bg:deep fg:peach"
+format = "[ $symbol$version ]($style)"
+version_format = "${major}.${minor}"
+
+[deno]
+symbol = "󰛦 "
+style = "bg:deep fg:soft"
+format = "[ $symbol$version ]($style)"
+version_format = "${major}.${minor}"
+
+[rust]
+symbol = " "
+style = "bg:deep fg:rose"
+format = "[ $symbol$version ]($style)"
+version_format = "${major}.${minor}"
+
+[golang]
+symbol = " "
+style = "bg:deep fg:sky"
+format = "[ $symbol$version ]($style)"
+version_format = "${major}.${minor}"
+
+[python]
+symbol = " "
+style = "bg:deep fg:sun"
+format = "[ $symbol($version)( \\($virtualenv\\)) ]($style)"
+version_format = "${major}.${minor}"
+
+[php]
+symbol = " "
+style = "bg:deep fg:lilac"
+format = "[ $symbol$version ]($style)"
+version_format = "${major}.${minor}"
+
+[cmd_duration]
+min_time = 2_000
+style = "fg:muted"
+format = "[󱎫 $duration]($style) "
+
+[jobs]
+symbol = " "
+style = "fg:peach"
+format = "[$symbol$number]($style) "
+
+[status]
+disabled = false
+symbol = " "
+style = "fg:red"
+format = "[$symbol$status]($style) "
+
+[time]
+disabled = false
+time_format = "%H:%M"
+style = "fg:muted"
+format = "[$time]($style)"
+
+[character]
+success_symbol = "[❯](bold mint)"
+error_symbol = "[❯](bold red)"
+vimcmd_symbol = "[❮](bold lilac)"
+vimcmd_replace_one_symbol = "[❮](bold peach)"
+vimcmd_replace_symbol = "[❮](bold peach)"
+vimcmd_visual_symbol = "[❮](bold sun)"

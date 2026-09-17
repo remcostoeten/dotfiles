@@ -27,7 +27,7 @@ Example command surface:
 dotfiles symlinks
 launcher
 todo list --upcoming
-copy tree -L 2
+copy tree -l 2
 replace ~/.config/nvim/init.lua
 ports 3000
 db turso
@@ -137,9 +137,11 @@ Most commands follow the same pattern: the implementation lives in `scripts/`, a
 | `powermenu` | Session power actions | `-` | `powermenu` |
 | `dotfiles` | Browse repo tools, config, and managed symlinks | `-` | `dotfiles symlinks`<br>`dotfiles search ports` |
 | `todo` | Keyboard taskboard and todo manager | [scripts/todo/README.md](scripts/todo/README.md) | `todo`<br>`todo list --upcoming`<br>`todo buy oat milk` |
+| `ai-history` | Browsable, filterable overview of every Claude Code and Codex session | [scripts/ai-history/README.md](scripts/ai-history/README.md) | `ai-history`<br>`ai-history --grep shieldcn`<br>`ai-history --tool codex --since 7d --json` |
 | `copy` | Clipboard helper for files, paths, git remotes, and trees | [scripts/copy](scripts/copy) | `copy pwd`<br>`copy remote`<br>`copy tree -L 2` |
 | `replace` | Replace a file with current clipboard contents | [scripts/replace.ts](scripts/replace.ts) | `replace ~/.config/nvim/init.lua`<br>`replace ./notes/todo.txt`<br>`replace --help` |
 | `timer` | Command execution timer | `-` | `timer bun run build`<br>`timer -r 5 "npm test"` |
+| `deploy` | Guarded Vercel or Cloudflare deployment | [scripts/deploy](scripts/deploy) | `deploy`<br>`deploy --vercel`<br>`deploy --yes` |
 | `alarm` | Alarm launcher and alarm state helpers | `-` | `alarm --in 15m` |
 | `wallpaper` | Wallpaper selection and rotation | [scripts/wallpaper](scripts/wallpaper) | `wallpaper help`<br>`wallpaper r`<br>`wallpaper o` |
 | `db` | Database connection manager and helper UI | [scripts/db](scripts/db) | `db connections`<br>`db connect postgres`<br>`db turso` |

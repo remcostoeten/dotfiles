@@ -12,9 +12,11 @@ API="${SCRAPE_LOVEABLE_API:-https://api.lovable.dev}"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/scrape-loveable"
 RUNS_TSV="$DATA_DIR/runs.tsv"
 TOKEN_FILE="$DATA_DIR/token"
+TOKEN_SRC_FILE="$DATA_DIR/token.src"
 DEST_ROOT="${SCRAPE_LOVEABLE_DEST:-$HOME/lovable-projects}"
 FIREBASE_AUD="${SCRAPE_LOVEABLE_AUD:-gpt-engineer-390607}"
 LOGIN_URL="${SCRAPE_LOVEABLE_LOGIN_URL:-https://lovable.dev/projects}"
+MAIN_ACCOUNT="${SCRAPE_LOVEABLE_MAIN_ACCOUNT:-stoetenremco.rs@gmail.com}"
 
 C_RESET=$'\e[0m'; C_DIM=$'\e[2m'; C_BOLD=$'\e[1m'
 C_CYAN=$'\e[36m'; C_GREEN=$'\e[32m'; C_YELLOW=$'\e[33m'; C_RED=$'\e[31m'; C_MAG=$'\e[35m'
@@ -28,7 +30,8 @@ need() { command -v "$1" >/dev/null 2>&1 || { err "Missing dependency: $1"; exit
 need curl; need jq
 
 mkdir -p "$DATA_DIR"
-[[ -f "$RUNS_TSV" ]] || printf 'when\tproject\tref\tfiles\tdest\n' > "$RUNS_TSV"
+[[ -f "$RUNS_TSV" ]] || printf 'when\tproject\tref\tfiles\tdest\tname\n' > "$RUNS_TSV"
+head -1 "$RUNS_TSV" | grep -q $'\tname' || sed -i '1s/$/\tname/' "$RUNS_TSV"
 
 # ---------------------------------------------------------------------------
 
@@ -76,13 +79,22 @@ set_token() {
   warn "Paste your Lovable token (input hidden), then Enter:"
   local t; read -rs t; echo
   if [[ -z "$t" ]]; then err "Empty token, aborted."; exit 1; fi
-  save_token "$t"
+  save_token "$t" "pasted manually"
 }
 
 save_token() {
   printf '%s' "$1" > "$TOKEN_FILE"
   chmod 600 "$TOKEN_FILE"
-  ok "Token saved to $TOKEN_FILE"
+  printf '%s' "${2:-manual}" > "$TOKEN_SRC_FILE"
+  local email; email="$(token_email "$1")"
+  ok "Token saved — ${email:-unknown account}, $(fmt_expiry "$(token_exp "$1")")"
+}
+
+token_source() {
+  if [[ -n "${LOVABLE_TOKEN:-}" ]]; then printf '$LOVABLE_TOKEN'
+  elif [[ -s "$TOKEN_SRC_FILE" ]]; then cat "$TOKEN_SRC_FILE"
+  else printf 'cached token'
+  fi
 }
 
 # --- token auto-discovery -------------------------------------------------
@@ -102,6 +114,29 @@ b64url_decode() {
 }
 
 jwt_payload() { b64url_decode "$(cut -d. -f2 <<<"$1")"; }
+
+token_email() { jq -r '.email // empty' <<<"$(jwt_payload "$1")" 2>/dev/null || true; }
+token_exp()   { jq -r '.exp // 0' <<<"$(jwt_payload "$1")" 2>/dev/null || echo 0; }
+
+fmt_dur() {
+  local s=$1
+  if   (( s >= 86400 )); then printf '%dd'      $(( s / 86400 ))
+  elif (( s >= 3600 ));  then printf '%dh%02dm' $(( s / 3600 )) $(( s % 3600 / 60 ))
+  elif (( s >= 60 ));    then printf '%dm'      $(( s / 60 ))
+  else                        printf '%ds'      "$s"
+  fi
+}
+
+fmt_expiry() {
+  local exp="${1:-0}" now; now="$(date +%s)"
+  if (( exp == 0 )); then printf 'expiry unknown'; return; fi
+  local d=$(( exp - now ))
+  if (( d > 0 )); then
+    printf 'expires %s (in %s)' "$(date -d "@$exp" '+%H:%M')" "$(fmt_dur "$d")"
+  else
+    printf 'expired %s ago' "$(fmt_dur "$(( -d ))")"
+  fi
+}
 
 browser_roots() {
   cat <<EOF
@@ -136,9 +171,9 @@ find_profiles() {
   done < <(browser_roots) | sort -rn
 }
 
-# echo the highest-exp token found in a profile, or nothing
+# echo the highest-exp token found in a profile as: exp \t email \t token
 token_from_profile() {
-  local profile="$1" best='' best_exp=0
+  local profile="$1" best='' best_exp=0 best_email=''
   local -a stores=( "$profile/IndexedDB/https_lovable.dev_0.indexeddb.leveldb" "$profile/Local Storage/leveldb" )
   local raw
   raw="$(grep -raoh 'eyJ[A-Za-z0-9_-]\{10,\}\.eyJ[A-Za-z0-9_-]\{20,\}\.[A-Za-z0-9_-]\{20,\}' \
@@ -152,11 +187,14 @@ token_from_profile() {
     aud="$(jq -r '.aud // empty' <<<"$payload" 2>/dev/null || true)"
     [[ "$aud" == "$FIREBASE_AUD" ]] || continue
     exp="$(jq -r '.exp // 0' <<<"$payload" 2>/dev/null || echo 0)"
-    if (( exp > best_exp )); then best_exp="$exp"; best="$t"; fi
+    if (( exp > best_exp )); then
+      best_exp="$exp"; best="$t"
+      best_email="$(jq -r '.email // empty' <<<"$payload" 2>/dev/null || true)"
+    fi
   done <<<"$raw"
 
   [[ -z "$best" ]] && return 1
-  printf '%s\t%s' "$best_exp" "$best"
+  printf '%s\t%s\t%s' "$best_exp" "${best_email:-?}" "$best"
 }
 
 launch_browser() {
@@ -181,17 +219,17 @@ generate_token() {
   local stale_browser='' stale_profile='' stale_launcher='' stale_exp=0
   local now; now="$(date +%s)"
 
-  local mtime browser launcher profile found exp tok
+  local mtime browser launcher profile found exp email tok
   for row in "${rows[@]}"; do
     IFS=$'\t' read -r mtime browser launcher profile <<<"$row"
     found="$(token_from_profile "$profile" || true)"
     [[ -z "$found" ]] && continue
-    IFS=$'\t' read -r exp tok <<<"$found"
+    IFS=$'\t' read -r exp email tok <<<"$found"
     if (( exp > now + 60 )); then
-      labels+=( "$(printf '%-16s %-22s expires %s' \
-        "$browser" "$(profile_label "$profile")" "$(date -d "@$exp" '+%H:%M:%S')")" )
+      labels+=( "$(printf '%-16s %-14s %-30s %s' \
+        "$browser" "$(profile_label "$profile")" "$email" "$(fmt_expiry "$exp")")" )
       tokens+=( "$tok" )
-      metas+=( "$browser / $(profile_label "$profile")" )
+      metas+=( "$browser / $(profile_label "$profile") — $email" )
     elif (( exp > stale_exp )); then
       stale_exp="$exp"; stale_browser="$browser"
       stale_profile="$profile"; stale_launcher="$launcher"
@@ -222,12 +260,12 @@ generate_token() {
     pick="$(for i in "${!labels[@]}"; do printf '%s\t%s\n' "$i" "${labels[$i]}"; done |
       fzf --with-nth=2.. --delimiter='\t' \
           --prompt='token › ' --height=40% --reverse \
-          --header='multiple live tokens — most recently used browser first')" || return 1
+          --header='multiple live sessions — pick the ACCOUNT that owns the project')" || return 1
     idx="$(cut -f1 <<<"$pick")"
   fi
 
   ok "Grabbed token from ${metas[$idx]}"
-  save_token "${tokens[$idx]}"
+  save_token "${tokens[$idx]}" "${metas[$idx]}"
 }
 
 token_is_live() {
@@ -247,10 +285,121 @@ normalize_id() {
 }
 
 record_run() {
-  printf '%s\t%s\t%s\t%s\t%s\n' "$(date +%Y-%m-%dT%H:%M:%S)" "$1" "$2" "$3" "$4" >> "$RUNS_TSV"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date +%Y-%m-%dT%H:%M:%S)" "$1" "$2" "$3" "$4" "${5:-}" >> "$RUNS_TSV"
+}
+
+fetch_project_name() {
+  local project="$1" token="$2"
+  curl -sS -m 10 -H "authorization: Bearer $token" \
+    "$API/projects/$project/details" 2>/dev/null \
+    | jq -r '.name // .display_name // empty' 2>/dev/null || true
+}
+
+fmt_when() {
+  local ts="$1"
+  date -d "$ts" +%s >/dev/null 2>&1 || { printf '%s' "$ts"; return; }
+  local day; day="$(date -d "$ts" +%F)"
+  if [[ "$day" == "$(date +%F)" ]]; then
+    printf 'today %s' "$(date -d "$ts" +%H:%M)"
+  elif [[ "$day" == "$(date -d yesterday +%F)" ]]; then
+    printf 'yesterday %s' "$(date -d "$ts" +%H:%M)"
+  elif [[ "$(date -d "$ts" +%Y)" == "$(date +%Y)" ]]; then
+    date -d "$ts" '+%-d %b %H:%M'
+  else
+    date -d "$ts" '+%-d %b %Y'
+  fi
+}
+
+run_display_name() {
+  local project="$1" dest="$2" stored="${3:-}"
+  if [[ -n "$stored" ]]; then printf '%s' "$stored"; return; fi
+  local base; base="$(basename "$dest")"
+  if [[ ! "$base" =~ ^[0-9a-f-]{36}$ ]]; then printf '%s' "$base"; return; fi
+  printf 'id %s' "${project:0:13}"
 }
 
 # ---------------------------------------------------------------------------
+
+list_accounts() {
+  local now; now="$(date +%s)"
+  mapfile -t rows < <(find_profiles)
+  if [[ "${#rows[@]}" -eq 0 ]]; then
+    warn "No browser profile has visited lovable.dev yet."
+    return
+  fi
+
+  local mtime browser launcher profile found exp email tok status mark
+  local table=''
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -r mtime browser launcher profile <<<"$row"
+    found="$(token_from_profile "$profile" || true)"
+    [[ -z "$found" ]] && continue
+    IFS=$'\t' read -r exp email tok <<<"$found"
+    if (( exp > now + 60 )); then status="live · $(fmt_expiry "$exp")"; else status="$(fmt_expiry "$exp")"; fi
+    mark=''; [[ "$email" == "$MAIN_ACCOUNT" ]] && mark=' ★main'
+    table+="$(printf '%s\t%s\t%s%s\t%s' "$browser" "$(profile_label "$profile")" "$email" "$mark" "$status")"$'\n'
+  done
+
+  printf '%s\n' "${C_BOLD}Lovable sessions on this machine${C_RESET}"
+  if [[ -z "$table" ]]; then
+    warn "Profiles found, but none holds a Lovable token. Log in on lovable.dev first."
+  else
+    printf 'BROWSER\tPROFILE\tACCOUNT\tSESSION\n%s' "$table" \
+      | column -t -s $'\t' \
+      | sed -e "1s/.*/${C_DIM}&${C_RESET}/" \
+            -e "s/\blive\b/${C_GREEN}live${C_RESET}/" \
+            -e "s/\bexpired\b/${C_RED}expired${C_RESET}/" \
+            -e "s/★main/${C_MAG}★main${C_RESET}/"
+  fi
+
+  echo
+  if [[ -n "${LOVABLE_TOKEN:-}" ]]; then
+    info "Active: \$LOVABLE_TOKEN — ${C_BOLD}$(token_email "$LOVABLE_TOKEN")${C_RESET}${C_CYAN}, $(fmt_expiry "$(token_exp "$LOVABLE_TOKEN")")"
+  elif [[ -s "$TOKEN_FILE" ]]; then
+    local t; t="$(cat "$TOKEN_FILE")"
+    if token_is_live "$t"; then
+      info "Active: ${C_BOLD}$(token_email "$t")${C_RESET}${C_CYAN} — $(fmt_expiry "$(token_exp "$t")") ${C_DIM}· via $(token_source)${C_RESET}"
+    else
+      warn "Active token ($(token_email "$t")) has expired — the next scrape re-grabs one automatically."
+    fi
+  else
+    warn "No token cached yet — the first scrape grabs one automatically."
+  fi
+}
+
+# ---------------------------------------------------------------------------
+
+draw_progress() {
+  local cur=$1 total=$2 label=$3 width=28
+  local filled=$(( cur * width / total )) bar='' i
+  for (( i = 0; i < width; i++ )); do
+    if (( i < filled )); then bar+='█'; else bar+='░'; fi
+  done
+  printf '\r\033[K  %s%s%s %3d%%  %s%d/%d%s  %s%.48s%s' \
+    "$C_GREEN" "$bar" "$C_RESET" $(( cur * 100 / total )) \
+    "$C_DIM" "$cur" "$total" "$C_RESET" "$C_DIM" "$label" "$C_RESET"
+}
+
+explain_403() {
+  local who="$1"
+  echo >&2
+  err "403 forbidden — this project is not accessible as ${who:-an unknown account}."
+  echo >&2
+  if [[ -n "$who" && "$who" != "$MAIN_ACCOUNT" ]]; then
+    warn "This is the wrong-account trap: a project (or remix) belongs to whichever"
+    warn "account was logged in when it was created — for you that's usually"
+    warn "${C_BOLD}$MAIN_ACCOUNT${C_RESET}${C_YELLOW}."
+    warn ""
+    warn "Fix: log in to lovable.dev as $MAIN_ACCOUNT in any Chromium browser,"
+    warn "open the project once so it can mint a token, then re-run this scrape."
+    warn "If several sessions are live you'll get a picker — choose that account."
+  else
+    warn "You're already on ${MAIN_ACCOUNT} — the project is private under some other"
+    warn "account. Open it in the browser to confirm, or ask the owner to share it."
+  fi
+  echo >&2
+  list_accounts >&2
+}
 
 do_scrape() {
   local project ref dest token
@@ -259,18 +408,37 @@ do_scrape() {
   dest="${3:-$DEST_ROOT/$project}"
   token="$(get_token)"
 
-  info "Project ${C_BOLD}$project${C_RESET}${C_CYAN} @ $ref"
-  info "Dest    $dest"
+  local who; who="$(token_email "$token")"
+  local pname; pname="$(fetch_project_name "$project" "$token")"
 
+  if [[ -n "$pname" ]]; then
+    info "Project ${C_BOLD}$pname${C_RESET}${C_CYAN} @ $ref ${C_DIM}· $project${C_RESET}"
+  else
+    info "Project ${C_BOLD}$project${C_RESET}${C_CYAN} @ $ref"
+  fi
+  info "Account ${C_BOLD}${who:-unknown}${C_RESET}${C_CYAN} ${C_DIM}$(fmt_expiry "$(token_exp "$token")") · via $(token_source)${C_RESET}"
+  info "Dest    $dest"
+  [[ -n "$who" && "$who" != "$MAIN_ACCOUNT" ]] && \
+    warn "Note: not the main account ($MAIN_ACCOUNT) — private projects under it will 403."
+
+  printf '%s' "${C_DIM}  Fetching file list…${C_RESET}"
   local listfile; listfile="$(mktemp)"
   local code
   code="$(curl -sS -w '%{http_code}' -o "$listfile" \
     -H "authorization: Bearer $token" \
     "$API/projects/$project/git/files?ref=$ref")"
+  printf '\r\033[K'
 
   if [[ "$code" == "401" ]]; then
-    err "401 unauthorized — token expired or invalid. Run: scrape-loveable token"
-    rm -f "$listfile"; exit 1
+    rm -f "$listfile"
+    err "401 unauthorized — token expired or invalid."
+    warn "Re-grab one with: scrape-loveable generate-token"
+    exit 1
+  fi
+  if [[ "$code" == "403" ]]; then
+    rm -f "$listfile"
+    explain_403 "$who"
+    exit 1
   fi
   if [[ "$code" != "200" ]]; then
     err "Failed to list files (HTTP $code):"; cat "$listfile" >&2; rm -f "$listfile"; exit 1
@@ -280,9 +448,10 @@ do_scrape() {
   rm -f "$listfile"
   local total="${#paths[@]}"
   if [[ "$total" -eq 0 ]]; then warn "No files returned."; exit 0; fi
-  info "Found $total files. Downloading…"
+  ok "Found $total files."
 
-  local n=0 fail=0
+  local n=0 started; started="$(date +%s)"
+  local -a failed=()
   for p in "${paths[@]}"; do
     local out="$dest/$p"
     mkdir -p "$(dirname "$out")"
@@ -290,19 +459,21 @@ do_scrape() {
     if curl -sS -f -H "authorization: Bearer $token" -o "$out" "$u"; then
       n=$((n+1))
     else
-      fail=$((fail+1)); warn "  ! failed: $p"
+      failed+=( "$p" )
     fi
-    printf '\r  %s%d/%d%s  %s' "$C_DIM" "$((n+fail))" "$total" "$C_RESET" "${p:0:50}"
+    draw_progress $(( n + ${#failed[@]} )) "$total" "$p"
   done
-  printf '\r%*s\r' 80 ''
+  printf '\r\033[K'
 
-  record_run "$project" "$ref" "$n" "$dest"
-  if [[ "$fail" -gt 0 ]]; then
-    warn "Done with $fail failure(s). $n/$total files written to:"
+  local took=$(( $(date +%s) - started ))
+  record_run "$project" "$ref" "$n" "$dest" "$pname"
+  if [[ "${#failed[@]}" -gt 0 ]]; then
+    warn "${#failed[@]} file(s) failed:"
+    for p in "${failed[@]}"; do warn "    $p"; done
+    warn "$n/$total files in $(fmt_dur "$took") → $dest"
   else
-    ok "Done. $n files written to:"
+    ok "✓ $n files in $(fmt_dur "$took") → $dest"
   fi
-  printf '%s\n' "$dest"
 }
 
 # ---------------------------------------------------------------------------
@@ -312,20 +483,36 @@ list_runs() {
     warn "No previous runs yet."; return
   fi
   printf '%s\n' "${C_BOLD}Previous runs${C_RESET}"
-  column -t -s $'\t' "$RUNS_TSV" | sed "1s/.*/${C_DIM}&${C_RESET}/"
+  {
+    printf 'WHEN\tPROJECT\tREF\tFILES\tDEST\n'
+    local when project ref files dest name
+    while IFS=$'\t' read -r when project ref files dest name; do
+      printf '%s\t%s\t%s\t%s\t%s\n' \
+        "$(fmt_when "$when")" "$(run_display_name "$project" "$dest" "$name")" \
+        "$ref" "$files" "${dest/#$HOME/\~}"
+    done < <(tail -n +2 "$RUNS_TSV" | tac)
+  } | column -t -s $'\t' | sed "1s/.*/${C_DIM}&${C_RESET}/"
 }
 
 pick_rerun() {
   if [[ "$(wc -l < "$RUNS_TSV")" -le 1 ]]; then
     warn "No previous runs to re-run."; return 1
   fi
-  local line
-  line="$(tail -n +2 "$RUNS_TSV" | tac | \
-    fzf --with-nth=1,2,3,4 --delimiter='\t' \
+  mapfile -t raw < <(tail -n +2 "$RUNS_TSV" | tac)
+  local -a menu=()
+  local i when project ref files dest name
+  for i in "${!raw[@]}"; do
+    IFS=$'\t' read -r when project ref files dest name <<<"${raw[$i]}"
+    menu+=( "$(printf '%s\t%-16s  %-32s %-5s %3s files  %s' "$i" \
+      "$(fmt_when "$when")" "$(run_display_name "$project" "$dest" "$name")" \
+      "$ref" "$files" "${project:0:8}")" )
+  done
+  local pick
+  pick="$(printf '%s\n' "${menu[@]}" | \
+    fzf --with-nth=2.. --delimiter='\t' \
         --prompt='re-run › ' --height=40% --reverse \
         --header='select a previous run to scrape again')" || return 1
-  local project ref dest
-  project="$(cut -f2 <<<"$line")"; ref="$(cut -f3 <<<"$line")"; dest="$(cut -f5 <<<"$line")"
+  IFS=$'\t' read -r when project ref files dest name <<<"${raw[$(cut -f1 <<<"$pick")]}"
   do_scrape "$project" "$ref" "$dest"
 }
 
@@ -346,6 +533,7 @@ menu() {
     "new        — scrape a project" \
     "rerun      — repeat a previous run" \
     "list       — show previous runs" \
+    "accounts   — show browser sessions + active token" \
     "generate   — auto-grab token from your browser" \
     "token      — paste an auth token manually" \
     "help       — usage + how to get a token" \
@@ -355,6 +543,7 @@ menu() {
     new*)      new_scrape_interactive ;;
     rerun*)    pick_rerun ;;
     list*)     list_runs ;;
+    accounts*) list_accounts ;;
     generate*) generate_token ;;
     token*)    set_token ;;
     help*)     usage ;;
@@ -368,6 +557,7 @@ ${C_BOLD}scrape-loveable${C_RESET} — download every file of a Lovable project 
 ${C_BOLD}Usage${C_RESET}
   scrape-loveable                       open interactive menu
   scrape-loveable <id|url> [ref] [dest] scrape directly (ref defaults to main)
+  scrape-loveable accounts              show browser sessions + active token
   scrape-loveable list                  show previous runs
   scrape-loveable rerun                 pick a previous run and repeat it
   scrape-loveable generate-token [url]  auto-grab a token from your browser
@@ -378,12 +568,18 @@ ${C_BOLD}Auth${C_RESET}
 Tokens are short-lived (~1h). Scraping refreshes them automatically, so you
 normally never touch this — ${C_BOLD}--generate-token${C_RESET} is only for doing it up front.
 
+Projects are account-bound: a 403 almost always means the token belongs to a
+different Lovable account than the one that owns the project. Your main
+account is ${C_BOLD}$MAIN_ACCOUNT${C_RESET} (override with \$SCRAPE_LOVEABLE_MAIN_ACCOUNT).
+Check who you are with:  scrape-loveable accounts
+
 ${C_BOLD}generate-token${C_RESET} reads the Firebase ID token straight out of your Chromium
 profile's on-disk LevelDB (IndexedDB + Local Storage), newest-used browser
 first, keeping only JWTs whose aud is $FIREBASE_AUD. Brave, Chrome,
 Chromium, Edge, Vivaldi, Opera and their flatpaks are all searched. If several
-profiles hold a live token you get an fzf picker; if none do, the browser opens
-at the login URL and it retries after you press Enter.
+profiles hold a live token you get an fzf picker (labelled per account); if
+none do, the browser opens at the login URL and it retries after you press
+Enter.
 
   scrape-loveable generate-token
   scrape-loveable generate-token https://lovable.dev/projects/<id>
@@ -405,6 +601,8 @@ case "${1:-}" in
   -h|--help|help)   usage ;;
   list|runs)        list_runs ;;
   rerun)            pick_rerun ;;
+  accounts|whoami|sessions)
+                    list_accounts ;;
   token)            set_token ;;
   generate-token|--generate-token|gen|auto)
                     shift; generate_token "${1:-$LOGIN_URL}" ;;

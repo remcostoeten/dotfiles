@@ -3,7 +3,7 @@ command = /usr/bin/fish
 
 
 # Background
-background-opacity = 1.00
+background-opacity = 0.92
 background-opacity-cells = false
 background-blur = 100
 
@@ -18,11 +18,13 @@ theme = Highway
 
 # Window Appearance
 window-decoration = auto
-gtk-titlebar = false
-window-show-tab-bar = never
+gtk-titlebar = true
+window-show-tab-bar = auto
 gtk-toolbar-style = flat
 gtk-custom-css = gtk.css
-window-padding-x = 16
+window-padding-x = 20
+window-padding-y = 14
+window-padding-balance = true
 
 
 # Font & Typography

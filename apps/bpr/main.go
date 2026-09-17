@@ -24,7 +24,13 @@ type app struct {
 func (a *app) hasJira() bool { return a.jira != nil }
 
 // newApp resolves credentials + repo slug and builds the Bitbucket client.
-func newApp() (*app, error) {
+func newApp() (*app, error) { return buildApp(true) }
+
+// newJiraApp is newApp for the ticket commands, which work outside a Bitbucket
+// repo — there the slug is simply unknown.
+func newJiraApp() (*app, error) { return buildApp(false) }
+
+func buildApp(needSlug bool) (*app, error) {
 	dir, _ := os.Getwd()
 	creds, ok := config.LoadCreds()
 	if !ok {
@@ -32,7 +38,7 @@ func newApp() (*app, error) {
 	}
 	settings := config.LoadSettings()
 	slug, err := config.RepoSlug(dir, settings)
-	if err != nil {
+	if err != nil && needSlug {
 		return nil, err
 	}
 	a := &app{
@@ -83,9 +89,13 @@ func main() {
 	case "create", "new", "pr":
 		mustAppArgs(cmdCreate, args)
 	case "todo", "issues", "mine":
-		mustApp(cmdTodo)
+		mustJira(cmdTodo)
 	case "issue", "ticket":
-		mustAppArgs(cmdIssue, args)
+		mustJiraArgs(cmdIssue, args)
+	case "ticket-new", "nt":
+		mustJiraArgs(cmdTicketNew, args)
+	case "sub", "subs", "subtask", "subtasks":
+		mustJiraArgs(cmdSubtasks, args)
 	case "dash", "dashboard", "menu", "ui", "i", "interactive":
 		mustApp(cmdDashboard)
 	case "help", "-h", "--help":
@@ -105,6 +115,26 @@ func mustApp(fn func(context.Context, *app) error) {
 		die(err)
 	}
 	if err := fn(context.Background(), a); err != nil {
+		die(err)
+	}
+}
+
+func mustJira(fn func(context.Context, *app) error) {
+	a, err := newJiraApp()
+	if err != nil {
+		die(err)
+	}
+	if err := fn(context.Background(), a); err != nil {
+		die(err)
+	}
+}
+
+func mustJiraArgs(fn func(context.Context, *app, []string) error, args []string) {
+	a, err := newJiraApp()
+	if err != nil {
+		die(err)
+	}
+	if err := fn(context.Background(), a, args); err != nil {
 		die(err)
 	}
 }
@@ -130,7 +160,13 @@ func usage() {
       -t <title>  -d <dest>  -m <body>  --no-open
   bpr web             open the current-branch PR (or new-PR page)
   bpr todo            list Jira issues assigned to you
-  bpr issue [KEY]     show a Jira issue (defaults to the branch's ticket)
+  bpr issue [KEY]     show a Jira issue + its subtasks (defaults to the branch's ticket)
+  bpr ticket new [summary] [-t <title>] [-m <desc>] [-y <type>]
+                      file a new ticket in the project backlog
+  bpr sub [KEY]       list the subtasks of a ticket
+  bpr sub add [KEY] [summary] [-m <desc>]
+                      add a subtask to a ticket
+  bpr sub rm <KEY>... delete subtasks (asks first; -f to skip)
   bpr auth            store your Atlassian email + API token(s)
   bpr help            this help
 

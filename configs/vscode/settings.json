@@ -63,6 +63,9 @@
   },
   "vim_mode": true,
   "agent_servers": {
+    "antigravity-acp": {
+      "type": "registry"
+    },
     "opencode": {
       "type": "registry"
     },
