@@ -1,0 +1,24 @@
+--- dark 60x1 ---
+[38;2;224;115;106m✗ Deleting pod scheduler-0 failed[m
+--- dark 80x1 ---
+[38;2;224;115;106m✗ Deleting pod scheduler-0 failed[m
+--- dark 120x1 ---
+[38;2;224;115;106m✗ Deleting pod scheduler-0 failed[m
+--- dim 60x1 ---
+[38;2;184;127;121m✗ Deleting pod scheduler-0 failed[m
+--- dim 80x1 ---
+[38;2;184;127;121m✗ Deleting pod scheduler-0 failed[m
+--- dim 120x1 ---
+[38;2;184;127;121m✗ Deleting pod scheduler-0 failed[m
+--- high-contrast 60x1 ---
+[38;2;255;107;107m✗ Deleting pod scheduler-0 failed[m
+--- high-contrast 80x1 ---
+[38;2;255;107;107m✗ Deleting pod scheduler-0 failed[m
+--- high-contrast 120x1 ---
+[38;2;255;107;107m✗ Deleting pod scheduler-0 failed[m
+--- ascii 60x1 ---
+[1mx Deleting pod scheduler-0 failed[m
+--- ascii 80x1 ---
+[1mx Deleting pod scheduler-0 failed[m
+--- ascii 120x1 ---
+[1mx Deleting pod scheduler-0 failed[m
