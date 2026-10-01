@@ -3,7 +3,7 @@
 # UI Toolkit Wrapper Script
 # Handles both Python toolkit and import transformer functionality
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 PYTHON_SCRIPT="$SCRIPT_DIR/../scripts/lib/ui/toolkit.py"
 IMPORT_TRANSFORMER="$SCRIPT_DIR/lib/ui/import-transformer"
 

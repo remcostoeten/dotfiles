@@ -159,7 +159,7 @@ class DatabaseManager:
    • Container lifecycle management (start/stop/remove)
    • Real-time logs and statistics
    • System cleanup utilities
-   • Location: ~/.config/dotfiles/bin/docker
+   • Location: ~/.config/dotfiles/bin/docker-manager
 
 {Colors.BOLD}Usage Examples:{Colors.RESET}
 
@@ -294,7 +294,7 @@ class DatabaseManager:
         return True
     
     def run_docker_manager(self):
-        docker_script = self.bin_path / "docker"
+        docker_script = self.bin_path / "docker-manager"
         if not docker_script.exists():
             print(f"{Colors.RED}Error: Docker manager not found at {docker_script}{Colors.RESET}")
             return False

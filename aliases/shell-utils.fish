@@ -31,7 +31,7 @@ alias rm='rm -rf'
 alias mkdir='mkdir -p'
 
 # DOCSTRING: Modern system monitor
-alias top='bottom'
+alias top='btm'
 
 # DOCSTRING: Quick shell command helper
 alias q='qs -c ii'

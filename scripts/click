@@ -5,7 +5,7 @@
 # ============================================================================
 # Configuration & Globals
 # ============================================================================
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$(readlink -f "$0")")" && pwd)"
 DATA_DIR_LIB="$SCRIPT_DIR/lib/data-dir.sh"
 if [ -f "$DATA_DIR_LIB" ]; then
     . "$DATA_DIR_LIB"
