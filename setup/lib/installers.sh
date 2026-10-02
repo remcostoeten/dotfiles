@@ -538,6 +538,7 @@ ensure_symlink() {
     local src_path="$1"
     local dst_path="$2"
     local backup_root="${3:-}"
+    local link_mode="${4:-absolute}"
     local dst_dir
 
     dst_dir="$(dirname "$dst_path")"
@@ -556,7 +557,10 @@ ensure_symlink() {
         fi
     fi
 
-    ln -s "$src_path" "$dst_path" 2>/dev/null || {
+    local ln_flags="-s"
+    [[ "$link_mode" == "relative" ]] && ln_flags="-sr"
+
+    ln "$ln_flags" "$src_path" "$dst_path" 2>/dev/null || {
         log_error "Failed to link $dst_path -> $src_path"
         return 1
     }
@@ -785,7 +789,7 @@ link_editor_configs_recursive() {
     for file in "$vscode_config"/*; do
         if [[ -f "$file" ]]; then
             local filename=$(basename "$file")
-            ensure_symlink "$file" "$all_editors_dir/$filename" "$SETUP_BACKUP_ROOT"
+            ensure_symlink "$file" "$all_editors_dir/$filename" "$SETUP_BACKUP_ROOT" relative
         fi
     done
 
@@ -802,7 +806,7 @@ link_editor_configs_recursive() {
         for file in "$all_editors_dir"/*; do
             if [[ -f "$file" ]]; then
                 local filename=$(basename "$file")
-                ensure_symlink "$file" "$editor_config_dir/$filename" "$SETUP_BACKUP_ROOT"
+                ensure_symlink "$file" "$editor_config_dir/$filename" "$SETUP_BACKUP_ROOT" relative
                 ensure_symlink "$file" "$dst_dir/$filename" "$SETUP_BACKUP_ROOT"
             fi
         done

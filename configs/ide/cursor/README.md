@@ -1,1 +1,1 @@
-/home/remcostoeten/.config/dotfiles/setup/../configs/ide/all-editors/README.md
+../all-editors/README.md

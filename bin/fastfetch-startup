@@ -21,4 +21,3 @@ if command -v fastfetch >/dev/null 2>&1; then
 fi
 
 exit 0
-r
