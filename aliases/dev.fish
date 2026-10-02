@@ -47,7 +47,7 @@ end
 
 # DOCSTRING: Open files with Vim
 function vim
-    vim $argv
+    command vim $argv
 end
 
 # DOCSTRING: Run `bun dev:all

@@ -1,2 +1,3 @@
 #!/usr/bin/env bash
-exec bun run "$HOME/.config/dotfiles/scripts/bg-remove/src/cli.ts" "$@"
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+exec bun run "$ROOT/scripts/bg-remove/src/cli.ts" "$@"

@@ -10,7 +10,7 @@ alias dot 'cd ~/.config/dotfiles'
 alias todo '$HOME/.config/dotfiles/bin/todo'
 
 # DOCSTRING: Scripts selector shortcut
-alias scripts '$HOME/.config/dotfiles/bin/scripts'
+alias scripts '$HOME/.config/dotfiles/scripts/scripts'
 
 # DOCSTRING: Dotfiles command line interface
 function dotfiles

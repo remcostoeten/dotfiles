@@ -1,5 +1,5 @@
 function show_todos_startup -d "Display pending todos with timestamps on shell startup"
-    set -l todo_script "$HOME/.config/dotfiles/scripts/todo.mjs"
+    set -l todo_script "$HOME/.config/dotfiles/apps/todo-tui/cli/todo.ts"
 
     if test -f "$todo_script"
         if command -v bun >/dev/null 2>&1

@@ -1,2 +1,3 @@
 #!/usr/bin/env bash
-exec "$HOME/.config/dotfiles/scripts/reg" "$@"
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+exec "$ROOT/scripts/reg" "$@"

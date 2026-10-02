@@ -134,8 +134,8 @@ _pretty_run() {
 
 _typo_check() {
   local pattern="$1"
-  [[ -z "$pattern" ]] && return
-  command -v hunspell &>/dev/null || return
+  [[ -z "$pattern" ]] && return 0
+  command -v hunspell &>/dev/null || return 0
 
   if ! out=$(echo "test" | hunspell -d en_US -a 2>/dev/null); then
     return
