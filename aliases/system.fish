@@ -16,9 +16,9 @@ function fantasy
 
     mkdir -p "$log_dir"
 
-    printf "%s\n" "111" | sudo -S -p "" "$HOME/Downloads/fantasy.earthbound.out" $argv 2>&1 | tee -a "$log_file"
+    sudo "$HOME/Downloads/fantasy.earthbound.out" $argv 2>&1 | tee -a "$log_file"
     set -l statuses $pipestatus
-    return $statuses[2]
+    return $statuses[1]
 end
 
 # DOCSTRING: Fix GNOME mouse/input issues by restarting GNOME Shell without logging out
