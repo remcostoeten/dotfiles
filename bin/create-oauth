@@ -2,7 +2,7 @@
 # Clone or update the OAuth app automator and run the selected provider.
 set -euo pipefail
 
-runner="$HOME/.config/dotfiles/scripts/lib/github-tool-runner.sh"
+runner="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)/scripts/lib/github-tool-runner.sh"
 
 if [[ "${1:-}" == "google" || "${1:-}" == "--google" ]]; then
     shift

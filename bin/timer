@@ -1,5 +1,3 @@
 #!/usr/bin/env bash
-exec bun "$HOME/.config/dotfiles/scripts/timer.ts" "$@"
-
-
-
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+exec bun "$ROOT/scripts/timer.ts" "$@"

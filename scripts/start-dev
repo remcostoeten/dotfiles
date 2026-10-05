@@ -330,9 +330,9 @@ run_cli() {
       -i|--ide)
         [ -n "$IDE_CMD" ] || { echo "no IDE (cursor/code/codium/zed) found"; exit 1; }
         "$IDE_CMD" "$REPO" >/dev/null 2>&1 & did=1 ;;
-      # shellcheck disable=SC2086
       -e|--explorer)
         [ -n "$EXPLORER_CMD" ] || { echo "no file manager / opener found"; exit 1; }
+        # shellcheck disable=SC2086
         $EXPLORER_CMD "$REPO" >/dev/null 2>&1 & did=1 ;;
       -h|--help)
         cat <<EOF

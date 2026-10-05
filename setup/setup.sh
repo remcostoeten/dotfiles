@@ -6,6 +6,8 @@ VERBOSE=false
 ENABLE_PASSWORDLESS_SUDO=false
 START_TIME=$(date +%s)
 SETUP_FAILURES=()
+STEP_FAILURES_FILE="$(mktemp)"
+trap 'rm -f "$STEP_FAILURES_FILE"' EXIT
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
@@ -616,101 +618,109 @@ install_detected_desktop() {
     esac
 }
 
+try() {
+    "$@" && return 0
+    local status=$?
+    printf '%s\n' "$*" >>"$STEP_FAILURES_FILE"
+    log_warn "Step failed ($status): $*"
+    return 0
+}
+
 install_category() {
     local category="$1"
     
     case "$category" in
         essential)
-            install_apt "git"
-            install_apt "curl"
-            install_apt "wget"
-            install_apt "build-essential"
-            install_apt "ca-certificates"
-            install_apt "gnupg"
-            install_apt "software-properties-common"
-            install_apt "fish"
-            setup_config_symlinks
+            try install_apt "git"
+            try install_apt "curl"
+            try install_apt "wget"
+            try install_apt "build-essential"
+            try install_apt "ca-certificates"
+            try install_apt "gnupg"
+            try install_apt "software-properties-common"
+            try install_apt "fish"
+            try setup_config_symlinks
             ;;
         langs)
-            install_apt "python3"
-            install_apt "python3-pip"
-            install_apt "python3-venv"
-            install_apt "nodejs"
-            install_apt "npm"
-            install_wayland_clipboard_prereqs
-            install_curl "https://get.pnpm.io/install.sh" "pnpm" "sh"
-            install_curl "https://bun.sh/install" "bun" "bash"
-            install_curl "https://sh.rustup.rs" "rustup" "bash" "-y"
-            install_dotnet
+            try install_apt "python3"
+            try install_apt "python3-pip"
+            try install_apt "python3-venv"
+            try install_apt "nodejs"
+            try install_apt "npm"
+            try install_wayland_clipboard_prereqs
+            try install_curl "https://get.pnpm.io/install.sh" "pnpm" "sh"
+            try install_curl "https://bun.sh/install" "bun" "bash"
+            try install_curl "https://sh.rustup.rs" "rustup" "bash" "-y"
+            try install_dotnet
             ;;
         tools)
-            install_apt "neovim"
-            install_apt "vim"
-            install_apt "ripgrep"
-            install_apt "fd-find"
-            install_apt "fzf"
-            install_apt "zoxide"
-            install_apt "eza"
-            install_apt "bat"
-            install_apt "htop"
-            install_apt "tree"
-            install_apt "jq"
+            try install_apt "neovim"
+            try install_apt "vim"
+            try install_apt "ripgrep"
+            try install_apt "fd-find"
+            try install_apt "fzf"
+            try install_apt "zoxide"
+            try install_apt "eza"
+            try install_apt "bat"
+            try install_apt "htop"
+            try install_apt "tree"
+            try install_apt "jq"
             ;;
         terminals)
-            install_ghostty
+            try install_ghostty
             set_default_terminal ghostty
             ;;
         curl-tools)
-            install_curl "https://starship.rs/install.sh" "starship" "sh"
-            setup_starship_config
-            install_curl "https://fnm.vercel.app/install" "fnm" "bash"
-            install_curl "https://sh.rustup.rs" "rustup" "bash" "-y"
-            install_curl "https://astral.sh/uv/install.sh" "uv" "sh"
+            try install_curl "https://starship.rs/install.sh" "starship" "sh"
+            try setup_starship_config
+            try install_curl "https://fnm.vercel.app/install" "fnm" "bash"
+            try install_curl "https://sh.rustup.rs" "rustup" "bash" "-y"
+            try install_curl "https://astral.sh/uv/install.sh" "uv" "sh"
             ;;
         npm-tools)
-            install_npm "vercel" "vercel"
-            install_npm "@google/gemini-cli" "gemini"
+            try install_npm "vercel" "vercel"
+            try install_npm "@google/gemini-cli" "gemini"
             ;;
         git-tools)
-            install_apt "gh"
-            install_github "jesseduffield/lazygit" "lazygit"
-            install_github "jesseduffield/lazydocker" "lazydocker"
+            try install_apt "gh"
+            try install_github "jesseduffield/lazygit" "lazygit"
+            try install_github "jesseduffield/lazydocker" "lazydocker"
             ;;
         editors)
-            install_zed
-            install_vscode
-            install_opencode
+            try install_zed
+            try install_vscode
+            try install_opencode
             ;;
         docker)
-            install_apt "docker.io"
-            install_apt "docker-compose"
+            try install_apt "docker.io"
+            try install_apt "docker-compose"
             ;;
         system)
-            install_apt "fastfetch" "Fastfetch"
-            install_apt "btop" "Btop"
+            try install_apt "fastfetch" "Fastfetch"
+            try install_apt "btop" "Btop"
             ;;
         hardware)
-            install_nvidia
-            install_openrgb
+            try install_nvidia
+            try install_openrgb
             ;;
         media)
-            install_apt "vlc" "VLC"
-            install_snap "spotify" "Spotify" "--classic"
+            try install_apt "vlc" "VLC"
+            try install_snap "spotify" "Spotify" "--classic"
             ;;
         fonts)
-            install_all_fonts
+            try install_all_fonts
             ;;
         desktop)
-            install_detected_desktop
+            try install_detected_desktop
             ;;
         gnome)
-            configure_gnome_desktop
+            try configure_gnome_desktop
             ;;
         kde|plasma)
-            configure_kde_desktop
+            try configure_kde_desktop
             ;;
         hyprland)
-            install_hyprland
+            try install_hyprland
             ;;
         *)
             log_error "Unknown category: $category"
@@ -944,7 +954,13 @@ else
     fi
 fi
 
+while IFS= read -r step; do
+    [[ -n "$step" ]] && SETUP_FAILURES+=("step:$step")
+done <"$STEP_FAILURES_FILE"
+
 if ((${#SETUP_FAILURES[@]} > 0)); then
     echo ""
-    log_warn "Completed with ${#SETUP_FAILURES[@]} failed item(s): ${SETUP_FAILURES[*]}"
+    log_warn "Completed with ${#SETUP_FAILURES[@]} failed item(s):"
+    printf '  %s\n' "${SETUP_FAILURES[@]}"
+    exit 1
 fi

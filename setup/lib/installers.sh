@@ -538,6 +538,7 @@ ensure_symlink() {
     local src_path="$1"
     local dst_path="$2"
     local backup_root="${3:-}"
+    local link_mode="${4:-absolute}"
     local dst_dir
 
     dst_dir="$(dirname "$dst_path")"
@@ -556,7 +557,10 @@ ensure_symlink() {
         fi
     fi
 
-    ln -s "$src_path" "$dst_path" 2>/dev/null || {
+    local ln_flags="-s"
+    [[ "$link_mode" == "relative" ]] && ln_flags="-sr"
+
+    ln "$ln_flags" "$src_path" "$dst_path" 2>/dev/null || {
         log_error "Failed to link $dst_path -> $src_path"
         return 1
     }
@@ -785,7 +789,7 @@ link_editor_configs_recursive() {
     for file in "$vscode_config"/*; do
         if [[ -f "$file" ]]; then
             local filename=$(basename "$file")
-            ensure_symlink "$file" "$all_editors_dir/$filename" "$SETUP_BACKUP_ROOT"
+            ensure_symlink "$file" "$all_editors_dir/$filename" "$SETUP_BACKUP_ROOT" relative
         fi
     done
 
@@ -802,7 +806,7 @@ link_editor_configs_recursive() {
         for file in "$all_editors_dir"/*; do
             if [[ -f "$file" ]]; then
                 local filename=$(basename "$file")
-                ensure_symlink "$file" "$editor_config_dir/$filename" "$SETUP_BACKUP_ROOT"
+                ensure_symlink "$file" "$editor_config_dir/$filename" "$SETUP_BACKUP_ROOT" relative
                 ensure_symlink "$file" "$dst_dir/$filename" "$SETUP_BACKUP_ROOT"
             fi
         done
@@ -860,39 +864,53 @@ install_editor_extensions() {
 install_github() {
     local repo="$1"
     local name="${2:-${repo##*/}}"
-    local target_dir="${3:-$name}"
-    
+    local bin_dir="$HOME/.local/bin"
+
     if command -v "$name" &>/dev/null; then
         log_success "$name already installed"
         return 0
     fi
-    
-    if [[ -d "$target_dir" ]]; then
-        log_info "$name directory exists, pulling latest..."
-        if [[ "$DRY_RUN" == "true" ]]; then
-            log_dry_run "git pull in $target_dir"
-        else
-            (cd "$target_dir" && git pull) 2>/dev/null || true
-            log_success "$name updated"
-        fi
-        return 0
-    fi
-    
+
+    local arch
+    case "$(uname -m)" in
+        x86_64) arch="x86_64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        *)
+            log_error "Unsupported architecture for $name: $(uname -m)"
+            return 1
+            ;;
+    esac
+
     log_step "Installing $name..."
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_dry_run "gh repo clone $repo $target_dir"
+        log_dry_run "download latest $repo release to $bin_dir/$name"
         return 0
-    else
-        set +e
-        gh repo clone "$repo" "$target_dir" 2>&1 | grep -v "Cloning" | grep -v "warning:"
-        local install_status=${PIPESTATUS[0]}
-        set -e
-        if ((install_status != 0)); then
-            log_error "Failed to install $name from GitHub repo $repo"
-            return 1
-        fi
     fi
-    log_success "$name installed"
+
+    local latest
+    latest=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest") || true
+    local tag="${latest##*/}"
+    if [[ -z "$tag" || "$tag" == "latest" ]]; then
+        log_error "Could not resolve latest release for $repo"
+        return 1
+    fi
+
+    local tmp os url
+    tmp=$(mktemp -d)
+    for os in linux Linux; do
+        url="https://github.com/$repo/releases/download/$tag/${name}_${tag#v}_${os}_${arch}.tar.gz"
+        curl -fsSL "$url" 2>/dev/null | tar -xz -C "$tmp" "$name" 2>/dev/null && break
+    done
+    if [[ ! -f "$tmp/$name" ]]; then
+        rm -rf "$tmp"
+        log_error "Failed to download $name $tag for $arch"
+        return 1
+    fi
+
+    mkdir -p "$bin_dir"
+    install -m 755 "$tmp/$name" "$bin_dir/$name"
+    rm -rf "$tmp"
+    log_success "$name $tag installed to $bin_dir"
 }
 
 install_nerd_font() {
@@ -1427,6 +1445,11 @@ install_opencode() {
 }
 
 install_nvidia() {
+    if ! lspci 2>/dev/null | grep -qi nvidia; then
+        log_info "No NVIDIA GPU detected, skipping drivers"
+        return 0
+    fi
+
     log_step "Installing NVIDIA drivers..."
     
     if [[ "$DRY_RUN" == "true" ]]; then

@@ -2,7 +2,7 @@
 # Clone or update the Turso DB creator and run the upstream generator.
 set -euo pipefail
 
-runner="$HOME/.config/dotfiles/scripts/lib/github-tool-runner.sh"
+runner="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)/scripts/lib/github-tool-runner.sh"
 
 exec "$runner" \
     "https://github.com/remcostoeten/Turso-db-creator-auto-retrieve-env-credentials.git" \
