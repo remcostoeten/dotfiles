@@ -22,7 +22,6 @@ if test -f ~/.config/dotfiles/configs/fish/core/init.fish
     source ~/.config/dotfiles/configs/fish/core/init.fish
 end
 
-source ~/.config/dotfiles/loaders/bin-loader.fish
 dotfiles_load_all_recursive ~/.config/dotfiles/aliases source
 
 source ~/.config/dotfiles/loaders/tools-loader.fish
