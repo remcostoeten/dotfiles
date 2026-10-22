@@ -748,8 +748,6 @@ setup_config_symlinks() {
         "fuzzel:$home_config_dir/fuzzel"
         "fish/config.fish:$home_config_dir/fish/config.fish"
         "fish/conf.d:$home_config_dir/fish/conf.d"
-        "zsh:$HOME/.config/zsh"
-        "zsh/.zshenv:$HOME/.zshenv"
         "bash:$HOME/.config/bash"
         "agents:$HOME/.agents"
         # No "zed"/"cursor" entries: the editor configs live under

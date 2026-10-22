@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-tui="$HOME/.config/dotfiles/bin/todo-tui"
+tui="$HOME/.config/dotfiles/apps/todo-tui/bin/todo-tui"
 if [[ -x "$tui" && -t 0 && -t 1 ]]; then
   case "${1-}" in
     ""|i|-i|--interactive|interactive) exec "$tui" ;;

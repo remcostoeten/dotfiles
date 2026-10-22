@@ -102,11 +102,10 @@ The default run covers the full general-purpose install set. For desktop setup, 
 
 ## Shells
 
-Fish is the primary shell.
+Fish is the only supported shell.
 
 - Fish bootstraps from `vendor/fish/bootstrap.fish`
 - Fish runtime loads `cfg` and the Fish-side tool modules
-- Plain POSIX shells can source the minimal `vendor/sh/bootstrap.sh`
 
 ## Dotfiles CLI
 

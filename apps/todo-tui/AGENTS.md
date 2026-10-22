@@ -37,7 +37,7 @@ make help          # every Go target
 make test          # go test ./...
 make lint          # golangci-lint run ./...
 make golden        # rewrite internal/app/testdata after an intended frame change
-make install       # build into ../../bin/todo-tui, which the launcher runs
+make build         # build into bin/todo-tui, which the launcher runs
 
 cd cli
 bun test

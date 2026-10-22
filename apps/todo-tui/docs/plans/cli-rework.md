@@ -11,8 +11,8 @@ before starting.
     mutation. Built to `cli/dist/todo.mjs` (`bun run build`).
   - `internal/`, `cmd/` — Go TUI (reusable-tui framework). Reads the data
     files; mutates by shelling out to the CLI (`internal/todo/cli.go`,
-    `CLI.Run`). Built to `~/.config/dotfiles/bin/todo-tui`
-    (`go build -trimpath -o ../../bin/todo-tui ./cmd/todo-tui` from `apps/todo-tui`).
+    `CLI.Run`). Built to `apps/todo-tui/bin/todo-tui`
+    (`make build` from `apps/todo-tui`).
   - `~/.config/dotfiles/bin/todo` — wrapper: bare `todo`/`todo i` in a TTY
     execs the Go TUI, everything else runs `bun cli/dist/todo.mjs`.
   - `cli/src/plugins/interactive.ts` — legacy TS taskboard, fallback when the
@@ -310,7 +310,7 @@ t() { bun ~/.config/dotfiles/apps/todo-tui/cli/todo.ts "$@" </dev/null; }
   all tasks + footer for running timed boards.
 - Completions: `todo completions fish | fish -n`; committed file matches.
 - TUI: `go test ./...`; manual run of `bin/todo-tui` with a temp data dir
-  (`DOTFILES_DATA_DIR=… ~/.config/dotfiles/bin/todo-tui`).
+  (`DOTFILES_DATA_DIR=… ~/.config/dotfiles/apps/todo-tui/bin/todo-tui`).
 
 ## Rules for the executing agent
 

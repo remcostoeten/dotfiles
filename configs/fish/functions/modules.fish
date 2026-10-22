@@ -90,7 +90,7 @@ function _show_modules_quick_help
     echo "  hypr-wallpaper (wallpaper manager)"
     echo "  c, x, q (shell-utils)"
     echo "  ., .., l, tree (navigation)"
-    echo "  r, rr, i, pi, v, vi, vim (development)"
+    echo "  r, rs, i, b, v, vi, vim (development)"
     echo "  whatsapp, spotify, code (apps)"
     echo ""
     echo "For detailed help:"

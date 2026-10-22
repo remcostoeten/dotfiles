@@ -1,11 +1,8 @@
-.PHONY: help install build run test golden lint vet tidy
+.PHONY: help build run test golden lint vet tidy
 .DEFAULT_GOAL := help
 
 help: ## List the available targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-
-install: ## Build the TUI into the dotfiles bin/todo-tui
-	go build -trimpath -o ../../bin/todo-tui ./cmd/todo-tui
 
 build: ## Build the TUI into ./bin/todo-tui
 	go build -trimpath -o bin/todo-tui ./cmd/todo-tui

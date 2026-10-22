@@ -90,8 +90,7 @@ ai-history --complete branches
 ai-history --complete tools
 ```
 
-Only fish is wired up. `configs/zsh/completions/` exists in this repo but is not
-on `fpath`, so a zsh file there would never load.
+Only fish is wired up.
 
 ## Development
 

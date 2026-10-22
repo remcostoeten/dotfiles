@@ -50,7 +50,6 @@ test_setup_config_symlinks_skips_hooks_when_links_are_current() {
         "fuzzel:$home/.config/fuzzel"
         "fish/config.fish:$home/.config/fish/config.fish"
         "fish/conf.d:$home/.config/fish/conf.d"
-        "zsh:$home/.config/zsh"
         "bash:$home/.config/bash"
         "agents:$home/.agents"
         "zed:$home/.config/zed"
