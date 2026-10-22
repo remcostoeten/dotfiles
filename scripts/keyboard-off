@@ -1,0 +1,441 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import re
+import selectors
+import shutil
+import signal
+import subprocess
+import sys
+import time
+
+try:
+    import evdev
+    from evdev import ecodes
+except ImportError:
+    sys.exit("keyboard-off: python-evdev is missing (sudo pacman -S python-evdev)")
+
+DEDUPE_SECONDS = 0.05
+COLOR = sys.stdout.isatty() and "NO_COLOR" not in os.environ
+CODES = {"bold": 1, "dim": 2, "red": 31, "green": 32, "yellow": 33, "blue": 34, "magenta": 35, "cyan": 36}
+
+
+def paint(text, *styles):
+    if not COLOR:
+        return text
+    return "".join(f"\033[{CODES[style]}m" for style in styles) + text + "\033[0m"
+
+
+def success(message):
+    print(f"{paint('✓', 'green', 'bold')} {message}", flush=True)
+
+
+def info(message):
+    print(f"{paint('●', 'yellow', 'bold')} {message}", flush=True)
+
+
+def fail(message, hint=None):
+    lines = [f"{paint('✗', 'red', 'bold')} {message}"]
+    if hint:
+        lines.append(f"  {paint(hint, 'dim')}")
+    print("\n".join(lines), file=sys.stderr)
+    sys.exit(1)
+PID_FILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "keyboard-off.pid")
+
+
+def parse_duration(value):
+    units = {"s": 1, "m": 60, "h": 3600}
+    text = value.strip().lower()
+    multiplier = units.get(text[-1:], None)
+    number = text[:-1] if multiplier else text
+    try:
+        seconds = float(number) * (multiplier or 1)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid duration '{value}', use e.g. 30, 45s, 2m or 1h")
+    if seconds < 0:
+        raise argparse.ArgumentTypeError("duration can not be negative")
+    return seconds
+
+
+def format_duration(seconds):
+    if seconds >= 60 and seconds % 60 == 0:
+        return f"{int(seconds // 60)}m"
+    return f"{int(seconds)}s"
+
+
+HELP = """keyboard-off: disable every keyboard so it can be cleaned
+
+Usage:
+  keyboard-off [off] [DURATION] [options]
+  keyboard-off on
+  keyboard-off status
+  keyboard-off help [TOPIC]
+
+Commands:
+  off        Disable the keyboard (default when no command is given)
+  on         Enable it again from another place (launcher, ssh, phone)
+  status     Print whether the keyboard is enabled or disabled
+  help       Show this help, or help for one topic
+
+Arguments:
+  DURATION   How long to stay disabled: 90, 30s, 5m or 1h (default 10m)
+
+Options:
+  -c, --clicks N       Left clicks needed to unlock (default 3)
+  -w, --window SECS    Seconds the clicks must fall within (default 1.0)
+  -t, --timeout DUR    Auto unlock after DUR, 0 disables (default 10m)
+  -h, --help           Show help, combine with any command or option for details
+
+Examples:
+  keyboard-off               disable for 10 minutes, triple left click to unlock
+  keyboard-off 2m            disable for 2 minutes
+  keyboard-off -c 5 -t 0     only unlock with 5 quick left clicks
+  keyboard-off on            enable again
+  keyboard-off --clicks -h   help for --clicks
+"""
+
+TOPICS = {
+    "off": """keyboard-off off [DURATION] [options]
+
+Disable every keyboard device, including media and power keys, until you left
+click enough times, the duration runs out, or 'keyboard-off on' is run. This is
+the default command, so 'keyboard-off' alone does the same.
+
+  keyboard-off off
+  keyboard-off off 5m
+""",
+    "on": """keyboard-off on
+
+Enable the keyboard again by stopping the running 'keyboard-off' instance.
+Useful from a launcher button, an ssh session or a phone, since you can not type
+while the keyboard is off. Does nothing when the keyboard is already enabled.
+""",
+    "status": """keyboard-off status
+
+Print 'enabled', or 'disabled (pid N)' while a 'keyboard-off' instance runs.
+""",
+    "help": """keyboard-off help [TOPIC]
+
+Show the full help, or help for one topic. Topics: off, on, status, duration,
+clicks, window, timeout. '-h' and '--help' work the same and can follow any
+command or option, e.g. 'keyboard-off --window -h'.
+""",
+    "duration": """keyboard-off [off] DURATION
+
+How long the keyboard stays disabled before it enables itself again. A plain
+number is seconds, or add a unit: s, m or h. Same as '--timeout'.
+
+  keyboard-off 90       90 seconds
+  keyboard-off 30s      30 seconds
+  keyboard-off off 5m   5 minutes
+""",
+    "clicks": """-c, --clicks N   (default 3)
+
+How many left clicks unlock the keyboard. They all have to land within
+'--window' seconds of each other.
+
+  keyboard-off --clicks 5
+""",
+    "window": """-w, --window SECS   (default 1.0)
+
+The time span in seconds that all '--clicks' left clicks must fall within.
+Raise it if you click slowly, lower it to avoid unlocking by accident.
+
+  keyboard-off --window 2
+""",
+    "timeout": """-t, --timeout DURATION   (default 10m)
+
+Enable the keyboard again automatically after this long, as a safety net.
+Accepts 90, 30s, 5m or 1h. Use 0 to stay disabled until you click or run
+'keyboard-off on'. A positional DURATION overrides it.
+
+  keyboard-off -t 0
+  keyboard-off --timeout 15m
+""",
+}
+
+ALIASES = {
+    "-c": "clicks",
+    "--clicks": "clicks",
+    "-w": "window",
+    "--window": "window",
+    "-t": "timeout",
+    "--timeout": "timeout",
+}
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        fail(message, "Run 'keyboard-off --help' for usage.")
+
+
+def help_topic(argv):
+    for arg in argv:
+        name = arg.split("=", 1)[0]
+        if name in ALIASES:
+            return ALIASES[name]
+        if name.lstrip("-") in TOPICS and name not in ("help", "-h", "--help"):
+            return name.lstrip("-")
+    if any(arg in ("on", "off", "status") for arg in argv):
+        return next(arg for arg in argv if arg in ("on", "off", "status"))
+    positional = [arg for arg in argv if not arg.startswith("-") and arg != "help"]
+    if positional:
+        try:
+            parse_duration(positional[0])
+            return "duration"
+        except argparse.ArgumentTypeError:
+            pass
+    return None
+
+
+def colorize(text):
+    if not COLOR:
+        return text
+    lines = []
+    for line in text.splitlines():
+        if re.fullmatch(r"[A-Z][a-z]+:", line):
+            lines.append(paint(line, "bold", "magenta"))
+            continue
+        # Split an example line into the command and its trailing description after 3+ spaces.
+        example = re.fullmatch(r"(  keyboard-off.*?)(\s{3,})(\S.*)", line)
+        tail = ""
+        if example:
+            line, tail = example.group(1), example.group(2) + paint(example.group(3), "dim")
+        line = re.sub(r"\(default [^)]*\)", lambda m: paint(m.group(0), "dim"), line)
+        line = re.sub(r"(?<![\w-])(--?[a-z][\w-]*)", lambda m: paint(m.group(1), "yellow"), line)
+        line = re.sub(r"\bkeyboard-off\b", lambda m: paint(m.group(0), "bold", "cyan"), line, count=1)
+        line = re.sub(r"\b(DURATION|DUR|SECS|TOPIC|N)\b", lambda m: paint(m.group(0), "green"), line)
+        line = re.sub(r"^  (off|on|status|help)\b", lambda m: "  " + paint(m.group(1), "cyan"), line)
+        lines.append(line + tail)
+    return "\n".join(lines) + "\n"
+
+
+def show_help(argv):
+    topic = help_topic(argv)
+    print(colorize(TOPICS[topic] if topic else HELP), end="")
+    sys.exit(0)
+
+
+def parse_args():
+    argv = sys.argv[1:]
+    if any(arg in ("-h", "--help") for arg in argv) or (argv and argv[0] == "help"):
+        show_help(argv)
+
+    parser = Parser(prog="keyboard-off", add_help=False)
+    parser.add_argument("action", nargs="?", default="off")
+    parser.add_argument("duration", nargs="?", type=parse_duration)
+    parser.add_argument("-c", "--clicks", type=int, default=3)
+    parser.add_argument("-w", "--window", type=float, default=1.0)
+    parser.add_argument("-t", "--timeout", type=parse_duration, default=600)
+    args = parser.parse_args(argv)
+    if args.action not in ("off", "on", "status"):
+        try:
+            args.duration = parse_duration(args.action)
+        except argparse.ArgumentTypeError as error:
+            parser.error(str(error))
+        args.action = "off"
+    if args.duration is not None:
+        args.timeout = args.duration
+    return args
+
+
+def notify(message):
+    if shutil.which("notify-send"):
+        subprocess.run(
+            ["notify-send", "-a", "keyboard-off", "-i", "input-keyboard", "Keyboard", message],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+
+
+def open_devices():
+    devices = []
+    for path in evdev.list_devices():
+        try:
+            devices.append(evdev.InputDevice(path))
+        except OSError:
+            continue
+    return devices
+
+
+def is_pointer(keys):
+    return ecodes.BTN_LEFT in keys
+
+
+def is_keyboard(keys):
+    # Any code below BTN_MISC is a real key, which also covers media and power buttons.
+    return any(code < ecodes.BTN_MISC for code in keys)
+
+
+def grab_keyboards(devices):
+    grabbed = []
+    for device in devices:
+        keys = device.capabilities().get(ecodes.EV_KEY, [])
+        if is_pointer(keys) or not is_keyboard(keys):
+            continue
+        try:
+            device.grab()
+            grabbed.append(device)
+        except OSError:
+            continue
+    return grabbed
+
+
+def pointers(devices):
+    return [d for d in devices if is_pointer(d.capabilities().get(ecodes.EV_KEY, []))]
+
+
+def release(devices):
+    for device in devices:
+        try:
+            device.ungrab()
+        except OSError:
+            pass
+        device.close()
+
+
+def show_progress(remaining, presses, clicks):
+    if not sys.stdout.isatty():
+        return
+    parts = [f"{paint('⌨', 'red', 'bold')}  {paint('keyboard off', 'bold')}"]
+    if remaining is not None:
+        minutes, seconds = divmod(max(0, int(remaining)), 60)
+        parts.append(f"auto unlock in {paint(f'{minutes}:{seconds:02d}', 'cyan')}")
+    dots = paint("●" * presses, "green") + paint("○" * (clicks - presses), "dim")
+    parts.append(f"clicks {dots}")
+    print(f"\r\033[2K  {paint(' · ', 'dim').join(parts)}", end="", flush=True)
+
+
+def clear_progress():
+    if sys.stdout.isatty():
+        print("\r\033[2K", end="", flush=True)
+
+
+def wait_for_clicks(mice, clicks, window, timeout):
+    selector = selectors.DefaultSelector()
+    for mouse in mice:
+        selector.register(mouse, selectors.EVENT_READ)
+
+    deadline = time.monotonic() + timeout if timeout > 0 else None
+    presses = []
+    while True:
+        remaining = None if deadline is None else deadline - time.monotonic()
+        if remaining is not None and remaining <= 0:
+            return "timeout"
+        now = time.monotonic()
+        show_progress(remaining, len([p for p in presses if now - p <= window]), clicks)
+        tick = 0.25 if remaining is None else min(remaining, 0.25)
+        for key, _ in selector.select(tick):
+            try:
+                events = list(key.fileobj.read())
+            except OSError:
+                selector.unregister(key.fileobj)
+                continue
+            for event in events:
+                if event.type != ecodes.EV_KEY or event.code != ecodes.BTN_LEFT or event.value != 1:
+                    continue
+                now = time.monotonic()
+                if presses and now - presses[-1] < DEDUPE_SECONDS:
+                    continue
+                presses = [p for p in presses if now - p <= window] + [now]
+                if len(presses) >= clicks:
+                    return "clicks"
+
+
+def running_pid():
+    try:
+        with open(PID_FILE) as file:
+            pid = int(file.read().strip())
+        os.kill(pid, 0)
+        return pid
+    except (OSError, ValueError):
+        return None
+
+
+def turn_on():
+    pid = running_pid()
+    if pid is None:
+        success("Keyboard is already enabled")
+        return
+    os.kill(pid, signal.SIGTERM)
+    for _ in range(50):
+        if running_pid() is None:
+            success("Keyboard enabled")
+            return
+        time.sleep(0.1)
+    fail(f"Process {pid} did not exit", f"Try: kill {pid}")
+
+
+def print_status():
+    pid = running_pid()
+    if pid:
+        print(f"{paint('●', 'red', 'bold')} Keyboard {paint('disabled', 'red', 'bold')} {paint(f'(pid {pid})', 'dim')}")
+    else:
+        print(f"{paint('●', 'green', 'bold')} Keyboard {paint('enabled', 'green', 'bold')}")
+
+
+def handle_term(signum, frame):
+    raise KeyboardInterrupt
+
+
+def turn_off(args):
+    if running_pid():
+        fail("Keyboard is already disabled", "Run 'keyboard-off on' to enable it.")
+
+    devices = open_devices()
+    if not devices:
+        fail("No readable input devices", "Is your user in the 'input' group?")
+
+    mice = pointers(devices)
+    if not mice:
+        fail("No mouse found", "Refusing to lock the keyboard without a way back.")
+
+    grabbed = grab_keyboards(devices)
+    if not grabbed:
+        fail("Could not grab any keyboard")
+
+    for device in devices:
+        if device not in grabbed and device not in mice:
+            device.close()
+
+    limit = f", auto unlock in {format_duration(args.timeout)}" if args.timeout > 0 else ""
+    notify(f"Disabled. Left click {args.clicks}x to enable{limit}.")
+    info(f"Disabled {paint(str(len(grabbed)), 'bold')} keyboard device(s)")
+    print(f"  {paint('Left click', 'dim')} {paint(f'{args.clicks}x', 'cyan', 'bold')} {paint(f'within {args.window:g}s to unlock', 'dim')}")
+    print(f"  {paint('or run', 'dim')} {paint('keyboard-off on', 'cyan')} {paint('from another place', 'dim')}\n", flush=True)
+    with open(PID_FILE, "w") as file:
+        file.write(str(os.getpid()))
+    signal.signal(signal.SIGTERM, handle_term)
+    reason = "clicks"
+    try:
+        reason = wait_for_clicks(mice, args.clicks, args.window, args.timeout)
+    except KeyboardInterrupt:
+        reason = "interrupt"
+    finally:
+        release(grabbed)
+        for mouse in mice:
+            mouse.close()
+        try:
+            os.remove(PID_FILE)
+        except OSError:
+            pass
+
+    clear_progress()
+    labels = {"timeout": "time is up", "clicks": "unlocked by clicking", "interrupt": "turned on by command"}
+    notify(f"Enabled again ({labels[reason]}).")
+    success(f"Keyboard enabled {paint(f'({labels[reason]})', 'dim')}")
+
+
+def main():
+    args = parse_args()
+    if args.action == "on":
+        turn_on()
+    elif args.action == "status":
+        print_status()
+    else:
+        turn_off(args)
+
+
+if __name__ == "__main__":
+    main()

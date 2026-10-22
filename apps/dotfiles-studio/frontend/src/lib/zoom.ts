@@ -1,27 +1,35 @@
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "dotfiles-studio:zoom";
-const MIN = 0.6;
-const MAX = 2.2;
-const STEP = 0.1;
-
-function clamp(level: number): number {
-  return Math.min(MAX, Math.max(MIN, Math.round(level * 100) / 100));
-}
-
-function readStored(): number {
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  const parsed = raw ? Number.parseFloat(raw) : NaN;
-  return Number.isFinite(parsed) ? clamp(parsed) : 1;
-}
-
 /**
- * Scales the whole UI with Ctrl +/- (and Ctrl+scroll), Ctrl+0 to reset.
- * Uses the CSS `zoom` property rather than a transform so layout reflows
- * instead of being visually squashed, and persists the level across launches.
+ * Manages the application zoom level and keyboard shortcuts.
+ *
+ * @example
+ * function Settings() {
+ *   const { decrease, increase, zoom } = useZoom();
+ *
+ *   return (
+ *     <div>
+ *       <button onClick={decrease}>-</button>
+ *       <span>{Math.round(zoom * 100)}%</span>
+ *       <button onClick={increase}>+</button>
+ *     </div>
+ *   );
+ * }
  */
-export function useZoom(): number {
-  const [zoom, setZoom] = useState(readStored);
+export function useZoom(): UseZoomResult {
+  const [zoom, setZoom] = useState(() => readStoredZoom());
+
+  function increase(): void {
+    setZoom((currentZoom) => clampZoom(currentZoom + ZOOM_STEP));
+  }
+
+  function decrease(): void {
+    setZoom((currentZoom) => clampZoom(currentZoom - ZOOM_STEP));
+  }
+
+  function reset(): void {
+    setZoom(DEFAULT_ZOOM);
+  }
 
   useEffect(() => {
     document.body.style.setProperty("zoom", String(zoom));
@@ -29,34 +37,84 @@ export function useZoom(): number {
   }, [zoom]);
 
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
+    function applyZoomDelta(delta: number): void {
+      setZoom((currentZoom) => clampZoom(currentZoom + delta));
+    }
 
-      if (e.key === "=" || e.key === "+") {
-        e.preventDefault();
-        setZoom((z) => clamp(z + STEP));
-      } else if (e.key === "-" || e.key === "_") {
-        e.preventDefault();
-        setZoom((z) => clamp(z - STEP));
-      } else if (e.key === "0") {
-        e.preventDefault();
-        setZoom(1);
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (!event.ctrlKey && !event.metaKey) {
+        return;
       }
-    };
 
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      setZoom((z) => clamp(z + (e.deltaY < 0 ? STEP : -STEP)));
-    };
+      if (event.key === "0") {
+        event.preventDefault();
+        reset();
+        return;
+      }
 
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("wheel", onWheel, { passive: false });
+      const delta = getKeyboardZoomDelta(event.key);
+
+      if (delta === null) {
+        return;
+      }
+
+      event.preventDefault();
+      applyZoomDelta(delta);
+    }
+
+    function handleWheel(event: WheelEvent): void {
+      if (!event.ctrlKey && !event.metaKey) {
+        return;
+      }
+
+      event.preventDefault();
+      applyZoomDelta(event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("wheel", handleWheel, { passive: false });
+
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("wheel", handleWheel);
     };
   }, []);
 
-  return zoom;
+  return { decrease, increase, reset, zoom };
+}
+
+const DEFAULT_ZOOM = 1;
+const MAX_ZOOM = 2.2;
+const MIN_ZOOM = 0.6;
+const STORAGE_KEY = "dotfiles-studio:zoom";
+const ZOOM_STEP = 0.1;
+
+export type UseZoomResult = {
+  decrease: () => void;
+  increase: () => void;
+  reset: () => void;
+  zoom: number;
+};
+
+function clampZoom(value: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(value * 100) / 100));
+}
+
+function readStoredZoom(): number {
+  const storedZoom = window.localStorage.getItem(STORAGE_KEY);
+  const parsedZoom = Number.parseFloat(storedZoom ?? "");
+
+  return Number.isFinite(parsedZoom) ? clampZoom(parsedZoom) : DEFAULT_ZOOM;
+}
+
+function getKeyboardZoomDelta(key: string): number | null {
+  if (key === "=" || key === "+") {
+    return ZOOM_STEP;
+  }
+
+  if (key === "-" || key === "_") {
+    return -ZOOM_STEP;
+  }
+
+  return null;
 }

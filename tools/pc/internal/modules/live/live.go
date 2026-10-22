@@ -113,13 +113,15 @@ type Verb struct {
 	Msg         tea.Msg
 }
 
-// Screen is a nav route plus its verbs.
+// Screen is a nav route plus its verbs. A non-nil Gate must also pass for the
+// verbs to be reachable, which is how a screen's own overlay keeps their keys.
 type Screen struct {
 	Route    navigation.Route
 	Key      string
 	Category string
 	Build    registry.Constructor
 	Verbs    []Verb
+	Gate     command.Predicate
 }
 
 // RegisterScreen installs a route, a global key that switches to it and its
@@ -139,7 +141,7 @@ func RegisterScreen(r *registry.Registrar, s Screen) {
 	r.Bind(input.LayerGlobal, input.Binding{Keys: []string{s.Key}, Command: goID})
 
 	for _, v := range s.Verbs {
-		when := command.OnRoute(route)
+		when := command.And(command.OnRoute(route), s.Gate)
 		if v.Confirmed {
 			when = command.And(when, onScreen(route))
 		}

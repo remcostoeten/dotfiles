@@ -51,6 +51,7 @@ type Context struct {
 	Log      kernel.Logger
 	Route    navigation.Entry
 	Depth    int
+	Overlay  OverlayID
 	Focus    focus.State
 	Size     kernel.Size
 	Dispatch func(command.ID) tea.Cmd
@@ -70,9 +71,10 @@ type Context struct {
 // reported through Scope.Overlay instead.
 func (c Context) Scope() command.Scope {
 	return command.Scope{
-		Route:  string(c.Route.Route),
-		Region: string(c.Focus.Current()),
-		Depth:  c.Depth,
+		Route:   string(c.Route.Route),
+		Region:  string(c.Focus.Current()),
+		Overlay: string(c.Overlay),
+		Depth:   c.Depth,
 	}
 }
 

@@ -14,8 +14,6 @@ export interface CorrectionDecision {
   mode: CorrectionMode;
 }
 
-export type ArgumentShape = "none" | "task-id" | "task-ids" | "text" | "any";
-
 export const AUTO_CORRECT_THRESHOLD = 3;
 const GIVE_UP_AFTER_REJECTIONS = 2;
 
@@ -56,28 +54,6 @@ export function isAutoCorrected(record: TypoRecord): boolean {
 
 export function isIgnored(record: TypoRecord): boolean {
   return record.accepted === 0 && record.rejected >= GIVE_UP_AFTER_REJECTIONS;
-}
-
-const ID_LIST_PART = /^\d+(-\d+)?$/;
-
-/** Guards first-word corrections: the remaining arguments must look like what the corrected command expects. */
-export function argumentsFitShape(shape: ArgumentShape, rest: ReadonlyArray<string>, taskIds: ReadonlySet<string>): boolean {
-  switch (shape) {
-    case "none":
-      return rest.every((argument) => argument.startsWith("-"));
-    case "task-id": {
-      const first = rest[0];
-      return first !== undefined && taskIds.has(first.replace(/^#/, ""));
-    }
-    case "task-ids":
-      if (rest.length === 0) return false;
-      if (rest.length === 1 && rest[0] === "all") return true;
-      return rest.every((argument) => argument.replace(/^#/, "").split(",").every((part) => ID_LIST_PART.test(part)));
-    case "text":
-      return rest.length > 0;
-    case "any":
-      return rest.length <= 3;
-  }
 }
 
 /** Swaps the mistyped token for its correction, also inside `--name=value` arguments. Undefined when the token is not a standalone argument. */

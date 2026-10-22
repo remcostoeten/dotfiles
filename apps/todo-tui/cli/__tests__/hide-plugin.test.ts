@@ -2,11 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addPlugin } from "@/src/plugins/add";
-import { epicPlugin } from "@/src/plugins/epic";
-import { lifecyclePlugin } from "@/src/plugins/lifecycle";
-import { PluginRegistry } from "@/src/plugins/registry";
-import { tasksPlugin } from "@/src/plugins/tasks";
+import { runTodo } from "./support/run-todo";
 import { getTodoPaths, TodoStore } from "@/src/storage/todo-store";
 
 const temporaryDirectories: string[] = [];
@@ -15,7 +11,7 @@ afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { force: true, recursive: true })));
 });
 
-test("hide by id keeps the task pending but drops its subtree from shell-display and list", async () => {
+test("hide by id keeps the task pending but drops its subtree from the panel and list", async () => {
   const store = await createStore();
   await run(store, "epic", ["Website", "redesign"]);
   await run(store, "sub", ["1", "fix", "header"]);
@@ -30,7 +26,7 @@ test("hide by id keeps the task pending but drops its subtree from shell-display
     ["3", "pending", undefined],
   ]);
 
-  const panel = stripAnsi(await run(store, "shell-display", []));
+  const panel = stripAnsi(await run(store, "panel", []));
   expect(panel).not.toContain("Website redesign");
   expect(panel).not.toContain("fix header");
   expect(panel).toContain("loose");
@@ -53,7 +49,7 @@ test("hide resolves epic names, including quoted names with spaces", async () =>
 
 test("hide without a target errors instead of creating a task", async () => {
   const store = await createStore();
-  await expect(run(store, "hide", [])).rejects.toThrow("Usage: todo hide <id|name>");
+  await expect(run(store, "hide", [])).rejects.toThrow("Usage: todo hide <task…>");
   await expect(run(store, "hide", ["nope"])).rejects.toThrow("Task not found: nope");
   expect(await store.loadTasks()).toEqual([]);
 });
@@ -65,7 +61,7 @@ test("unhide restores a hidden task", async () => {
   expect(stripAnsi(await run(store, "hide", ["1"]))).toContain("already hidden");
   expect(stripAnsi(await run(store, "unhide", ["thing"]))).toContain("Unhid #1: thing");
   expect((await store.loadTasks())[0]?.hidden).toBeUndefined();
-  expect(stripAnsi(await run(store, "shell-display", []))).toContain("thing");
+  expect(stripAnsi(await run(store, "panel", []))).toContain("thing");
 });
 
 async function createStore(): Promise<TodoStore> {
@@ -75,20 +71,7 @@ async function createStore(): Promise<TodoStore> {
 }
 
 async function run(store: TodoStore, name: string, args: string[]): Promise<string> {
-  const registry = new PluginRegistry();
-  for (const plugin of [addPlugin, epicPlugin, lifecyclePlugin, tasksPlugin]) registry.use(plugin);
-  const command = registry.getCommand(name);
-  if (command === undefined) throw new Error(`Command not registered: ${name}`);
-
-  let output = "";
-  const stdout = {
-    write(chunk: string | Uint8Array) {
-      output += chunk.toString();
-      return true;
-    },
-  } as Pick<typeof process.stdout, "write">;
-  await command.handler({ args, store, stdout, stderr: stdout, commands: registry.listCommands() });
-  return output;
+  return await runTodo(store, [name, ...args]);
 }
 
 function stripAnsi(value: string): string {

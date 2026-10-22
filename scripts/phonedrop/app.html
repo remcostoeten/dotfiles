@@ -1,0 +1,1927 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="phonedrop">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="icon" href="/icon.png">
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<title>phonedrop</title>
+<style>
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --fg: #0a0a0a;
+  --muted: #6b6b6b;
+  --line: #d9d9d9;
+  --accent: #fe5101;
+  --ok: #1fae78;
+  --warn: #b7791f;
+  --err: #e5484d;
+  --sans: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --dots: radial-gradient(var(--line) 1px, transparent 1px);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --fg: #ededed;
+    --muted: #8a8a8a;
+    --line: #262626;
+    --ok: #54f2b3;
+    --warn: #f5b544;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body {
+  font: 15px/normal var(--sans);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+button, input, textarea { font: inherit; color: inherit; }
+input, textarea, select { font-size: max(16px, 1em); }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; transition: text-decoration-color 120ms ease; }
+a:hover, a:focus-visible { text-decoration-color: var(--accent); }
+:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.caps, .ctl, .badge, .meta, .group-label, .pct, .url, .tip {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.meta, .tip { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); }
+
+.frame {
+  position: relative;
+  width: min(640px, calc(100% - 32px));
+  margin: 0 auto;
+  border-inline: 1px dashed var(--line);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.frame > * {
+  position: relative;
+  padding: 24px;
+  border-bottom: 1px dashed var(--line);
+}
+.frame > *::before, .frame > *::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  width: 7px;
+  height: 7px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  z-index: 1;
+}
+.frame > *::before { left: -4px; }
+.frame > *::after { right: -4px; }
+@media (max-width: 620px) { .frame > * { padding: 16px; } }
+
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg) var(--dots);
+  background-size: 16px 16px;
+  border-top: 1px dashed var(--line);
+}
+.brand { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; }
+.brand img { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); }
+.brand span { font-weight: 500; font-size: 0.95rem; letter-spacing: -0.01em; }
+.status {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); transition: background 150ms ease, box-shadow 150ms ease; }
+.status.live .dot { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); animation: live 1s ease-in-out infinite; }
+@keyframes live { 50% { opacity: 0.5; } }
+
+.ctl {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; padding: 0 10px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.ctl:hover, .ctl:focus-visible { background: color-mix(in srgb, var(--fg) 7%, transparent); color: var(--fg); }
+a.ctl { text-decoration: none; }
+.ctl.ghost { border-color: transparent; background: transparent; }
+.ctl.ghost:hover, .ctl.ghost:focus-visible { background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.ctl[aria-pressed="true"] { background: color-mix(in srgb, var(--fg) 12%, transparent); color: var(--fg); }
+.ctl:disabled { opacity: 0.6; cursor: wait; }
+
+.hint {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border-radius: 6px;
+  border: 1px dashed var(--line); color: var(--muted); font-size: 0.8rem;
+  margin-bottom: 16px;
+}
+.hint svg { flex: none; width: 16px; height: 16px; color: var(--accent); margin-top: 1px; }
+.hint b { color: var(--fg); font-weight: 500; }
+.hint button { margin-left: auto; border: 0; background: none; color: var(--muted); padding: 0 2px; font-size: 18px; line-height: 1; }
+.hint button:hover { color: var(--fg); }
+
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 380px) { .actions { grid-template-columns: 1fr; } }
+.action {
+  position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 18px;
+  min-height: 112px; padding: 14px; border-radius: 10px; text-align: left;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.action:hover, .action:focus-within { transform: translateY(-2px); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.action:active { transform: scale(0.97); }
+.action svg { width: 20px; height: 20px; color: var(--muted); }
+.action .label { display: grid; gap: 4px; }
+.action .label > span { font-family: var(--mono); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase; }
+.action small { font-size: 0.78rem; color: var(--muted); }
+.action.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.action.primary svg { color: var(--bg); opacity: 0.7; }
+.action.primary small { color: var(--bg); opacity: 0.65; }
+.action.primary:hover, .action.primary:focus-within { background: var(--accent); border-color: var(--accent); color: #fff; }
+.action.primary:hover svg, .action.primary:hover small { color: #fff; }
+.action input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+
+.uploads { display: grid; gap: 8px; }
+.uploads:empty { display: none; }
+.upload { border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--surface); border-radius: 10px; padding: 10px 12px; font-size: 0.8rem; }
+.upload .line { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.upload .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload .pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { height: 3px; background: var(--line); margin-top: 8px; overflow: hidden; border-radius: 2px; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 150ms linear; }
+.upload.failed { border-color: color-mix(in srgb, var(--err) 45%, var(--line)); }
+.upload.failed .pct { color: var(--err); }
+.upload.failed .bar i { background: var(--err); }
+
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg .ctl span { opacity: 0.6; font-variant-numeric: tabular-nums; }
+.seg .ctl span:empty { display: none; }
+.seg.labels { margin-top: 8px; }
+.seg.labels #editLabelsBtn { margin-left: auto; }
+.swatch { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chips:empty { display: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 999px;
+  font-family: var(--mono); font-size: 0.62rem; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase;
+  color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent);
+}
+.chip::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--c); }
+.label-list { grid-auto-flow: row; }
+.label-list .btn { flex-basis: 100%; justify-content: flex-start; }
+.label-list .btn[aria-pressed="true"] { border-color: var(--c); color: var(--fg); background: color-mix(in srgb, var(--c) 12%, transparent); }
+.label-list .btn .tick { margin-left: auto; width: 12px; height: 12px; opacity: 0; }
+.label-list .btn[aria-pressed="true"] .tick { opacity: 1; }
+.label-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.label-row .title { flex: 1; }
+.label-row .ctl { flex: none; }
+.new-label { display: grid; gap: 10px; margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--line); }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch-pick {
+  width: 24px; height: 24px; border-radius: 50%; background: var(--c); border: 2px solid transparent; padding: 0;
+  box-shadow: 0 0 0 1px var(--line); transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.swatch-pick[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--fg); transform: scale(1.1); }
+
+.feed { flex: 1; }
+.group-label { color: var(--muted); margin: 0 2px 8px; }
+.group + .group-label { margin-top: 20px; }
+.group { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; overflow: hidden; }
+.group-label + .group { margin-bottom: 0; }
+.group + .group-label { margin-top: 20px; }
+.swipe { position: relative; overflow: hidden; background: var(--surface); }
+.swipe + .swipe { border-top: 1px solid var(--line); }
+.swipe-action {
+  position: absolute; inset: 0 0 0 auto; width: 88px; border: 0; border-radius: 0;
+  background: var(--err); color: #fff; padding: 0;
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase;
+  display: grid; place-items: center; opacity: 0; transition: opacity 120ms ease;
+}
+.swipe.open .swipe-action, .swipe.commit .swipe-action { opacity: 1; }
+.swipe.commit .swipe-action { width: 100%; }
+.swipe.leaving { transition: opacity 150ms var(--ease-exit); opacity: 0.4; pointer-events: none; }
+.swipe.dragging { z-index: 5; box-shadow: 0 10px 30px rgb(0 0 0 / 0.18); border-radius: 8px; border-top: 0; }
+.swipe.dragging .row { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.swipe.drop-target .row { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); box-shadow: inset 3px 0 0 var(--accent); }
+body.is-dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+body.is-dragging .swipe:not(.dragging) { transition: transform 150ms var(--ease-out); }
+.row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 10px 12px; border: 0; background: var(--surface); text-align: left; color: inherit;
+  position: relative; transition: background 120ms ease;
+  touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+.row:hover, .row:focus-visible { background: color-mix(in srgb, var(--fg) 4%, transparent); outline: none; }
+.row:active { background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.grip { flex: none; width: 14px; height: 14px; color: var(--muted); opacity: 0; cursor: grab; transition: opacity 120ms ease; }
+.grip svg { width: 100%; height: 100%; }
+@media (hover: hover) { .row:hover .grip { opacity: 0.6; } }
+body.selecting .grip { display: none; }
+.folder-thumb { border-style: solid; color: var(--accent); }
+.crumb { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.crumb .title { font-size: 0.95rem; }
+.crumb .ctl svg { width: 14px; height: 14px; }
+.field {
+  width: 100%; height: 40px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); padding: 0 12px; font-size: 16px; outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.move-list { grid-auto-flow: row; }
+.move-list .btn { flex-basis: 100%; justify-content: flex-start; }
+.move-list .btn svg { width: 14px; height: 14px; }
+.thumb {
+  flex: none; width: 44px; height: 44px; border-radius: 7px; object-fit: cover;
+  border: 1px dashed var(--line); color: var(--muted); background: var(--bg);
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 0.6rem; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase;
+}
+img.thumb { border-style: solid; }
+.thumb svg { width: 16px; height: 16px; }
+.main { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.title { font-weight: 500; font-size: 0.9rem; letter-spacing: -0.01em; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta { font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-text {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; font-size: 0.9rem; line-height: 1.4;
+}
+.chev { color: var(--muted); opacity: 0.6; flex: none; font-family: var(--mono); }
+.check {
+  flex: none; width: 18px; height: 18px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface); display: none; place-items: center;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.check svg { width: 10px; height: 10px; color: #fff; opacity: 0; }
+body.selecting .check { display: grid; }
+body.selecting .chev, body.selecting [data-copy] { display: none; }
+.row[aria-selected="true"] { background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.row[aria-selected="true"] .check { background: var(--accent); border-color: var(--accent); }
+.row[aria-selected="true"] .check svg { opacity: 1; }
+.seg #newFolderBtn { margin-left: auto; }
+.seg #newFolderBtn[hidden] + #selectBtn { margin-left: auto; }
+.selbar { align-items: center; gap: 8px; }
+.selbar #selCount { margin-right: auto; }
+.selbar .sel-actions { flex-basis: 100%; display: flex; gap: 8px; }
+.selbar .sel-actions .ctl { flex: 1; white-space: nowrap; }
+.selbar #selSave { flex: 2; }
+.crumb .swatch { width: 10px; height: 10px; }
+
+.empty {
+  text-align: center; padding: 40px 24px; color: var(--muted);
+  border: 1px dashed var(--line); border-radius: 10px;
+}
+.empty svg { width: 28px; height: 28px; color: var(--muted); }
+.empty h3 { margin: 10px 0 4px; color: var(--fg); font-size: 0.95rem; font-weight: 500; }
+.empty p { margin: 0; font-size: 0.8rem; }
+
+.foot {
+  position: sticky; bottom: 0; z-index: 10; margin-top: auto;
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg) var(--dots); background-size: 16px 16px;
+  border-top: 1px dashed var(--line); border-bottom: 0;
+  font-family: var(--mono); font-size: 0.72rem; color: var(--muted);
+}
+.foot::before, .foot::after { display: none; }
+.foot p { margin: 0; }
+.droptip { display: none; }
+body.local .droptip { display: block; }
+
+.scrim {
+  position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / 0.4);
+  opacity: 0; pointer-events: none; transition: opacity 150ms var(--ease-exit);
+}
+.scrim.open { opacity: 1; pointer-events: auto; transition-timing-function: var(--ease-out); }
+.sheet {
+  position: fixed; z-index: 31; left: 0; right: 0; bottom: 0;
+  max-height: 90vh; overflow: auto; overscroll-behavior: contain;
+  background: var(--surface); border: 1px solid var(--line); border-bottom: 0; border-radius: 10px 10px 0 0;
+  padding: 8px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(105%); transition: transform 150ms var(--ease-exit), visibility 0s 150ms;
+  visibility: hidden;
+}
+.sheet.open { transform: none; visibility: visible; transition: transform 220ms var(--ease-out); }
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 14px; }
+.sheet.dragging { transition: none; }
+.sheet:focus { outline: none; }
+.sheet-close {
+  position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 18px; line-height: 1; padding: 0;
+  display: grid; place-items: center; transition: background 120ms ease, color 120ms ease;
+}
+.sheet-close:hover, .sheet-close:focus-visible { background: color-mix(in srgb, var(--fg) 7%, transparent); color: var(--fg); }
+.sheet h2 { padding-right: 36px; }
+.quick-list { grid-auto-flow: row; margin-top: 12px; }
+.quick-list .btn { flex-basis: 100%; justify-content: flex-start; height: 42px; }
+.quick-list .btn svg { width: 14px; height: 14px; }
+.haptic { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+@media (min-width: 720px) {
+  .sheet {
+    left: 50%; right: auto; bottom: 24px; width: 560px; margin-left: -280px;
+    border-radius: 10px; border-bottom: 1px solid var(--line); padding-top: 20px;
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.14);
+    transform: translateY(6px) scale(0.97); opacity: 0;
+    transition: transform 150ms var(--ease-exit), opacity 150ms var(--ease-exit), visibility 0s 150ms;
+  }
+  .sheet.open { transform: none; opacity: 1; transition: transform 200ms var(--ease-out), opacity 200ms var(--ease-out); }
+  .grab { display: none; }
+}
+.sheet h2 { margin: 0 0 6px; font-size: 1rem; font-weight: 500; letter-spacing: -0.01em; line-height: 1.3; overflow-wrap: anywhere; }
+.sheet .meta { white-space: normal; }
+.preview {
+  display: block; width: 100%; max-height: 52vh; object-fit: contain; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--bg); margin-bottom: 14px;
+}
+audio.preview { border: 0; }
+.preview-tile {
+  display: grid; place-items: center; height: 140px; border-radius: 7px; margin-bottom: 14px;
+  border: 1px dashed var(--line); color: var(--muted);
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase;
+}
+.sheet-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.95rem; line-height: 1.45; margin: 10px 0 12px; max-height: 50vh; overflow: auto; }
+.tip { margin: 10px 0 0; font-size: 0.75rem; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.buttons .btn { flex: 1 1 calc(50% - 4px); }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none;
+  height: 36px; padding: 0 12px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.btn:hover, .btn:focus-visible { background: color-mix(in srgb, var(--fg) 7%, transparent); color: var(--fg); }
+.btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.btn.primary:hover, .btn.primary:focus-visible { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:active { transform: scale(0.97); }
+.btn.danger { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); border-color: transparent; }
+.btn.danger:hover, .btn.danger:focus-visible { background: color-mix(in srgb, var(--err) 20%, transparent); color: var(--err); }
+.btn:disabled { opacity: 0.6; cursor: wait; }
+textarea {
+  width: 100%; min-height: 140px; resize: vertical; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); padding: 10px 12px; font-size: 16px; line-height: 1.4; outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.qr { display: grid; place-items: center; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 12px 0; }
+.qr svg { width: 240px; height: 240px; max-width: 100%; }
+.url { text-transform: none; letter-spacing: 0; color: var(--muted); overflow-wrap: anywhere; text-align: center; }
+
+.drop {
+  position: fixed; inset: 12px; z-index: 40; border-radius: 10px;
+  border: 2px dashed var(--accent); background: color-mix(in srgb, var(--bg) 88%, transparent);
+  display: grid; place-items: center; color: var(--accent);
+  font-family: var(--mono); font-size: 0.85rem; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase;
+  pointer-events: none;
+}
+.toast {
+  position: fixed; z-index: 50; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100% - 32px);
+  transform: translateY(6px); opacity: 0; transition: opacity 150ms var(--ease-exit), transform 150ms var(--ease-exit);
+  background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 9px 14px; font-size: 0.8rem; font-weight: 500;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.14);
+  pointer-events: none; white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: none; transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+</style>
+</head>
+<body>
+<main class="frame">
+  <header class="top" id="top">
+    <div class="brand"><img src="/icon.png" alt=""><span>phonedrop</span></div>
+    <span class="status caps" id="status" role="status"><span class="dot" aria-hidden="true"></span><span id="statusText">connecting</span></span>
+    <a class="ctl" id="camBtn" href="/cam">Camera</a>
+    <button class="ctl" id="installBtn" hidden>Install</button>
+    <button class="ctl" id="pairBtn" hidden>Pair phone</button>
+  </header>
+
+  <section>
+    <div class="hint" id="installHint" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
+      <span>Tap <b>Share</b> → <b>Add to Home Screen</b> to keep phonedrop one tap away.</span>
+      <button id="hintClose" aria-label="Dismiss" title="Dismiss">×</button>
+    </div>
+
+    <div class="actions">
+      <label class="action primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <span class="label"><span>Send files</span><small id="sendFilesSub">Photos, videos, anything</small></span>
+        <input type="file" id="fileInput" multiple>
+      </label>
+      <button class="action" id="textBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span class="label"><span>Send text</span><small>Links, notes, codes</small></span>
+      </button>
+    </div>
+  </section>
+
+  <section class="uploads" id="uploads"></section>
+
+  <section>
+    <nav class="seg" id="seg" aria-label="Filter">
+      <button class="ctl" data-filter="all" aria-pressed="true">All<span id="countAll"></span></button>
+      <button class="ctl" data-filter="files" aria-pressed="false">Files<span id="countFiles"></span></button>
+      <button class="ctl" data-filter="notes" aria-pressed="false">Text<span id="countNotes"></span></button>
+      <button class="ctl ghost" id="newFolderBtn" hidden>+ Folder</button>
+      <button class="ctl ghost" id="selectBtn" hidden>Select</button>
+    </nav>
+    <nav class="seg labels" id="labelSeg" aria-label="Labels" hidden></nav>
+  </section>
+
+  <section class="feed" id="feed"></section>
+
+  <footer class="foot" id="foot">
+    <p class="droptip">Drop files anywhere, or paste with Ctrl+V</p>
+    <p id="footNote">Same wifi, no cloud</p>
+  </footer>
+  <footer class="foot selbar" id="selbar" hidden>
+    <span id="selCount">0 selected</span>
+    <button class="ctl ghost" id="selCancel">Cancel</button>
+    <div class="sel-actions">
+      <button class="ctl" id="selAll">All</button>
+      <button class="ctl" id="selSave" hidden>Save to Photos</button>
+      <button class="ctl" id="selMove" hidden>Move</button>
+      <button class="ctl" id="selLabel">Label</button>
+      <button class="ctl" id="selZip">Zip</button>
+    </div>
+  </footer>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" tabindex="-1"></div>
+<label class="haptic" aria-hidden="true"><input type="checkbox" switch id="hapticSwitch" tabindex="-1"></label>
+<div class="drop" id="drop" hidden>Drop to send</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const ICONS = {
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',
+  audio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+  note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z"/></svg>',
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+  empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>',
+  grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
+};
+const FOLDER_SCOPE = '__folders__';
+const LABEL_COLORS = ['#fe5101', '#1fae78', '#2f80ed', '#8b5cf6', '#e5484d', '#f5b544', '#0ea5b7', '#8a8a8a'];
+const SWIPE_REVEAL = 88;
+const SWIPE_COMMIT = 180;
+const LONG_PRESS_MS = 320;
+
+const state = {
+  files: [], notes: [], folders: [], layout: {}, labels: [], local: false,
+  filter: 'all', folder: '', label: '', selecting: false, selected: new Set(),
+};
+const canShareFiles = typeof navigator.canShare === 'function';
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+let installPrompt = null;
+let refreshTimer = 0;
+let toastTimer = 0;
+let dragDepth = 0;
+let sheetCleanup = null;
+let renderPending = false;
+let openSwipeRow = null;
+const gesture = { mode: null };
+
+function byId(id) {
+  return document.getElementById(id);
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+function linkify(text) {
+  return escapeHtml(text).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+
+function formatSize(bytes) {
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return unit === 0 ? `${value} B` : `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+}
+
+function formatTime(seconds) {
+  return new Date(seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function dayLabel(seconds) {
+  const date = new Date(seconds * 1000);
+  const today = new Date();
+  const diffDays = Math.round((startOfDay(today) - startOfDay(date)) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return date.toLocaleDateString([], { weekday: 'long' });
+  return date.toLocaleDateString([], { day: 'numeric', month: 'long', year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
+}
+
+function whenLabel(seconds) {
+  const day = dayLabel(seconds);
+  return day === 'Today' ? formatTime(seconds) : `${day} ${formatTime(seconds)}`;
+}
+
+function extension(name) {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(dot + 1, dot + 5).toUpperCase() : 'FILE';
+}
+
+function encodePath(path) {
+  return path.split('/').map(encodeURIComponent).join('/');
+}
+
+function fileUrl(path, download) {
+  return `/f/${encodePath(path)}${download ? '?dl=1' : ''}`;
+}
+
+function zipUrl(paths) {
+  return `/api/zip?${paths.map((path) => `name=${encodeURIComponent(path)}`).join('&')}`;
+}
+
+function isMedia(file) {
+  return file.kind === 'image' || file.kind === 'video';
+}
+
+function fileId(file) {
+  return `f:${file.path}`;
+}
+
+function noteId(note) {
+  return `n:${note.id}`;
+}
+
+function folderId(folder) {
+  return `d:${folder.name}`;
+}
+
+function findFile(path) {
+  return state.files.find((file) => file.path === path);
+}
+
+function findNote(id) {
+  return state.notes.find((note) => note.id === id);
+}
+
+function findLabel(id) {
+  return state.labels.find((label) => label.id === id);
+}
+
+function labelsOf(item) {
+  return (item.labels || []).map(findLabel).filter(Boolean);
+}
+
+function hasLabel(item) {
+  return !state.label || (item.labels || []).includes(state.label);
+}
+
+function feedScope() {
+  return state.label ? `label:${state.label}` : state.folder;
+}
+
+function readFlag(key) {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch (error) {
+    return false;
+  }
+}
+
+function writeFlag(key) {
+  try {
+    localStorage.setItem(key, '1');
+  } catch (error) {
+    console.warn('phonedrop: could not persist flag', error);
+  }
+}
+
+const HAPTIC_MS = { light: 8, medium: 18, heavy: 30 };
+
+/** Fires a haptic tick. iOS has no vibrate API; toggling an `<input switch>` is the only web hook that clicks the Taptic engine (iOS 18+). */
+function haptic(strength = 'light') {
+  if (typeof navigator.vibrate === 'function') {
+    navigator.vibrate(HAPTIC_MS[strength] || HAPTIC_MS.light);
+    return;
+  }
+  if (!isIOS) return;
+  const toggle = byId('hapticSwitch');
+  if (toggle) toggle.click();
+}
+
+function showToast(message) {
+  const toast = byId('toast');
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+  document.body.appendChild(area);
+  area.focus();
+  area.setSelectionRange(0, text.length);
+  const ok = document.execCommand('copy');
+  area.remove();
+  return ok ? Promise.resolve() : Promise.reject(new Error('copy failed'));
+}
+
+async function api(method, url, body) {
+  const response = await fetch(url, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.status === 204 ? null : response.json();
+}
+
+async function refresh() {
+  const response = await fetch('/api/state', { cache: 'no-store' });
+  if (response.status === 401) {
+    location.reload();
+    return;
+  }
+  Object.assign(state, await response.json());
+  if (state.folder && !state.folders.some((folder) => folder.name === state.folder)) state.folder = '';
+  if (state.label && !findLabel(state.label)) state.label = '';
+  render();
+}
+
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => refresh().catch((error) => console.warn('phonedrop: refresh failed', error)), 120);
+}
+
+function orderByLayout(items, scope, idOf) {
+  const saved = state.layout[scope] || [];
+  const byIdMap = new Map(items.map((item) => [idOf(item), item]));
+  const ordered = saved.map((id) => byIdMap.get(id)).filter(Boolean);
+  const seen = new Set(ordered.map(idOf));
+  const fresh = items.filter((item) => !seen.has(idOf(item))).sort((a, b) => (b.at || 0) - (a.at || 0));
+  return [...fresh, ...ordered];
+}
+
+function scopeFiles() {
+  return state.files.filter((file) => (state.label ? hasLabel(file) : file.folder === state.folder));
+}
+
+function scopeNotes() {
+  return state.notes.filter((note) => (state.label ? hasLabel(note) : (note.folder || '') === state.folder));
+}
+
+function feedItems() {
+  const files = state.filter === 'notes' ? [] : scopeFiles().map((file) => ({ type: 'file', id: fileId(file), at: file.at, file }));
+  const notes = state.filter === 'files' ? [] : scopeNotes().map((note) => ({ type: 'note', id: noteId(note), at: note.at, note }));
+  return orderByLayout([...files, ...notes], feedScope(), (item) => item.id);
+}
+
+function orderedFolders() {
+  return orderByLayout(state.folders, FOLDER_SCOPE, folderId);
+}
+
+async function fetchAsFile(file) {
+  const response = await fetch(fileUrl(file.path));
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const blob = await response.blob();
+  return new File([blob], file.name, { type: blob.type || 'application/octet-stream' });
+}
+
+async function saveToLibrary(files) {
+  if (!files.length) return;
+  showToast(files.length === 1 ? 'Preparing…' : `Preparing ${files.length} files…`);
+  try {
+    const payload = await Promise.all(files.map(fetchAsFile));
+    if (canShareFiles && navigator.canShare({ files: payload })) {
+      await navigator.share({ files: payload });
+      showToast(files.length === 1 ? 'Saved' : `Shared ${files.length} files`);
+      return;
+    }
+    location.href = files.length === 1 ? fileUrl(files[0].path, true) : zipUrl(files.map((file) => file.path));
+  } catch (error) {
+    if (error && error.name === 'AbortError') return;
+    console.warn('phonedrop: save failed', error);
+    showToast('Save failed');
+  }
+}
+
+function thumbHtml(file) {
+  if (file.kind === 'image') {
+    return `<img class="thumb" src="${fileUrl(file.path)}" loading="lazy" alt="" data-ext="${escapeHtml(extension(file.name))}">`;
+  }
+  if (file.kind === 'video' || file.kind === 'audio') {
+    return `<span class="thumb">${ICONS[file.kind]}</span>`;
+  }
+  return `<span class="thumb">${escapeHtml(extension(file.name))}</span>`;
+}
+
+function chipsHtml(item) {
+  return `<span class="chips">${labelsOf(item).map((label) => `<span class="chip" style="--c:${label.color}">${escapeHtml(label.name)}</span>`).join('')}</span>`;
+}
+
+function whereLabel(item) {
+  return state.label && item.folder ? `${escapeHtml(item.folder)} · ` : '';
+}
+
+function rowShell(attrs, inner, action) {
+  return `<div class="swipe" ${attrs}>
+    <button class="swipe-action" data-swipe-delete tabindex="-1">${action}</button>
+    ${inner}
+  </div>`;
+}
+
+function fileRowHtml(file) {
+  const id = fileId(file);
+  return rowShell(`data-id="${escapeHtml(id)}" data-file="${escapeHtml(file.path)}"`, `<button class="row" aria-selected="${state.selected.has(id)}">
+    ${thumbHtml(file)}
+    <span class="main">
+      <span class="title">${escapeHtml(file.name)}</span>
+      <span class="meta">${whereLabel(file)}${formatSize(file.size)} · from ${escapeHtml(file.from)} · ${whenLabel(file.at)}</span>
+      ${chipsHtml(file)}
+    </span>
+    <span class="check" aria-hidden="true">${ICONS.check}</span>
+    <span class="grip" aria-hidden="true">${ICONS.grip}</span>
+  </button>`, 'Trash');
+}
+
+function noteRowHtml(note) {
+  const id = noteId(note);
+  return rowShell(`data-id="${escapeHtml(id)}" data-note="${note.id}"`, `<div class="row" role="button" tabindex="0" aria-selected="${state.selected.has(id)}">
+    <span class="thumb">${ICONS.note}</span>
+    <span class="main">
+      <span class="note-text">${linkify(note.text)}</span>
+      <span class="meta">${whereLabel(note)}from ${escapeHtml(note.from)} · ${whenLabel(note.at)}</span>
+      ${chipsHtml(note)}
+    </span>
+    <button class="ctl" data-copy="${note.id}">Copy</button>
+    <span class="check" aria-hidden="true">${ICONS.check}</span>
+    <span class="grip" aria-hidden="true">${ICONS.grip}</span>
+  </div>`, 'Delete');
+}
+
+function folderRowHtml(folder) {
+  return rowShell(`data-id="${escapeHtml(folderId(folder))}" data-folder="${escapeHtml(folder.name)}"`, `<button class="row">
+    <span class="thumb folder-thumb">${ICONS.folder}</span>
+    <span class="main">
+      <span class="title">${escapeHtml(folder.name)}</span>
+      <span class="meta">${folder.count === 1 ? '1 item' : `${folder.count} items`}</span>
+    </span>
+    <span class="chev">›</span>
+    <span class="grip" aria-hidden="true">${ICONS.grip}</span>
+  </button>`, 'Delete');
+}
+
+function emptyHtml() {
+  if (state.label) {
+    return `<div class="empty">${ICONS.empty}<h3>Nothing labelled ${escapeHtml(findLabel(state.label)?.name || '')}</h3><p>Open an item and tap Labels, or select several and tap Label.</p></div>`;
+  }
+  const copy = {
+    all: ['Nothing here yet', state.local ? 'Drop a file on this window or send text — it shows up on your phone instantly.' : 'Send a photo or some text — it lands on your PC instantly.'],
+    files: ['No files yet', 'Files you send either way show up here.'],
+    notes: ['No text yet', 'Send a link or a note to copy it on the other device.'],
+  }[state.filter];
+  return `<div class="empty">${ICONS.empty}<h3>${copy[0]}</h3><p>${copy[1]}</p></div>`;
+}
+
+function folderHeaderHtml() {
+  const label = findLabel(state.label);
+  if (label) {
+    return `<div class="crumb">
+      <button class="ctl ghost" id="backBtn">${ICONS.back}All</button>
+      <i class="swatch" style="--c:${label.color}"></i><span class="title">${escapeHtml(label.name)}</span>
+    </div>`;
+  }
+  if (!state.folder) return '';
+  return `<div class="crumb">
+    <button class="ctl ghost" id="backBtn">${ICONS.back}All</button>
+    <span class="title">${escapeHtml(state.folder)}</span>
+  </div>`;
+}
+
+function renderLabelSeg() {
+  const seg = byId('labelSeg');
+  seg.hidden = !state.labels.length || state.selecting;
+  if (seg.hidden) return;
+  seg.innerHTML = `${state.labels.map((label) => `<button class="ctl" data-label="${label.id}" aria-pressed="${state.label === label.id}"><i class="swatch" style="--c:${label.color}"></i>${escapeHtml(label.name)}</button>`).join('')}
+    <button class="ctl ghost" id="editLabelsBtn">Edit</button>`;
+}
+
+function renderFeed() {
+  const folders = state.folder || state.label ? [] : orderedFolders();
+  const items = feedItems();
+  const parts = [folderHeaderHtml()];
+  if (folders.length) {
+    parts.push(`<div class="group-label">Folders</div><div class="group" data-list="${FOLDER_SCOPE}">${folders.map(folderRowHtml).join('')}</div>`);
+  }
+  if (items.length) {
+    if (folders.length) parts.push('<div class="group-label">Items</div>');
+    parts.push(`<div class="group" data-list="${escapeHtml(feedScope())}">${items.map((item) => (item.type === 'file' ? fileRowHtml(item.file) : noteRowHtml(item.note))).join('')}</div>`);
+  } else {
+    parts.push(emptyHtml());
+  }
+  const openId = openSwipeRow?.dataset.id;
+  byId('feed').innerHTML = parts.join('');
+  openSwipeRow = openId ? byId('feed').querySelector(`.swipe[data-id="${CSS.escape(openId)}"]`) : null;
+  if (openSwipeRow) setSwipe(openSwipeRow, -SWIPE_REVEAL, false);
+}
+
+function render() {
+  if (gesture.mode) {
+    renderPending = true;
+    return;
+  }
+  renderPending = false;
+  document.body.classList.toggle('local', state.local);
+  byId('pairBtn').hidden = !state.local;
+  byId('sendFilesSub').textContent = state.folder ? `Into ${state.folder}` : state.local ? 'To your phone' : 'Photos, videos, anything';
+  byId('footNote').textContent = state.local ? 'Uploads from your phone raise a notification' : 'Same wifi, no cloud';
+  byId('countAll').textContent = scopeFiles().length + scopeNotes().length || '';
+  byId('countFiles').textContent = scopeFiles().length || '';
+  byId('countNotes').textContent = scopeNotes().length || '';
+  byId('installHint').hidden = !isIOS || navigator.standalone || state.local || readFlag('hintDismissed');
+  byId('newFolderBtn').hidden = Boolean(state.folder) || Boolean(state.label) || state.selecting;
+  const known = new Set([...state.files.map(fileId), ...state.notes.map(noteId)]);
+  state.selected.forEach((id) => known.has(id) || state.selected.delete(id));
+  renderLabelSeg();
+  renderFeed();
+  renderSelection();
+}
+
+function selectableItems() {
+  return feedItems();
+}
+
+function selectedItems() {
+  return selectableItems().filter((item) => state.selected.has(item.id));
+}
+
+function selectedFiles() {
+  return selectedItems().filter((item) => item.type === 'file').map((item) => item.file);
+}
+
+function renderSelection() {
+  document.body.classList.toggle('selecting', state.selecting);
+  byId('foot').hidden = state.selecting;
+  byId('selbar').hidden = !state.selecting;
+  byId('selectBtn').hidden = state.selecting || !selectableItems().length;
+  byId('newFolderBtn').hidden = Boolean(state.folder) || Boolean(state.label) || state.selecting;
+  byId('labelSeg').hidden = !state.labels.length || state.selecting;
+  if (!state.selecting) return;
+  const items = selectedItems();
+  const files = selectedFiles();
+  const onlyFiles = items.length && files.length === items.length;
+  byId('selCount').textContent = `${items.length} selected`;
+  byId('selAll').textContent = items.length && items.length === selectableItems().length ? 'None' : 'All';
+  byId('selSave').hidden = state.local || !canShareFiles || !onlyFiles || !files.every(isMedia);
+  byId('selSave').disabled = !items.length;
+  byId('selZip').hidden = !onlyFiles;
+  byId('selZip').disabled = !items.length;
+  byId('selMove').hidden = (!state.folders.length && !state.folder) || Boolean(state.label);
+  byId('selMove').disabled = !items.length;
+  byId('selLabel').disabled = !items.length;
+  byId('feed').querySelectorAll('.swipe[data-id]').forEach((shell) => {
+    const row = shell.querySelector('.row');
+    if (row.hasAttribute('aria-selected')) row.setAttribute('aria-selected', String(state.selected.has(shell.dataset.id)));
+  });
+}
+
+function setSelecting(selecting) {
+  state.selecting = selecting;
+  state.selected.clear();
+  closeSwipe();
+  renderSelection();
+}
+
+function toggleSelected(id) {
+  if (state.selected.has(id)) state.selected.delete(id);
+  else state.selected.add(id);
+  haptic('light');
+  renderSelection();
+}
+
+let sheetOpener = null;
+const sheetDrag = { active: false };
+
+function openSheet(html, onClose) {
+  const sheet = byId('sheet');
+  if (!sheet.classList.contains('open')) sheetOpener = document.activeElement;
+  sheet.style.transform = '';
+  sheet.style.transition = '';
+  sheet.classList.remove('dragging');
+  sheet.innerHTML = `<div class="grab"></div><button class="sheet-close" id="sheetClose" aria-label="Close">×</button>${html}`;
+  sheet.scrollTop = 0;
+  byId('scrim').classList.add('open');
+  sheet.classList.add('open');
+  sheetCleanup = onClose || null;
+  byId('sheetClose').addEventListener('click', closeSheet);
+  if (!sheet.querySelector('textarea, input.field')) sheet.focus({ preventScroll: true });
+}
+
+function closeSheet() {
+  const sheet = byId('sheet');
+  if (!sheet.classList.contains('open')) return;
+  sheet.classList.remove('open', 'dragging');
+  sheet.style.transform = '';
+  sheet.style.transition = '';
+  byId('scrim').classList.remove('open');
+  sheet.querySelectorAll('video, audio').forEach((media) => media.pause());
+  const cleanup = sheetCleanup;
+  sheetCleanup = null;
+  if (cleanup) cleanup();
+  if (!sheet.classList.contains('open') && sheetOpener?.isConnected) sheetOpener.focus({ preventScroll: true });
+}
+
+function dismissSheetByDrag(offset) {
+  const sheet = byId('sheet');
+  sheet.classList.remove('dragging');
+  sheet.style.transition = 'transform 160ms var(--ease-exit)';
+  sheet.style.transform = 'translateY(105%)';
+  haptic('light');
+  setTimeout(() => {
+    sheet.style.transition = '';
+    sheet.style.transform = '';
+    closeSheet();
+  }, offset >= sheet.offsetHeight ? 0 : 160);
+}
+
+function onSheetPointerDown(event) {
+  const sheet = byId('sheet');
+  if (!event.isPrimary || event.pointerType === 'mouse' || !sheet.classList.contains('open')) return;
+  if (event.target.closest('textarea, input, select, video, audio')) return;
+  sheetDrag.active = false;
+  sheetDrag.pending = true;
+  sheetDrag.pointerId = event.pointerId;
+  sheetDrag.startX = event.clientX;
+  sheetDrag.startY = event.clientY;
+  sheetDrag.lastY = event.clientY;
+  sheetDrag.lastTime = event.timeStamp;
+  sheetDrag.velocity = 0;
+  sheetDrag.offset = 0;
+}
+
+function onSheetPointerMove(event) {
+  if ((!sheetDrag.pending && !sheetDrag.active) || event.pointerId !== sheetDrag.pointerId) return;
+  const sheet = byId('sheet');
+  const dy = event.clientY - sheetDrag.startY;
+  const dx = event.clientX - sheetDrag.startX;
+  if (sheetDrag.pending) {
+    if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return;
+    sheetDrag.pending = false;
+    if (dy <= 0 || Math.abs(dx) > Math.abs(dy) || sheet.scrollTop > 0) return;
+    sheetDrag.active = true;
+    sheet.classList.add('dragging');
+  }
+  const dt = Math.max(1, event.timeStamp - sheetDrag.lastTime);
+  sheetDrag.velocity = (event.clientY - sheetDrag.lastY) / dt;
+  sheetDrag.lastY = event.clientY;
+  sheetDrag.lastTime = event.timeStamp;
+  sheetDrag.offset = Math.max(0, dy);
+  sheet.style.transform = `translateY(${sheetDrag.offset}px)`;
+}
+
+function onSheetPointerEnd(event) {
+  if ((!sheetDrag.pending && !sheetDrag.active) || event.pointerId !== sheetDrag.pointerId) return;
+  const wasActive = sheetDrag.active;
+  sheetDrag.pending = false;
+  sheetDrag.active = false;
+  if (!wasActive) return;
+  const sheet = byId('sheet');
+  const shouldClose = event.type !== 'pointercancel' && (sheetDrag.offset > 110 || sheetDrag.velocity > 0.6);
+  if (shouldClose) {
+    dismissSheetByDrag(sheetDrag.offset);
+    return;
+  }
+  sheet.classList.remove('dragging');
+  sheet.style.transition = 'transform 220ms var(--ease-out)';
+  sheet.style.transform = '';
+}
+
+function armDelete(button, onConfirm) {
+  let armed = false;
+  let timer = 0;
+  const label = button.textContent;
+  button.addEventListener('click', () => {
+    if (!armed) {
+      armed = true;
+      button.textContent = 'Tap again';
+      timer = setTimeout(() => {
+        armed = false;
+        button.textContent = label;
+      }, 3000);
+      return;
+    }
+    clearTimeout(timer);
+    button.disabled = true;
+    onConfirm();
+  });
+}
+
+async function deleteFile(path) {
+  const response = await fetch(`/api/files/${encodePath(path)}`, { method: 'DELETE' });
+  showToast(response.ok ? 'Moved to trash' : 'Delete failed');
+  scheduleRefresh();
+}
+
+async function deleteNote(id) {
+  const response = await fetch(`/api/notes/${id}`, { method: 'DELETE' });
+  showToast(response.ok ? 'Deleted' : 'Delete failed');
+  scheduleRefresh();
+}
+
+async function deleteFolder(name) {
+  const response = await fetch(`/api/folders/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  showToast(response.ok ? 'Folder moved to trash' : 'Delete failed');
+  scheduleRefresh();
+}
+
+async function moveItems(ids, folder) {
+  try {
+    const result = await api('POST', '/api/move', { items: ids, folder });
+    const count = result.moved.length;
+    showToast(count ? `Moved ${count === 1 ? '1 item' : `${count} items`} to ${folder || 'top level'}` : 'Nothing moved');
+  } catch (error) {
+    console.warn('phonedrop: move failed', error);
+    showToast('Move failed');
+  }
+  scheduleRefresh();
+}
+
+async function saveOrder(scope, ids) {
+  state.layout[scope] = ids;
+  try {
+    await api('POST', '/api/order', { scope, items: ids });
+  } catch (error) {
+    console.warn('phonedrop: order failed', error);
+    showToast('Could not save order');
+  }
+}
+
+function moveButtonsHtml() {
+  const options = [...(state.folder ? [{ name: '', label: 'Top level' }] : []), ...orderedFolders().filter((folder) => folder.name !== state.folder).map((folder) => ({ name: folder.name, label: folder.name }))];
+  return options.map((option) => `<button class="btn" data-move-to="${escapeHtml(option.name)}">${ICONS.folder}${escapeHtml(option.label)}</button>`).join('');
+}
+
+function openMoveSheet(ids) {
+  openSheet(`
+    <h2>Move ${ids.length === 1 ? 'to' : `${ids.length} items to`}</h2>
+    <div class="buttons move-list">${moveButtonsHtml()}</div>
+  `);
+  byId('sheet').querySelectorAll('[data-move-to]').forEach((button) => {
+    button.addEventListener('click', () => {
+      closeSheet();
+      moveItems(ids, button.dataset.moveTo).then(() => state.selecting && setSelecting(false));
+    });
+  });
+}
+
+function canMove() {
+  return (state.folders.length > 0 || Boolean(state.folder)) && !state.label;
+}
+
+function itemById(id) {
+  const [kind, ...rest] = id.split(':');
+  const ident = rest.join(':');
+  return kind === 'f' ? findFile(ident) : findNote(ident);
+}
+
+function applyLabelLocally(ids, labelId, add) {
+  ids.map(itemById).filter(Boolean).forEach((item) => {
+    const current = (item.labels || []).filter((x) => x !== labelId);
+    item.labels = add ? [...current, labelId] : current;
+  });
+}
+
+async function setLabel(ids, labelId, add) {
+  applyLabelLocally(ids, labelId, add);
+  try {
+    await api('POST', '/api/label', { items: ids, add: add ? [labelId] : [], remove: add ? [] : [labelId] });
+  } catch (error) {
+    console.warn('phonedrop: label failed', error);
+    showToast('Could not update label');
+  }
+  scheduleRefresh();
+}
+
+async function createLabel(name, color) {
+  const label = await api('POST', '/api/labels', { name, color });
+  if (!findLabel(label.id)) state.labels.push(label);
+  return label;
+}
+
+async function deleteLabel(id) {
+  const response = await fetch(`/api/labels/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  showToast(response.ok ? 'Label deleted' : 'Delete failed');
+  if (response.ok) {
+    state.labels = state.labels.filter((label) => label.id !== id);
+    if (state.label === id) state.label = '';
+  }
+  scheduleRefresh();
+}
+
+function newLabelFormHtml() {
+  return `<div class="new-label">
+    <div class="caps" style="color:var(--muted)">New label</div>
+    <input class="field" id="labelName" type="text" placeholder="Label name" autocomplete="off" autocapitalize="words" maxlength="40">
+    <div class="swatches" id="swatches">${LABEL_COLORS.map((color, index) => `<button class="swatch-pick" data-color="${color}" style="--c:${color}" aria-pressed="${index === 0}" aria-label="${color}"></button>`).join('')}</div>
+    <div class="buttons" style="margin-top:0"><button class="btn primary" id="createLabelBtn">Create label</button></div>
+  </div>`;
+}
+
+function bindNewLabelForm(onCreated) {
+  const field = byId('labelName');
+  const swatches = byId('swatches');
+  swatches.addEventListener('click', (event) => {
+    const pick = event.target.closest('[data-color]');
+    if (!pick) return;
+    swatches.querySelectorAll('[data-color]').forEach((button) => button.setAttribute('aria-pressed', String(button === pick)));
+  });
+  async function create() {
+    const name = field.value.trim();
+    if (!name) return;
+    const color = swatches.querySelector('[aria-pressed="true"]').dataset.color;
+    byId('createLabelBtn').disabled = true;
+    try {
+      const label = await createLabel(name, color);
+      await onCreated(label);
+    } catch (error) {
+      console.warn('phonedrop: create label failed', error);
+      showToast('Could not create label');
+      byId('createLabelBtn').disabled = false;
+    }
+  }
+  byId('createLabelBtn').addEventListener('click', create);
+  field.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') create();
+  });
+}
+
+function labelOptionsHtml(ids) {
+  const items = ids.map(itemById).filter(Boolean);
+  return state.labels.map((label) => {
+    const on = items.length > 0 && items.every((item) => (item.labels || []).includes(label.id));
+    return `<button class="btn" data-label-opt="${label.id}" style="--c:${label.color}" aria-pressed="${on}"><i class="swatch" style="--c:${label.color}"></i>${escapeHtml(label.name)}<span class="tick">${ICONS.check}</span></button>`;
+  }).join('');
+}
+
+function openLabelSheet(ids, onClose) {
+  openSheet(`
+    <h2>${ids.length === 1 ? 'Labels' : `Label ${ids.length} items`}</h2>
+    ${state.labels.length ? `<div class="buttons label-list" style="margin-top:12px">${labelOptionsHtml(ids)}</div>` : '<div class="meta">No labels yet. Create one below.</div>'}
+    ${newLabelFormHtml()}
+  `, onClose);
+  byId('sheet').querySelectorAll('[data-label-opt]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const add = button.getAttribute('aria-pressed') !== 'true';
+      button.setAttribute('aria-pressed', String(add));
+      setLabel(ids, button.dataset.labelOpt, add);
+    });
+  });
+  bindNewLabelForm(async (label) => {
+    await setLabel(ids, label.id, true);
+    openLabelSheet(ids, onClose);
+  });
+}
+
+function openEditLabelsSheet() {
+  openSheet(`
+    <h2>Labels</h2>
+    ${state.labels.length ? state.labels.map((label) => `<div class="label-row" data-label-row="${label.id}">
+      <i class="swatch" style="--c:${label.color}"></i>
+      <span class="title">${escapeHtml(label.name)}</span>
+      <button class="ctl" data-label-delete="${label.id}">Delete</button>
+    </div>`).join('') : '<div class="meta">No labels yet.</div>'}
+    ${newLabelFormHtml()}
+  `);
+  byId('sheet').querySelectorAll('[data-label-delete]').forEach((button) => {
+    armDelete(button, () => {
+      button.closest('[data-label-row]').remove();
+      deleteLabel(button.dataset.labelDelete);
+    });
+  });
+  bindNewLabelForm(async () => {
+    showToast('Label created');
+    scheduleRefresh();
+    openEditLabelsSheet();
+  });
+}
+
+function quickButton(id, label, icon, extra = '') {
+  return `<button class="btn ${extra}" id="${id}">${icon || ''}${label}</button>`;
+}
+
+function openQuickSheet(shell) {
+  const kind = shellKind(shell);
+  const id = shell.dataset.id;
+  const item = kind === 'file' ? findFile(shell.dataset.file) : kind === 'note' ? findNote(shell.dataset.note) : null;
+  if (kind !== 'folder' && !item) return;
+  const title = kind === 'file' ? item.name : kind === 'note' ? 'Text' : shell.dataset.folder;
+  const canSave = kind === 'file' && !state.local && canShareFiles && isMedia(item);
+  const buttons = kind === 'folder'
+    ? [quickButton('qOpen', 'Open', ICONS.folder, 'primary'), quickButton('qDelete', 'Delete', '', 'danger')]
+    : [
+      kind === 'file' ? quickButton('qOpen', 'Open', '', 'primary') : quickButton('qCopy', 'Copy', '', 'primary'),
+      canSave ? quickButton('qSave', 'Save to Photos') : '',
+      quickButton('qLabel', 'Labels'),
+      canMove() ? quickButton('qMove', 'Move', ICONS.folder) : '',
+      quickButton('qSelect', 'Select', ICONS.check),
+      quickButton('qDelete', 'Delete', '', 'danger'),
+    ];
+  openSheet(`
+    <h2>${escapeHtml(title)}</h2>
+    ${item ? `<div class="meta">from ${escapeHtml(item.from)} · ${whenLabel(item.at)}</div>` : ''}
+    <div class="buttons quick-list">${buttons.join('')}</div>
+  `);
+  const on = (buttonId, handler) => byId(buttonId)?.addEventListener('click', handler);
+  on('qOpen', () => (kind === 'file' ? openFileSheet(item.path) : (closeSheet(), enterFolder(shell.dataset.folder))));
+  on('qCopy', () => { closeSheet(); copyNote(item); });
+  on('qSave', () => { closeSheet(); saveToLibrary([item]); });
+  on('qLabel', () => openLabelSheet([id], () => scheduleRefresh()));
+  on('qMove', () => openMoveSheet([id]));
+  on('qSelect', () => { closeSheet(); setSelecting(true); toggleSelected(id); });
+  const remove = byId('qDelete');
+  if (remove) armDelete(remove, () => {
+    closeSheet();
+    if (kind === 'file') deleteFile(item.path);
+    else if (kind === 'note') deleteNote(item.id);
+    else deleteFolder(shell.dataset.folder);
+  });
+}
+
+function openFileSheet(path) {
+  const file = findFile(path);
+  if (!file) return;
+  const url = fileUrl(file.path);
+  const previews = {
+    image: `<img class="preview" src="${url}" alt="">`,
+    video: `<video class="preview" src="${url}" controls playsinline preload="metadata"></video>`,
+    audio: `<audio class="preview" src="${url}" controls></audio>`,
+  };
+  const preview = previews[file.kind] || `<div class="preview-tile">${escapeHtml(extension(file.name))}</div>`;
+  const canSave = !state.local && canShareFiles && isMedia(file);
+  const tip = !state.local && isMedia(file) && !canSave
+    ? `<p class="tip">To save to Photos: ${file.kind === 'image' ? 'long-press the image' : 'tap Open, then the share button'} → Save to Photos. Download saves to Files.</p>`
+    : '';
+  const saveButton = canSave
+    ? `<button class="btn primary" id="saveBtn">Save to Photos</button><a class="btn" href="${fileUrl(file.path, true)}">Download</a>`
+    : `<a class="btn primary" href="${fileUrl(file.path, true)}">Download</a>`;
+  openSheet(`
+    ${preview}
+    <h2>${escapeHtml(file.name)}</h2>
+    <div class="meta">${formatSize(file.size)} · from ${escapeHtml(file.from)} · ${dayLabel(file.at)} ${formatTime(file.at)}</div>
+    <div style="margin-top:8px">${chipsHtml(file)}</div>
+    ${tip}
+    <div class="buttons">
+      ${saveButton}
+      <a class="btn" href="${url}" target="_blank" rel="noopener">Open</a>
+      <button class="btn" id="labelBtn">Labels</button>
+      ${canMove() ? '<button class="btn" id="moveBtn">Move</button>' : ''}
+      <button class="btn danger" id="deleteBtn">Delete</button>
+    </div>
+  `);
+  if (canSave) byId('saveBtn').addEventListener('click', () => saveToLibrary([file]));
+  byId('labelBtn').addEventListener('click', () => openLabelSheet([fileId(file)], () => openFileSheet(path)));
+  if (canMove()) byId('moveBtn').addEventListener('click', () => openMoveSheet([fileId(file)]));
+  armDelete(byId('deleteBtn'), () => {
+    closeSheet();
+    deleteFile(file.path);
+  });
+}
+
+function openNoteSheet(id) {
+  const note = findNote(id);
+  if (!note) return;
+  openSheet(`
+    <h2>Text</h2>
+    <div class="meta">from ${escapeHtml(note.from)} · ${dayLabel(note.at)} ${formatTime(note.at)}</div>
+    ${chipsHtml(note)}
+    <div class="sheet-text">${linkify(note.text)}</div>
+    <div class="buttons">
+      <button class="btn primary" id="copyBtn">Copy</button>
+      <button class="btn" id="labelBtn">Labels</button>
+      ${canMove() ? '<button class="btn" id="moveBtn">Move</button>' : ''}
+      <button class="btn danger" id="deleteBtn">Delete</button>
+    </div>
+  `);
+  byId('copyBtn').addEventListener('click', () => copyNote(note));
+  byId('labelBtn').addEventListener('click', () => openLabelSheet([noteId(note)], () => openNoteSheet(id)));
+  if (canMove()) byId('moveBtn').addEventListener('click', () => openMoveSheet([noteId(note)]));
+  armDelete(byId('deleteBtn'), () => {
+    closeSheet();
+    deleteNote(note.id);
+  });
+}
+
+function copyNote(note) {
+  copyText(note.text)
+    .then(() => showToast('Copied'))
+    .catch(() => showToast('Copy failed — long-press to select'));
+}
+
+function openComposer(prefill) {
+  openSheet(`
+    <h2>Send text</h2>
+    <div class="meta" style="margin-bottom:12px;font-size:0.8rem">${state.local ? 'Shows up on your phone right away.' : 'Shows up on your PC and raises a notification.'}${state.folder ? ` Goes into ${escapeHtml(state.folder)}.` : ''}</div>
+    <textarea id="composer" placeholder="Paste a link, a note, a code…">${escapeHtml(prefill || '')}</textarea>
+    <div class="buttons">
+      <button class="btn primary" id="sendTextBtn">Send</button>
+    </div>
+  `);
+  const area = byId('composer');
+  function send() {
+    if (!area.value.trim()) return;
+    sendText(area.value).then(closeSheet);
+  }
+  byId('sendTextBtn').addEventListener('click', send);
+  area.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) send();
+  });
+  setTimeout(() => area.focus(), 60);
+}
+
+function openFolderComposer() {
+  openSheet(`
+    <h2>New folder</h2>
+    <input class="field" id="folderName" type="text" placeholder="Folder name" autocomplete="off" autocapitalize="words">
+    <div class="buttons">
+      <button class="btn primary" id="createFolderBtn">Create</button>
+    </div>
+  `);
+  const field = byId('folderName');
+  async function create() {
+    const name = field.value.trim();
+    if (!name) return;
+    try {
+      await api('POST', '/api/folders', { name });
+      closeSheet();
+      showToast(`Folder ${name} created`);
+      scheduleRefresh();
+    } catch (error) {
+      showToast('Could not create folder');
+    }
+  }
+  byId('createFolderBtn').addEventListener('click', create);
+  field.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') create();
+  });
+  setTimeout(() => field.focus(), 60);
+}
+
+async function openPairSheet() {
+  openSheet('<h2>Pair your phone</h2><div class="meta">Loading…</div>');
+  const response = await fetch('/api/pair');
+  const pair = await response.json();
+  openSheet(`
+    <h2>Pair your phone</h2>
+    <div class="meta">Scan with the iPhone camera, then tap Share → Add to Home Screen. Phone and PC must be on the same wifi.</div>
+    <div class="qr">${pair.svg || '<p style="color:#333;margin:0;font-size:0.8rem">Install qrencode to show a QR code.</p>'}</div>
+    <div class="url">${escapeHtml(pair.url)}</div>
+  `);
+}
+
+async function sendText(text) {
+  const response = await fetch('/api/notes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, folder: state.folder }),
+  });
+  showToast(response.ok ? 'Text sent' : 'Sending failed');
+  scheduleRefresh();
+}
+
+function uploadFile(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('PUT', `/api/upload?name=${encodeURIComponent(file.name || 'pasted')}&folder=${encodeURIComponent(state.folder)}`);
+    request.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) onProgress(event.loaded / event.total);
+    });
+    request.addEventListener('load', () => (request.status < 300 ? resolve() : reject(new Error(`HTTP ${request.status}`))));
+    request.addEventListener('error', () => reject(new Error('network error')));
+    request.send(file);
+  });
+}
+
+function addUploadRow(file) {
+  const row = document.createElement('div');
+  row.className = 'upload';
+  row.innerHTML = `<div class="line"><span class="name">${escapeHtml(file.name || 'pasted')}</span><span class="pct">waiting</span></div><div class="bar"><i></i></div>`;
+  byId('uploads').appendChild(row);
+  return row;
+}
+
+function setRowProgress(row, fraction) {
+  row.querySelector('.pct').textContent = `${Math.round(fraction * 100)}%`;
+  row.querySelector('.bar i').style.width = `${fraction * 100}%`;
+}
+
+async function sendFiles(fileList) {
+  const files = [...fileList];
+  if (!files.length) return;
+  const rows = files.map(addUploadRow);
+  let sent = 0;
+  for (const [index, file] of files.entries()) {
+    const row = rows[index];
+    try {
+      setRowProgress(row, 0);
+      await uploadFile(file, (fraction) => setRowProgress(row, fraction));
+      sent += 1;
+      row.remove();
+    } catch (error) {
+      row.classList.add('failed');
+      row.querySelector('.pct').textContent = 'failed';
+      setTimeout(() => row.remove(), 5000);
+    }
+  }
+  if (sent) showToast(sent === 1 ? 'Sent' : `Sent ${sent} files`);
+  scheduleRefresh();
+}
+
+function setLive(live) {
+  byId('status').classList.toggle('live', live);
+  byId('statusText').textContent = live ? 'live' : 'offline';
+}
+
+function connect() {
+  const source = new EventSource('/api/events');
+  source.addEventListener('open', () => {
+    setLive(true);
+    scheduleRefresh();
+  });
+  source.addEventListener('error', () => setLive(false));
+  source.addEventListener('files', scheduleRefresh);
+  source.addEventListener('notes', scheduleRefresh);
+  source.addEventListener('layout', scheduleRefresh);
+  source.addEventListener('labels', scheduleRefresh);
+}
+
+function hasFiles(event) {
+  return [...(event.dataTransfer?.types || [])].includes('Files');
+}
+
+function enterFolder(name) {
+  state.folder = name;
+  state.label = '';
+  state.selected.clear();
+  render();
+  window.scrollTo({ top: 0 });
+}
+
+function enterLabel(id) {
+  state.label = state.label === id ? '' : id;
+  state.folder = '';
+  state.selected.clear();
+  render();
+  window.scrollTo({ top: 0 });
+}
+
+function shellOf(target) {
+  return target.closest?.('.swipe[data-id]') || null;
+}
+
+function shellKind(shell) {
+  if (shell.dataset.file !== undefined) return 'file';
+  if (shell.dataset.note !== undefined) return 'note';
+  return 'folder';
+}
+
+function deleteShellItem(shell) {
+  const kind = shellKind(shell);
+  shell.classList.add('leaving');
+  if (kind === 'file') return deleteFile(shell.dataset.file);
+  if (kind === 'note') return deleteNote(shell.dataset.note);
+  return deleteFolder(shell.dataset.folder);
+}
+
+function setSwipe(shell, offset, animate) {
+  const row = shell.querySelector('.row');
+  row.style.transition = animate ? 'transform 180ms cubic-bezier(0.23, 1, 0.32, 1)' : 'none';
+  row.style.transform = offset ? `translateX(${offset}px)` : '';
+  shell.classList.toggle('open', offset <= -SWIPE_REVEAL);
+  shell.classList.toggle('commit', offset <= -SWIPE_COMMIT);
+}
+
+function closeSwipe() {
+  if (!openSwipeRow) return;
+  setSwipe(openSwipeRow, 0, true);
+  openSwipeRow = null;
+}
+
+function listSiblings(list) {
+  return [...list.querySelectorAll(':scope > .swipe[data-id]')];
+}
+
+function startDrag(shell, pointerY) {
+  const list = shell.parentElement;
+  const rect = shell.getBoundingClientRect();
+  gesture.mode = 'drag';
+  gesture.list = list;
+  gesture.grab = pointerY - rect.top;
+  gesture.height = rect.height;
+  gesture.dropFolder = null;
+  gesture.dragMoved = false;
+  gesture.moved = true;
+  shell.classList.add('dragging');
+  document.body.classList.add('is-dragging');
+  haptic('medium');
+  updateDrag(pointerY, gesture.startX);
+}
+
+function folderUnder(x, y) {
+  if (state.folder || gesture.list.dataset.list === FOLDER_SCOPE) return null;
+  const element = document.elementFromPoint(x, y);
+  const shell = element && shellOf(element);
+  return shell && shell.dataset.folder !== undefined ? shell : null;
+}
+
+function updateDrag(pointerY, pointerX) {
+  const shell = gesture.shell;
+  const siblings = listSiblings(gesture.list).filter((node) => node !== shell);
+  const target = folderUnder(pointerX, pointerY);
+  if (gesture.dropFolder !== target) {
+    gesture.dropFolder?.classList.remove('drop-target');
+    gesture.dropFolder = target;
+    target?.classList.add('drop-target');
+    if (target) haptic('light');
+  }
+  if (Math.abs(pointerY - gesture.startY) > 6 || Math.abs(pointerX - gesture.startX) > 6) gesture.dragMoved = true;
+  const center = pointerY - gesture.grab + gesture.height / 2;
+  if (!target) {
+    const previous = shell.previousElementSibling;
+    const next = shell.nextElementSibling;
+    if (previous && siblings.includes(previous)) {
+      const rect = previous.getBoundingClientRect();
+      if (center < rect.top + rect.height / 2) gesture.list.insertBefore(shell, previous);
+    }
+    if (next && siblings.includes(next)) {
+      const rect = next.getBoundingClientRect();
+      if (center > rect.top + rect.height / 2) gesture.list.insertBefore(next, shell);
+    }
+  }
+  const top = shell.getBoundingClientRect().top;
+  shell.style.transform = `translateY(${pointerY - gesture.grab - top}px)`;
+}
+
+async function finishDrag(shell) {
+  const list = gesture.list;
+  const target = gesture.dropFolder;
+  shell.style.transform = '';
+  shell.classList.remove('dragging');
+  document.body.classList.remove('is-dragging');
+  target?.classList.remove('drop-target');
+  const scope = list.dataset.list;
+  const ids = listSiblings(list).map((node) => node.dataset.id);
+  if (target) {
+    await moveItems([shell.dataset.id], target.dataset.folder);
+    return;
+  }
+  const before = state.layout[scope] || [];
+  const changed = ids.length !== before.length || ids.some((id, index) => id !== before[index]);
+  if (changed) saveOrder(scope, ids);
+}
+
+function endGesture() {
+  clearTimeout(gesture.timer);
+  const { mode, shell } = gesture;
+  gesture.mode = null;
+  gesture.shell = null;
+  setTimeout(() => { gesture.moved = false; }, 0);
+  if (mode === 'drag') {
+    gesture.mode = 'drag';
+    const held = gesture.touch && !gesture.dragMoved;
+    finishDrag(shell).finally(() => {
+      gesture.mode = null;
+      if (renderPending) render();
+      if (held) openQuickSheet(shell);
+    });
+    return;
+  }
+  if (mode === 'swipe') {
+    const offset = gesture.offset;
+    if (offset <= -SWIPE_COMMIT && shellKind(shell) === 'file') {
+      haptic('heavy');
+      setSwipe(shell, -shell.getBoundingClientRect().width, true);
+      deleteShellItem(shell);
+    } else if (offset <= -SWIPE_REVEAL / 2) {
+      setSwipe(shell, -SWIPE_REVEAL, true);
+      openSwipeRow = shell;
+    } else {
+      setSwipe(shell, 0, true);
+    }
+  }
+  if (renderPending) render();
+}
+
+function onPointerDown(event) {
+  if (state.selecting || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  if (event.target.closest('a, [data-copy], [data-swipe-delete]')) return;
+  const shell = shellOf(event.target);
+  if (!shell) return;
+  if (openSwipeRow && openSwipeRow !== shell) closeSwipe();
+  gesture.shell = shell;
+  gesture.mode = 'pending';
+  gesture.pointerId = event.pointerId;
+  gesture.startX = event.clientX;
+  gesture.startY = event.clientY;
+  gesture.offset = shell === openSwipeRow ? -SWIPE_REVEAL : 0;
+  gesture.moved = false;
+  gesture.touch = event.pointerType !== 'mouse';
+  clearTimeout(gesture.timer);
+  if (gesture.touch || event.target.closest('.grip')) {
+    gesture.timer = setTimeout(() => {
+      if (gesture.mode !== 'pending') return;
+      startDrag(shell, gesture.startY);
+    }, event.target.closest('.grip') ? 0 : LONG_PRESS_MS);
+  }
+}
+
+function onPointerMove(event) {
+  if (!gesture.mode || event.pointerId !== gesture.pointerId) return;
+  const dx = event.clientX - gesture.startX;
+  const dy = event.clientY - gesture.startY;
+  if (gesture.mode === 'pending') {
+    if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+      clearTimeout(gesture.timer);
+      gesture.mode = 'swipe';
+      gesture.moved = true;
+    } else if (!gesture.touch && Math.abs(dy) > 8) {
+      startDrag(gesture.shell, event.clientY);
+      gesture.moved = true;
+    } else if (Math.abs(dy) > 10) {
+      clearTimeout(gesture.timer);
+      gesture.mode = null;
+    }
+    return;
+  }
+  gesture.moved = true;
+  if (gesture.mode === 'swipe') {
+    const base = gesture.shell === openSwipeRow ? -SWIPE_REVEAL : 0;
+    const offset = Math.min(0, Math.max(-SWIPE_COMMIT - 40, base + dx));
+    const wasOpen = gesture.offset <= -SWIPE_REVEAL;
+    const wasCommit = gesture.offset <= -SWIPE_COMMIT;
+    gesture.offset = offset;
+    setSwipe(gesture.shell, offset, false);
+    if (offset <= -SWIPE_REVEAL !== wasOpen || offset <= -SWIPE_COMMIT !== wasCommit) haptic('light');
+    return;
+  }
+  if (gesture.mode === 'drag') {
+    updateDrag(event.clientY, event.clientX);
+    const margin = 72;
+    if (event.clientY < margin) window.scrollBy(0, -8);
+    else if (event.clientY > window.innerHeight - margin) window.scrollBy(0, 8);
+  }
+}
+
+function onPointerUp(event) {
+  if (!gesture.mode || event.pointerId !== gesture.pointerId) return;
+  endGesture();
+}
+
+function onPointerCancel(event) {
+  if (!gesture.mode || event.pointerId !== gesture.pointerId) return;
+  if (gesture.mode === 'swipe') setSwipe(gesture.shell, 0, true);
+  if (gesture.mode === 'drag') {
+    endGesture();
+    return;
+  }
+  clearTimeout(gesture.timer);
+  gesture.mode = null;
+  gesture.shell = null;
+}
+
+byId('fileInput').addEventListener('change', (event) => {
+  sendFiles(event.target.files);
+  event.target.value = '';
+});
+byId('textBtn').addEventListener('click', () => openComposer());
+byId('pairBtn').addEventListener('click', () => openPairSheet());
+byId('newFolderBtn').addEventListener('click', () => openFolderComposer());
+byId('scrim').addEventListener('click', closeSheet);
+const sheetEl = byId('sheet');
+sheetEl.addEventListener('pointerdown', onSheetPointerDown);
+sheetEl.addEventListener('pointermove', onSheetPointerMove, { passive: true });
+sheetEl.addEventListener('pointerup', onSheetPointerEnd);
+sheetEl.addEventListener('pointercancel', onSheetPointerEnd);
+sheetEl.addEventListener('touchmove', (event) => {
+  if (sheetDrag.active) event.preventDefault();
+}, { passive: false });
+byId('hintClose').addEventListener('click', () => {
+  writeFlag('hintDismissed');
+  byId('installHint').hidden = true;
+});
+byId('selectBtn').addEventListener('click', () => setSelecting(true));
+byId('selCancel').addEventListener('click', () => setSelecting(false));
+byId('selAll').addEventListener('click', () => {
+  const items = selectableItems();
+  const all = items.length && items.every((item) => state.selected.has(item.id));
+  state.selected.clear();
+  if (!all) items.forEach((item) => state.selected.add(item.id));
+  renderSelection();
+});
+byId('selSave').addEventListener('click', () => saveToLibrary(selectedFiles()).then(() => setSelecting(false)));
+byId('selMove').addEventListener('click', () => openMoveSheet(selectedItems().map((item) => item.id)));
+byId('selLabel').addEventListener('click', () => openLabelSheet(selectedItems().map((item) => item.id), () => setSelecting(false)));
+byId('labelSeg').addEventListener('click', (event) => {
+  if (event.target.closest('#editLabelsBtn')) return openEditLabelsSheet();
+  const button = event.target.closest('button[data-label]');
+  if (button) enterLabel(button.dataset.label);
+});
+byId('selZip').addEventListener('click', () => {
+  const files = selectedFiles();
+  if (!files.length) return;
+  location.href = files.length === 1 ? fileUrl(files[0].path, true) : zipUrl(files.map((file) => file.path));
+  setSelecting(false);
+});
+byId('installBtn').addEventListener('click', async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  byId('installBtn').hidden = true;
+});
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  installPrompt = event;
+  byId('installBtn').hidden = false;
+});
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch((error) => console.warn('phonedrop: service worker failed', error));
+}
+
+byId('seg').addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-filter]');
+  if (!button) return;
+  state.filter = button.dataset.filter;
+  byId('seg').querySelectorAll('button[data-filter]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+  render();
+});
+
+const feed = byId('feed');
+feed.addEventListener('pointerdown', onPointerDown);
+window.addEventListener('pointermove', onPointerMove, { passive: true });
+window.addEventListener('pointerup', onPointerUp);
+window.addEventListener('pointercancel', onPointerCancel);
+feed.addEventListener('touchmove', (event) => {
+  if (gesture.mode === 'drag' || gesture.mode === 'swipe') event.preventDefault();
+}, { passive: false });
+feed.addEventListener('contextmenu', (event) => {
+  if (gesture.mode) event.preventDefault();
+});
+
+feed.addEventListener('click', (event) => {
+  if (gesture.moved) {
+    event.preventDefault();
+    return;
+  }
+  if (event.target.closest('a')) return;
+  if (event.target.closest('#backBtn')) return enterFolder('');
+  const remove = event.target.closest('[data-swipe-delete]');
+  if (remove) {
+    const shell = shellOf(remove);
+    if (shellKind(shell) === 'folder' && !remove.dataset.armed) {
+      remove.dataset.armed = '1';
+      remove.textContent = 'Sure?';
+      setTimeout(() => {
+        delete remove.dataset.armed;
+        remove.textContent = 'Delete';
+      }, 3000);
+      return;
+    }
+    openSwipeRow = null;
+    setSwipe(shell, -shell.getBoundingClientRect().width, true);
+    deleteShellItem(shell);
+    return;
+  }
+  if (openSwipeRow) {
+    closeSwipe();
+    return;
+  }
+  const copy = event.target.closest('[data-copy]');
+  if (copy) {
+    const note = findNote(copy.dataset.copy);
+    if (note) copyNote(note);
+    return;
+  }
+  const shell = shellOf(event.target);
+  if (!shell) return;
+  const kind = shellKind(shell);
+  if (state.selecting) {
+    if (kind !== 'folder') toggleSelected(shell.dataset.id);
+    return;
+  }
+  if (kind === 'file') return openFileSheet(shell.dataset.file);
+  if (kind === 'note') return openNoteSheet(shell.dataset.note);
+  enterFolder(shell.dataset.folder);
+});
+
+feed.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  const row = event.target.closest('.row[role="button"]');
+  if (!row) return;
+  event.preventDefault();
+  row.click();
+});
+
+document.addEventListener('error', (event) => {
+  const image = event.target;
+  if (!(image instanceof HTMLImageElement) || !image.classList.contains('thumb')) return;
+  const tile = document.createElement('span');
+  tile.className = 'thumb';
+  tile.textContent = image.dataset.ext || 'IMG';
+  image.replaceWith(tile);
+}, true);
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (byId('sheet').classList.contains('open')) closeSheet();
+  else if (state.selecting) setSelecting(false);
+  else if (openSwipeRow) closeSwipe();
+  else if (state.folder || state.label) enterFolder('');
+});
+
+document.addEventListener('paste', (event) => {
+  if (event.target.closest?.('textarea, input')) return;
+  const files = [...(event.clipboardData?.files || [])];
+  if (files.length) {
+    event.preventDefault();
+    sendFiles(files);
+    return;
+  }
+  const text = event.clipboardData?.getData('text') || '';
+  if (text.trim()) {
+    event.preventDefault();
+    openComposer(text);
+  }
+});
+
+window.addEventListener('dragenter', (event) => {
+  if (!hasFiles(event)) return;
+  event.preventDefault();
+  dragDepth += 1;
+  byId('drop').hidden = false;
+});
+window.addEventListener('dragover', (event) => {
+  if (hasFiles(event)) event.preventDefault();
+});
+window.addEventListener('dragleave', () => {
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) byId('drop').hidden = true;
+});
+window.addEventListener('drop', (event) => {
+  if (!hasFiles(event)) return;
+  event.preventDefault();
+  dragDepth = 0;
+  byId('drop').hidden = true;
+  sendFiles(event.dataTransfer.files);
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') scheduleRefresh();
+});
+
+refresh().catch((error) => console.warn('phonedrop: initial load failed', error));
+connect();
+</script>
+</body>
+</html>

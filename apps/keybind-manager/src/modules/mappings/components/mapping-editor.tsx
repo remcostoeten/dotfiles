@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createResource, createSignal } from "solid-js"
 import type { Mapping, Profile } from "@/shared/types/config"
 import { appStore } from "@/app/utilities/store"
+import { Badge } from "@/shared/components/badge"
 import { Button } from "@/shared/components/button"
 import { Dialog } from "@/shared/components/dialog"
 import { MappingRow } from "@/modules/mappings/components/mapping-row"
@@ -124,7 +125,11 @@ export function MappingEditor() {
     >
       {(current: () => Profile) => (
         <div class="flex min-h-0 flex-1 flex-col overflow-auto">
-          <div class="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1.5">
+          <p class="px-4 pt-3 text-[12px] text-ink-faint">
+            Tap/hold keys, shortcuts with modifiers, macros and layers for the profile selected on the
+            left. Simple one-key remaps are easier on the Keyboard tab.
+          </p>
+          <div class="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
             <Button variant="primary" onClick={() => addMapping(null)}>
               + Mapping
             </Button>
@@ -133,19 +138,18 @@ export function MappingEditor() {
             <Button onClick={() => setAddingLayer(true)}>+ Layer</Button>
             <span class="flex-1" />
             <Show when={(check()?.warnings ?? []).length > 0}>
-              <span class="text-[11.5px] text-warn">
-                {check()?.warnings.length} warning(s)
-              </span>
+              <Badge tone="warn" text={`${check()?.warnings.length} warning(s)`} />
             </Show>
             <Show when={(check()?.errors ?? []).length > 0}>
-              <span class="text-[11.5px] text-bad">{check()?.errors.length} error(s)</span>
+              <Badge tone="bad" text={`${check()?.errors.length} error(s)`} />
             </Show>
           </div>
 
           <Show when={current().mappings.length === 0 && current().layers.length === 0}>
-            <p class="p-6 text-center text-ink-faint">
-              No mappings yet. Add one above — for example Caps Lock → Escape.
-            </p>
+            <div class="m-4 flex flex-col items-center gap-1 rounded-md border border-dashed border-line py-9 text-center">
+              <p class="text-ink-dim">No mappings yet.</p>
+              <p class="text-[12px] text-ink-faint">Add one above — for example Caps Lock → Escape.</p>
+            </div>
           </Show>
 
           <div role="list" aria-label="Mappings">
@@ -164,11 +168,9 @@ export function MappingEditor() {
 
           <For each={current().layers}>
             {(layer) => (
-              <section class="mt-2">
-                <div class="flex items-center gap-2 bg-surface-1 px-2 py-1">
-                  <h3 class="text-[11px] font-semibold tracking-wide text-ink-faint uppercase">
-                    Layer: {layer.name}
-                  </h3>
+              <section class="mt-2 border-t border-line">
+                <div class="flex items-center gap-2 bg-surface-1 px-2 py-1.5">
+                  <h3 class="section-heading">Layer: {layer.name}</h3>
                   <Button variant="ghost" onClick={() => addMapping(layer.id)}>
                     + Mapping
                   </Button>
@@ -212,7 +214,7 @@ export function MappingEditor() {
             }
           >
             <input
-              class="w-full rounded border border-line bg-surface-2 px-2 py-1 text-[12.5px]"
+              class="w-full rounded border border-line bg-surface-2 px-2 py-1 text-[12.5px] transition-colors duration-100"
               placeholder="layer name (e.g. nav)"
               aria-label="Layer name"
               value={layerName()}

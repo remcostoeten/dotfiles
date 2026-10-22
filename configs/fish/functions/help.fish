@@ -443,7 +443,7 @@ function _show_dotfiles_overview
     c "Editor & Tools:"
     echo "  Editor:    Neovim  (v, vi, vim helper functions)"
     echo "  Terminal:  Fish    (current shell entrypoint)"
-    echo "  File Mgr:  exa     (enhanced ls replacement)"
+    echo "  File Mgr:  eza     (enhanced ls replacement)"
     echo "  Finder:    fzf     (fuzzy finding everywhere)"
     echo ""
     

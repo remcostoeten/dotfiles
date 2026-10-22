@@ -27,6 +27,8 @@ pub struct Profile {
     pub layers: Vec<Layer>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub preserved: Vec<PreservedEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub replaces: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -61,9 +63,21 @@ pub enum InputMode {
     Press,
     Tap,
     Hold,
+    DoubleTap,
+    TripleTap,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+impl InputMode {
+    pub fn tap_count(self) -> Option<u8> {
+        match self {
+            InputMode::DoubleTap => Some(2),
+            InputMode::TripleTap => Some(3),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct KeyAction {
     pub kind: ActionKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -74,16 +88,28 @@ pub struct KeyAction {
     pub layer: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub macro_text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_as: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ActionKind {
+    #[default]
     Key,
     Combo,
     Layer,
     Disable,
     Macro,
+    Text,
+    Command,
+    Launch,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -120,6 +146,7 @@ impl AppConfig {
             mappings: Vec::new(),
             layers: Vec::new(),
             preserved: Vec::new(),
+            replaces: Vec::new(),
         };
         AppConfig {
             version: SCHEMA_VERSION,
@@ -167,6 +194,34 @@ pub fn slug(input: &str) -> String {
 
 pub fn managed_filename(profile: &Profile) -> String {
     format!("{MANAGED_PREFIX}-{}.conf", slug(&profile.id))
+}
+
+/// Foreign keyd config filenames that enabled profiles have taken over and
+/// that must be moved out of `/etc/keyd` on apply.
+pub fn retired_filenames(config: &AppConfig) -> Vec<String> {
+    let mut names: Vec<String> = config
+        .profiles
+        .iter()
+        .filter(|p| p.enabled)
+        .flat_map(|p| p.replaces.iter().cloned())
+        .filter(|n| is_foreign_filename(n))
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// A plain `*.conf` name directly inside `/etc/keyd` that Keybind Manager does not own.
+pub fn is_foreign_filename(name: &str) -> bool {
+    name.ends_with(".conf")
+        && !name.starts_with(MANAGED_PREFIX)
+        && !name.starts_with('.')
+        && !name.contains('/')
+        && !name.contains("..")
+        && name.len() <= 96
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
 }
 
 pub fn is_managed_filename(name: &str) -> bool {

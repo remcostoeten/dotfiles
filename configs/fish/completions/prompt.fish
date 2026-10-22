@@ -1,0 +1,10 @@
+complete -c prompt -f
+complete -c prompt -a '(path basename -E $HOME/.config/dotfiles/configs/starship/prompts/*.toml)' -d 'prompt'
+complete -c prompt -a toggle -d 'Toggle hollow/powerline'
+complete -c prompt -a next -d 'Cycle to next prompt'
+complete -c prompt -a prev -d 'Cycle to previous prompt'
+complete -c prompt -a preview -d 'Render prompts live'
+complete -c prompt -a current -d 'Print active prompt'
+complete -c prompt -a list -d 'List prompts with opacity'
+complete -c prompt -a opacity -d 'Show or set opacity of active prompt'
+complete -c prompt -a help -d 'Show prompt help'

@@ -4,8 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Task } from "@/src/domain/task";
 import { UserInputError } from "@/src/domain/user-input-error";
-import { lifecyclePlugin } from "@/src/plugins/lifecycle";
-import { PluginRegistry } from "@/src/plugins/registry";
+import { runTodo } from "./support/run-todo";
 import { getTodoPaths, TodoStore } from "@/src/storage/todo-store";
 
 const temporaryDirectories: string[] = [];
@@ -46,26 +45,8 @@ test("edit updates a task description without changing its task state", async ()
 test("edit rejects an empty description and unknown task", async () => {
   const store = await createStore([createTask({ id: "1" })]);
 
-  await expect(runCommand("edit", ["1"], store)).rejects.toThrow("Usage: todo edit <id> <description>");
+  await expect(runCommand("edit", ["1"], store)).rejects.toThrow("Usage: todo edit <id> <description…>");
   await expect(runCommand("edit", ["2", "Missing"], store)).rejects.toThrow("Task not found: 2");
-});
-
-test("archive lists completed tasks newest first", async () => {
-  const store = await createStore([
-    createTask({ id: "1", description: "Older", status: "completed", updatedAt: 10 }),
-    createTask({ id: "2", description: "Pending", updatedAt: 30 }),
-    createTask({ id: "3", description: "Newer", status: "completed", updatedAt: 20 }),
-  ]);
-
-  const output = await runCommand("archive", [], store);
-  expect(output.indexOf("Newer")).toBeLessThan(output.indexOf("Older"));
-  expect(output).not.toContain("Pending");
-});
-
-test("archive reports when there are no completed tasks", async () => {
-  const store = await createStore([createTask({ status: "pending" })]);
-
-  expect(await runCommand("archive", [], store)).toContain("No archived tasks found");
 });
 
 function createTask(overrides: Partial<Task> = {}): Task {
@@ -91,18 +72,5 @@ async function createStore(tasks: Task[]): Promise<TodoStore> {
 }
 
 async function runCommand(name: string, args: string[], store: TodoStore): Promise<string> {
-  const registry = new PluginRegistry();
-  registry.use(lifecyclePlugin);
-  const command = registry.getCommand(name);
-  if (command === undefined) throw new Error(`Command not registered: ${name}`);
-
-  let output = "";
-  const stdout = {
-    write(chunk: string | Uint8Array) {
-      output += chunk.toString();
-      return true;
-    },
-  } as Pick<typeof process.stdout, "write">;
-  await command.handler({ args, store, stdout, stderr: stdout, commands: registry.listCommands() });
-  return output;
+  return await runTodo(store, [name, ...args]);
 }

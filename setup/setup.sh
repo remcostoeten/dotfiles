@@ -27,7 +27,7 @@ Options:
     --verbose       Show detailed output
     --passwordless-sudo
                     Configure passwordless sudo for the current user
-    --category C    Install only specific category (essential, langs, fonts, tools, terminals, curl-tools, npm-tools, git-tools, editors, docker, system, hardware, media, desktop, gnome, kde, hyprland)
+    --category C    Install only specific category (essential, langs, fonts, tools, terminals, curl-tools, npm-tools, git-tools, editors, docker, system, hardware, media, desktop, gnome, kde, hyprland, keybind-manager, phonedrop)
     --package P     Install specific package
     -h, --help      Show this help message
 
@@ -713,6 +713,12 @@ install_category() {
         desktop)
             try install_detected_desktop
             ;;
+        keybind-manager)
+            install_keybind_manager
+            ;;
+        phonedrop)
+            install_phonedrop
+            ;;
         gnome)
             try configure_gnome_desktop
             ;;
@@ -799,6 +805,7 @@ install_all() {
     install_category "media"
     install_category "fonts"
     install_category "desktop"
+    install_category "phonedrop"
 }
 
 category=""
@@ -907,7 +914,7 @@ elif [[ -n "$package" ]]; then
     fi
     update_progress "$package"
 else
-    init_progress 14
+    init_progress 15
     run_with_progress "essential"
     run_with_progress "langs"
     run_with_progress "tools"
@@ -922,6 +929,7 @@ else
     run_with_progress "media"
     run_with_progress "fonts"
     run_with_progress "desktop"
+    run_with_progress "phonedrop"
 fi
 
 if should_configure_fish; then

@@ -3,8 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Task } from "@/src/domain/task";
-import { duePlugin } from "@/src/plugins/due";
-import { PluginRegistry } from "@/src/plugins/registry";
+import { runTodo } from "./support/run-todo";
 import { getTodoPaths, TodoStore } from "@/src/storage/todo-store";
 
 const temporaryDirectories: string[] = [];
@@ -188,7 +187,7 @@ test("due list filters by overdue, today, and week", async () => {
   expect(await runDue(["list", "overdue"], store)).not.toContain("soon");
   expect(await runDue(["list", "week"], store)).toContain("soon");
   expect(await runDue(["list", "week"], store)).not.toContain("nextmonth");
-  expect(runDue(["list", "nonsense"], store)).rejects.toThrow("Unknown filter");
+  expect(runDue(["list", "nonsense"], store)).rejects.toThrow("Unknown value for list: nonsense");
 });
 
 test("due list says so when nothing has a due date", async () => {
@@ -274,14 +273,13 @@ test("every help form renders and none of them mutate anything", async () => {
   await runDue(["27", "tomorrow"], store);
   const before = JSON.stringify(await store.loadTasks());
 
-  expect(await runDue(["help"], store)).toContain("todo due");
   expect(await runDue(["-h"], store)).toContain("RELATIVE");
   expect(await runDue(["--help"], store)).toContain("CALENDAR");
-  expect(await runDue(["list", "--help"], store)).toContain("todo due list");
-  expect(await runDue(["27", "--help"], store)).toContain("todo due <todo>");
-  expect(await runDue(["27", "clear", "--help"], store)).toContain("remove a due date");
-  expect(await runDue(["27", "reset", "--help"], store)).toContain("rearm the notification");
+  expect(await runDue(["list", "--help"], store)).toContain("todo due list  ·");
+  expect(await runDue(["27", "--help"], store)).toContain("todo due <todo> [when…]");
+  expect(await runDue(["27", "clear", "--help"], store)).toContain("rearms a fired reminder");
   expect(await runDue(["daemon", "--help"], store)).toContain("background scheduler");
+  expect(await runDue(["daemon", "install", "--help"], store)).toContain("todo due daemon install  ·");
 
   expect(JSON.stringify(await store.loadTasks())).toBe(before);
 });
@@ -291,7 +289,7 @@ test("help wins over a clear or reset that would otherwise run", async () => {
   await runDue(["27", "tomorrow"], store);
 
   await runDue(["27", "clear", "-h"], store);
-  await runDue(["27", "reset", "help"], store);
+  await runDue(["27", "reset", "--help"], store);
 
   expect((await store.loadTasks())[0]?.reminder).toBeDefined();
 });
@@ -351,19 +349,5 @@ export function createTask(overrides: Partial<Task>): Task {
 }
 
 async function runDue(args: string[], store: TodoStore): Promise<string> {
-  const registry = new PluginRegistry();
-  registry.use(duePlugin);
-  const command = registry.getCommand("due");
-  if (command === undefined) throw new Error("due command not registered");
-
-  let output = "";
-  const stdout = {
-    write(chunk: string | Uint8Array) {
-      output += chunk.toString();
-      return true;
-    },
-  } as Pick<typeof process.stdout, "write">;
-
-  await command.handler({ args, store, stdout, stderr: stdout, commands: registry.listCommands() });
-  return output;
+  return await runTodo(store, ["due", ...args]);
 }

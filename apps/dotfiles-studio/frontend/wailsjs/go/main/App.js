@@ -14,46 +14,58 @@ export function CheckPresence(arg1) {
   return window['go']['main']['App']['CheckPresence'](arg1);
 }
 
-export function KeydApplyProfile(arg1) {
-  return window['go']['main']['App']['KeydApplyProfile'](arg1);
+export function PackagesCheckSource(arg1) {
+  return window['go']['main']['App']['PackagesCheckSource'](arg1);
 }
 
-export function KeydDeleteProfile(arg1) {
-  return window['go']['main']['App']['KeydDeleteProfile'](arg1);
+export function PackagesImport(arg1) {
+  return window['go']['main']['App']['PackagesImport'](arg1);
 }
 
-export function KeydListKeys() {
-  return window['go']['main']['App']['KeydListKeys']();
+export function PackagesInstall(arg1, arg2) {
+  return window['go']['main']['App']['PackagesInstall'](arg1, arg2);
 }
 
-export function KeydListProfiles() {
-  return window['go']['main']['App']['KeydListProfiles']();
+export function PackagesInstallAURHelper(arg1, arg2) {
+  return window['go']['main']['App']['PackagesInstallAURHelper'](arg1, arg2);
 }
 
-export function KeydSaveProfile(arg1, arg2) {
-  return window['go']['main']['App']['KeydSaveProfile'](arg1, arg2);
+export function PackagesLoad() {
+  return window['go']['main']['App']['PackagesLoad']();
 }
 
-export function KeydStartCapture() {
-  return window['go']['main']['App']['KeydStartCapture']();
+export function PackagesPickFile() {
+  return window['go']['main']['App']['PackagesPickFile']();
 }
 
-export function KeydStatus() {
-  return window['go']['main']['App']['KeydStatus']();
+export function PackagesRun(arg1, arg2) {
+  return window['go']['main']['App']['PackagesRun'](arg1, arg2);
 }
 
-export function KeydStopCapture() {
-  return window['go']['main']['App']['KeydStopCapture']();
+export function PackagesSave(arg1) {
+  return window['go']['main']['App']['PackagesSave'](arg1);
 }
 
-export function KeydValidate(arg1) {
-  return window['go']['main']['App']['KeydValidate'](arg1);
+export function PackagesUninstall(arg1, arg2) {
+  return window['go']['main']['App']['PackagesUninstall'](arg1, arg2);
+}
+
+export function PackagesVerify(arg1) {
+  return window['go']['main']['App']['PackagesVerify'](arg1);
 }
 
 export function RunInstall(arg1, arg2, arg3) {
   return window['go']['main']['App']['RunInstall'](arg1, arg2, arg3);
 }
 
+export function RunUninstall(arg1, arg2) {
+  return window['go']['main']['App']['RunUninstall'](arg1, arg2);
+}
+
 export function SystemInfo() {
   return window['go']['main']['App']['SystemInfo']();
+}
+
+export function VerifyInstall(arg1) {
+  return window['go']['main']['App']['VerifyInstall'](arg1);
 }

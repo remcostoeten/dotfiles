@@ -1,6 +1,6 @@
-export type InputMode = "press" | "tap" | "hold"
+export type InputMode = "press" | "tap" | "hold" | "doubletap" | "tripletap"
 
-export type ActionKind = "key" | "combo" | "layer" | "disable" | "macro"
+export type ActionKind = "key" | "combo" | "layer" | "disable" | "macro" | "text" | "command" | "launch"
 
 export type KeyInput = {
   key: string
@@ -14,6 +14,10 @@ export type KeyAction = {
   mods?: string[]
   layer?: string
   macro_text?: string
+  text?: string
+  command?: string
+  app?: string
+  run_as?: string
 }
 
 export type Mapping = {
@@ -42,6 +46,7 @@ export type Profile = {
   devices: DeviceRef[]
   mappings: Mapping[]
   layers: Layer[]
+  replaces?: string[]
 }
 
 export type Settings = {

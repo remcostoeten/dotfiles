@@ -19,6 +19,9 @@ ls /usr/bin/keybind-manager-helper
 ```
 
 Both are installed by the native packages; the AppImage cannot provide them.
+On a fresh machine, run `scripts/install.sh` to build and install the app,
+helper, and polkit policy in one step, and `scripts/doctor.sh` to check what's
+missing (keyd, the helper, the policy, pkexec, a running polkit agent).
 
 ## Apply reports "rolled back"
 

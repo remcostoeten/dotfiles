@@ -1,15 +1,18 @@
 use keybind_core::devices::InputDevice;
 use keybind_core::distro::{install_guidance, Capabilities, PackageInfo};
 use keybind_core::export::Bundle;
-use keybind_core::keyd::{generate_all, ManagedFile};
-use keybind_core::model::{migrate, AppConfig};
+use keybind_core::keyd::{generate_all, KeyboardConflict, ManagedFile, ScannedConfig};
+use keybind_core::model::{migrate, AppConfig, Profile};
 use keybind_core::validation::{validate, CheckResult};
 use keybind_core::StructuredError;
 
 use crate::applying::{self, ApplyResult};
 use crate::dotfiles;
+use crate::launchers::{self, DesktopApp};
+use crate::notify;
 use crate::store::{self, LocalState};
 use crate::system::{self, BackendStatus};
+use crate::via::{self, ViaKeyboard};
 
 fn checked_config(value: serde_json::Value) -> Result<AppConfig, StructuredError> {
     migrate(value).map_err(StructuredError::from)
@@ -27,7 +30,7 @@ pub fn get_backend_status() -> BackendStatus {
 
 #[tauri::command]
 pub fn get_devices() -> Vec<InputDevice> {
-    system::keyboards()
+    system::input_devices()
 }
 
 #[tauri::command]
@@ -63,12 +66,38 @@ pub fn apply_config(
 ) -> Result<ApplyResult, StructuredError> {
     let config = checked_config(config)?;
     store::save_config(&config)?;
-    applying::apply(&config, force)
+    let outcome = applying::apply(&config, force);
+    notify::apply_outcome(&outcome);
+    outcome
 }
 
 #[tauri::command]
 pub fn helper_action(action: String) -> Result<String, StructuredError> {
-    applying::helper_action(&action)
+    let outcome = applying::helper_action(&action);
+    notify::helper_outcome(&action, &outcome);
+    outcome
+}
+
+#[tauri::command]
+pub fn scan_keyd_configs() -> Result<Vec<ScannedConfig>, StructuredError> {
+    applying::scan()
+}
+
+#[tauri::command]
+pub fn get_keyboard_conflicts() -> Result<Vec<KeyboardConflict>, StructuredError> {
+    applying::keyboard_conflicts(&system::keyboards())
+}
+
+#[tauri::command]
+pub fn get_keyboard_ownership(
+    config: serde_json::Value,
+) -> Result<Vec<KeyboardConflict>, StructuredError> {
+    applying::keyboard_ownership(&checked_config(config)?, &system::keyboards())
+}
+
+#[tauri::command]
+pub fn import_keyd_config(filename: String) -> Result<Profile, StructuredError> {
+    applying::import_foreign(&filename)
 }
 
 #[tauri::command]
@@ -90,4 +119,57 @@ pub fn export_profiles(
 #[tauri::command]
 pub fn import_bundle(path: String) -> Result<Bundle, StructuredError> {
     dotfiles::import_from(&path)
+}
+
+#[tauri::command]
+pub fn get_session_user() -> Option<String> {
+    launchers::session_user()
+}
+
+#[tauri::command]
+pub fn get_desktop_apps() -> Vec<DesktopApp> {
+    launchers::desktop_apps()
+}
+
+#[tauri::command]
+pub fn via_detect(vendor: String, product: String) -> Result<ViaKeyboard, StructuredError> {
+    via::detect(&vendor, &product)
+}
+
+#[tauri::command]
+pub fn via_read_keymap(
+    vendor: String,
+    product: String,
+    layers: u8,
+    rows: u8,
+    cols: u8,
+) -> Result<Vec<u16>, StructuredError> {
+    via::read_keymap(&vendor, &product, layers, rows, cols)
+}
+
+#[tauri::command]
+pub fn via_set_keycode(
+    vendor: String,
+    product: String,
+    layer: u8,
+    row: u8,
+    col: u8,
+    keycode: u16,
+) -> Result<(), StructuredError> {
+    via::set_keycode(&vendor, &product, layer, row, col, keycode)
+}
+
+#[tauri::command]
+pub fn via_get_layout_options(vendor: String, product: String) -> Result<u32, StructuredError> {
+    via::get_layout_options(&vendor, &product)
+}
+
+#[tauri::command]
+pub fn via_set_layout_options(vendor: String, product: String, options: u32) -> Result<(), StructuredError> {
+    via::set_layout_options(&vendor, &product, options)
+}
+
+#[tauri::command]
+pub fn via_save_layout(path: String, contents: String) -> Result<(), StructuredError> {
+    via::write_file(&path, &contents)
 }

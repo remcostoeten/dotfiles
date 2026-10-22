@@ -4,8 +4,6 @@ Personal Linux dotfiles, shell bootstrap, setup automation, and terminal tools.
 
 This repo is meant to take a fresh or existing Linux machine from base install to a usable development environment. The setup script detects `apt` or `pacman`, installs the default package set, links the managed configs, installs Fish, builds Ghostty from source, and configures the matching desktop path for the current session.
 
-It is primarily Fish-first, but Bash, Zsh, and POSIX shell startup still have a shared minimal runtime so the repo is not locked to Fish forever.
-
 ## Preview
 
 ![Dotfiles CLI screenshot](cli.png)
@@ -14,12 +12,12 @@ The setup script installs the desktop and shell baseline, while the repo also sh
 
 | Area | Included |
 | --- | --- |
-| Shell | Fish config, Starship prompt, shared PATH/runtime setup, Bash/Zsh fallback bootstrap |
+| Shell | Fish config, Starship prompt, shared PATH/runtime setup |
 | Terminal | Ghostty source build, Ghostty config, launcher defaults that prefer Ghostty |
 | Desktop | Auto-detected GNOME, KDE, or Hyprland configuration path |
 | Dev tools | GitHub CLI, lazygit, lazydocker, Docker, Node, pnpm, Bun, Rust, Python, uv |
 | Config links | Managed symlinks for Fish, Git, Ghostty, Fuzzel, Neovim, Agents skills, Zed, Cursor, Hyprland, Waybar, Dunst, and related configs |
-| User commands | `dotfiles`, `launcher`, `todo`, `copy`, `replace`, `ports`, `db`, `wallpaper`, `spellcheck`, `license`, `create-oauth`, `generate-turso-db` |
+| User commands | `dotfiles`, `launcher`, `todo`, `copy`, `replace`, `ports`, `phonedrop`, `db`, `wallpaper`, `spellcheck`, `license`, `create-oauth`, `generate-turso-db` |
 
 Example command surface:
 
@@ -108,9 +106,7 @@ Fish is the primary shell.
 
 - Fish bootstraps from `vendor/fish/bootstrap.fish`
 - Fish runtime loads `cfg` and the Fish-side tool modules
-- Bash, Zsh, and plain POSIX shells use the shared `vendor/sh/bootstrap.sh`
-
-The shared shell layer is intentionally minimal. It exists so Bash and Zsh can keep working without duplicating the full Fish runtime.
+- Plain POSIX shells can source the minimal `vendor/sh/bootstrap.sh`
 
 ## Dotfiles CLI
 
@@ -136,7 +132,7 @@ Most commands follow the same pattern: the implementation lives in `scripts/`, a
 | `launcher` | App launcher wrapper for Fuzzel or KDE KRunner | `-` | `launcher` |
 | `powermenu` | Session power actions | `-` | `powermenu` |
 | `dotfiles` | Browse repo tools, config, and managed symlinks | `-` | `dotfiles symlinks`<br>`dotfiles search ports` |
-| `todo` | Keyboard taskboard and todo manager | [scripts/todo/README.md](scripts/todo/README.md) | `todo`<br>`todo list --upcoming`<br>`todo buy oat milk` |
+| `todo` | Keyboard taskboard and todo manager | [apps/todo-tui/cli/README.md](apps/todo-tui/cli/README.md) | `todo`<br>`todo list --upcoming`<br>`todo buy oat milk` |
 | `ai-history` | Browsable, filterable overview of every Claude Code and Codex session | [scripts/ai-history/README.md](scripts/ai-history/README.md) | `ai-history`<br>`ai-history --grep shieldcn`<br>`ai-history --tool codex --since 7d --json` |
 | `copy` | Clipboard helper for files, paths, git remotes, and trees | [scripts/copy](scripts/copy) | `copy pwd`<br>`copy remote`<br>`copy tree -L 2` |
 | `replace` | Replace a file with current clipboard contents | [scripts/replace.ts](scripts/replace.ts) | `replace ~/.config/nvim/init.lua`<br>`replace ./notes/todo.txt`<br>`replace --help` |
@@ -156,6 +152,8 @@ Most commands follow the same pattern: the implementation lives in `scripts/`, a
 | `unused` | Unused file or code cleanup helper | `-` | `unused --help` |
 | `gc` | Cleanup and garbage-collection helper | `bin/gc` | `gc fix navbar spacing`<br>`gc --all refactor git helper`<br>`gc -n test parser bin/gc` |
 | `ports` | Port and process manager for dev servers and profiles | [scripts/ports](scripts/ports) | `ports 3000`<br>`ports --dry-run 3000`<br>`ports profile fullstack` |
+| `rig` | Dev, start, install and build for any JavaScript project: picks bun or pnpm from the lockfile, handles monorepos, moves to a free port | [apps/rig](apps/rig/README.md) | `rig`<br>`rig start`<br>`rig install` |
+| `phonedrop` | Persistent wifi drop zone for your phone: home-screen web app, files and text both ways, live updates, desktop notifications | [scripts/phonedrop/phonedrop](scripts/phonedrop/phonedrop) | `phonedrop install`<br>`phonedrop qr`<br>`phonedrop open` |
 | `generate-turso-db` | Latest upstream Turso database generator | [upstream](https://github.com/remcostoeten/Turso-db-creator-auto-retrieve-env-credentials) | `generate-turso-db --help`<br>`generate-turso-db interactive` |
 | `create-oauth` | Latest upstream OAuth app automator | [upstream](https://github.com/remcostoeten/oauth-app-automator) | `create-oauth`<br>`create-oauth github`<br>`create-oauth google` |
 | `docker-manager` | Docker management UI | [scripts/docker/README.md](scripts/docker/README.md) | `docker-manager`<br>`docker-manager help`<br>`docker-manager list` |

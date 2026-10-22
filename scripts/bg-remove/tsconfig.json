@@ -8,8 +8,10 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "rootDir": "src"
+    "rewriteRelativeImportExtensions": true,
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": "dist"
   },
   "include": ["src"]
 }

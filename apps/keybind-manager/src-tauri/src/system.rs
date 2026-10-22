@@ -54,9 +54,13 @@ pub fn keyd_status() -> BackendStatus {
     }
 }
 
-pub fn keyboards() -> Vec<InputDevice> {
+pub fn input_devices() -> Vec<InputDevice> {
     let content = std::fs::read_to_string("/proc/bus/input/devices").unwrap_or_default();
     parse_proc_devices(&content)
+}
+
+pub fn keyboards() -> Vec<InputDevice> {
+    input_devices()
         .into_iter()
         .filter(|d| d.keyboard)
         .collect()

@@ -1,0 +1,74 @@
+I: Bus=0003 Vendor=1e71 Product=2606 Version=0111
+N: Name="NZXT NZXT USB MIC"
+P: Phys=usb-0000:00:14.0-7/input3
+H: Handlers=kbd event3 
+B: EV=13
+B: KEY=e000000000000 0
+
+I: Bus=0003 Vendor=1ea7 Product=7777 Version=0111
+N: Name="UBEST zoom65 wireless"
+P: Phys=usb-0000:00:14.0-1.4/input0
+H: Handlers=sysrq kbd leds event4 
+B: EV=120013
+B: KEY=1000000000007 ff9f207ac14057ff febeffdfffefffff fffffffffffffffe
+
+I: Bus=0003 Vendor=1ea7 Product=7777 Version=0111
+N: Name="UBEST zoom65 wireless Consumer Control"
+P: Phys=usb-0000:00:14.0-1.4/input2
+H: Handlers=kbd event5 
+B: EV=1f
+B: KEY=3f00733fff 0 0 483ffff17aff32d bfd4444600000000 1 130ff38b17d000 677bfad9415fed 19ed68000004400 10000002
+B: REL=1040
+
+I: Bus=0003 Vendor=1ea7 Product=7777 Version=0111
+N: Name="UBEST zoom65 wireless System Control"
+P: Phys=usb-0000:00:14.0-1.4/input2
+H: Handlers=kbd event6 
+B: EV=13
+B: KEY=c000 10000000000000 0
+
+I: Bus=0003 Vendor=1ea7 Product=7777 Version=0111
+N: Name="UBEST zoom65 wireless Mouse"
+P: Phys=usb-0000:00:14.0-1.4/input2
+H: Handlers=event7 mouse0 
+B: EV=17
+B: KEY=ff0000 0 0 0 0
+B: REL=1943
+
+I: Bus=0003 Vendor=1532 Product=0086 Version=0111
+N: Name="Razer Basilisk Ultimate"
+P: Phys=usb-0000:00:14.0-8/input0
+H: Handlers=event8 mouse1 
+B: EV=17
+B: KEY=1fff0000 0 0 0 0
+B: REL=1943
+
+I: Bus=0003 Vendor=1532 Product=0086 Version=0111
+N: Name="Razer Basilisk Ultimate"
+P: Phys=usb-0000:00:14.0-8/input2
+H: Handlers=sysrq kbd leds event9 
+B: EV=120013
+B: KEY=1000000000007 ff9f207ac14057ff febeffdfffefffff fffffffffffffffe
+
+I: Bus=0003 Vendor=1532 Product=0086 Version=0111
+N: Name="Razer Basilisk Ultimate"
+P: Phys=usb-0000:00:14.0-8/input1
+H: Handlers=sysrq kbd event10 
+B: EV=10001f
+B: KEY=733eff 0 0 483ffff17aff32d bfd4444600000000 1 130c730b17c007 ffbf7bfad941dfff febeffdfffefffff fffffffffffffffe
+B: REL=1040
+
+I: Bus=0005 Vendor=046d Product=b034 Version=0003
+N: Name="Logitech MX Master 3S"
+P: Phys=00:e0:4c:23:99:87
+H: Handlers=event29 mouse4 
+B: EV=17
+B: KEY=ffff0000 0 0 0 0
+B: REL=1943
+
+I: Bus=0003 Vendor=1038 Product=12ad Version=0111
+N: Name="SteelSeries  SteelSeries Arctis 7 Consumer Control"
+P: Phys=usb-0000:00:14.0-9.2/input5
+H: Handlers=kbd event12 
+B: EV=13
+B: KEY=3800000000 c000000000000 0

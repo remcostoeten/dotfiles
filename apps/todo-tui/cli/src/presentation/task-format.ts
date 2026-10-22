@@ -109,6 +109,22 @@ function truncate(value: string, maximumLength: number): string {
   return value.length > maximumLength ? `${value.slice(0, maximumLength - 3)}...` : value;
 }
 
+/** Cuts a string with ANSI colour codes to `width` visible characters, ending in an ellipsis and a colour reset. */
+export function truncateVisible(value: string, width: number): string {
+  if (getVisibleLength(value) <= width) return value;
+  let output = "";
+  let visible = 0;
+  for (const token of value.match(/\u001B\[[0-9;]*m|[^\u001B]/gu) ?? []) {
+    if (token.startsWith("\u001B")) {
+      output += token;
+    } else if (visible < width - 1) {
+      output += token;
+      visible += 1;
+    }
+  }
+  return `${output}…${RESET}`;
+}
+
 export function getVisibleLength(value: string): number {
   return value.replace(/\u001B\[[0-9;]*m/g, "").length;
 }

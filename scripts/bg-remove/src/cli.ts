@@ -1,17 +1,20 @@
+#!/usr/bin/env node
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { existsSync, statSync, readdirSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { rename } from "node:fs/promises";
-import { extname, basename, dirname, join, relative, resolve as resolvePath } from "node:path";
-import { homedir } from "node:os";
+import { extname, basename, dirname, join, relative } from "node:path";
+import { pickImages, printImage, displayPath } from "./picker.ts";
 import {
   run,
+  preloadModel,
   resolvedPath,
   defaultOutputPath,
   validateInput,
   type CompressionPreset,
   type OutputFormat,
   type Result,
+  type RunOptions,
 } from "./remove-bg.ts";
 
 type Args = {
@@ -28,9 +31,30 @@ type Args = {
   restoreTransparent?: boolean;
 };
 
+const PREVIEW_LIMIT = 4;
+
+function noop(): void {}
+
+function runOptions(input: string, output: string, format: OutputFormat, args: Args): RunOptions {
+  return {
+    input,
+    output,
+    format,
+    ...(args.compression !== undefined ? { compression: args.compression } : {}),
+    ...(args.quality !== undefined ? { quality: args.quality } : {}),
+    ...(args.pngCompressionLevel !== undefined
+      ? { pngCompressionLevel: args.pngCompressionLevel }
+      : {}),
+    ...(args.pngPalette !== undefined ? { pngPalette: args.pngPalette } : {}),
+    ...(args.webpEffort !== undefined ? { webpEffort: args.webpEffort } : {}),
+    ...(args.webpLossless !== undefined ? { webpLossless: args.webpLossless } : {}),
+    ...(args.flipHorizontal ? { flipHorizontal: true } : {}),
+  };
+}
+
 function printHelp(): void {
   console.log(`
-${pc.bold("bg-remove")} — AI background removal
+${pc.bold("bg-remove")}  AI background removal
 
 ${pc.dim("Usage:")}
   bg-remove                         interactive mode
@@ -52,9 +76,15 @@ ${pc.dim("Options:")}
                       rename selected *-transparent files back to original names
   --help, -h          show this help
 
+${pc.dim("Interactive picker:")}
+  Fuzzy search (fzf) over images in the current directory, ~/Pictures,
+  ~/Downloads, ~/Desktop and the rest of your home, with image previews.
+  Tab marks files, Enter confirms. Typing a path such as
+  ~/Downloads/photo.png also works, in the picker and as an argument.
+
 ${pc.dim("Examples:")}
   bg-remove photo.jpg
-  bg-remove photo.jpg --format webp --compression small
+  bg-remove ~/Downloads/photo.jpg --format webp --compression small
   bg-remove photo.jpg --flip
   bg-remove --restore-transparent
   bg-remove photo.jpg --output ./out/result.png
@@ -71,7 +101,11 @@ function parseArgs(argv: ReadonlyArray<string>): Args {
       printHelp();
       process.exit(0);
     }
-    if (a === "--output") { const v = args[++i]; if (v !== undefined) out.output = v; continue; }
+    if (a === "--output") {
+      const v = args[++i];
+      if (v !== undefined) out.output = v;
+      continue;
+    }
     if (a === "--format") {
       const v = args[++i];
       if (v !== "png" && v !== "webp") {
@@ -108,7 +142,10 @@ function parseArgs(argv: ReadonlyArray<string>): Args {
       out.pngCompressionLevel = n;
       continue;
     }
-    if (a === "--png-palette") { out.pngPalette = true; continue; }
+    if (a === "--png-palette") {
+      out.pngPalette = true;
+      continue;
+    }
     if (a === "--webp-effort") {
       const n = Number(args[++i]);
       if (!Number.isInteger(n) || n < 0 || n > 6) {
@@ -118,54 +155,22 @@ function parseArgs(argv: ReadonlyArray<string>): Args {
       out.webpEffort = n;
       continue;
     }
-    if (a === "--webp-lossless") { out.webpLossless = true; continue; }
-    if (a === "--flip" || a === "--flip-horizontal") { out.flipHorizontal = true; continue; }
-    if (a === "--restore-transparent") { out.restoreTransparent = true; continue; }
+    if (a === "--webp-lossless") {
+      out.webpLossless = true;
+      continue;
+    }
+    if (a === "--flip" || a === "--flip-horizontal") {
+      out.flipHorizontal = true;
+      continue;
+    }
+    if (a === "--restore-transparent") {
+      out.restoreTransparent = true;
+      continue;
+    }
     if (!a.startsWith("--")) out.input = a;
   }
 
   return out;
-}
-
-function scanNearbyImages(): { label: string; value: string; hint?: string }[] {
-  const seen = new Set<string>();
-  const items: { label: string; value: string; hint?: string }[] = [];
-  const dirs: string[] = ["."];
-
-  try {
-    for (const e of readdirSync(".", { withFileTypes: true })) {
-      if (e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules") {
-        dirs.push(e.name);
-      }
-    }
-  } catch {}
-
-  for (const d of ["Pictures", "Downloads", "Desktop"].map(d => join(homedir(), d))) {
-    if (existsSync(d)) dirs.push(d);
-  }
-
-  const SCAN_LIMIT = 60;
-  for (const dir of dirs) {
-    if (items.length >= SCAN_LIMIT) break;
-    try {
-      for (const e of readdirSync(dir, { withFileTypes: true })) {
-        if (items.length >= SCAN_LIMIT) break;
-        if (!e.isFile()) continue;
-        const ext = extname(e.name).toLowerCase();
-        if (![".jpg", ".jpeg", ".png", ".webp", ".avif"].includes(ext)) continue;
-        const full = resolvePath(process.cwd(), dir, e.name);
-        if (seen.has(full)) continue;
-        seen.add(full);
-        const rel = relative(process.cwd(), full);
-        const dirPart = dirname(rel);
-        const item: { label: string; value: string; hint?: string } = { label: basename(rel), value: full };
-        if (dirPart !== ".") item.hint = dirPart;
-        items.push(item);
-      }
-    } catch {}
-  }
-
-  return items;
 }
 
 function transparentTargetPath(path: string): string | null {
@@ -175,32 +180,18 @@ function transparentTargetPath(path: string): string | null {
   return join(dirname(path), `${base.slice(0, "-transparent".length * -1)}${ext}`);
 }
 
-function scanTransparentImages(): { label: string; value: string; hint?: string }[] {
-  const items = scanNearbyImages()
-    .filter(item => transparentTargetPath(item.value) !== null)
-    .map(item => {
-      const target = transparentTargetPath(item.value);
-      if (target) return { ...item, hint: `→ ${relative(process.cwd(), target)}` };
-      return item;
-    });
-  return items;
-}
-
-function fileSize(path: string): string {
-  try {
-    const bytes = statSync(path).size;
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  } catch {
-    return "unknown size";
-  }
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileSize(path: string): string {
+  try {
+    return formatBytes(statSync(path).size);
+  } catch {
+    return "unknown size";
+  }
 }
 
 function sizeStats(inputBytes: number, outputBytes: number): string {
@@ -223,60 +214,67 @@ function compressionHint(preset: CompressionPreset): string {
   return "minimal extra compression";
 }
 
+function fileLine(path: string): string {
+  const ext = extname(path).slice(1).toUpperCase();
+  return `${pc.bold(basename(path))}  ${pc.dim(`${ext} · ${fileSize(path)} · ${displayPath(dirname(path))}`)}`;
+}
+
+function previewFiles(files: string[]): void {
+  console.log();
+  for (const file of files.slice(0, PREVIEW_LIMIT)) {
+    console.log(`  ${fileLine(file)}`);
+    printImage(file);
+    console.log();
+  }
+  if (files.length > PREVIEW_LIMIT) {
+    console.log(pc.dim(`  and ${files.length - PREVIEW_LIMIT} more`));
+    console.log();
+  }
+}
+
+function exitIfCancelled(value: unknown, message = "Cancelled"): void {
+  if (p.isCancel(value)) {
+    p.cancel(message);
+    process.exit(0);
+  }
+}
+
+function validatedFiles(paths: string[]): string[] {
+  const files = paths.map((path) => resolvedPath(path));
+  for (const file of files) {
+    const err = validateInput(file);
+    if (err) {
+      p.cancel(err);
+      process.exit(1);
+    }
+  }
+  return files;
+}
+
 async function interactiveMode(prefill: Args): Promise<void> {
   console.clear();
-
   p.intro(pc.bgWhite(pc.black(" bg-remove ")));
+  preloadModel().catch(noop);
 
-  // --- FILE SELECTION ---
-  const files: string[] = [];
-
+  let files: string[];
   if (prefill.input) {
-    const resolved = resolvedPath(prefill.input);
-    const err = validateInput(resolved);
-    if (err) { console.error(pc.red(err)); process.exit(1); }
-    files.push(resolved);
+    files = validatedFiles([prefill.input]);
   } else {
-    const manualPath = await p.text({
-      message: "Enter image path (optional, leave empty to browse)",
-      placeholder: "photo.jpg",
-      validate(v) {
-        if (!v || !v.trim()) return undefined;
-        const r = resolvedPath(v.trim());
-        return validateInput(r) ?? undefined;
-      },
-    });
-    if (p.isCancel(manualPath)) { p.cancel("Cancelled"); process.exit(0); }
-    if (manualPath.trim()) {
-      files.push(resolvedPath(manualPath.trim()));
+    const picked = await pickImages({ message: "Select images" });
+    if (picked === null) {
+      p.cancel("Cancelled");
+      process.exit(0);
     }
-
-    const images = scanNearbyImages();
-    if (images.length > 0) {
-      const picked = await p.multiselect<string>({
-        message: "Select images (space to toggle, enter to confirm)",
-        options: images,
-        required: false,
-      });
-      if (p.isCancel(picked)) { p.cancel("Cancelled"); process.exit(0); }
-      files.push(...(picked as string[]));
-    }
-
-    if (files.length === 0) {
+    if (picked.length === 0) {
       p.cancel("No files selected");
       process.exit(0);
     }
+    files = validatedFiles(picked);
   }
 
-  // preview selected files
-  const fileList = files.map(f => {
-    const s = fileSize(f);
-    const e = extname(f).slice(1).toUpperCase();
-    return `${pc.bold(basename(f))}  ${pc.dim(`${e} · ${s}`)}`;
-  });
-  p.note(fileList.join("\n"), `Selected ${files.length} file${files.length > 1 ? "s" : ""}`);
+  p.log.step(`Selected ${files.length} file${files.length > 1 ? "s" : ""}`);
+  previewFiles(files);
 
-  // --- FORMAT ---
   const format = await p.select<OutputFormat>({
     message: "Output format",
     initialValue: prefill.format ?? "png",
@@ -285,7 +283,7 @@ async function interactiveMode(prefill: Args): Promise<void> {
       { value: "webp", label: "WebP", hint: "lossy, smaller file" },
     ],
   });
-  if (p.isCancel(format)) { p.cancel("Cancelled"); process.exit(0); }
+  exitIfCancelled(format);
 
   let quality: number | undefined;
   if ((format as string) === "webp") {
@@ -298,7 +296,7 @@ async function interactiveMode(prefill: Args): Promise<void> {
         if (isNaN(n) || n < 0 || n > 100) return "Enter a number between 0 and 100";
       },
     });
-    if (p.isCancel(q)) { p.cancel("Cancelled"); process.exit(0); }
+    exitIfCancelled(q);
     quality = Number(q);
   }
 
@@ -312,38 +310,37 @@ async function interactiveMode(prefill: Args): Promise<void> {
       { value: "none", label: "None", hint: "minimal extra compression" },
     ],
   });
-  if (p.isCancel(compression)) { p.cancel("Cancelled"); process.exit(0); }
+  exitIfCancelled(compression);
 
-  const flipHorizontal = prefill.flipHorizontal ?? await p.confirm({
-    message: "Mirror output left-to-right?",
-    initialValue: false,
-  });
-  if (p.isCancel(flipHorizontal)) { p.cancel("Cancelled"); process.exit(0); }
+  const flipHorizontal =
+    prefill.flipHorizontal ??
+    (await p.confirm({
+      message: "Mirror output left-to-right?",
+      initialValue: false,
+    }));
+  exitIfCancelled(flipHorizontal);
 
-  // --- OUTPUT ---
-  const outputs: string[] = files.map(f => defaultOutputPath(f, format as OutputFormat));
+  const outputs: string[] = files.map((f) => defaultOutputPath(f, format as OutputFormat));
 
-  // single file → allow custom output path
   if (files.length === 1) {
     const suggestedOut = outputs[0] as string;
     const custom = await p.text({
       message: "Output path",
-      placeholder: suggestedOut,
+      placeholder: displayPath(suggestedOut),
       initialValue: prefill.output ?? "",
       validate(v) {
         if (!v || !v.trim()) return undefined;
-        const dir = resolvedPath(v.trim()).split("/").slice(0, -1).join("/");
-        if (dir && !existsSync(dir)) return `Directory does not exist: ${dir}`;
+        const dir = dirname(resolvedPath(v.trim()));
+        if (!existsSync(dir)) return `Directory does not exist: ${dir}`;
       },
     });
-    if (p.isCancel(custom)) { p.cancel("Cancelled"); process.exit(0); }
-    outputs[0] = custom.trim() || suggestedOut;
+    exitIfCancelled(custom);
+    outputs[0] = (custom as string).trim() ? resolvedPath((custom as string).trim()) : suggestedOut;
   }
 
-  // --- SUMMARY ---
   const summaryLines = files.map((f, i) => {
     const out = outputs[i] as string;
-    return `${pc.dim("input")}   ${f}\n${pc.dim("output")}  ${out}`;
+    return `${pc.dim("input")}   ${displayPath(f)}\n${pc.dim("output")}  ${displayPath(out)}`;
   });
   p.note(
     [
@@ -352,35 +349,43 @@ async function interactiveMode(prefill: Args): Promise<void> {
       `${pc.dim("compression")}  ${compression as string}  ${pc.dim(compressionHint(compression as CompressionPreset))}`,
       `${pc.dim("mirror")}  ${flipHorizontal ? "yes" : "no"}`,
     ].join("\n\n"),
-    `Summary (${files.length} file${files.length > 1 ? "s" : ""})`
+    `Summary (${files.length} file${files.length > 1 ? "s" : ""})`,
   );
 
   const confirmed = await p.confirm({ message: "Start processing?" });
-  if (p.isCancel(confirmed) || !confirmed) { p.cancel("Aborted"); process.exit(0); }
+  if (p.isCancel(confirmed) || !confirmed) {
+    p.cancel("Aborted");
+    process.exit(0);
+  }
 
-  // --- PROCESS ---
+  const chosen: Args = {
+    ...prefill,
+    compression: compression as CompressionPreset,
+    flipHorizontal: flipHorizontal === true,
+    ...(quality !== undefined ? { quality } : {}),
+  };
+  function startRun(i: number): Promise<Result> {
+    return run(
+      runOptions(files[i] as string, outputs[i] as string, format as OutputFormat, chosen),
+    );
+  }
+
   const results: Result[] = [];
+  let ahead: Promise<Result> | undefined;
   for (let i = 0; i < files.length; i++) {
     const f = files[i] as string;
-    const out = outputs[i] as string;
-    const label = files.length > 1 ? `[${i + 1}/${files.length}] ${basename(f)}` : "Removing background";
+    const label =
+      files.length > 1 ? `[${i + 1}/${files.length}] ${basename(f)}` : "Removing background";
+
+    const current = ahead ?? startRun(i);
+    ahead = i + 1 < files.length ? startRun(i + 1) : undefined;
+    ahead?.catch(noop);
 
     const spinner = p.spinner();
     spinner.start(label);
 
     try {
-      const result = await run({
-        input: f,
-        output: out,
-        format: format as OutputFormat,
-        compression: compression as CompressionPreset,
-        ...(quality !== undefined ? { quality } : {}),
-        ...(prefill.pngCompressionLevel !== undefined ? { pngCompressionLevel: prefill.pngCompressionLevel } : {}),
-        ...(prefill.pngPalette !== undefined ? { pngPalette: prefill.pngPalette } : {}),
-        ...(prefill.webpEffort !== undefined ? { webpEffort: prefill.webpEffort } : {}),
-        ...(prefill.webpLossless !== undefined ? { webpLossless: prefill.webpLossless } : {}),
-        ...(flipHorizontal ? { flipHorizontal: true } : {}),
-      });
+      const result = await current;
       spinner.stop(pc.green("✓"));
       results.push(result);
     } catch (err) {
@@ -390,9 +395,10 @@ async function interactiveMode(prefill: Args): Promise<void> {
     }
   }
 
-  // --- DONE ---
-  const outLines = results.map(r =>
-    `${pc.green("✓")} ${pc.bold(basename(r.outputPath))}  ${pc.dim(sizeStats(r.inputBytes, r.outputBytes))}`
+  previewFiles(results.map((r) => r.outputPath));
+  const outLines = results.map(
+    (r) =>
+      `${pc.green("✓")} ${pc.bold(displayPath(r.outputPath))}  ${pc.dim(sizeStats(r.inputBytes, r.outputBytes))}`,
   );
   p.outro(outLines.join("\n"));
 }
@@ -401,33 +407,37 @@ async function restoreTransparentMode(): Promise<void> {
   console.clear();
   p.intro(pc.bgWhite(pc.black(" bg-remove restore ")));
 
-  const transparentFiles = scanTransparentImages();
-  if (transparentFiles.length === 0) {
-    p.cancel("No *-transparent image files found nearby");
+  const picked = await pickImages({
+    message: "Select transparent files",
+    filter: (path) => transparentTargetPath(path) !== null,
+  });
+  if (picked === null) {
+    p.cancel("Cancelled");
     process.exit(0);
   }
-
-  const picked = await p.multiselect<string>({
-    message: "Select transparent files to overwrite originals",
-    options: transparentFiles,
-    required: false,
-  });
-  if (p.isCancel(picked)) { p.cancel("Cancelled"); process.exit(0); }
-
-  const files = picked as string[];
-  if (files.length === 0) {
+  if (picked.length === 0) {
     p.cancel("No files selected");
     process.exit(0);
   }
 
-  const summary = files.map(file => {
-    const target = transparentTargetPath(file);
-    return `${pc.dim("from")}  ${file}\n${pc.dim("to")}    ${target ?? ""}${target && existsSync(target) ? pc.dim("  overwrite") : ""}`;
+  const files = picked.filter((file) => transparentTargetPath(file) !== null);
+  if (files.length === 0) {
+    p.cancel("Selected files are not *-transparent files");
+    process.exit(1);
+  }
+
+  const summary = files.map((file) => {
+    const target = transparentTargetPath(file) as string;
+    const overwrite = existsSync(target) ? pc.dim("  overwrite") : "";
+    return `${pc.dim("from")}  ${displayPath(file)}\n${pc.dim("to")}    ${displayPath(target)}${overwrite}`;
   });
   p.note(summary.join("\n\n"), `Restore ${files.length} file${files.length > 1 ? "s" : ""}`);
 
   const confirmed = await p.confirm({ message: "Overwrite originals?" });
-  if (p.isCancel(confirmed) || !confirmed) { p.cancel("Aborted"); process.exit(0); }
+  if (p.isCancel(confirmed) || !confirmed) {
+    p.cancel("Aborted");
+    process.exit(0);
+  }
 
   const restored: string[] = [];
   for (const file of files) {
@@ -437,39 +447,35 @@ async function restoreTransparentMode(): Promise<void> {
     restored.push(target);
   }
 
-  p.outro(restored.map(file => `${pc.green("✓")} ${relative(process.cwd(), file)}`).join("\n"));
+  p.outro(restored.map((file) => `${pc.green("✓")} ${relative(process.cwd(), file)}`).join("\n"));
 }
 
 async function directMode(args: Args): Promise<void> {
-  if (!args.input) { printHelp(); process.exit(1); }
+  if (!args.input) {
+    printHelp();
+    process.exit(1);
+  }
 
   const input = resolvedPath(args.input);
   const err = validateInput(input);
-  if (err) { console.error(pc.red(err)); process.exit(1); }
+  if (err) {
+    console.error(pc.red(err));
+    process.exit(1);
+  }
 
   const spinner = p.spinner();
   const fmt = args.format ?? "png";
-  const out = args.output ?? defaultOutputPath(input, fmt);
+  const out = args.output ? resolvedPath(args.output) : defaultOutputPath(input, fmt);
 
   p.intro(pc.bgWhite(pc.black(" bg-remove ")));
   spinner.start(`Processing ${pc.bold(basename(input))}`);
 
   try {
-    const result = await run({
-      input,
-      output: out,
-      format: fmt,
-      ...(args.compression !== undefined ? { compression: args.compression } : {}),
-      ...(args.quality !== undefined ? { quality: args.quality } : {}),
-      ...(args.pngCompressionLevel !== undefined ? { pngCompressionLevel: args.pngCompressionLevel } : {}),
-      ...(args.pngPalette !== undefined ? { pngPalette: args.pngPalette } : {}),
-      ...(args.webpEffort !== undefined ? { webpEffort: args.webpEffort } : {}),
-      ...(args.webpLossless !== undefined ? { webpLossless: args.webpLossless } : {}),
-      ...(args.flipHorizontal ? { flipHorizontal: true } : {}),
-    });
+    const result = await run(runOptions(input, out, fmt, args));
     spinner.stop("Done");
+    previewFiles([result.outputPath]);
     p.outro(
-      `${pc.green("✓")} ${pc.bold(basename(result.outputPath))}  ${pc.dim(sizeStats(result.inputBytes, result.outputBytes))}`
+      `${pc.green("✓")} ${pc.bold(displayPath(result.outputPath))}  ${pc.dim(sizeStats(result.inputBytes, result.outputBytes))}`,
     );
   } catch (e) {
     spinner.stop("Failed");
@@ -485,7 +491,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  const isInteractive = !args.input || process.argv.includes("--interactive") || process.argv.includes("-i");
+  const isInteractive =
+    !args.input || process.argv.includes("--interactive") || process.argv.includes("-i");
 
   if (isInteractive) {
     if (!args.input) {
@@ -496,10 +503,14 @@ async function main(): Promise<void> {
         initialValue: "remove",
         options: [
           { value: "remove", label: "Remove background", hint: "create transparent output" },
-          { value: "restore", label: "Restore names", hint: "rename *-transparent files back to originals" },
+          {
+            value: "restore",
+            label: "Restore names",
+            hint: "rename *-transparent files back to originals",
+          },
         ],
       });
-      if (p.isCancel(mode)) { p.cancel("Cancelled"); process.exit(0); }
+      exitIfCancelled(mode);
       if (mode === "restore") {
         await restoreTransparentMode();
         return;

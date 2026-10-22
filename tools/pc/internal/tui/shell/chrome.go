@@ -59,7 +59,7 @@ func (c Chrome) TopBar(rc render.Context, nav navigation.State, routes []navigat
 
 // Sidebar lists the routes vertically, collapsing to initials when the
 // terminal is too narrow for titles.
-func (c Chrome) Sidebar(rc render.Context, nav navigation.State, routes []navigation.Route) string {
+func (c Chrome) Sidebar(rc render.Context, nav navigation.State, routes []navigation.Route, state registry.SidebarState) string {
 	st := rc.Styles()
 	area := rc.Rect
 	if area.IsEmpty() {
@@ -67,14 +67,17 @@ func (c Chrome) Sidebar(rc render.Context, nav navigation.State, routes []naviga
 	}
 
 	rows := make([]string, 0, len(routes))
-	for _, r := range routes {
-		label := " " + r.Title
-		if rc.Breakpoint == layout.Normal {
-			label = " " + initial(r.Title)
-		}
-		style := st.NavItem
+	for i, r := range routes {
+		lead, style := " ", st.NavItem
 		if r.ID == nav.Root() {
 			style = st.NavItemActive
+		}
+		if state.Focused && i == state.Cursor {
+			lead, style = rc.Glyphs.Chevron, st.Selection
+		}
+		label := lead + r.Title
+		if rc.Breakpoint == layout.Normal {
+			label = lead + initial(r.Title)
 		}
 		rows = append(rows, style.Render(render.Fit(label, area.Width, render.Left, "")))
 	}

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+key=org.gnome.desktop.a11y.applications
+if [[ "$(gsettings get $key screen-reader-enabled)" == "true" ]]; then
+    gsettings set $key screen-reader-enabled false
+    pkill -x orca || true
+    echo "Screen reader off"
+else
+    gsettings set $key screen-reader-enabled true
+    pgrep -x orca >/dev/null || (setsid orca --replace >/dev/null 2>&1 &)
+    echo "Screen reader on"
+fi

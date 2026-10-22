@@ -69,7 +69,11 @@ fn validate_profile(profile: &Profile, result: &mut CheckResult) {
                 Some(&profile.id),
             );
         }
-        if keys::is_mod(&layer.name) || layer.name == "main" || layer.name == "ids" {
+        if keys::is_mod(&layer.name)
+            || ["main", "ids", "global"].contains(&layer.name.as_str())
+            || layer.name.starts_with("tap2_")
+            || layer.name.starts_with("tap3_")
+        {
             push_error(
                 result,
                 "RESERVED_LAYER",
@@ -118,7 +122,91 @@ fn validate_profile(profile: &Profile, result: &mut CheckResult) {
         }
     }
 
+    for layer in &profile.layers {
+        for mapping in layer.mappings.iter().filter(|m| m.enabled) {
+            if mapping.source.mode != InputMode::Press || !mapping.source.mods.is_empty() {
+                push_error(
+                    result,
+                    "LAYER_PRESS_ONLY",
+                    format!("keys in layer '{}' can only be plain presses", layer.name),
+                    Some(&mapping.id),
+                    Some(&profile.id),
+                );
+            }
+        }
+    }
+
+    check_taps(profile, result);
     check_dangerous(profile, result);
+}
+
+fn check_taps(profile: &Profile, result: &mut CheckResult) {
+    let enabled: Vec<&Mapping> = profile.mappings.iter().filter(|m| m.enabled).collect();
+    let find = |mapping: &Mapping, mode: InputMode| {
+        enabled.iter().copied().find(|m| {
+            m.source.key == mapping.source.key
+                && m.source.mods.is_empty()
+                && m.source.mode == mode
+        })
+    };
+    for mapping in &enabled {
+        match mapping.source.mode {
+            InputMode::Tap if mapping.source.mods.is_empty() => {
+                if let Some(press) = find(mapping, InputMode::Press) {
+                    push_error(
+                        result,
+                        "TAP_CONFLICT",
+                        format!("'{}' has both a press and a tap action", mapping.source.key),
+                        Some(&press.id),
+                        Some(&profile.id),
+                    );
+                }
+            }
+            InputMode::DoubleTap | InputMode::TripleTap => {
+                if !mapping.source.mods.is_empty() {
+                    push_error(
+                        result,
+                        "TAP_WITH_MODS",
+                        "double and triple taps cannot use modifiers",
+                        Some(&mapping.id),
+                        Some(&profile.id),
+                    );
+                    continue;
+                }
+                let earlier: &[InputMode] = if mapping.source.mode == InputMode::TripleTap {
+                    &[InputMode::Press, InputMode::Tap, InputMode::DoubleTap]
+                } else {
+                    &[InputMode::Press, InputMode::Tap]
+                };
+                for mode in earlier {
+                    if let Some(before) = find(mapping, *mode).filter(|m| !types_keys(m)) {
+                        push_error(
+                            result,
+                            "TAP_CHAIN",
+                            format!(
+                                "'{}' is tapped again afterwards, so this can only send keys or text",
+                                mapping.source.key
+                            ),
+                            Some(&before.id),
+                            Some(&profile.id),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn types_keys(mapping: &Mapping) -> bool {
+    matches!(
+        mapping.target.kind,
+        ActionKind::Key
+            | ActionKind::Combo
+            | ActionKind::Macro
+            | ActionKind::Text
+            | ActionKind::Disable
+    )
 }
 
 fn validate_mapping(
@@ -210,6 +298,32 @@ fn validate_mapping(
                     Some(&mapping.id),
                     Some(&profile.id),
                 );
+            }
+        }
+        ActionKind::Text | ActionKind::Command | ActionKind::Launch => {
+            let (value, what) = match mapping.target.kind {
+                ActionKind::Text => (&mapping.target.text, "text"),
+                ActionKind::Command => (&mapping.target.command, "command"),
+                _ => (&mapping.target.app, "application"),
+            };
+            if value.as_deref().unwrap_or("").trim().is_empty() {
+                push_error(
+                    result,
+                    "MISSING_TARGET",
+                    format!("mapping has no {what}"),
+                    Some(&mapping.id),
+                    Some(&profile.id),
+                );
+            }
+            if mapping.target.kind != ActionKind::Text && mapping.target.run_as.is_none() {
+                result.warnings.push(Issue {
+                    code: "RUNS_AS_ROOT".into(),
+                    message: format!(
+                        "this {what} runs as root without access to your desktop session"
+                    ),
+                    mapping_id: Some(mapping.id.clone()),
+                    profile_id: Some(profile.id.clone()),
+                });
             }
         }
         ActionKind::Disable => {}
@@ -357,6 +471,7 @@ mod tests {
             mods: Vec::new(),
             layer: None,
             macro_text: None,
+            ..Default::default()
         }
     }
 
@@ -367,6 +482,7 @@ mod tests {
             mods: Vec::new(),
             layer: None,
             macro_text: None,
+            ..Default::default()
         }
     }
 
@@ -404,6 +520,7 @@ mod tests {
                 mods: Vec::new(),
                 layer: Some("nav".into()),
                 macro_text: None,
+                ..Default::default()
             },
         )]);
         let result = validate(&config);
@@ -429,6 +546,21 @@ mod tests {
             .warnings
             .iter()
             .any(|w| w.message.contains("Control")));
+    }
+
+    #[test]
+    fn rejects_command_before_a_double_tap() {
+        let command = KeyAction {
+            kind: ActionKind::Command,
+            command: Some("x".into()),
+            run_as: Some("me".into()),
+            ..Default::default()
+        };
+        let first = mapping("first", "f1", command);
+        let mut second = mapping("second", "f1", key_target("esc"));
+        second.source.mode = InputMode::DoubleTap;
+        let result = validate(&config_with(vec![first, second]));
+        assert!(result.errors.iter().any(|e| e.code == "TAP_CHAIN"));
     }
 
     #[test]

@@ -65,10 +65,10 @@ var AUTO_CORRECT_THRESHOLD = 3;
 var GIVE_UP_AFTER_REJECTIONS = 2;
 function decideCorrection(memory, token, candidates) {
   const records = memory[token] ?? {};
-  const learned = Object.entries(records).filter(([candidate, record2]) => candidates.includes(candidate) && record2.accepted > record2.rejected).sort(([, left], [, right]) => right.accepted - left.accepted)[0];
+  const learned = Object.entries(records).filter(([candidate, record]) => candidates.includes(candidate) && record.accepted > record.rejected).sort(([, left], [, right]) => right.accepted - left.accepted)[0];
   if (learned !== undefined) {
-    const [correction, record2] = learned;
-    return { correction, mode: record2.accepted >= AUTO_CORRECT_THRESHOLD && record2.rejected === 0 ? "auto" : "prompt" };
+    const [correction, record] = learned;
+    return { correction, mode: record.accepted >= AUTO_CORRECT_THRESHOLD && record.rejected === 0 ? "auto" : "prompt" };
   }
   const closest = findClosest(token, candidates);
   if (closest === undefined)
@@ -93,29 +93,8 @@ function isAutoCorrected(record) {
 function isIgnored(record) {
   return record.accepted === 0 && record.rejected >= GIVE_UP_AFTER_REJECTIONS;
 }
-var ID_LIST_PART = /^\d+(-\d+)?$/;
-function argumentsFitShape(shape, rest, taskIds) {
-  switch (shape) {
-    case "none":
-      return rest.every((argument) => argument.startsWith("-"));
-    case "task-id": {
-      const first = rest[0];
-      return first !== undefined && taskIds.has(first.replace(/^#/, ""));
-    }
-    case "task-ids":
-      if (rest.length === 0)
-        return false;
-      if (rest.length === 1 && rest[0] === "all")
-        return true;
-      return rest.every((argument) => argument.replace(/^#/, "").split(",").every((part) => ID_LIST_PART.test(part)));
-    case "text":
-      return rest.length > 0;
-    case "any":
-      return rest.length <= 3;
-  }
-}
 function replaceToken(args, token, correction) {
-  const index = args.findIndex((argument2) => argument2 === token || argument2.startsWith(`${token}=`) || argument2.endsWith(`=${token}`));
+  const index = args.findIndex((argument) => argument === token || argument.startsWith(`${token}=`) || argument.endsWith(`=${token}`));
   if (index === -1)
     return;
   const argument = args[index];
@@ -127,46 +106,340 @@ function replaceToken(args, token, correction) {
 var DIM = "\x1B[2m";
 var BOLD = "\x1B[1m";
 var RESET = "\x1B[0m";
-async function correctCommandName(args, registry, store, io) {
-  const [token, ...rest] = args;
-  if (token === undefined)
-    return;
-  const dashed = token.startsWith("-");
-  const candidates = registry.listCommands().flatMap((command) => [command.name, ...command.help.aliases ?? []]).filter((name) => name.startsWith("-") === dashed);
-  const pendingIds = new Set((await store.loadTasks()).filter((task) => task.status === "pending").map((task) => task.id));
-  return await applyCorrection(args, token, candidates, store, io, (correction) => {
-    const command = registry.getCommand(correction);
-    return command !== undefined && argumentsFitShape(command.help.positional ?? "none", rest, pendingIds);
-  });
-}
-async function correctRejectedToken(error, commandName, args, store, io) {
-  return await applyCorrection(args, error.token, error.candidates, store, io, () => true, commandName);
-}
-async function applyCorrection(args, token, candidates, store, io, accepts, commandName) {
+async function resolveTypo(error, argv, store, io) {
   const memory = await store.loadTypoMemory();
-  const decision = decideCorrection(memory, token, candidates);
-  if (decision === undefined || !accepts(decision.correction))
-    return;
-  const corrected = replaceToken(args, token, decision.correction);
+  const decision = decideCorrection(memory, error.token, error.candidates);
+  if (decision === undefined)
+    return { kind: "none" };
+  const corrected = replaceToken(argv, error.token, decision.correction);
   if (corrected === undefined)
-    return;
+    return { kind: "none" };
   if (decision.mode === "auto") {
-    io.notify(`${DIM}autocorrected ${token} \u2192 ${decision.correction}  (todo typos forget ${token} to stop)${RESET}
+    io.notify(`${DIM}autocorrected ${error.token} \u2192 ${decision.correction}  (todo typos forget ${error.token} to stop)${RESET}
 `);
-    return corrected;
+    return { kind: "corrected", argv: corrected };
   }
-  const shown = commandName === undefined ? corrected : [commandName, ...corrected];
-  const answer = await io.confirm(`Did you mean ${BOLD}todo ${shown.join(" ")}${RESET}? [Y/n] `);
+  const answer = await io.confirm(`Did you mean ${BOLD}todo ${corrected.join(" ")}${RESET}? [Y/n] `);
   if (answer === undefined)
-    return;
-  const updated = recordDecision(memory, token, decision.correction, answer);
+    return { kind: "unanswered", suggestion: decision.correction };
+  const updated = recordDecision(memory, error.token, decision.correction, answer);
   await store.saveTypoMemory(updated);
-  const record = updated[token]?.[decision.correction];
+  const record = updated[error.token]?.[decision.correction];
   if (answer && record !== undefined && isAutoCorrected(record)) {
-    io.notify(`${DIM}learned: ${token} now autocorrects to ${decision.correction}${RESET}
+    io.notify(`${DIM}learned: ${error.token} now autocorrects to ${decision.correction}${RESET}
 `);
   }
-  return answer ? corrected : undefined;
+  return answer ? { kind: "corrected", argv: corrected } : { kind: "declined" };
+}
+
+// src/command-spec/tree.ts
+var HELP_FLAGS = new Set(["-h", "--help"]);
+function findChild(node, token) {
+  return node.subcommands?.find((child) => child.name === token || child.aliases?.includes(token) === true);
+}
+function childNames(node) {
+  return (node.subcommands ?? []).filter((child) => child.hidden !== true).flatMap((child) => [child.name, ...child.aliases ?? []]);
+}
+function flagSpellings(flag) {
+  return [`--${flag.name}`, ...(flag.aliases ?? []).map((alias) => `--${alias}`), ...flag.short === undefined ? [] : [`-${flag.short}`]];
+}
+function findFlag(node, spelling) {
+  return node.flags?.find((flag) => flagSpellings(flag).includes(spelling));
+}
+function visibleFlags(node) {
+  return (node.flags ?? []).filter((flag) => flag.hidden !== true);
+}
+function walkSpecs(root) {
+  const visits = [];
+  function visit(node, path) {
+    for (const child of node.subcommands ?? []) {
+      const childPath = [...path, child];
+      visits.push({ node: child, path: childPath });
+      visit(child, childPath);
+    }
+  }
+  visit(root, []);
+  return visits;
+}
+function commandLine(path) {
+  return ["todo", ...path.map((node) => node.name)].join(" ");
+}
+function valuePlaceholder(kind, fallback) {
+  if (typeof kind === "object")
+    return kind.oneOf.join("|");
+  switch (kind) {
+    case "duration":
+      return "dur";
+    case "board-name":
+      return "name";
+    case "due-time":
+      return "time";
+    case "priority":
+      return "level";
+    case "count-or-all":
+      return "n|all";
+    case "task-id":
+    case "pending-task-id":
+    case "epic-id":
+      return "id";
+    case "parent-id":
+      return "id|root";
+    case "minutes":
+      return "min,\u2026";
+    default:
+      return fallback;
+  }
+}
+function formatArg(arg) {
+  const label = `${typeof arg.kind === "object" ? arg.kind.oneOf.join("|") : arg.name}${arg.variadic === true ? "\u2026" : ""}`;
+  return arg.optional === true ? `[${label}]` : `<${label}>`;
+}
+function formatFlag(flag) {
+  const spelling = `--${flag.name}`;
+  return flag.value === undefined ? spelling : `${spelling} <${valuePlaceholder(flag.value, flag.name)}>`;
+}
+var MAX_INLINE_FLAGS = 4;
+function formatUsage(path) {
+  const node = path[path.length - 1];
+  if (node === undefined)
+    return ["todo <command> [arguments]"];
+  const base = commandLine(path);
+  const lines = [];
+  if (node.run !== undefined || node.defaultSubcommand !== undefined) {
+    const args = (node.args ?? []).map(formatArg);
+    const flags = visibleFlags(node);
+    const flagText = flags.length > MAX_INLINE_FLAGS ? ["[options]"] : flags.map((flag) => `[${formatFlag(flag)}]`);
+    lines.push([base, ...args, ...flagText].join(" "));
+  }
+  if ((node.subcommands ?? []).some((child) => child.hidden !== true))
+    lines.push(`${base} <command>`);
+  return lines;
+}
+
+// src/domain/visibility-alias.ts
+var ACTION_LETTERS = { o: "open", c: "close" };
+var TARGET_LETTERS = { a: "all" };
+var HELP_TOKENS = new Set(["help", "-h", "--help"]);
+var VISIBILITY_ALIASES = [
+  { alias: "-oa", meaning: "open all" },
+  { alias: "-ca", meaning: "close all" },
+  { alias: "--o --a", meaning: "open all" },
+  { alias: "--c --a", meaning: "close all" },
+  { alias: "-o <epic>", meaning: "open <epic>" },
+  { alias: "-c <epic>", meaning: "close <epic>" }
+];
+function isHelpToken(token) {
+  return HELP_TOKENS.has(token);
+}
+function expandVisibilityAliases(args) {
+  const letters = [];
+  let index = 0;
+  for (;index < args.length; index += 1) {
+    const parsed = readAliasLetters(args[index]);
+    if (parsed === undefined)
+      break;
+    letters.push(...parsed);
+  }
+  if (letters.length === 0 || new Set(letters).size !== letters.length)
+    return;
+  const actions = letters.filter((letter) => (letter in ACTION_LETTERS));
+  const targets = letters.filter((letter) => (letter in TARGET_LETTERS));
+  const action = actions[0];
+  if (action === undefined || actions.length !== 1)
+    return;
+  const rest = args.slice(index);
+  const help = rest.filter(isHelpToken).map((token) => token === "help" ? "--help" : token);
+  const selectors = rest.filter((token) => !isHelpToken(token));
+  if (selectors.some((token) => token.startsWith("-")))
+    return;
+  if (targets.length === 0 && selectors.length === 0 && help.length === 0)
+    return;
+  return [ACTION_LETTERS[action], ...targets.map((letter) => TARGET_LETTERS[letter]), ...selectors, ...help];
+}
+function readAliasLetters(token) {
+  if (token.startsWith("--")) {
+    const body = token.slice(2);
+    return body.length === 1 && isAliasLetter(body) ? [body] : undefined;
+  }
+  if (!token.startsWith("-") || token.length < 2)
+    return;
+  const letters = [...token.slice(1)];
+  return letters.every(isAliasLetter) ? letters : undefined;
+}
+function isAliasLetter(letter) {
+  return letter in ACTION_LETTERS || letter in TARGET_LETTERS;
+}
+
+// src/presentation/help-format.ts
+var GROUP_ORDER = ["Create", "Boards", "View", "Change", "Epic visibility", "Remove", "Settings"];
+var INDENT = "  ";
+var COLOR_PALETTE = {
+  reset: "\x1B[0m",
+  bold: "\x1B[1m",
+  dim: "\x1B[2m",
+  accent: "\x1B[38;5;208m",
+  heading: "\x1B[38;5;147m",
+  command: "\x1B[38;5;114m",
+  placeholder: "\x1B[38;5;116m",
+  flag: "\x1B[38;5;229m"
+};
+var PLAIN_PALETTE = {
+  reset: "",
+  bold: "",
+  dim: "",
+  accent: "",
+  heading: "",
+  command: "",
+  placeholder: "",
+  flag: ""
+};
+function supportsColor() {
+  if (process.env.NO_COLOR !== undefined)
+    return false;
+  if (process.env.FORCE_COLOR !== undefined)
+    return true;
+  return process.stdout.isTTY === true;
+}
+function formatHelpOverview(root, useColor = supportsColor()) {
+  const p = useColor ? COLOR_PALETTE : PLAIN_PALETTE;
+  const commands = visibleChildren(root);
+  const lines = [""];
+  lines.push(`${INDENT}${p.accent}${p.bold}\u2713 todo${p.reset}  ${p.dim}\xB7${p.reset}  tasks, epics and boards from the shell`);
+  lines.push("");
+  lines.push(heading("Usage", p));
+  lines.push(`${INDENT}${INDENT}${highlightUsage("todo <description>[, <description>] [--due <time>] [--priority <level>] [--later] [--off-board]", p)}`);
+  lines.push(`${INDENT}${INDENT}${highlightUsage("todo <command> [arguments]", p)}`);
+  lines.push(`${INDENT}${INDENT}${highlightUsage("todo <command> --help", p)}`);
+  const width = Math.max(...commands.map((command) => formatCommandLabel(command).length));
+  for (const group of groupCommands(commands)) {
+    lines.push("");
+    lines.push(heading(group.name, p));
+    for (const command of group.commands) {
+      const label = formatCommandLabel(command);
+      const padding = " ".repeat(width - label.length + 3);
+      lines.push(`${INDENT}${INDENT}${colorCommandLabel(command, p)}${padding}${command.summary}`);
+    }
+  }
+  lines.push("");
+  lines.push(heading("Aliases", p));
+  const aliasWidth = Math.max(...VISIBILITY_ALIASES.map((alias) => alias.alias.length));
+  for (const { alias, meaning } of VISIBILITY_ALIASES) {
+    const padding = " ".repeat(aliasWidth - alias.length + 3);
+    lines.push(`${INDENT}${INDENT}${highlightInline(alias, p)}${padding}${p.dim}${meaning}${p.reset}`);
+  }
+  lines.push("");
+  lines.push(`${INDENT}${p.dim}Plain text is added as a task. Run${p.reset} ${p.command}todo <command> --help${p.reset} ${p.dim}for details on any command.${p.reset}`);
+  lines.push("");
+  return `${lines.join(`
+`)}
+`;
+}
+function formatCommandHelp(path, useColor = supportsColor()) {
+  const node = path[path.length - 1];
+  if (node === undefined)
+    throw new Error("formatCommandHelp needs a command path");
+  const p = useColor ? COLOR_PALETTE : PLAIN_PALETTE;
+  const lines = [""];
+  lines.push(`${INDENT}${p.accent}${p.bold}${commandLine(path)}${p.reset}  ${p.dim}\xB7${p.reset}  ${node.summary}`);
+  if (node.aliases !== undefined && node.aliases.length > 0) {
+    lines.push(`${INDENT}${p.dim}aliases:${p.reset} ${node.aliases.map((alias) => `${p.command}${alias}${p.reset}`).join(`${p.dim},${p.reset} `)}`);
+  }
+  lines.push("");
+  lines.push(heading("Usage", p));
+  for (const usage of formatUsage(path))
+    lines.push(`${INDENT}${INDENT}${highlightUsage(usage, p)}`);
+  const args = node.args ?? [];
+  pushTable(lines, "Arguments", args.map((arg) => ({ left: formatArg(arg), right: arg.description })), p);
+  const children = visibleChildren(node);
+  pushTable(lines, "Commands", children.map((child) => ({
+    left: formatCommandLabel(child),
+    right: `${child.summary}${child.name === node.defaultSubcommand ? " (default)" : ""}`
+  })), p);
+  pushTable(lines, "Options", visibleFlags(node).map((flag) => ({
+    left: [formatFlag(flag), ...(flag.aliases ?? []).map((alias) => `--${alias}`), ...flag.short === undefined ? [] : [`-${flag.short}`]].join(", "),
+    right: flag.description
+  })), p);
+  if (node.details !== undefined && node.details.length > 0) {
+    lines.push("");
+    lines.push(heading("Details", p));
+    for (const detail of node.details)
+      lines.push(`${INDENT}${INDENT}${highlightInline(detail, p)}`);
+  }
+  for (const section of node.sections ?? [])
+    pushSection(lines, section, p);
+  if (node.examples !== undefined && node.examples.length > 0) {
+    lines.push("");
+    lines.push(heading("Examples", p));
+    const width = Math.max(...node.examples.map((example) => example.command.length));
+    for (const example of node.examples) {
+      const note = example.note === undefined ? "" : `${" ".repeat(width - example.command.length + 3)}${p.dim}# ${example.note}${p.reset}`;
+      lines.push(`${INDENT}${INDENT}${p.dim}$${p.reset} ${highlightUsage(example.command, p)}${note}`);
+    }
+  }
+  lines.push("");
+  return `${lines.join(`
+`)}
+`;
+}
+function pushTable(lines, title, rows, p) {
+  if (rows.length === 0)
+    return;
+  lines.push("");
+  lines.push(heading(title, p));
+  const width = Math.max(...rows.map((row) => row.left.length));
+  for (const row of rows) {
+    const padding = " ".repeat(width - row.left.length + 3);
+    lines.push(`${INDENT}${INDENT}${highlightInline(row.left, p)}${padding}${highlightInline(row.right, p)}`);
+  }
+}
+function pushSection(lines, section, p) {
+  if (section.rows.length === 0)
+    return;
+  lines.push("");
+  lines.push(heading(section.heading, p));
+  const width = Math.max(...section.rows.map((row) => row.right === undefined ? 0 : row.left.length));
+  for (const row of section.rows) {
+    if (row.right === undefined) {
+      lines.push(`${INDENT}${INDENT}${highlightUsage(row.left, p)}`);
+      continue;
+    }
+    const padding = " ".repeat(width - row.left.length + 3);
+    lines.push(`${INDENT}${INDENT}${highlightInline(row.left, p)}${padding}${p.dim}${row.right}${p.reset}`);
+  }
+}
+function visibleChildren(node) {
+  return (node.subcommands ?? []).filter((child) => child.hidden !== true);
+}
+function formatCommandLabel(command) {
+  const aliases = command.aliases ?? [];
+  return aliases.length === 0 ? command.name : `${command.name}, ${aliases.join(", ")}`;
+}
+function colorCommandLabel(command, p) {
+  const aliases = command.aliases ?? [];
+  const name = `${p.command}${p.bold}${command.name}${p.reset}`;
+  return aliases.length === 0 ? name : `${name}${p.dim}, ${aliases.join(", ")}${p.reset}`;
+}
+function groupCommands(commands) {
+  const groups = new Map(GROUP_ORDER.map((group) => [group, []]));
+  for (const command of commands)
+    groups.get(command.group ?? "Settings")?.push(command);
+  return [...groups.entries()].filter(([, members]) => members.length > 0).map(([name, members]) => ({ name, commands: members }));
+}
+function heading(text, p) {
+  return `${INDENT}${p.heading}${p.bold}${text.toUpperCase()}${p.reset}`;
+}
+function highlightUsage(usage, p) {
+  const tokens = usage.split(" ");
+  return tokens.map((token, index) => {
+    if (index === 0 && token === "todo")
+      return `${p.dim}todo${p.reset}`;
+    if (index === 1 && tokens[0] === "todo" && /^[a-z-]+$/.test(token))
+      return `${p.command}${token}${p.reset}`;
+    return highlightInline(token, p);
+  }).join(" ");
+}
+function highlightInline(text, p) {
+  return text.replace(/<[^>]+>/g, (match) => `${p.placeholder}${match}${p.reset}`).replace(/(^|[\s[(|,])(--?[a-z][\w-]*)/g, (_match, lead, flag) => `${lead}${p.flag}${flag}${p.reset}`).replace(/`([^`]+)`/g, (_match, code) => `${p.command}${code}${p.reset}`);
 }
 
 // src/domain/user-input-error.ts
@@ -177,18 +450,577 @@ class UserInputError extends Error {
   }
 }
 
+// src/domain/duration.ts
+var MAX_BOARD_DURATION_MS = 24 * 60 * 60 * 1000;
+var MIN_BOARD_DURATION_MS = 60000;
+function parseDuration(word) {
+  const durationMs = readDuration(word);
+  if (durationMs > MAX_BOARD_DURATION_MS)
+    throw new UserInputError("A timed board lasts at most 24h");
+  if (durationMs < MIN_BOARD_DURATION_MS)
+    throw new UserInputError("A timed board needs at least a minute");
+  return durationMs;
+}
+function readDuration(word) {
+  if (/^\d+(\.\d+)?$/.test(word))
+    return Number(word) * 60 * 60 * 1000;
+  const match = /^(?:(\d+)h)?(?:(\d+)m)?$/.exec(word);
+  if (match === null || match[1] === undefined && match[2] === undefined) {
+    throw new UserInputError(`Not a duration: ${word} (try 4h or 90m)`);
+  }
+  return Number(match[1] ?? 0) * 60 * 60 * 1000 + Number(match[2] ?? 0) * 60 * 1000;
+}
+function formatDuration(milliseconds) {
+  const minutes = Math.floor(milliseconds / 60000);
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours > 0 && rest > 0)
+    return `${hours}h${String(rest).padStart(2, "0")}m`;
+  if (hours > 0)
+    return `${hours}h`;
+  if (rest > 0)
+    return `${rest}m`;
+  return "<1m";
+}
+
+// src/domain/task-tree.ts
+function buildTaskTreeRows(visibleTasks, allTasks, options = {}) {
+  const compare = options.compare ?? (() => 0);
+  const collapsedIds = options.collapsedIds ?? new Set;
+  const visibleIds = new Set(visibleTasks.map((task) => task.id));
+  const childrenByParent = new Map;
+  for (const task of visibleTasks) {
+    const parentKey = task.parentId !== undefined && visibleIds.has(task.parentId) && task.parentId !== task.id ? task.parentId : undefined;
+    const siblings = childrenByParent.get(parentKey) ?? [];
+    siblings.push(task);
+    childrenByParent.set(parentKey, siblings);
+  }
+  for (const siblings of childrenByParent.values())
+    siblings.sort(compare);
+  const rows = [];
+  const visited = new Set;
+  const visit = (parentKey, depth, trail) => {
+    const siblings = childrenByParent.get(parentKey) ?? [];
+    siblings.forEach((task, index) => {
+      if (visited.has(task.id))
+        return;
+      visited.add(task.id);
+      const siblingFollows = [...trail, index < siblings.length - 1];
+      const children = childrenByParent.get(task.id) ?? [];
+      const collapsed = collapsedIds.has(task.id);
+      rows.push({
+        task,
+        depth,
+        siblingFollows,
+        hasChildren: children.length > 0,
+        childCount: children.length,
+        collapsed,
+        progress: getTaskProgress(allTasks, task.id)
+      });
+      if (!collapsed)
+        visit(task.id, depth + 1, siblingFollows);
+    });
+  };
+  visit(undefined, 0, []);
+  return rows;
+}
+function collectDescendantIds(tasks, rootIds) {
+  const childrenByParent = new Map;
+  for (const task of tasks) {
+    if (task.parentId === undefined)
+      continue;
+    const children = childrenByParent.get(task.parentId) ?? [];
+    children.push(task.id);
+    childrenByParent.set(task.parentId, children);
+  }
+  const descendants = new Set;
+  const queue = [...rootIds];
+  while (queue.length > 0) {
+    const id = queue.pop();
+    for (const childId of childrenByParent.get(id) ?? []) {
+      if (descendants.has(childId))
+        continue;
+      descendants.add(childId);
+      queue.push(childId);
+    }
+  }
+  for (const id of rootIds)
+    descendants.delete(id);
+  return descendants;
+}
+function collectSubtreeIds(tasks, rootIds) {
+  const roots = [...rootIds];
+  return new Set([...roots, ...collectDescendantIds(tasks, roots)]);
+}
+function excludeHiddenSubtrees(tasks) {
+  const hiddenIds = collectSubtreeIds(tasks, tasks.filter((task) => task.hidden === true).map((task) => task.id));
+  return tasks.filter((task) => !hiddenIds.has(task.id));
+}
+function findTaskByIdOrDescription(tasks, target) {
+  const trimmed = target.trim();
+  if (/^#?\d+$/.test(trimmed))
+    return findTask(tasks, trimmed.replace(/^#/, ""));
+  const needle = trimmed.toLowerCase();
+  const matches = tasks.filter((task) => task.status === "pending" && task.description.toLowerCase() === needle);
+  const match = matches.find((task) => task.kind === "epic") ?? matches[0];
+  if (match === undefined)
+    throw new UserInputError(`Task not found: ${target}`);
+  return match;
+}
+function getTaskProgress(tasks, id) {
+  const descendantIds = collectDescendantIds(tasks, [id]);
+  let completed = 0;
+  for (const task of tasks) {
+    if (descendantIds.has(task.id) && task.status === "completed")
+      completed += 1;
+  }
+  return { total: descendantIds.size, completed };
+}
+function isEpic(task, tasks) {
+  return task.kind === "epic" || countDescendants(tasks, task.id) > 0;
+}
+function findTask(tasks, id) {
+  const task = tasks.find((candidate) => candidate.id === id);
+  if (task === undefined)
+    throw new UserInputError(`Task not found: ${id}`);
+  return task;
+}
+function moveTask(tasks, id, parentId, now = Date.now()) {
+  const task = findTask(tasks, id);
+  if (parentId !== undefined) {
+    findTask(tasks, parentId);
+    if (parentId === id || collectDescendantIds(tasks, [id]).has(parentId)) {
+      throw new UserInputError(`Cannot move #${id} under #${parentId}: it would nest inside itself`);
+    }
+    task.parentId = parentId;
+  } else {
+    delete task.parentId;
+  }
+  task.updatedAt = now;
+  return task;
+}
+function reorderTask(tasks, id, position, now = Date.now()) {
+  const task = findTask(tasks, id);
+  let anchorTask;
+  if (position.type === "before" || position.type === "after") {
+    anchorTask = findTask(tasks, position.anchorId);
+    if (anchorTask.id === task.id)
+      throw new UserInputError(`Cannot reorder #${id} relative to itself`);
+    if (anchorTask.parentId !== task.parentId) {
+      throw new UserInputError(`Cannot reorder #${id} next to #${position.anchorId}: they are not siblings`);
+    }
+  }
+  const fromIndex = tasks.indexOf(task);
+  tasks.splice(fromIndex, 1);
+  let insertIndex;
+  if (position.type === "top" || position.type === "bottom") {
+    const siblingIndexes = tasks.reduce((indexes, candidate, index) => {
+      if (candidate.parentId === task.parentId)
+        indexes.push(index);
+      return indexes;
+    }, []);
+    insertIndex = position.type === "top" ? siblingIndexes[0] ?? 0 : (siblingIndexes.at(-1) ?? tasks.length - 1) + 1;
+  } else {
+    const anchorIndex = tasks.indexOf(anchorTask);
+    insertIndex = position.type === "before" ? anchorIndex : anchorIndex + 1;
+  }
+  tasks.splice(insertIndex, 0, task);
+  task.updatedAt = now;
+  return task;
+}
+function completeSubtrees(tasks, rootIds, now = Date.now()) {
+  const ids = collectSubtreeIds(tasks, rootIds);
+  let changed = 0;
+  for (const task of tasks) {
+    if (!ids.has(task.id) || task.status === "completed")
+      continue;
+    task.status = "completed";
+    task.updatedAt = now;
+    changed += 1;
+  }
+  return changed;
+}
+function countDescendants(tasks, id) {
+  return collectDescendantIds(tasks, [id]).size;
+}
+
 // src/domain/unknown-token-error.ts
 class UnknownTokenError extends UserInputError {
   token;
   candidates;
   kind;
-  constructor(message, token, candidates, kind) {
+  implicitAddFallback;
+  constructor(message, token, candidates, kind, implicitAddFallback = false) {
     super(message);
     this.token = token;
     this.candidates = candidates;
     this.kind = kind;
+    this.implicitAddFallback = implicitAddFallback;
     this.name = "UnknownTokenError";
   }
+}
+
+// src/command-spec/parsed-input.ts
+class ParsedInput {
+  path;
+  argValues;
+  flagValues;
+  positionals;
+  constructor(path, argValues, flagValues, positionals) {
+    this.path = path;
+    this.argValues = argValues;
+    this.flagValues = flagValues;
+    this.positionals = positionals;
+  }
+  arg(name) {
+    const value = this.argValues.get(name)?.[0];
+    if (value === undefined)
+      throw new Error(`Argument ${name} was not bound`);
+    return value;
+  }
+  optionalArg(name) {
+    return this.argValues.get(name)?.[0];
+  }
+  args(name) {
+    return [...this.argValues.get(name) ?? []];
+  }
+  flag(name) {
+    return this.flagValues.has(name);
+  }
+  value(name) {
+    const value = this.flagValues.get(name);
+    return typeof value === "string" ? value : undefined;
+  }
+}
+
+// src/command-spec/parse.ts
+var IMPLICIT_ADD = "add";
+var IMPLICIT_SUB = "sub";
+var TASK_ID = /^#?\d+$/;
+var TASK_ID_LIST_PART = /^#?\d+(-\d+)?$/;
+function isFlagToken(token) {
+  return /^--?[a-zA-Z]/.test(token);
+}
+function parse(root, argv, options = {}) {
+  const separator = argv.indexOf("--");
+  const beforeSeparator = separator === -1 ? argv : argv.slice(0, separator);
+  const wantsHelp = beforeSeparator.some((token) => HELP_FLAGS.has(token));
+  const tokens = wantsHelp ? [...beforeSeparator.filter((token) => !HELP_FLAGS.has(token)), ...separator === -1 ? [] : argv.slice(separator)] : [...argv];
+  const path = [];
+  let node = root;
+  let index = 0;
+  for (;; ) {
+    if (node.subcommands === undefined || node.subcommands.length === 0)
+      break;
+    const token = tokens[index];
+    if (token === undefined || token === "--") {
+      if (wantsHelp || node.run !== undefined)
+        break;
+      const fallback = defaultChild(node);
+      if (fallback === undefined)
+        throw new UserInputError(usageMessage(path));
+      path.push(fallback);
+      node = fallback;
+      continue;
+    }
+    const child = findChild(node, token);
+    if (child !== undefined) {
+      path.push(child);
+      node = child;
+      index += 1;
+      continue;
+    }
+    if (node === root) {
+      const implicit = resolveImplicitCommand(root, tokens.slice(index), options);
+      path.push(implicit);
+      node = implicit;
+      break;
+    }
+    if (isFlagToken(token) || (node.args ?? []).length > 0) {
+      if (node.run !== undefined || wantsHelp)
+        break;
+      const fallback = defaultChild(node);
+      if (fallback !== undefined && (isFlagToken(token) || (fallback.args ?? []).length > 0)) {
+        path.push(fallback);
+        node = fallback;
+        continue;
+      }
+    }
+    if (wantsHelp && isFlagToken(token))
+      break;
+    throw unknownChild(node, token);
+  }
+  if (wantsHelp)
+    return { kind: "help", path };
+  if (node.run === undefined)
+    throw new UserInputError(usageMessage(path));
+  return { kind: "run", path, node, input: bind(path, node, tokens.slice(index), options) };
+}
+function defaultChild(node) {
+  return node.defaultSubcommand === undefined ? undefined : findChild(node, node.defaultSubcommand);
+}
+function unknownChild(node, token) {
+  const noun = node.subcommandNoun ?? "subcommand";
+  return new UnknownTokenError(`Unknown ${noun}: ${token}`, token, childNames(node), noun === "setting" ? "setting" : "command");
+}
+function resolveImplicitCommand(root, rest, options) {
+  const [token = "", ...others] = rest;
+  if (isFlagToken(token)) {
+    const candidates = [...childNames(root).filter((name) => name.startsWith("-")), ...HELP_FLAGS];
+    throw new UnknownTokenError(`Unknown option: ${token}`, token, candidates, "option");
+  }
+  if (TASK_ID.test(token) && others.length > 0)
+    return requireChild(root, IMPLICIT_SUB);
+  const candidates = childNames(root).filter((name) => !name.startsWith("-"));
+  if (options.forceImplicitAdd !== true && options.isNearMiss?.(token, candidates) === true) {
+    const plausible = candidates.filter((name) => argumentsFit(root, name, others, options));
+    if (plausible.length > 0 && options.isNearMiss(token, plausible)) {
+      throw new UnknownTokenError(`Unknown command: ${token}`, token, plausible, "command", true);
+    }
+  }
+  return requireChild(root, IMPLICIT_ADD);
+}
+function argumentsFit(root, name, rest, options) {
+  try {
+    const strict = { strict: true, ...options.tasks === undefined ? {} : { tasks: options.tasks }, ...options.boardNames === undefined ? {} : { boardNames: options.boardNames } };
+    return parse(root, [name, ...rest], strict).kind === "run";
+  } catch (error) {
+    if (error instanceof UserInputError)
+      return false;
+    throw error;
+  }
+}
+function requireChild(node, name) {
+  const child = findChild(node, name);
+  if (child === undefined)
+    throw new Error(`Command tree has no ${name}`);
+  return child;
+}
+function usageMessage(path) {
+  const help = path.length === 0 ? "todo help" : `${commandLine(path)} --help`;
+  return `Usage: ${formatUsage(path).join(`
+       `)}
+Run '${help}' for details.`;
+}
+function bind(path, node, tokens, options) {
+  const positionals = [];
+  const flags = new Map;
+  let flagsEnded = false;
+  for (let index = 0;index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!flagsEnded && token === "--") {
+      flagsEnded = true;
+      continue;
+    }
+    if (flagsEnded || !isFlagToken(token)) {
+      positionals.push(token);
+      continue;
+    }
+    const equals = token.startsWith("--") ? token.indexOf("=") : -1;
+    const spelling = equals === -1 ? token : token.slice(0, equals);
+    const inline = equals === -1 ? undefined : token.slice(equals + 1);
+    const flag = findFlag(node, spelling);
+    if (flag === undefined) {
+      throw new UnknownTokenError(`Unknown option: ${spelling}`, spelling, visibleFlags(node).flatMap(flagSpellings), "option");
+    }
+    if (flag.value === undefined) {
+      if (inline !== undefined)
+        throw new UserInputError(`${spelling} takes no value`);
+      flags.set(flag.name, true);
+      continue;
+    }
+    let value = inline;
+    if (value === undefined) {
+      const next = tokens[index + 1];
+      if (next === undefined || next === "--" || isFlagToken(next))
+        throw new UserInputError(`Missing value for ${spelling}`);
+      const words = [next];
+      index += 1;
+      while (flag.greedy === true && index + 1 < tokens.length && tokens[index + 1] !== "--" && !isFlagToken(tokens[index + 1])) {
+        words.push(tokens[index + 1]);
+        index += 1;
+      }
+      value = words.join(" ");
+    }
+    if (value.length === 0)
+      throw new UserInputError(`Missing value for ${spelling}`);
+    flags.set(flag.name, validateValue(flag.value, value, spelling, options));
+  }
+  const values = new Map;
+  let cursor = 0;
+  for (const arg of node.args ?? []) {
+    const taken = arg.variadic === true ? positionals.slice(cursor) : positionals.slice(cursor, cursor + 1);
+    cursor += taken.length;
+    if (taken.length === 0) {
+      if (arg.optional === true)
+        continue;
+      throw new UserInputError(usageMessage(path));
+    }
+    if (cursor === taken.length)
+      rejectNearChild(node, taken[0]);
+    values.set(arg.name, taken.map((token) => validateArgument(node, arg, token, options)));
+  }
+  const extra = positionals[cursor];
+  if (extra !== undefined) {
+    if ((node.subcommands ?? []).length > 0)
+      throw unknownChild(node, extra);
+    throw new UserInputError(`Unexpected argument: ${extra}
+${usageMessage(path)}`);
+  }
+  return new ParsedInput(path.map((step) => step.name), values, flags, positionals);
+}
+function rejectNearChild(node, token) {
+  if (TASK_ID.test(token) || findClosest(token, childNames(node)) === undefined)
+    return;
+  throw unknownChild(node, token);
+}
+function validateArgument(node, arg, token, options) {
+  try {
+    const label = (node.args ?? []).length === 1 ? node.name : arg.name;
+    return validateValue(arg.kind, token, label, options);
+  } catch (error) {
+    if (error instanceof UserInputError && !(error instanceof UnknownTokenError) && findClosest(token, childNames(node)) !== undefined) {
+      throw unknownChild(node, token);
+    }
+    throw error;
+  }
+}
+function validateValue(kind, raw, label, options = {}) {
+  const value = validateShape(kind, raw, label, options);
+  if (options.strict === true && options.tasks !== undefined)
+    requireExisting(kind, value, options.tasks);
+  return value;
+}
+function requireExisting(kind, value, tasks) {
+  if (!taskValueExists(kind, value, tasks))
+    throw new UserInputError(`No such task: ${value}`);
+}
+function taskValueExists(kind, value, tasks) {
+  const pending = tasks.filter((task) => task.status === "pending");
+  const id = value.replace(/^#/, "");
+  const name = value.trim().toLowerCase();
+  const matches = (task) => task.id === id || task.description.trim().toLowerCase() === name;
+  switch (kind) {
+    case "task-id":
+      return tasks.some((task) => task.id === value);
+    case "pending-task-id":
+      return pending.some((task) => task.id === value);
+    case "task-selector":
+      return pending.some(matches);
+    case "epic-id":
+    case "epic-selector":
+      return pending.some((task) => matches(task) && isEpic(task, [...tasks]));
+    default:
+      return true;
+  }
+}
+function validateShape(kind, raw, label, options) {
+  if (typeof kind === "object")
+    return chooseOne(kind.oneOf, raw, label);
+  switch (kind) {
+    case "task-id":
+    case "pending-task-id":
+    case "epic-id":
+      if (!TASK_ID.test(raw.trim()))
+        throw new UserInputError(`Invalid task ID: ${raw}`);
+      return raw.trim().replace(/^#/, "");
+    case "parent-id":
+      if (["root", "top", "-"].includes(raw.trim()))
+        return raw.trim();
+      if (!TASK_ID.test(raw.trim()))
+        throw new UserInputError(`Invalid parent: ${raw}. Use a task ID or root.`);
+      return raw.trim().replace(/^#/, "");
+    case "task-ids":
+      if (!raw.split(",").every((part) => TASK_ID_LIST_PART.test(part.trim())))
+        throw new UserInputError(`Invalid task ID list: ${raw}`);
+      return raw;
+    case "priority":
+      return chooseOne(["none", "low", "medium", "high"], raw, label);
+    case "count-or-all":
+      if (!/^(\d+|all|unlimited)$/i.test(raw.trim()))
+        throw new UserInputError(`Invalid count: ${raw}. Use a whole number or 'all'.`);
+      return raw.trim().toLowerCase();
+    case "minutes":
+      if (!raw.split(",").every((part) => /^\d+$/.test(part.trim())))
+        throw new UserInputError(`Invalid reminders: ${raw}`);
+      return raw;
+    case "duration":
+      parseDuration(raw);
+      return raw;
+    case "board-name":
+      return matchBoardName(raw, options.boardNames);
+    default:
+      return raw;
+  }
+}
+function chooseOne(choices, raw, label) {
+  const match = choices.find((choice) => choice.toLowerCase() === raw.trim().toLowerCase());
+  if (match !== undefined)
+    return match;
+  throw new UnknownTokenError(`Unknown value for ${label}: ${raw}`, raw, choices, "value");
+}
+function matchBoardName(raw, names) {
+  if (names === undefined)
+    return raw;
+  const match = names.find((name) => name.toLowerCase() === raw.trim().toLowerCase());
+  if (match !== undefined)
+    return match;
+  if (names.length === 0)
+    throw new UserInputError(`No board named ${raw} \xB7 todo board new ${raw} creates it`);
+  throw new UnknownTokenError(`Unknown board: ${raw}`, raw, names, "value");
+}
+
+// src/command-spec/execute.ts
+async function executeCommand(root, argv, context, options = {}) {
+  const result = parse(root, argv, options);
+  if (result.kind === "help") {
+    context.stdout.write(result.path.length === 0 ? formatHelpOverview(root) : formatCommandHelp(result.path));
+    return;
+  }
+  await result.node.run?.(result.input, context);
+}
+
+// src/notifications.ts
+import { spawnSync } from "child_process";
+async function sendDueNotifications(store, now = Date.now()) {
+  const tasks = await store.loadTasks();
+  let changed = false;
+  for (const task of tasks) {
+    if (task.status !== "pending" || task.dueDate === undefined)
+      continue;
+    if (task.reminder !== undefined)
+      continue;
+    if (task.dueDate < now && !task.notificationsSent.overdue) {
+      sendNotification("Task Overdue", `${task.description} - due ${formatDueDate(task.dueDate)}`);
+      task.notificationsSent.overdue = true;
+      changed = true;
+    }
+    for (const offset of task.reminderOffsets) {
+      if (now < task.dueDate - offset * 60000 || task.notificationsSent.reminders.includes(offset))
+        continue;
+      sendNotification("Task Reminder", `${task.description} - due in ${offset} minutes`);
+      task.notificationsSent.reminders.push(offset);
+      changed = true;
+    }
+  }
+  if (changed)
+    await store.saveTasks(tasks);
+}
+function sendNotification(title, message) {
+  spawnSync("notify-send", [title, message], { stdio: "ignore" });
+}
+function formatDueDate(timestamp) {
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short"
+  }).format(timestamp);
+}
+function resetNotificationState(task) {
+  task.notificationsSent = { reminders: [], overdue: false };
+  if (task.reminder !== undefined)
+    delete task.reminder.firedAt;
 }
 
 // src/domain/due-date.ts
@@ -390,11 +1222,11 @@ function parseRelativeDate(date, time, now) {
     tokens = tokens.slice(1);
   const direction = tokens[0];
   if (tokens.length === 2 && (direction === "next" || direction === "last")) {
-    const unit2 = UNITS.get(tokens[1] ?? "");
-    if (unit2 === undefined)
+    const unit = UNITS.get(tokens[1] ?? "");
+    if (unit === undefined)
       return;
-    const target = shift(now, unit2, direction === "next" ? 1 : -1);
-    return withTime(target, time ?? (unit2 === "minute" || unit2 === "hour" ? undefined : DEFAULT_TIME)).getTime();
+    const target = shift(now, unit, direction === "next" ? 1 : -1);
+    return withTime(target, time ?? (unit === "minute" || unit === "hour" ? undefined : DEFAULT_TIME)).getTime();
   }
   const [amountToken, unitToken] = readAmountAndUnit(tokens);
   if (amountToken === undefined || unitToken === undefined)
@@ -440,14 +1272,14 @@ function readNumericDate(parts) {
     return;
   const numbers = parts.map(Number);
   if (parts.length === 3) {
-    const [first2, second2, third] = numbers;
+    const [first, second, third] = numbers;
     if (third === undefined)
       return;
     if ((parts[0] ?? "").length === 4)
-      return { year: first2, month: second2, day: third };
-    if (second2 > 12 && first2 <= 12)
-      return { year: expandYear(third), month: first2, day: second2 };
-    return { year: expandYear(third), month: second2, day: first2 };
+      return { year: first, month: second, day: third };
+    if (second > 12 && first <= 12)
+      return { year: expandYear(third), month: first, day: second };
+    return { year: expandYear(third), month: second, day: first };
   }
   const [first, second] = numbers;
   if (second > 12 && first <= 12)
@@ -511,173 +1343,370 @@ function withTime(date, time) {
 }
 var DATE_PARSERS = [parseClockTime, parseKeywordDate, parseWeekdayDate, parseRelativeDate, parseCalendarDate];
 
-// src/domain/task-tree.ts
-function buildTaskTreeRows(visibleTasks, allTasks, options = {}) {
-  const compare = options.compare ?? (() => 0);
-  const collapsedIds = options.collapsedIds ?? new Set;
-  const visibleIds = new Set(visibleTasks.map((task) => task.id));
-  const childrenByParent = new Map;
-  for (const task of visibleTasks) {
-    const parentKey = task.parentId !== undefined && visibleIds.has(task.parentId) && task.parentId !== task.id ? task.parentId : undefined;
-    const siblings = childrenByParent.get(parentKey) ?? [];
-    siblings.push(task);
-    childrenByParent.set(parentKey, siblings);
+// src/domain/boards.ts
+var LANE_LABELS = { now: "Now", later: "Later" };
+function findBoard(state, name) {
+  const needle = name.trim().toLowerCase();
+  return state.boards.find((board) => board.name.toLowerCase() === needle);
+}
+function requireBoard(state, name) {
+  const board = findBoard(state, name);
+  if (board !== undefined)
+    return board;
+  const names = state.boards.map((candidate) => candidate.name);
+  if (names.length === 0)
+    throw new UserInputError(`No board named ${name} \xB7 todo board new ${name} creates it`);
+  throw new UnknownTokenError(`Unknown board: ${name}`, name, names, "value");
+}
+function getActiveBoard(state) {
+  return state.active === undefined ? undefined : findBoard(state, state.active);
+}
+function isTimed(board) {
+  return board.expiresAt !== undefined;
+}
+function isExpired(board, now = Date.now()) {
+  return board.expiresAt !== undefined && board.expiresAt <= now;
+}
+function remainingMs(board, now = Date.now()) {
+  return board.expiresAt === undefined ? Number.POSITIVE_INFINITY : Math.max(0, board.expiresAt - now);
+}
+function laneOf(board, tasks, id) {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const seen = new Set;
+  let current = id;
+  while (current !== undefined && !seen.has(current)) {
+    if (board.now.includes(current))
+      return "now";
+    if (board.later.includes(current))
+      return "later";
+    seen.add(current);
+    current = byId.get(current)?.parentId;
   }
-  for (const siblings of childrenByParent.values())
-    siblings.sort(compare);
-  const rows = [];
-  const visited = new Set;
-  const visit = (parentKey, depth, trail) => {
-    const siblings = childrenByParent.get(parentKey) ?? [];
-    siblings.forEach((task, index) => {
-      if (visited.has(task.id))
-        return;
-      visited.add(task.id);
-      const siblingFollows = [...trail, index < siblings.length - 1];
-      const children = childrenByParent.get(task.id) ?? [];
-      const collapsed = collapsedIds.has(task.id);
-      rows.push({
-        task,
-        depth,
-        siblingFollows,
-        hasChildren: children.length > 0,
-        childCount: children.length,
-        collapsed,
-        progress: getTaskProgress(allTasks, task.id)
-      });
-      if (!collapsed)
-        visit(task.id, depth + 1, siblingFollows);
-    });
+  return;
+}
+function collectLaneIds(board, tasks, lane) {
+  return new Set(tasks.filter((task) => laneOf(board, tasks, task.id) === lane).map((task) => task.id));
+}
+function findListedAncestor(board, tasks, id) {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const seen = new Set([id]);
+  let current = byId.get(id)?.parentId;
+  while (current !== undefined && !seen.has(current)) {
+    if (board.now.includes(current) || board.later.includes(current))
+      return current;
+    seen.add(current);
+    current = byId.get(current)?.parentId;
+  }
+  return;
+}
+function placeOnBoard(board, tasks, id, lane) {
+  const ancestor = findListedAncestor(board, tasks, id);
+  if (ancestor !== undefined) {
+    throw new UserInputError(`#${id} sits under #${ancestor} on ${board.name} and moves with it \xB7 move #${ancestor} instead`);
+  }
+  const current = board.now.includes(id) ? "now" : board.later.includes(id) ? "later" : undefined;
+  const folded = collectDescendantIds([...tasks], [id]);
+  const keep = (item) => item !== id && !folded.has(item);
+  const next = { ...board, now: board.now.filter(keep), later: board.later.filter(keep) };
+  next[lane] = [...next[lane], id];
+  return { board: next, change: current === undefined ? "added" : current === lane ? "unchanged" : "moved" };
+}
+function takeOffBoard(board, tasks, id) {
+  if (board.now.includes(id) || board.later.includes(id)) {
+    return { board: { ...board, now: board.now.filter((item) => item !== id), later: board.later.filter((item) => item !== id) }, removed: true };
+  }
+  const ancestor = findListedAncestor(board, tasks, id);
+  if (ancestor !== undefined) {
+    throw new UserInputError(`#${id} sits under #${ancestor} on ${board.name} \xB7 take #${ancestor} off instead`);
+  }
+  return { board, removed: false };
+}
+function moveBetweenBoards(state, tasks, id, fromName, toName, lane) {
+  const from = requireBoard(state, fromName);
+  const to = requireBoard(state, toName);
+  if (from.name === to.name)
+    throw new UserInputError(`#${id} is already on ${to.name}`);
+  const currentLane = laneOf(from, tasks, id);
+  if (currentLane === undefined)
+    throw new UserInputError(`#${id} is not on ${from.name}`);
+  const taken = takeOffBoard(from, tasks, id);
+  const target = lane ?? currentLane;
+  const placed = placeOnBoard(to, tasks, id, target);
+  return { state: replaceBoard(replaceBoard(state, from.name, taken.board), to.name, placed.board), from, to, lane: target };
+}
+function replaceBoard(state, name, board) {
+  const needle = name.toLowerCase();
+  return { ...state, boards: state.boards.map((candidate) => candidate.name.toLowerCase() === needle ? board : candidate) };
+}
+function createBoard(state, name, now, durationMs) {
+  const trimmed = name.trim().replace(/\s+/g, " ");
+  if (trimmed.length === 0)
+    throw new UserInputError("A board needs a name");
+  if (findBoard(state, trimmed) !== undefined)
+    throw new UserInputError(`A board named ${trimmed} already exists \xB7 todo board use ${trimmed}`);
+  const board = { name: trimmed, createdAt: now, ...durationMs === undefined ? {} : { expiresAt: now + durationMs }, now: [], later: [] };
+  return { state: { active: board.name, boards: [...state.boards, board] }, board };
+}
+function renameBoard(state, from, to) {
+  const board = requireBoard(state, from);
+  const trimmed = to.trim().replace(/\s+/g, " ");
+  if (trimmed.length === 0)
+    throw new UserInputError("A board needs a name");
+  const clash = findBoard(state, trimmed);
+  if (clash !== undefined && clash !== board)
+    throw new UserInputError(`A board named ${clash.name} already exists`);
+  const renamed = replaceBoard(state, board.name, { ...board, name: trimmed });
+  const wasActive = state.active !== undefined && state.active.toLowerCase() === board.name.toLowerCase();
+  return wasActive ? { ...renamed, active: trimmed } : renamed;
+}
+function deleteBoard(state, name) {
+  const needle = name.toLowerCase();
+  const boards = state.boards.filter((board) => board.name.toLowerCase() !== needle);
+  return state.active !== undefined && state.active.toLowerCase() === needle ? { boards } : { ...state, boards };
+}
+function extendBoard(board, durationMs, now = Date.now()) {
+  if (!isTimed(board))
+    throw new UserInputError(`${board.name} has no timer \xB7 only timed boards can be extended`);
+  const expiresAt = Math.max(board.expiresAt, now) + durationMs;
+  if (expiresAt > now + MAX_BOARD_DURATION_MS)
+    throw new UserInputError("A board can run at most 24h from now");
+  return { ...board, expiresAt };
+}
+function purgeTaskIds(state, ids) {
+  return {
+    ...state,
+    boards: state.boards.map((board) => ({ ...board, now: board.now.filter((id) => !ids.has(id)), later: board.later.filter((id) => !ids.has(id)) }))
   };
-  visit(undefined, 0, []);
-  return rows;
 }
-function collectDescendantIds(tasks, rootIds) {
-  const childrenByParent = new Map;
-  for (const task of tasks) {
-    if (task.parentId === undefined)
-      continue;
-    const children = childrenByParent.get(task.parentId) ?? [];
-    children.push(task.id);
-    childrenByParent.set(task.parentId, children);
+function collectSessionRoots(board, tasks) {
+  return tasks.filter((task) => task.parentId === undefined && task.createdAt >= board.createdAt && (board.now.includes(task.id) || board.later.includes(task.id)));
+}
+function defaultBoardName(state, timestamp) {
+  const base = `Focus ${formatBoardDate(timestamp)}`;
+  if (findBoard(state, base) === undefined)
+    return base;
+  for (let suffix = 2;; suffix += 1) {
+    const candidate = `${base} (${suffix})`;
+    if (findBoard(state, candidate) === undefined)
+      return candidate;
   }
-  const descendants = new Set;
-  const queue = [...rootIds];
-  while (queue.length > 0) {
-    const id = queue.pop();
-    for (const childId of childrenByParent.get(id) ?? []) {
-      if (descendants.has(childId))
-        continue;
-      descendants.add(childId);
-      queue.push(childId);
+}
+var MONTHS2 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function formatBoardDate(timestamp) {
+  const date = new Date(timestamp);
+  return `${date.getDate()} ${MONTHS2[date.getMonth()]}`;
+}
+function migrateLegacyFocus(legacy, tasks) {
+  const excluded = new Set(legacy.excluded ?? []);
+  const seeds = [...legacy.pinned ?? [], ...tasks.filter((task) => task.createdAt >= legacy.startedAt).map((task) => task.id)].filter((id) => !excluded.has(id));
+  const members = new Set(seeds);
+  for (const id of collectDescendantIds([...tasks], seeds)) {
+    if (!excluded.has(id))
+      members.add(id);
+  }
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const roots = [...members].filter((id) => {
+    const parentId = byId.get(id)?.parentId;
+    return parentId === undefined || !members.has(parentId);
+  });
+  const later = (legacy.later ?? []).filter((id) => members.has(id));
+  const name = legacy.title === undefined || legacy.title.trim() === "" ? `Focus ${formatBoardDate(legacy.startedAt)}` : legacy.title.trim();
+  const board = {
+    name,
+    createdAt: legacy.startedAt,
+    expiresAt: legacy.expiresAt,
+    now: roots.filter((id) => !later.includes(id)).sort(compareIds),
+    later
+  };
+  return legacy.hidden === true ? { boards: [board] } : { active: name, boards: [board] };
+}
+function compareIds(left, right) {
+  return Number(left) - Number(right);
+}
+function normalizeBoards(value) {
+  if (typeof value !== "object" || value === null)
+    return { boards: [] };
+  const raw = value;
+  const boards = (Array.isArray(raw.boards) ? raw.boards : []).flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null)
+      return [];
+    const board = entry;
+    if (typeof board.name !== "string" || board.name.trim() === "")
+      return [];
+    const ids = (list) => Array.isArray(list) ? list.filter((id) => typeof id === "string") : [];
+    return [{
+      name: board.name,
+      createdAt: typeof board.createdAt === "number" ? board.createdAt : 0,
+      ...typeof board.expiresAt === "number" ? { expiresAt: board.expiresAt } : {},
+      now: ids(board.now),
+      later: ids(board.later)
+    }];
+  });
+  const state = { boards };
+  if (typeof raw.active === "string") {
+    const active = findBoard(state, raw.active);
+    if (active !== undefined)
+      state.active = active.name;
+  }
+  return state;
+}
+
+// src/services/boards.ts
+async function loadBoards(store, now = Date.now()) {
+  let state = await store.loadBoardsFile();
+  if (state === undefined) {
+    const legacy = await store.loadLegacyFocus();
+    state = legacy === undefined ? { boards: [] } : migrateLegacyFocus(legacy, await store.loadTasks());
+    if (legacy !== undefined) {
+      await store.saveBoards(state);
+      await store.deleteLegacyFocus();
     }
   }
-  for (const id of rootIds)
-    descendants.delete(id);
-  return descendants;
-}
-function collectSubtreeIds(tasks, rootIds) {
-  const roots = [...rootIds];
-  return new Set([...roots, ...collectDescendantIds(tasks, roots)]);
-}
-function excludeHiddenSubtrees(tasks) {
-  const hiddenIds = collectSubtreeIds(tasks, tasks.filter((task) => task.hidden === true).map((task) => task.id));
-  return tasks.filter((task) => !hiddenIds.has(task.id));
-}
-function findTaskByIdOrDescription(tasks, target) {
-  const trimmed = target.trim();
-  if (/^#?\d+$/.test(trimmed))
-    return findTask(tasks, trimmed.replace(/^#/, ""));
-  const needle = trimmed.toLowerCase();
-  const matches = tasks.filter((task) => task.status === "pending" && task.description.toLowerCase() === needle);
-  const match = matches.find((task) => task.kind === "epic") ?? matches[0];
-  if (match === undefined)
-    throw new UserInputError(`Task not found: ${target}`);
-  return match;
-}
-function getTaskProgress(tasks, id) {
-  const descendantIds = collectDescendantIds(tasks, [id]);
-  let completed = 0;
-  for (const task of tasks) {
-    if (descendantIds.has(task.id) && task.status === "completed")
-      completed += 1;
+  const expired = state.boards.filter((board) => isExpired(board, now));
+  if (expired.length === 0)
+    return state;
+  for (const board of expired) {
+    await wrapUpBoard(store, board, now);
+    state = deleteBoard(state, board.name);
   }
-  return { total: descendantIds.size, completed };
+  await store.saveBoards(state);
+  return state;
 }
-function isEpic(task, tasks) {
-  return task.kind === "epic" || countDescendants(tasks, task.id) > 0;
+async function readBoardNames(store) {
+  const state = await store.loadBoardsFile();
+  return state?.boards.map((board) => board.name) ?? [];
 }
-function findTask(tasks, id) {
-  const task = tasks.find((candidate) => candidate.id === id);
-  if (task === undefined)
-    throw new UserInputError(`Task not found: ${id}`);
-  return task;
-}
-function moveTask(tasks, id, parentId, now = Date.now()) {
-  const task = findTask(tasks, id);
-  if (parentId !== undefined) {
-    findTask(tasks, parentId);
-    if (parentId === id || collectDescendantIds(tasks, [id]).has(parentId)) {
-      throw new UserInputError(`Cannot move #${id} under #${parentId}: it would nest inside itself`);
-    }
-    task.parentId = parentId;
-  } else {
-    delete task.parentId;
-  }
-  task.updatedAt = now;
-  return task;
-}
-function completeSubtrees(tasks, rootIds, now = Date.now()) {
-  const ids = collectSubtreeIds(tasks, rootIds);
-  let changed = 0;
-  for (const task of tasks) {
-    if (!ids.has(task.id) || task.status === "completed")
-      continue;
-    task.status = "completed";
+async function wrapUpBoard(store, board, now = Date.now()) {
+  const tasks = await store.loadTasks();
+  const sessionRoots = collectSessionRoots(board, tasks);
+  if (board.expiresAt === undefined || sessionRoots.length === 0)
+    return;
+  const epic = {
+    id: `${nextTaskId(tasks)}`,
+    description: board.name,
+    status: sessionRoots.every((task) => task.status === "completed") ? "completed" : "pending",
+    priority: "none",
+    kind: "epic",
+    createdAt: board.createdAt,
+    updatedAt: now,
+    reminderOffsets: [],
+    notificationsSent: { reminders: [], overdue: false }
+  };
+  for (const task of sessionRoots) {
+    task.parentId = epic.id;
     task.updatedAt = now;
-    changed += 1;
   }
-  return changed;
+  await store.saveTasks([...tasks, epic]);
+  return epic;
 }
-function countDescendants(tasks, id) {
-  return collectDescendantIds(tasks, [id]).size;
+async function placeNewTasks(store, state, tasks, created, placement) {
+  const board = getActiveBoard(state);
+  if (board === undefined || placement.offBoard === true || created.length === 0)
+    return;
+  const lane = placement.later === true ? "later" : "now";
+  let next = board;
+  for (const task of created) {
+    if (laneOfParent(next, tasks, task) !== undefined)
+      continue;
+    next = placeOnBoard(next, tasks, task.id, lane).board;
+  }
+  await store.saveBoards(replaceBoard(state, board.name, next));
+}
+function checkPlacement(state, tasks, parentIds, placement) {
+  if (placement.later === true && placement.offBoard === true)
+    throw new UserInputError("--later and --off-board contradict each other");
+  if (placement.later !== true)
+    return;
+  const board = getActiveBoard(state);
+  if (board === undefined)
+    throw new UserInputError("--later needs an active board \xB7 todo board use <name> or todo board new <name>");
+  for (const parentId of parentIds) {
+    if (parentId === undefined)
+      continue;
+    const parentLane = laneOf(board, tasks, parentId);
+    if (parentLane === "now")
+      throw new UserInputError(`#${parentId} is in Now on ${board.name}; its subtasks follow it \xB7 move #${parentId} to Later instead`);
+  }
+}
+function laneOfParent(board, tasks, task) {
+  return task.parentId === undefined ? undefined : laneOf(board, tasks, task.parentId);
+}
+function nextTaskId(tasks) {
+  const numericIds = tasks.map((task) => Number.parseInt(task.id, 10)).filter((id) => Number.isFinite(id));
+  return (numericIds.length === 0 ? 0 : Math.max(...numericIds)) + 1;
 }
 
 // src/plugins/add.ts
-var addPlugin = {
+var PLACEMENT_FLAGS = [
+  { name: "later", description: "Put the new tasks in the active board's Later lane" },
+  { name: "off-board", description: "Keep the new tasks off the active board" }
+];
+var TASK_FLAGS = [
+  { name: "due", value: "due-time", greedy: true, description: "Due date: 1h, 30m, tomorrow, monday, next week, 16/08/2026" },
+  { name: "priority", value: "priority", description: "none (default), low, medium, or high" },
+  { name: "reminders", aliases: ["remind"], value: "minutes", description: "Comma list of minutes before the due date to notify" }
+];
+var UNDER_FLAG = { name: "under", aliases: ["parent", "in"], value: "task-id", description: "Nest the new tasks under an existing task" };
+var addCommand = {
   name: "add",
-  description: "Creates tasks.",
-  register(app) {
-    app.command("add", "Add one or more tasks.", async ({ args, store, stdout }) => {
-      const newTasks = await createTasks(store, args);
-      for (const task of newTasks)
-        stdout.write(formatAddedTask(task));
-    }, {
-      group: "Create",
-      positional: "text",
-      usage: ["todo add <description>[, <description>] [options]", "todo <description>[, <description>] [options]"],
-      details: [
-        "The add verb is optional: any unknown first word starts a task description.",
-        "Separate several tasks with commas. The first --option ends the description;",
-        "use a standalone -- when a description itself starts with a dash."
-      ],
-      options: [
-        { flag: "--due <time>", description: "Due date: 1h, 30m, tomorrow, monday, next week, 16/08/2026" },
-        { flag: "--priority <level>", description: "none (default), low, medium, or high" },
-        { flag: "--reminders <minutes>", description: "Comma list of minutes before the due date to notify (alias --remind)" },
-        { flag: "--under <id>", description: "Nest the new task under an existing task (aliases --parent, --in)" }
-      ],
-      examples: [
-        { command: "todo buy oat milk", note: "implicit add" },
-        { command: "todo buy oat milk, call dentist --priority high", note: "two tasks, both high" },
-        { command: "todo add call dentist -- --due tomorrow --reminders 10,30" },
-        { command: "todo add polish hero --under 2", note: "subtask of #2" }
-      ]
-    });
+  summary: "Add one or more tasks.",
+  group: "Create",
+  args: [{ name: "description", kind: "text", variadic: true, description: "Task text; separate several tasks with commas" }],
+  flags: [...TASK_FLAGS, UNDER_FLAG, ...PLACEMENT_FLAGS],
+  details: [
+    "The add verb is optional: any unknown first word starts a task description.",
+    "Separate several tasks with commas. Use a standalone -- when a description itself starts with a dash.",
+    "While a board is active, new tasks join its Now lane; --later puts them in Later, --off-board keeps them off.",
+    "There is no --on for add. Activate the board first with `todo board use <name>`, or place the task afterwards with `todo board add <id> --on <name>`."
+  ],
+  examples: [
+    { command: "todo buy oat milk", note: "implicit add" },
+    { command: "todo buy oat milk, call dentist --priority high", note: "two tasks, both high" },
+    { command: "todo add call dentist --due tomorrow --reminders 10,30" },
+    { command: "todo add polish hero --under 2", note: "subtask of #2" },
+    { command: "todo add read that paper --later", note: "Later lane of the active board" },
+    { command: "todo add renew passport --off-board", note: "on no board" },
+    { command: "todo add -- -v flag is broken", note: "text that starts with a dash" }
+  ],
+  async run(input, { store, stdout }) {
+    const tasks = await insertTasks(store, readAddOptions(input), readPlacement(input));
+    for (const task of tasks)
+      stdout.write(formatAddedTask(task));
   }
 };
+function readPlacement(input) {
+  return { later: input.flag("later"), offBoard: input.flag("off-board") };
+}
+function parseAddArguments(args, now = new Date) {
+  const result = parse({ name: "todo", summary: "", subcommands: [addCommand] }, ["add", ...args]);
+  if (result.kind !== "run")
+    throw new UserInputError("Usage: todo add <description>[, <description>]");
+  return readAddOptions(result.input, now);
+}
+function readAddOptions(input, now = new Date, defaults = {}, words = input.args("description")) {
+  const descriptions = parseDescriptions(words);
+  if (descriptions.length === 0)
+    throw new UserInputError("Usage: todo add <description>[, <description>]");
+  const options = { priority: "none", ...defaults };
+  const priority = input.value("priority");
+  if (priority !== undefined)
+    options.priority = priority;
+  const due = input.value("due");
+  if (due !== undefined)
+    options.dueDate = parseDueDate(due, now);
+  const reminders = input.value("reminders");
+  if (reminders !== undefined)
+    options.reminderOffsets = reminders.split(",").map((offset) => Number(offset.trim()));
+  const under = input.value("under");
+  if (under !== undefined)
+    options.parentId = under;
+  return descriptions.map((description) => ({ ...options, description }));
+}
 async function createTasks(store, args, defaults = {}) {
-  const options = parseAddArguments(args).map((option) => ({ ...defaults, ...option }));
+  const options = parseAddArguments(args).map((option) => ({ ...option, ...defaults }));
+  return await insertTasks(store, options, {});
+}
+async function insertTasks(store, options, placement) {
   const tasks = await store.loadTasks();
   const config = await store.loadConfig();
   const now = Date.now();
@@ -685,60 +1714,20 @@ async function createTasks(store, args, defaults = {}) {
     if (option.parentId !== undefined)
       findTask(tasks, option.parentId);
   }
-  const newTasks = options.map((option, index) => createTask(option, getNextId(tasks) + index, now, config.defaultReminderOffsets));
-  await store.saveTasks([...tasks, ...newTasks]);
-  return newTasks;
+  const boards = await loadBoards(store, now);
+  checkPlacement(boards, tasks, options.map((option) => option.parentId), placement);
+  const firstId = nextTaskId(tasks);
+  const created = options.map((option, index) => createTask(option, firstId + index, now, config.defaultReminderOffsets));
+  const allTasks = [...tasks, ...created];
+  await store.saveTasks(allTasks);
+  await placeNewTasks(store, boards, allTasks, created, placement);
+  return created;
 }
 function formatAddedTask(task) {
   const noun = task.kind === "epic" ? "epic" : "task";
   const location = task.parentId === undefined ? "" : ` under #${task.parentId}`;
   return `Added ${noun} ${task.id}${location}: ${task.description}
 `;
-}
-function parseAddArguments(args, now = new Date) {
-  const optionStart = args.findIndex((argument) => argument === "--" || argument.startsWith("--"));
-  const descriptionParts = optionStart === -1 ? args : args.slice(0, optionStart);
-  const optionArguments = optionStart === -1 ? [] : args.slice(optionStart);
-  if (optionArguments[0] === "--")
-    optionArguments.shift();
-  const descriptions = parseDescriptions(descriptionParts);
-  if (descriptions.length === 0) {
-    throw new UserInputError("Usage: todo <description>[, <description>] [--due <time>] [--priority <level>] [--reminders <minutes>] [--under <id>]");
-  }
-  const options = { priority: "none" };
-  for (let index = 0;index < optionArguments.length; index += 1) {
-    const argument = optionArguments[index];
-    if (argument === undefined)
-      continue;
-    const [name, inlineValue] = splitOption(argument);
-    let value = inlineValue;
-    if (value === undefined) {
-      const valueParts = [];
-      while (index + 1 < optionArguments.length) {
-        const nextArgument = optionArguments[index + 1];
-        if (nextArgument === undefined || nextArgument.startsWith("--"))
-          break;
-        valueParts.push(nextArgument);
-        index += 1;
-      }
-      value = valueParts.join(" ");
-    }
-    if (value.length === 0) {
-      throw new UserInputError(`Missing value for ${name}`);
-    }
-    if (name === "--priority") {
-      options.priority = parsePriority(value);
-    } else if (name === "--under" || name === "--parent" || name === "--in") {
-      options.parentId = parseTaskIdArgument(value);
-    } else if (name === "--due") {
-      options.dueDate = parseDueDate(value, now);
-    } else if (name === "--reminders" || name === "--remind" || name === "--r") {
-      options.reminderOffsets = parseReminderOffsets(value);
-    } else {
-      throw new UnknownTokenError(`Unknown option: ${name}`, name, ADD_OPTION_NAMES, "option");
-    }
-  }
-  return descriptions.map((description) => ({ ...options, description }));
 }
 function parseDescriptions(parts) {
   const descriptions = [];
@@ -782,35 +1771,650 @@ function createTask(options, id, now, defaultReminderOffsets) {
     task.kind = options.kind;
   return task;
 }
-var ADD_OPTION_NAMES = ["--due", "--priority", "--under", "--parent", "--in", "--reminders", "--remind"];
-var PRIORITIES = ["none", "low", "medium", "high"];
-function splitOption(argument) {
-  const equalsIndex = argument.indexOf("=");
-  if (equalsIndex === -1)
-    return [argument, undefined];
-  return [argument.slice(0, equalsIndex), argument.slice(equalsIndex + 1)];
-}
-function parsePriority(value) {
-  if (value === "none" || value === "low" || value === "medium" || value === "high")
-    return value;
-  throw new UnknownTokenError(`Invalid priority: ${value}`, value, PRIORITIES, "value");
-}
 function parseTaskIdArgument(value) {
   const id = value.trim().replace(/^#/, "");
   if (!/^\d+$/.test(id))
     throw new UserInputError(`Invalid task ID: ${value}`);
   return id;
 }
-function parseReminderOffsets(value) {
-  const offsets = value.split(",").map((offset) => Number(offset.trim()));
-  if (offsets.length === 0 || offsets.some((offset) => !Number.isFinite(offset) || offset < 0)) {
-    throw new UserInputError(`Invalid reminders: ${value}`);
+
+// src/plugins/archive.ts
+import { emitKeypressEvents } from "readline";
+
+// src/plugins/undo.ts
+var DIM2 = "\x1B[2m";
+var GREEN = "\x1B[32m";
+var RESET2 = "\x1B[0m";
+var undoCommand = {
+  name: "undo",
+  aliases: ["revert", "restore"],
+  summary: "Restore the most recently deleted task or tasks.",
+  group: "Remove",
+  details: ["Only the most recent rm, rm all, or taskboard delete is kept. Restored tasks get fresh IDs and do not return to boards."],
+  examples: [
+    { command: "todo undo", note: "bring back what the last rm removed, under new IDs" },
+    { command: "todo archive restore r3", note: "an older removal" }
+  ],
+  async run(_input, { store, stdout }) {
+    const undo = await store.loadUndo();
+    if (undo === undefined || undo.tasks.length === 0) {
+      stdout.write(`${DIM2}Nothing to undo${RESET2}
+`);
+      return;
+    }
+    const tasks = await store.loadTasks();
+    const restoredTasks = restoreTasks(tasks, undo.tasks);
+    await store.saveTasks([...tasks, ...restoredTasks]);
+    await store.forgetRemovedBatch(undo.timestamp);
+    await store.clearUndo();
+    stdout.write(`${GREEN}Restored ${restoredTasks.length} task(s)${RESET2}
+`);
   }
-  return offsets;
+};
+var snoozeCommand = {
+  name: "snooze",
+  summary: "Push a task's due date forward.",
+  group: "Change",
+  args: [
+    { name: "id", kind: "task-id", description: "Task to snooze" },
+    { name: "time", kind: "due-time", variadic: true, description: "1h, 30m, tomorrow, monday, next week, 16/08/2026" }
+  ],
+  details: ["Sets a new due date and resets reminder notifications for the task."],
+  examples: [
+    { command: "todo snooze 4 1h" },
+    { command: "todo snooze 4 tomorrow" },
+    { command: "todo snooze 4 next week" },
+    { command: "todo snooze 4 16/08/2026" }
+  ],
+  async run(input, { store, stdout }) {
+    const id = input.arg("id");
+    const dueDate = tryParseDueDate(input.args("time").join(" "));
+    if (dueDate === undefined)
+      throw new UserInputError("Invalid snooze time");
+    const tasks = await store.loadTasks();
+    const task = tasks.find((item) => item.id === id);
+    if (task === undefined)
+      throw new UserInputError(`Task not found: ${id}`);
+    task.dueDate = dueDate;
+    task.updatedAt = Date.now();
+    if (task.reminder !== undefined)
+      task.reminder.dueAt = dueDate;
+    resetNotificationState(task);
+    await store.saveTasks(tasks);
+    stdout.write(`${GREEN}Snoozed #${task.id}${RESET2}
+`);
+  }
+};
+function restoreTasks(tasks, deletedTasks) {
+  let nextId = nextTaskId(tasks);
+  const existingIds = new Set(tasks.map((task) => task.id));
+  const idMap = new Map(deletedTasks.map((task) => [task.id, `${nextId++}`]));
+  const now = Date.now();
+  return deletedTasks.map((task) => {
+    const restored = { ...task, id: idMap.get(task.id) ?? task.id, updatedAt: now };
+    const parentId = task.parentId === undefined ? undefined : idMap.get(task.parentId) ?? (existingIds.has(task.parentId) ? task.parentId : undefined);
+    if (parentId === undefined)
+      delete restored.parentId;
+    else
+      restored.parentId = parentId;
+    return restored;
+  });
 }
-function getNextId(tasks) {
-  const numericIds = tasks.map((task) => Number.parseInt(task.id, 10)).filter((id) => Number.isFinite(id));
-  return (numericIds.length === 0 ? 0 : Math.max(...numericIds)) + 1;
+
+// src/domain/archive.ts
+function buildArchiveEntries(tasks, removed) {
+  const done = tasks.filter((task) => task.status === "completed").map((task) => ({ kind: "done", ref: `#${task.id}`, at: task.updatedAt, task }));
+  const gone = removed.map((entry) => ({ kind: "removed", ref: `r${entry.ref}`, at: entry.removedAt, task: entry.task }));
+  return [...done, ...gone].sort((left, right) => right.at - left.at);
+}
+function filterArchive(entries, filter) {
+  const needle = filter.query?.trim().toLowerCase() ?? "";
+  return entries.filter((entry) => (filter.kind === undefined || entry.kind === filter.kind) && (filter.since === undefined || entry.at >= filter.since) && (filter.until === undefined || entry.at <= filter.until) && (needle.length === 0 || entry.task.description.toLowerCase().includes(needle) || entry.ref === needle));
+}
+function parseArchiveDate(value, now = new Date) {
+  const shorthand = value.trim().match(/^(\d+)([hdw])$/i);
+  const timestamp = tryParseDueDate(shorthand ? `-${shorthand[1]}${shorthand[2]}` : value, now);
+  if (timestamp === undefined)
+    throw new UserInputError(`Invalid date: ${value}`);
+  return timestamp;
+}
+function parseArchiveArgs(args, now = new Date) {
+  const filter = {};
+  const words = [];
+  let interactive = false;
+  for (let index = 0;index < args.length; index += 1) {
+    const arg = args[index] ?? "";
+    if (arg === "--removed" || arg === "--deleted")
+      filter.kind = "removed";
+    else if (arg === "--done" || arg === "--completed")
+      filter.kind = "done";
+    else if (arg === "-i" || arg === "--interactive")
+      interactive = true;
+    else if (arg === "--since" || arg === "--until") {
+      const value = args[index + 1];
+      if (value === undefined)
+        throw new UserInputError(`Missing value for ${arg}`);
+      filter[arg === "--since" ? "since" : "until"] = parseArchiveDate(value, now);
+      index += 1;
+    } else if (arg.startsWith("--"))
+      throw new UserInputError(`Unknown option: ${arg}`);
+    else
+      words.push(arg);
+  }
+  if (words.length > 0)
+    filter.query = words.join(" ");
+  return { filter, interactive };
+}
+function restoreArchiveEntries(tasks, removed, refs, parentId, now = Date.now()) {
+  if (typeof parentId === "string" && !tasks.some((task) => task.id === parentId && task.status === "pending")) {
+    throw new UserInputError(`Parent task not found: ${parentId}`);
+  }
+  const removedRefs = new Set;
+  const doneIds = new Set;
+  for (const raw of refs) {
+    const ref = raw.trim().toLowerCase();
+    const removedMatch = ref.match(/^r(\d+)$/);
+    if (removedMatch)
+      removedRefs.add(Number(removedMatch[1]));
+    else if (/^#?\d+$/.test(ref))
+      doneIds.add(ref.replace(/^#/, ""));
+    else
+      throw new UserInputError(`Invalid archive reference: ${raw} (use r3 for removed, #12 for completed)`);
+  }
+  const picked = removed.filter((entry) => removedRefs.has(entry.ref));
+  const missingRemoved = [...removedRefs].filter((ref) => !picked.some((entry) => entry.ref === ref));
+  const reopened = tasks.filter((task) => doneIds.has(task.id) && task.status === "completed");
+  const missingDone = [...doneIds].filter((id) => !reopened.some((task) => task.id === id));
+  const missing = [...missingRemoved.map((ref) => `r${ref}`), ...missingDone.map((id) => `#${id}`)];
+  if (missing.length > 0)
+    throw new UserInputError(`Not in archive: ${missing.join(", ")}`);
+  const recreated = restoreTasks(tasks, picked.map((entry) => entry.task));
+  const recreatedIds = new Set(recreated.map((task) => task.id));
+  for (const task of recreated) {
+    task.status = "pending";
+    if (parentId !== undefined && (task.parentId === undefined || !recreatedIds.has(task.parentId)))
+      assignParent(task, parentId);
+  }
+  for (const task of reopened) {
+    task.status = "pending";
+    task.updatedAt = now;
+    if (parentId !== undefined && parentId !== task.id)
+      assignParent(task, parentId);
+  }
+  return {
+    tasks: [...tasks, ...recreated],
+    removed: removed.filter((entry) => !removedRefs.has(entry.ref)),
+    restored: [...recreated, ...reopened]
+  };
+}
+function assignParent(task, parentId) {
+  if (parentId === null)
+    delete task.parentId;
+  else
+    task.parentId = parentId;
+}
+
+// src/presentation/due-format.ts
+var MINUTE_MS = 60000;
+var HOUR_MS = 60 * MINUTE_MS;
+var DAY_MS = 24 * HOUR_MS;
+var SOON_WINDOW_MS = 30 * MINUTE_MS;
+var DUE_COLORS = {
+  reset: "\x1B[0m",
+  dim: "\x1B[2m",
+  bold: "\x1B[1m",
+  overdue: "\x1B[38;5;203m",
+  soon: "\x1B[38;5;229m",
+  upcoming: "\x1B[38;5;116m",
+  label: "\x1B[38;5;147m"
+};
+var MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function getDueUrgency(dueAt, now) {
+  if (dueAt < now)
+    return "overdue";
+  return dueAt - now <= SOON_WINDOW_MS ? "soon" : "upcoming";
+}
+function getUrgencyColor(dueAt, now) {
+  return DUE_COLORS[getDueUrgency(dueAt, now)];
+}
+function formatAbsoluteDue(dueAt) {
+  const date = new Date(dueAt);
+  const day = `${date.getDate()}`.padStart(2, "0");
+  const month = MONTH_NAMES[date.getMonth()];
+  const hours = `${date.getHours()}`.padStart(2, "0");
+  const minutes = `${date.getMinutes()}`.padStart(2, "0");
+  return `${day} ${month} ${date.getFullYear()} \xB7 ${hours}:${minutes}`;
+}
+function formatRelativeDue(dueAt, now) {
+  const difference = dueAt - now;
+  const parts = splitDuration(Math.abs(difference), 2);
+  return difference < 0 ? `overdue by ${parts}` : `in ${parts}`;
+}
+function formatCompactDue(dueAt, now) {
+  if (dueAt < now)
+    return `overdue ${splitDuration(now - dueAt, 1)}`;
+  const difference = dueAt - now;
+  if (difference < HOUR_MS)
+    return `due in ${splitDuration(difference, 1)}`;
+  const dayGap = countCalendarDaysBetween(now, dueAt);
+  if (dayGap === 0)
+    return `due in ${splitDuration(difference, 1)}`;
+  if (dayGap === 1)
+    return "due tomorrow";
+  return `due ${formatShortDate(dueAt, now)}`;
+}
+function formatShortDate(dueAt, now) {
+  const date = new Date(dueAt);
+  const month = MONTH_NAMES[date.getMonth()];
+  const year = date.getFullYear() === new Date(now).getFullYear() ? "" : ` ${date.getFullYear()}`;
+  return `${date.getDate()} ${month}${year}`;
+}
+function formatSound(reminder) {
+  if (reminder.soundMode === "none")
+    return "none";
+  if (reminder.soundMode === "default")
+    return "default";
+  return reminder.soundPath ?? "custom";
+}
+function formatNotifyState(reminder) {
+  return reminder.firedAt === undefined ? "enabled" : `fired ${formatAbsoluteDue(reminder.firedAt)}`;
+}
+function countCalendarDaysBetween(from, to) {
+  const start = startOfDay(new Date(from));
+  const end = startOfDay(new Date(to));
+  return Math.round((end - start) / DAY_MS);
+}
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+function splitDuration(milliseconds, maximumParts) {
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const units = [
+    [86400, "d"],
+    [3600, "h"],
+    [60, "m"],
+    [1, "s"]
+  ];
+  const parts = [];
+  let remaining = totalSeconds;
+  for (const [size, suffix] of units) {
+    const amount = Math.floor(remaining / size);
+    if (amount === 0 && parts.length === 0)
+      continue;
+    if (amount > 0)
+      parts.push(`${amount}${suffix}`);
+    remaining -= amount * size;
+    if (parts.length >= maximumParts)
+      break;
+  }
+  return parts.length === 0 ? "0s" : parts.join(" ");
+}
+
+// src/presentation/ansi-text.ts
+var ANSI_PATTERN = /\u001B\[[0-9;]*m/g;
+function stripAnsi(value) {
+  return value.replace(ANSI_PATTERN, "");
+}
+function getVisibleWidth(value) {
+  return stripAnsi(value).length;
+}
+function clipVisible(value, width) {
+  if (width <= 0)
+    return "";
+  if (getVisibleWidth(value) <= width)
+    return value;
+  let result = "";
+  let visible = 0;
+  for (const token of tokenize(value)) {
+    if (token.escape) {
+      result += token.text;
+      continue;
+    }
+    for (const character of token.text) {
+      if (visible === width)
+        return `${result}\x1B[0m`;
+      result += character;
+      visible += 1;
+    }
+  }
+  return `${result}\x1B[0m`;
+}
+function highlightVisibleRanges(value, ranges, on, off) {
+  if (ranges.length === 0)
+    return value;
+  const starts = new Map(ranges.map((range) => [range.start, range]));
+  const ends = new Map(ranges.map((range) => [range.end, range]));
+  let result = "";
+  let visible = 0;
+  let activeOff;
+  for (const token of tokenize(value)) {
+    if (token.escape) {
+      result += token.text;
+      continue;
+    }
+    for (const character of token.text) {
+      const ending = ends.get(visible);
+      if (activeOff !== undefined && ending !== undefined) {
+        result += activeOff;
+        activeOff = undefined;
+      }
+      const starting = starts.get(visible);
+      if (starting !== undefined) {
+        result += starting.on ?? on;
+        activeOff = starting.off ?? off;
+      }
+      result += character;
+      visible += 1;
+    }
+  }
+  return activeOff === undefined ? result : `${result}${activeOff}`;
+}
+function tokenize(value) {
+  const tokens = [];
+  let lastIndex = 0;
+  for (const match of value.matchAll(ANSI_PATTERN)) {
+    if (match.index > lastIndex)
+      tokens.push({ text: value.slice(lastIndex, match.index), escape: false });
+    tokens.push({ text: match[0], escape: true });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < value.length)
+    tokens.push({ text: value.slice(lastIndex), escape: false });
+  return tokens;
+}
+
+// src/plugins/archive.ts
+var DIM3 = "\x1B[2m";
+var GREEN2 = "\x1B[32m";
+var RED = "\x1B[38;5;203m";
+var MAUVE = "\x1B[38;5;147m";
+var SELECTED = "\x1B[48;5;60m";
+var RESET3 = "\x1B[0m";
+var archiveCommand = {
+  name: "archive",
+  aliases: ["removed", "trash"],
+  summary: "List completed and removed tasks, newest first.",
+  group: "View",
+  args: [{ name: "text", kind: "text", variadic: true, optional: true, description: "Only entries whose description contains this" }],
+  flags: [
+    { name: "removed", aliases: ["deleted"], description: "Only removed tasks" },
+    { name: "done", aliases: ["completed"], description: "Only completed tasks" },
+    { name: "since", value: "due-time", description: "Newer than: 7d, 12h, 2w (ago) or a date" },
+    { name: "until", value: "due-time", description: "Older than: 7d, 12h, 2w (ago) or a date" },
+    { name: "interactive", short: "i", description: "Open the restore picker" }
+  ],
+  details: [
+    "`todo rm` never deletes: removed tasks are kept in ~/.dotfiles/todo/removed.json as r<n>.",
+    "Completed tasks are listed as #<id>. Restoring a removed task recreates it with a fresh ID; restoring a completed one reopens it.",
+    "Dates accept 7d/12h/2w (ago) or any due-date form (yesterday, 16/08/2026).",
+    "-i opens a picker: type to filter, Tab cycles all/removed/done, Space marks, Enter restores, Ctrl+T restores under a chosen parent."
+  ],
+  examples: [
+    { command: "todo archive --removed --since 7d" },
+    { command: "todo archive groceries" },
+    { command: "todo archive restore r3 r4", note: "recreate two removed tasks" },
+    { command: "todo archive restore r3 --to 12", note: "recreate under task #12" },
+    { command: "todo archive -i" }
+  ],
+  subcommands: [
+    {
+      name: "restore",
+      summary: "Bring archived tasks back.",
+      args: [{ name: "ref", kind: "archive-ref", variadic: true, description: "r<n> for removed tasks, #<id> or <id> for completed ones" }],
+      flags: [{ name: "to", value: "parent-id", description: "Restore under this task, or top for the top level" }],
+      details: ["Removed tasks come back with fresh IDs; completed ones reopen with their own ID. Find refs with `todo archive`."],
+      examples: [
+        { command: "todo archive restore r3" },
+        { command: "todo archive restore r3,r4 #12", note: "two removed tasks and a completed one" },
+        { command: "todo archive restore r3 --to 12", note: "under task #12" },
+        { command: "todo archive restore r3 --to top", note: "at the top level" }
+      ],
+      async run(input, { store, stdout }) {
+        const to = input.value("to");
+        const parentId = to === undefined ? undefined : to === "top" || to === "root" || to === "-" ? null : to;
+        const refs = input.args("ref").flatMap((ref) => ref.split(",").filter((part) => part.length > 0));
+        const restored = await applyRestore(store, refs, parentId);
+        stdout.write(`${GREEN2}Restored ${restored.length} task(s): ${restored.map((task) => `#${task.id}`).join(", ")}${RESET3}
+`);
+      }
+    }
+  ],
+  run: runArchive
+};
+async function runArchive(input, { store, stdout }) {
+  const { filter, interactive } = parseArchiveArgs(toArchiveArgs(input));
+  if (interactive) {
+    if (!process.stdin.isTTY)
+      throw new UserInputError("todo archive -i needs a terminal");
+    await runArchivePicker(store, filter);
+    return;
+  }
+  const entries = filterArchive(buildArchiveEntries(await store.loadTasks(), await store.loadRemoved()), filter);
+  if (entries.length === 0) {
+    stdout.write(`${DIM3}No archived tasks found${RESET3}
+`);
+    return;
+  }
+  for (const entry of entries)
+    stdout.write(`${formatArchiveEntry(entry)}
+`);
+}
+function toArchiveArgs(input) {
+  const args = [...input.args("text")];
+  if (input.flag("removed"))
+    args.push("--removed");
+  if (input.flag("done"))
+    args.push("--done");
+  if (input.flag("interactive"))
+    args.push("-i");
+  for (const name of ["since", "until"]) {
+    const value = input.value(name);
+    if (value !== undefined)
+      args.push(`--${name}`, value);
+  }
+  return args;
+}
+async function applyRestore(store, refs, parentId) {
+  const result = restoreArchiveEntries(await store.loadTasks(), await store.loadRemoved(), refs, parentId);
+  await store.saveTasks(result.tasks);
+  await store.saveRemoved(result.removed);
+  return result.restored;
+}
+function formatArchiveEntry(entry, now = Date.now()) {
+  const badge = entry.kind === "removed" ? `${RED}removed${RESET3}` : `${GREEN2}done   ${RESET3}`;
+  return `${MAUVE}${entry.ref.padEnd(5)}${RESET3} ${badge} ${DIM3}${formatShortDate(entry.at, now).padEnd(11)}${RESET3} ${entry.task.description}`;
+}
+var KIND_CYCLE = [undefined, "removed", "done"];
+
+class ArchivePicker {
+  entries;
+  baseFilter;
+  pendingTasks;
+  query;
+  kind;
+  index = 0;
+  marked = new Set;
+  message = "";
+  parentStage;
+  closed = false;
+  constructor(entries, baseFilter, pendingTasks) {
+    this.entries = entries;
+    this.baseFilter = baseFilter;
+    this.pendingTasks = pendingTasks;
+    this.query = baseFilter.query ?? "";
+    this.kind = baseFilter.kind;
+  }
+  get visible() {
+    return filterArchive(this.entries, { ...this.baseFilter, kind: this.kind, query: this.query });
+  }
+  get parentMatches() {
+    const stage = this.parentStage;
+    if (stage === undefined)
+      return [];
+    const needle = stage.query.toLowerCase();
+    return stage.candidates.filter((task) => needle.length === 0 || task.description.toLowerCase().includes(needle) || task.id === needle.replace(/^#/, ""));
+  }
+  replaceEntries(entries) {
+    this.entries = entries;
+    this.marked.clear();
+    this.index = Math.min(this.index, Math.max(0, this.visible.length - 1));
+  }
+  handleKey(character, key) {
+    if (key.name === "escape" || key.ctrl && key.name === "c") {
+      if (this.parentStage !== undefined)
+        this.parentStage = undefined;
+      else
+        this.closed = true;
+      return;
+    }
+    return this.parentStage === undefined ? this.handleListKey(character, key) : this.handleParentKey(character, key);
+  }
+  selectedRefs() {
+    if (this.marked.size > 0)
+      return [...this.marked];
+    const current = this.visible[this.index];
+    return current === undefined ? [] : [current.ref];
+  }
+  handleListKey(character, key) {
+    const count = this.visible.length;
+    if (key.name === "up")
+      this.index = Math.max(0, this.index - 1);
+    else if (key.name === "down")
+      this.index = Math.min(Math.max(0, count - 1), this.index + 1);
+    else if (key.name === "tab") {
+      this.kind = KIND_CYCLE[(KIND_CYCLE.indexOf(this.kind) + 1) % KIND_CYCLE.length];
+      this.index = 0;
+    } else if (key.name === "space") {
+      const current = this.visible[this.index];
+      if (current !== undefined) {
+        if (this.marked.has(current.ref))
+          this.marked.delete(current.ref);
+        else
+          this.marked.add(current.ref);
+        this.index = Math.min(Math.max(0, count - 1), this.index + 1);
+      }
+    } else if (key.name === "return") {
+      const refs = this.selectedRefs();
+      if (refs.length > 0)
+        return { refs };
+    } else if (key.ctrl && key.name === "t") {
+      if (this.selectedRefs().length > 0)
+        this.parentStage = { candidates: this.pendingTasks(), query: "", index: 0 };
+    } else if (key.name === "backspace") {
+      this.query = this.query.slice(0, -1);
+      this.index = 0;
+    } else if (character !== undefined && !key.ctrl && character.length === 1 && character >= " ") {
+      this.query += character;
+      this.index = 0;
+    }
+    return;
+  }
+  handleParentKey(character, key) {
+    const stage = this.parentStage;
+    if (stage === undefined)
+      return;
+    const options = this.parentMatches.length + 1;
+    if (key.name === "up")
+      stage.index = Math.max(0, stage.index - 1);
+    else if (key.name === "down")
+      stage.index = Math.min(options - 1, stage.index + 1);
+    else if (key.name === "return") {
+      const parent = stage.index === 0 ? null : this.parentMatches[stage.index - 1]?.id ?? null;
+      this.parentStage = undefined;
+      return { refs: this.selectedRefs(), parentId: parent };
+    } else if (key.name === "backspace") {
+      stage.query = stage.query.slice(0, -1);
+      stage.index = 0;
+    } else if (character !== undefined && !key.ctrl && character.length === 1 && character >= " ") {
+      stage.query += character;
+      stage.index = 0;
+    }
+    return;
+  }
+  render(width, height) {
+    const lines = [];
+    const listHeight = Math.max(3, height - 5);
+    if (this.parentStage !== undefined) {
+      lines.push(`${MAUVE}restore ${this.selectedRefs().join(" ")} under\u2026${RESET3}  ${DIM3}filter:${RESET3} ${this.parentStage.query}\u258F`);
+      const options = ["(top level)", ...this.parentMatches.map((task) => `#${task.id} ${task.description}`)];
+      const start = Math.max(0, this.parentStage.index - listHeight + 1);
+      options.slice(start, start + listHeight).forEach((option, offset) => {
+        lines.push(start + offset === this.parentStage?.index ? `${SELECTED}${clipVisible(`\u203A ${option}`, width)}${RESET3}` : clipVisible(`  ${option}`, width));
+      });
+      lines.push(`${DIM3}\u2191\u2193 choose \xB7 Enter restore here \xB7 Esc back${RESET3}`);
+      return lines.join(`
+`);
+    }
+    const visible = this.visible;
+    const kindLabel = this.kind ?? "all";
+    lines.push(`${MAUVE}todo archive${RESET3} ${DIM3}\xB7 ${kindLabel} \xB7 ${visible.length} match(es)${RESET3}  ${DIM3}filter:${RESET3} ${this.query}\u258F`);
+    if (visible.length === 0)
+      lines.push(`${DIM3}  nothing matches${RESET3}`);
+    const start = Math.max(0, this.index - listHeight + 1);
+    visible.slice(start, start + listHeight).forEach((entry, offset) => {
+      const mark = this.marked.has(entry.ref) ? `${GREEN2}\u25CF${RESET3}` : " ";
+      const line = clipVisible(`${mark} ${formatArchiveEntry(entry)}`, width);
+      lines.push(start + offset === this.index ? `${SELECTED}${line}${RESET3}` : line);
+    });
+    if (this.message.length > 0)
+      lines.push(`${GREEN2}${this.message}${RESET3}`);
+    lines.push(`${DIM3}type to filter \xB7 Tab all/removed/done \xB7 Space mark \xB7 Enter restore \xB7 Ctrl+T restore under\u2026 \xB7 Esc quit${RESET3}`);
+    return lines.join(`
+`);
+  }
+}
+async function runArchivePicker(store, filter) {
+  const terminal = process.stdout;
+  let tasks = await store.loadTasks();
+  const load = async () => buildArchiveEntries(tasks, await store.loadRemoved());
+  const picker = new ArchivePicker(await load(), filter, () => tasks.filter((task) => task.status === "pending"));
+  const wasRaw = process.stdin.isRaw;
+  const draw = () => {
+    const output = picker.render(terminal.columns ?? 80, terminal.rows ?? 24);
+    terminal.write(`\x1B[H${output.split(`
+`).join(`\x1B[K
+`)}\x1B[K\x1B[J`);
+  };
+  emitKeypressEvents(process.stdin);
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  terminal.write("\x1B[?1049h\x1B[?25l");
+  await new Promise((resolve) => {
+    let busy = false;
+    const handleKeypress = (character, key) => {
+      if (busy)
+        return;
+      const request = picker.handleKey(character, key ?? {});
+      if (picker.closed) {
+        process.stdin.off("keypress", handleKeypress);
+        process.stdout.off("resize", draw);
+        resolve();
+        return;
+      }
+      if (request === undefined) {
+        draw();
+        return;
+      }
+      busy = true;
+      applyRestore(store, request.refs, request.parentId).then(async (restored) => {
+        tasks = await store.loadTasks();
+        picker.replaceEntries(await load());
+        picker.message = `Restored ${restored.map((task) => `#${task.id}`).join(", ")}`;
+      }).catch((error) => {
+        picker.message = error instanceof Error ? error.message : String(error);
+      }).finally(() => {
+        busy = false;
+        draw();
+      });
+    };
+    process.stdin.on("keypress", handleKeypress);
+    process.stdout.on("resize", draw);
+    draw();
+  });
+  terminal.write("\x1B[?25h\x1B[?1049l");
+  if (!wasRaw)
+    process.stdin.setRawMode(false);
+  process.stdin.pause();
 }
 
 // src/domain/task.ts
@@ -819,139 +2423,1030 @@ var DEFAULT_CONFIG = {
   defaultReminderOffsets: [10, 30, 60],
   showNotificationsOnStartup: true,
   showCompletedTasksByDefault: false,
-  shellDisplayLimit: 5,
-  undoTimeout: 5000,
+  panelLimit: 5,
+  panelLayout: "auto",
+  panelBoards: "active",
+  undoTimeout: 86400000,
   autocorrect: true,
   collapsedEpicIds: []
 };
-var UNLIMITED_SHELL_DISPLAY = 0;
+var UNLIMITED_PANEL_ROWS = 0;
 
-// src/domain/shell-display-limit.ts
-function parseShellDisplayLimit(value) {
+// src/domain/panel-boards.ts
+var PANEL_BOARDS = ["active", "all"];
+function parsePanelBoards(value) {
+  const normalized = value.trim().toLowerCase();
+  const boards = PANEL_BOARDS.find((candidate) => candidate === normalized);
+  if (boards === undefined) {
+    throw new UnknownTokenError(`Unknown value for panel-boards: ${value}`, value, PANEL_BOARDS, "value");
+  }
+  return boards;
+}
+function normalizePanelBoards(value) {
+  return PANEL_BOARDS.find((candidate) => candidate === value) ?? DEFAULT_CONFIG.panelBoards;
+}
+
+// src/domain/panel-layout.ts
+var PANEL_LAYOUTS = ["auto", "side", "stack"];
+function parsePanelLayout(value) {
+  const normalized = value.trim().toLowerCase();
+  const layout = PANEL_LAYOUTS.find((candidate) => candidate === normalized);
+  if (layout === undefined) {
+    throw new UnknownTokenError(`Unknown value for panel-layout: ${value}`, value, PANEL_LAYOUTS, "value");
+  }
+  return layout;
+}
+function normalizePanelLayout(value) {
+  return PANEL_LAYOUTS.find((candidate) => candidate === value) ?? DEFAULT_CONFIG.panelLayout;
+}
+
+// src/domain/panel-limit.ts
+function parsePanelLimit(value) {
   const normalized = value.trim().toLowerCase();
   if (normalized === "all" || normalized === "unlimited")
-    return UNLIMITED_SHELL_DISPLAY;
+    return UNLIMITED_PANEL_ROWS;
   const parsed = Number(normalized);
   if (!Number.isInteger(parsed) || parsed < 0) {
     throw new UserInputError(`Invalid task count: ${value}. Use a whole number or 'all'.`);
   }
   return parsed;
 }
-function normalizeShellDisplayLimit(value) {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : DEFAULT_CONFIG.shellDisplayLimit;
+function normalizePanelLimit(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : DEFAULT_CONFIG.panelLimit;
 }
-function toShellDisplayCount(limit) {
-  return limit === UNLIMITED_SHELL_DISPLAY ? Number.POSITIVE_INFINITY : limit;
+function toPanelRowCount(limit) {
+  return limit === UNLIMITED_PANEL_ROWS ? Number.POSITIVE_INFINITY : limit;
 }
-function formatShellDisplayLimit(limit) {
-  return limit === UNLIMITED_SHELL_DISPLAY ? "all" : `${limit}`;
+function formatPanelLimit(limit) {
+  return limit === UNLIMITED_PANEL_ROWS ? "all" : `${limit}`;
+}
+
+// src/presentation/task-format.ts
+var RESET4 = "\x1B[0m";
+var DIM4 = "\x1B[2m";
+var BOLD2 = "\x1B[1m";
+var GREEN3 = "\x1B[38;5;114m";
+var RED2 = "\x1B[38;5;203m";
+var YELLOW = "\x1B[38;5;229m";
+var PEACH = "\x1B[38;5;208m";
+var SKY = "\x1B[38;5;116m";
+var SUBTEXT = "\x1B[38;5;217m";
+var PRIORITY_COLORS = {
+  none: SUBTEXT,
+  low: SKY,
+  medium: YELLOW,
+  high: RED2
+};
+function formatTaskTreeRowForDisplay(row, now = Date.now()) {
+  const description = row.hasChildren || row.task.kind === "epic" ? `${BOLD2}${row.task.description}${RESET4}` : row.task.description;
+  return `${formatTreePrefix(row)}${formatTask(row.task, description, now, true)}${formatRowSuffix(row)}`;
+}
+function formatTaskRowForShellDisplay(row, now = Date.now()) {
+  const prefix = formatTreePrefix(row);
+  const badge = formatRowSuffix(row);
+  const description = truncate(row.task.description, Math.max(12, 38 - getVisibleLength(prefix) - getVisibleLength(badge)));
+  const emphasized = row.hasChildren || row.task.kind === "epic" ? `${BOLD2}${description}${RESET4}` : description;
+  const taskText = formatTask(row.task, emphasized, now, false);
+  const id = `${DIM4}#${row.task.id.padStart(2, "0")}${RESET4}`;
+  return {
+    left: `${id}  ${prefix}${taskText}${badge}`,
+    right: `${DIM4}${formatCreatedAt(row.task.createdAt)}${RESET4}`
+  };
+}
+function formatTreePrefix(row) {
+  if (row.depth === 0)
+    return "";
+  const guides = row.siblingFollows.slice(1, -1).map((follows) => follows ? "\u2502  " : "   ");
+  const connector = row.siblingFollows[row.siblingFollows.length - 1] ? "\u251C\u2500 " : "\u2514\u2500 ";
+  return `${DIM4}${guides.join("")}${connector}${RESET4}`;
+}
+function formatProgressBadge(row) {
+  if (row.progress.total > 0) {
+    const color = row.progress.completed === row.progress.total ? GREEN3 : SKY;
+    return ` ${color}[${row.progress.completed}/${row.progress.total}]${RESET4}`;
+  }
+  return row.task.kind === "epic" ? ` ${DIM4}[epic]${RESET4}` : "";
+}
+function formatCollapsedSummary(row) {
+  return ` ${SKY}\u25CF${RESET4} ${DIM4}${row.childCount} subticket${row.childCount === 1 ? "" : "s"}${RESET4}`;
+}
+function formatRowSuffix(row) {
+  return row.collapsed ? formatCollapsedSummary(row) : formatProgressBadge(row);
+}
+function formatTask(task, description, now, includeId) {
+  const parts = [];
+  if (task.priority !== "none") {
+    parts.push(`${PRIORITY_COLORS[task.priority]}[${task.priority.toUpperCase()}]${RESET4}`);
+  }
+  parts.push(`${getUrgencyColor2(task.dueDate, now)}${description}${RESET4}`);
+  if (task.dueDate !== undefined) {
+    parts.push(`${getUrgencyColor2(task.dueDate, now)}${formatCompactDue(task.dueDate, now)}${RESET4}`);
+  }
+  if (includeId)
+    parts.push(`${DIM4}(${task.id})${RESET4}`);
+  return parts.join(" ");
+}
+function isUpcoming(timestamp, now = Date.now()) {
+  const difference = timestamp - now;
+  return difference > 0 && difference < 30 * 60 * 1000;
+}
+function isOverdue(timestamp, now = Date.now()) {
+  return timestamp < now;
+}
+function getUrgencyColor2(timestamp, now) {
+  if (timestamp === undefined)
+    return SUBTEXT;
+  if (isOverdue(timestamp, now))
+    return RED2;
+  if (isUpcoming(timestamp, now))
+    return YELLOW;
+  if ((timestamp - now) / (60 * 60 * 1000) < 2)
+    return PEACH;
+  return SUBTEXT;
+}
+function truncate(value, maximumLength) {
+  return value.length > maximumLength ? `${value.slice(0, maximumLength - 3)}...` : value;
+}
+function truncateVisible(value, width) {
+  if (getVisibleLength(value) <= width)
+    return value;
+  let output = "";
+  let visible = 0;
+  for (const token of value.match(/\u001B\[[0-9;]*m|[^\u001B]/gu) ?? []) {
+    if (token.startsWith("\x1B")) {
+      output += token;
+    } else if (visible < width - 1) {
+      output += token;
+      visible += 1;
+    }
+  }
+  return `${output}\u2026${RESET4}`;
+}
+function getVisibleLength(value) {
+  return value.replace(/\u001B\[[0-9;]*m/g, "").length;
+}
+function formatCreatedAt(timestamp) {
+  const date = new Date(timestamp);
+  const month = date.toLocaleString(undefined, { month: "short" });
+  const day = date.getDate().toString().padStart(2, "0");
+  const time = `${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
+  return `${day} ${month} \xB7 ${time}`;
+}
+
+// src/plugins/tasks.ts
+var DIM5 = "\x1B[2m";
+var RESET5 = "\x1B[0m";
+var GREEN4 = "\x1B[38;5;166m";
+var BOLD3 = "\x1B[1m";
+var PANEL_WIDTH = 72;
+var panelCommand = {
+  name: "panel",
+  summary: "Print the compact task panel shown at shell startup.",
+  group: "View",
+  flags: [
+    { name: "side", description: "Board lanes in columns, however narrow the terminal" },
+    { name: "stack", description: "Board lanes stacked" },
+    { name: "boards", description: "Every board as a column, the active one marked with *" },
+    { name: "limit", value: "count-or-all", description: "Rows per lane before folding the rest into a summary line" },
+    { name: "all", description: "Every pending task, ignoring the active board and the limit" }
+  ],
+  details: [
+    "Runs automatically when todo gets no arguments and stdin is not a terminal.",
+    "With an active board it shows the Now and Later lanes; otherwise every pending task, plus one line per running timed board.",
+    "With --boards, or panel-boards set to all, every board gets a column with its Now lane and, when filled, its Later lane.",
+    "Tasks hidden with `todo hide` stay out. TODO_PANEL_LIMIT, TODO_PANEL_LAYOUT and TODO_PANEL_BOARDS override the configured values."
+  ],
+  examples: [{ command: "todo panel" }, { command: "todo panel --side --limit 3" }, { command: "todo panel --boards" }, { command: "todo panel --all" }],
+  run: runPanel
+};
+var listCommand = {
+  name: "list",
+  aliases: ["tree"],
+  summary: "List tasks as a tree.",
+  group: "View",
+  flags: [
+    { name: "all", description: "Every task including completed and hidden ones, ignoring the active board" },
+    { name: "overdue", description: "Only pending tasks past their due date" },
+    { name: "upcoming", description: "Only pending tasks due soon" }
+  ],
+  details: [
+    "Pending tasks by default, without anything hidden via `todo hide`.",
+    "With an active board only its Now and Later lanes are listed; --all lifts that. Filtered views show matches flat when their parent is not part of the result."
+  ],
+  examples: [{ command: "todo list" }, { command: "todo tree --overdue" }, { command: "todo list --all" }],
+  async run(input, { store, stdout }) {
+    await listTasks(store, stdout, readListFilter(input));
+  }
+};
+function readListFilter(input) {
+  const filters = ["all", "overdue", "upcoming"].filter((name) => input.flag(name));
+  if (filters.length > 1)
+    throw new UserInputError("Use one of --all, --overdue or --upcoming");
+  return filters[0] ?? "pending";
+}
+async function listTasks(store, stdout, filter = "pending") {
+  const tasks = await store.loadTasks();
+  const now = Date.now();
+  const visible = filterTasks(tasks, filter, now);
+  const collapsedIds = await store.loadCollapsedEpicIds();
+  const board = filter === "all" ? undefined : getActiveBoard(await loadBoards(store, now));
+  if (board !== undefined) {
+    writeBoard(board, visible, tasks, stdout, now, collapsedIds);
+    return;
+  }
+  const rows = buildTaskTreeRows(visible, tasks, { compare: compareTasks, collapsedIds });
+  if (rows.length === 0) {
+    stdout.write(`${DIM5}No tasks found${RESET5}
+`);
+    return;
+  }
+  for (const row of rows)
+    stdout.write(`${formatTaskTreeRowForDisplay(row, now)}
+`);
+}
+function writeBoard(board, visible, tasks, stdout, now, collapsedIds) {
+  stdout.write(`${BOLD3}${board.name}${RESET5}${formatBoardTimer(board, now, " \xB7 ")}
+`);
+  const lanes = splitLanes(board, visible, tasks);
+  if (lanes.now.length === 0 && lanes.later.length === 0) {
+    stdout.write(`${DIM5}Nothing on the board yet \xB7 todo board add <id> pulls a task in${RESET5}
+`);
+    return;
+  }
+  for (const lane of ["now", "later"]) {
+    if (lane === "later" && lanes.later.length === 0)
+      continue;
+    stdout.write(`${lane === "later" ? `
+` : ""}${BOLD3}${LANE_TITLES[lane]}${RESET5}
+`);
+    if (lanes[lane].length === 0)
+      stdout.write(`${DIM5}nothing here \xB7 todo board now <id>${RESET5}
+`);
+    for (const row of buildTaskTreeRows(lanes[lane], tasks, { compare: compareTasks, collapsedIds: new Set(collapsedIds) })) {
+      stdout.write(`${formatTaskTreeRowForDisplay(row, now)}
+`);
+    }
+  }
+}
+var LANE_TITLES = { now: "Now", later: "Later" };
+function splitLanes(board, visible, tasks) {
+  return {
+    now: visible.filter((task) => laneOf(board, tasks, task.id) === "now"),
+    later: visible.filter((task) => laneOf(board, tasks, task.id) === "later")
+  };
+}
+function formatBoardTimer(board, now, prefix = "") {
+  return isTimed(board) ? `${DIM5}${prefix}${formatDuration(remainingMs(board, now))} left${RESET5}` : "";
+}
+async function runPanel(input, { store, stdout }) {
+  const tasks = await store.loadTasks();
+  const now = Date.now();
+  const state = await loadBoards(store, now);
+  const showAll = input.flag("all");
+  const board = showAll ? undefined : getActiveBoard(state);
+  const pendingTasks = excludeHiddenSubtrees(tasks).filter((task) => task.status === "pending");
+  const config = await store.loadConfig();
+  const limit = resolvePanelLimit(showAll ? "all" : input.value("limit"), config.panelLimit);
+  const layout = resolvePanelLayout(input, config.panelLayout);
+  const boards = resolvePanelBoards(input, config.panelBoards);
+  const collapsedIds = await store.loadCollapsedEpicIds();
+  function buildLines(lane) {
+    const rows = buildTaskTreeRows(lane, tasks, { compare: compareTasksForPanel, collapsedIds });
+    const lines = rows.slice(0, limit).map((row) => formatTaskRowForShellDisplay(row, now));
+    const hiddenTaskCount = rows.length - lines.length;
+    if (hiddenTaskCount > 0) {
+      lines.push({
+        left: `${DIM5}\u21B3 ${hiddenTaskCount} more task${hiddenTaskCount === 1 ? "" : "s"}${RESET5}`,
+        right: `${DIM5}todo config panel-limit all${RESET5}`
+      });
+    }
+    return lines;
+  }
+  function buildBoardColumn(column) {
+    const lanes = splitLanes(column, pendingTasks, tasks);
+    const name = `${BOLD3}${column.name === state.active ? "* " : ""}${column.name}${RESET5}`;
+    const on = `--on ${quoteBoardName(column.name)}`;
+    if (lanes.now.length === 0 && lanes.later.length === 0) {
+      return [{ left: `${name}${DIM5} \xB7 nothing on it yet \xB7 todo board add <id> ${on}${RESET5}`, right: formatBoardTimer(column, now) }];
+    }
+    const lines = [{ left: `${name} ${DIM5}\xB7 Now${RESET5}`, right: formatBoardTimer(column, now) }];
+    lines.push(...lanes.now.length === 0 ? [{ left: `${DIM5}nothing in Now \xB7 todo board now <id> ${on}${RESET5}`, right: "" }] : buildLines(lanes.now));
+    if (lanes.later.length > 0)
+      lines.push({ left: `${BOLD3}Later${RESET5}`, right: `${DIM5}${lanes.later.length}${RESET5}` }, ...buildLines(lanes.later));
+    return lines;
+  }
+  if (!showAll && boards === "all" && state.boards.length > 0) {
+    stdout.write(formatPanels(state.boards.map(buildBoardColumn), layout));
+    return;
+  }
+  if (board !== undefined) {
+    const lanes = splitLanes(board, pendingTasks, tasks);
+    const title = { left: `${BOLD3}${board.name}${RESET5} ${DIM5}\xB7 Now${RESET5}`, right: formatBoardTimer(board, now) };
+    if (lanes.now.length === 0 && lanes.later.length === 0) {
+      stdout.write(formatPanels([[{ ...title, left: `${BOLD3}${board.name}${RESET5}${DIM5} \xB7 nothing on it yet \xB7 todo board add <id>${RESET5}` }]], layout));
+      return;
+    }
+    const nowPanel = [title, ...lanes.now.length === 0 ? [{ left: `${DIM5}nothing in Now \xB7 todo board now <id>${RESET5}`, right: "" }] : buildLines(lanes.now)];
+    if (lanes.later.length === 0) {
+      stdout.write(formatPanels([nowPanel], layout));
+      return;
+    }
+    const laterPanel = [{ left: `${BOLD3}Later${RESET5}`, right: `${DIM5}${lanes.later.length}${RESET5}` }, ...buildLines(lanes.later)];
+    stdout.write(formatPanels([nowPanel, laterPanel], layout));
+    return;
+  }
+  const footer = showAll ? [] : state.boards.filter(isTimed).map((running) => ({
+    left: `${DIM5}${running.name} \xB7 ${formatDuration(remainingMs(running, now))} left \xB7 todo board use ${quoteBoardName(running.name)}${RESET5}`,
+    right: ""
+  }));
+  if (pendingTasks.length === 0) {
+    const completedCount = tasks.filter((task) => task.status === "completed").length;
+    const completedText = completedCount > 0 ? `${DIM5} \xB7 ${completedCount} completed${RESET5}` : "";
+    stdout.write(formatPanels([[{ left: `${GREEN4}\u2713 All caught up${RESET5}${completedText}`, right: "" }, ...footer]], layout));
+    return;
+  }
+  stdout.write(formatPanels([[...buildLines(pendingTasks), ...footer]], layout));
+}
+function quoteBoardName(name) {
+  return /\s/.test(name) ? `"${name}"` : name;
+}
+function resolvePanelLimit(requested, configuredLimit) {
+  const value = requested ?? process.env.TODO_PANEL_LIMIT;
+  const limit = value === undefined || value === "" ? normalizePanelLimit(configuredLimit) : parsePanelLimit(value);
+  return toPanelRowCount(limit);
+}
+function resolvePanelLayout(input, configuredLayout) {
+  if (input.flag("side") && input.flag("stack"))
+    throw new UserInputError("Use --side or --stack, not both");
+  if (input.flag("side"))
+    return "side";
+  if (input.flag("stack"))
+    return "stack";
+  const fromEnvironment = process.env.TODO_PANEL_LAYOUT;
+  return fromEnvironment === undefined || fromEnvironment === "" ? normalizePanelLayout(configuredLayout) : parsePanelLayout(fromEnvironment);
+}
+function resolvePanelBoards(input, configured) {
+  if (input.flag("boards"))
+    return "all";
+  const fromEnvironment = process.env.TODO_PANEL_BOARDS;
+  return fromEnvironment === undefined || fromEnvironment === "" ? normalizePanelBoards(configured) : parsePanelBoards(fromEnvironment);
+}
+function filterTasks(tasks, filter, now) {
+  if (filter === "all")
+    return [...tasks];
+  const pendingTasks = excludeHiddenSubtrees(tasks).filter((task) => task.status === "pending");
+  if (filter === "overdue")
+    return pendingTasks.filter((task) => task.dueDate !== undefined && isOverdue(task.dueDate, now));
+  if (filter === "upcoming")
+    return pendingTasks.filter((task) => task.dueDate !== undefined && isUpcoming(task.dueDate, now));
+  return pendingTasks;
+}
+function compareTasks(left, right) {
+  if (left.dueDate !== undefined && right.dueDate !== undefined)
+    return left.dueDate - right.dueDate;
+  if (left.dueDate !== undefined)
+    return -1;
+  if (right.dueDate !== undefined)
+    return 1;
+  return 0;
+}
+function compareTasksForPanel(left, right) {
+  const dueDateOrder = compareTasks(left, right);
+  return dueDateOrder === 0 ? left.createdAt - right.createdAt : dueDateOrder;
+}
+var PANEL_GAP = 2;
+var MIN_SIDE_BY_SIDE_WIDTH = 56;
+var MIN_FORCED_SIDE_WIDTH = 24;
+function formatPanels(panels, layout) {
+  const fittedWidth = Math.min(PANEL_WIDTH, Math.floor((readTerminalColumns() - PANEL_GAP * (panels.length - 1)) / panels.length) - 4);
+  const sideBySide = panels.length > 1 && (layout === "side" || layout === "auto" && fittedWidth >= MIN_SIDE_BY_SIDE_WIDTH);
+  if (!sideBySide) {
+    return panels.map((lines) => `${formatPanel(lines, PANEL_WIDTH).join(`
+`)}
+`).join("");
+  }
+  const width = Math.max(MIN_FORCED_SIDE_WIDTH, fittedWidth);
+  const height = Math.max(...panels.map((lines) => lines.length));
+  const boxes = panels.map((lines) => formatPanel([...lines, ...Array.from({ length: height - lines.length }, () => ({ left: "", right: "" }))], width));
+  return boxes[0].map((_, row) => boxes.map((box) => box[row]).join(" ".repeat(PANEL_GAP))).join(`
+`) + `
+`;
+}
+function readTerminalColumns() {
+  return process.stdout.columns ?? (Number(process.env.COLUMNS) || 80);
+}
+function formatPanel(lines, width) {
+  const rowsFitRight = lines.slice(1).every((line) => fitsRight(line, width));
+  const shown = lines.map((line, index) => index === 0 || rowsFitRight ? line : { ...line, right: "" });
+  return [formatPanelBorder("\u256D", "\u256E", width), ...shown.map((line) => formatPanelLine(line, width)), formatPanelBorder("\u2570", "\u256F", width)];
+}
+function fitsRight({ left, right }, width) {
+  return right === "" || getVisibleLength(left) + 1 + getVisibleLength(right) <= width;
+}
+function formatPanelLine(line, width) {
+  const right = fitsRight(line, width) ? line.right : "";
+  const left = truncateVisible(line.left, width - (right === "" ? 0 : getVisibleLength(right) + 1));
+  const padding = " ".repeat(Math.max(0, width - getVisibleLength(left) - getVisibleLength(right)));
+  return `${DIM5}\u2502${RESET5} ${left}${padding}${right} ${DIM5}\u2502${RESET5}`;
+}
+function formatPanelBorder(left, right, width) {
+  return `${DIM5}${left}${"\u2500".repeat(width + 2)}${right}${RESET5}`;
+}
+
+// src/plugins/board.ts
+var DIM6 = "\x1B[2m";
+var GREEN5 = "\x1B[32m";
+var BOLD4 = "\x1B[1m";
+var ACCENT = "\x1B[38;5;208m";
+var RESET6 = "\x1B[0m";
+var ON_FLAG = { name: "on", value: "board-name", description: "Board to change instead of the active one" };
+var IDS_ARG = { name: "id", kind: "pending-task-id", variadic: true, description: "Tasks to change; their subtasks follow them" };
+var boardCommand = {
+  name: "board",
+  summary: "Curated views of tasks with Now and Later lanes.",
+  group: "Boards",
+  defaultSubcommand: "list",
+  details: [
+    "A board is a view, not a folder: a task can sit on several boards, and epics still own the tree.",
+    "One board can be active. It drives the shell panel, `todo list` and the TUI's first view; new tasks join its Now lane.",
+    "Lanes hold top-level picks; a task's subtasks follow it and cannot be moved on their own.",
+    "A timed board ends itself: tasks created on it move under an epic named after it.",
+    "To add new tasks to another board, activate it first with `todo board use`, or add them and place them with `todo board add <id> --on <name>`.",
+    'Quote board names that contain spaces when they are a single argument: `todo board use "werk fixes"`.'
+  ],
+  examples: [
+    { command: "todo board new projecten", note: "create and activate" },
+    { command: 'todo board new "deploy day" --for 4h', note: "a timed board" },
+    { command: "todo board use werk", note: "switch the active board" },
+    { command: "todo board add 12 14", note: "onto the active board, in Now" },
+    { command: "todo board later 14", note: "Now \u2192 Later" },
+    { command: "todo board move 12 --to werk", note: "move #12 off the active board onto werk" },
+    { command: "todo board end projecten", note: "delete a board; its tasks stay" },
+    { command: "todo board off", note: "back to all tasks" }
+  ],
+  subcommands: [
+    {
+      name: "list",
+      aliases: ["ls"],
+      summary: "List boards; * marks the active one.",
+      details: ["Each row shows how many tasks sit in Now and Later, and the time left on a timed board."],
+      examples: [{ command: "todo board" }, { command: "todo board ls" }],
+      run: runList
+    },
+    {
+      name: "new",
+      summary: "Create a board and make it active.",
+      args: [{ name: "name", kind: "text", variadic: true, description: "Board name; spaces are fine" }],
+      flags: [{ name: "for", value: "duration", description: "Make it a timed board: 4h, 90m, 2h30m (24h at most)" }],
+      details: ["The new board starts empty and becomes active, so tasks you add next join its Now lane."],
+      examples: [
+        { command: "todo board new projecten" },
+        { command: "todo board new deploy day --for 4h", note: "ends itself after 4 hours" },
+        { command: "todo board new release --for 2h30m" }
+      ],
+      async run(input, context) {
+        const duration = input.value("for");
+        await startBoard(context, input.args("name").join(" "), duration === undefined ? undefined : parseDuration(duration));
+      }
+    },
+    {
+      name: "use",
+      summary: "Make a board the active one.",
+      args: [{ name: "name", kind: "board-name", description: "Board to activate" }],
+      details: ["The active board drives the shell panel and `todo list`, and new tasks join its Now lane."],
+      examples: [{ command: "todo board use werk" }, { command: 'todo board use "werk fixes"', note: "quote names with spaces" }],
+      async run(input, { store, stdout }) {
+        const state = await loadBoards(store);
+        const board = requireBoard(state, input.arg("name"));
+        await store.saveBoards({ ...state, active: board.name });
+        stdout.write(`${GREEN5}${board.name} is active${RESET6}${formatBoardTimer(board, Date.now(), " \xB7 ")}
+`);
+      }
+    },
+    {
+      name: "off",
+      summary: "Show all tasks again; boards and their timers keep running.",
+      details: ["New tasks stay off every board until one is active again."],
+      examples: [{ command: "todo board off" }, { command: "todo board use werk", note: "turn a board back on" }],
+      async run(_input, { store, stdout }) {
+        const state = await loadBoards(store);
+        const { active: _active, ...rest } = state;
+        await store.saveBoards(rest);
+        stdout.write(`${GREEN5}No active board${RESET6} ${DIM6}\xB7 all tasks show; timed boards keep counting down${RESET6}
+`);
+      }
+    },
+    {
+      name: "show",
+      summary: "Print a board's Now and Later lanes.",
+      args: [{ name: "name", kind: "board-name", optional: true, description: "Board to show; defaults to the active one" }],
+      examples: [{ command: "todo board show", note: "the active board" }, { command: "todo board show werk" }],
+      async run(input, { store, stdout }) {
+        const now = Date.now();
+        const state = await loadBoards(store, now);
+        const board = resolveBoard(state, input.optionalArg("name"));
+        const tasks = await store.loadTasks();
+        const visible = excludeHiddenSubtrees(tasks).filter((task) => task.status === "pending");
+        writeBoard(board, visible, tasks, stdout, now, await store.loadCollapsedEpicIds());
+      }
+    },
+    {
+      name: "add",
+      summary: "Put tasks on a board (Now unless --later).",
+      args: [IDS_ARG],
+      flags: [{ name: "later", description: "Put them in Later" }, ON_FLAG],
+      details: ["Idempotent: a task already on the board just moves to the requested lane."],
+      examples: [
+        { command: "todo board add 12", note: "Now lane of the active board" },
+        { command: "todo board add 12 13 --later --on projecten" },
+        { command: 'todo board add 12 --on "werk fixes"' }
+      ],
+      run: (input, context) => placeTasks(input, context, input.flag("later") ? "later" : "now")
+    },
+    {
+      name: "rm",
+      aliases: ["remove"],
+      summary: "Take tasks off a board; the tasks themselves stay.",
+      args: [IDS_ARG],
+      flags: [ON_FLAG],
+      details: ["To delete a task, use `todo rm`."],
+      examples: [{ command: "todo board rm 12" }, { command: "todo board rm 12 13 --on werk" }],
+      run: removeTasks
+    },
+    {
+      name: "move",
+      aliases: ["mv"],
+      summary: "Move tasks to another board, keeping their lane.",
+      args: [IDS_ARG],
+      flags: [
+        { name: "to", value: "board-name", description: "Board to move them to" },
+        { name: "from", value: "board-name", description: "Board to take them off; defaults to the active one" },
+        { name: "later", description: "Put them in Later on the new board" },
+        { name: "now", description: "Put them in Now on the new board" }
+      ],
+      details: [
+        "The tasks leave the old board and land in the same lane on the new one, unless --later or --now says otherwise.",
+        "Subtasks follow their parent. To keep a task on both boards, use `todo board add <id> --on <board>` instead."
+      ],
+      examples: [
+        { command: "todo board move 12 --to werk", note: "from the active board" },
+        { command: "todo board mv 12 13 --to werk --from cleanup" },
+        { command: 'todo board move 12 --to "werk fixes" --later' }
+      ],
+      run: moveTasks
+    },
+    {
+      name: "later",
+      summary: "Move tasks to Later, adding them when needed.",
+      args: [IDS_ARG],
+      flags: [ON_FLAG],
+      examples: [{ command: "todo board later 14" }, { command: "todo board later 14 15 --on werk" }],
+      run: (input, context) => placeTasks(input, context, "later")
+    },
+    {
+      name: "now",
+      summary: "Move tasks to Now, adding them when needed.",
+      args: [IDS_ARG],
+      flags: [ON_FLAG],
+      examples: [{ command: "todo board now 14" }, { command: "todo board now 14 --on werk" }],
+      run: (input, context) => placeTasks(input, context, "now")
+    },
+    {
+      name: "extend",
+      summary: "Give a timed board more time.",
+      args: [{ name: "duration", kind: "duration", description: "Extra time: 1h, 30m, 1h30m" }],
+      flags: [ON_FLAG],
+      details: ["The board can never run past 24h from now. An untimed board cannot be extended."],
+      examples: [{ command: "todo board extend 1h" }, { command: 'todo board extend 30m --on "deploy day"' }],
+      async run(input, { store, stdout }) {
+        const now = Date.now();
+        const state = await loadBoards(store, now);
+        const board = resolveBoard(state, input.value("on"));
+        const extended = extendBoard(board, parseDuration(input.arg("duration")), now);
+        await store.saveBoards(replaceBoard(state, board.name, extended));
+        stdout.write(`${GREEN5}${board.name} runs until ${formatClock(extended.expiresAt ?? now)}${RESET6}${formatBoardTimer(extended, now, " \xB7 ")}
+`);
+      }
+    },
+    {
+      name: "rename",
+      summary: "Rename a board.",
+      args: [
+        { name: "old", kind: "board-name", description: "Current name" },
+        { name: "new", kind: "text", variadic: true, description: "New name" }
+      ],
+      examples: [{ command: "todo board rename werk werk oud" }, { command: 'todo board rename "werk fixes" bugs' }],
+      async run(input, { store, stdout }) {
+        const state = await loadBoards(store);
+        const board = requireBoard(state, input.arg("old"));
+        const name = input.args("new").join(" ");
+        await store.saveBoards(renameBoard(state, board.name, name));
+        stdout.write(`${GREEN5}Renamed ${board.name} \u2192 ${name.trim()}${RESET6}
+`);
+      }
+    },
+    {
+      name: "end",
+      aliases: ["delete"],
+      summary: "Delete a board; a timed one nests its new tasks under an epic.",
+      args: [{ name: "name", kind: "board-name", optional: true, description: "Board to end; defaults to the active one" }],
+      details: ["Top-level tasks created on a timed board move under a new epic named after it. Tasks are never deleted."],
+      examples: [
+        { command: "todo board end", note: "the active board" },
+        { command: "todo board end cleanup" },
+        { command: 'todo board delete "werk fixes"' }
+      ],
+      async run(input, { store, stdout }) {
+        const now = Date.now();
+        const state = await loadBoards(store, now);
+        const board = resolveBoard(state, input.optionalArg("name"));
+        const epic = await wrapUpBoard(store, board, now);
+        await store.saveBoards(deleteBoard(state, board.name));
+        const nested = epic === undefined ? "" : ` \xB7 its tasks are under epic #${epic.id} ${epic.description}`;
+        stdout.write(`${GREEN5}Ended ${board.name}${RESET6}${DIM6}${nested}${RESET6}
+`);
+      }
+    }
+  ]
+};
+var focusCommand = {
+  name: "focus",
+  summary: "Start a timed board: shortcut for board new --for.",
+  group: "Boards",
+  args: [
+    { name: "duration", kind: "duration", description: "How long it runs: 4h, 90m, 2h30m (24h at most)" },
+    { name: "title", kind: "text", variadic: true, optional: true, description: "Board name; defaults to Focus <date>" }
+  ],
+  examples: [{ command: "todo focus 4h" }, { command: "todo focus 90m deploy day" }],
+  async run(input, context) {
+    const title = input.args("title").join(" ").trim();
+    const state = await loadBoards(context.store);
+    await startBoard(context, title === "" ? defaultBoardName(state, Date.now()) : title, parseDuration(input.arg("duration")));
+  }
+};
+async function startBoard({ store, stdout }, name, durationMs) {
+  const now = Date.now();
+  const { state, board } = createBoard(await loadBoards(store, now), name, now, durationMs);
+  await store.saveBoards(state);
+  const timer = durationMs === undefined ? "" : ` ${DIM6}\xB7 ${formatDuration(durationMs)}${RESET6}`;
+  stdout.write(`${GREEN5}${board.name} is active${RESET6}${timer} ${DIM6}\xB7 new tasks join it; todo board add <id> pulls others in${RESET6}
+`);
+}
+async function runList(_input, { store, stdout }) {
+  const now = Date.now();
+  const state = await loadBoards(store, now);
+  if (state.boards.length === 0) {
+    stdout.write(`${DIM6}No boards yet \xB7 todo board new <name> [--for 4h]${RESET6}
+`);
+    return;
+  }
+  const tasks = (await store.loadTasks()).filter((task) => task.status === "pending");
+  const active = getActiveBoard(state);
+  const width = Math.max(...state.boards.map((board) => board.name.length));
+  for (const board of state.boards) {
+    const marker = board === active ? `${ACCENT}*${RESET6}` : " ";
+    const name = board === active ? `${BOLD4}${board.name.padEnd(width)}${RESET6}` : board.name.padEnd(width);
+    const counts = `${collectLaneIds(board, tasks, "now").size} now \xB7 ${collectLaneIds(board, tasks, "later").size} later`;
+    stdout.write(`${marker} ${name}  ${DIM6}${counts}${RESET6}${formatBoardTimer(board, now, " \xB7 ")}
+`);
+  }
+  if (active === undefined)
+    stdout.write(`${DIM6}No active board \xB7 todo board use <name>${RESET6}
+`);
+}
+function resolveBoard(state, name) {
+  if (name !== undefined)
+    return requireBoard(state, name);
+  const active = getActiveBoard(state);
+  if (active === undefined)
+    throw new UserInputError("No active board \xB7 todo board use <name>, or name one with --on <name>");
+  return active;
+}
+async function placeTasks(input, { store, stdout }, lane) {
+  const { state, board, tasks } = await loadTarget(store, input);
+  let next = board;
+  const lines = [];
+  for (const id of input.args("id")) {
+    findTask(tasks, id);
+    const result = placeOnBoard(next, tasks, id, lane);
+    next = result.board;
+    lines.push(result.change === "unchanged" ? `${DIM6}#${id} is already in ${LANE_LABELS[lane]} on ${board.name}${RESET6}` : `${GREEN5}${result.change === "added" ? "Added" : "Moved"} #${id} to ${LANE_LABELS[lane]} on ${board.name}${RESET6}`);
+  }
+  await store.saveBoards(replaceBoard(state, board.name, next));
+  stdout.write(`${lines.join(`
+`)}
+`);
+}
+async function removeTasks(input, { store, stdout }) {
+  const { state, board, tasks } = await loadTarget(store, input);
+  let next = board;
+  const lines = [];
+  for (const id of input.args("id")) {
+    findTask(tasks, id);
+    const result = takeOffBoard(next, tasks, id);
+    next = result.board;
+    lines.push(result.removed ? `${GREEN5}Took #${id} off ${board.name}${RESET6}` : `${DIM6}#${id} is not on ${board.name}${RESET6}`);
+  }
+  await store.saveBoards(replaceBoard(state, board.name, next));
+  stdout.write(`${lines.join(`
+`)}
+`);
+}
+async function moveTasks(input, { store, stdout }) {
+  const toName = input.value("to");
+  if (toName === undefined)
+    throw new UserInputError("Usage: todo board move <id\u2026> --to <board> [--from <board>]");
+  if (input.flag("later") && input.flag("now"))
+    throw new UserInputError("Pick one of --later and --now");
+  const lane = input.flag("later") ? "later" : input.flag("now") ? "now" : undefined;
+  let state = await loadBoards(store);
+  const fromName = resolveBoard(state, input.value("from")).name;
+  const tasks = await store.loadTasks();
+  const lines = [];
+  for (const id of input.args("id")) {
+    findTask(tasks, id);
+    const moved = moveBetweenBoards(state, tasks, id, fromName, toName, lane);
+    state = moved.state;
+    lines.push(`${GREEN5}Moved #${id} from ${moved.from.name} to ${LANE_LABELS[moved.lane]} on ${moved.to.name}${RESET6}`);
+  }
+  await store.saveBoards(state);
+  stdout.write(`${lines.join(`
+`)}
+`);
+}
+async function loadTarget(store, input) {
+  const state = await loadBoards(store);
+  return { state, board: resolveBoard(state, input.value("on")), tasks: await store.loadTasks() };
+}
+function formatClock(timestamp) {
+  return new Date(timestamp).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+// src/command-spec/completions.ts
+var DYNAMIC_KINDS = ["task", "epic", "board", "archive"];
+var PRIORITIES = ["none", "low", "medium", "high"];
+function dynamicKindOf(kind) {
+  if (typeof kind === "object")
+    return;
+  switch (kind) {
+    case "task-id":
+    case "pending-task-id":
+    case "task-ids":
+    case "task-selector":
+    case "parent-id":
+      return "task";
+    case "epic-id":
+    case "epic-selector":
+      return "epic";
+    case "board-name":
+      return "board";
+    case "archive-ref":
+      return "archive";
+    default:
+      return;
+  }
+}
+function staticValues(kind) {
+  if (typeof kind === "object")
+    return kind.oneOf;
+  if (kind === "priority")
+    return PRIORITIES;
+  if (kind === "count-or-all")
+    return ["all"];
+  return;
+}
+var PRELUDE = `# Generated from the command spec by \`todo completions fish\`. Do not edit by hand.
+
+complete -c todo -e
+complete -c todo -f
+
+function __todo_walk --description 'Print the canonical todo command path and the count of arguments after it'
+    set -l tokens (commandline -opc)
+    set -e tokens[1]
+    set -l path
+    set -l extra 0
+    for token in $tokens
+        if string match -q -- '-*' $token
+            continue
+        end
+        if test $extra -eq 0
+            set -l key (string join ' ' -- $path $token)
+            set -l index (contains -i -- $key $__todo_node_keys)
+            if test -n "$index"
+                set path (string split ' ' -- $__todo_node_paths[$index])
+                continue
+            end
+        end
+        set extra (math $extra + 1)
+    end
+    echo "path:$path"
+    echo $extra
+end
+
+function __todo_at --description 'True when the command line sits right after the given todo command path'
+    set -l state (__todo_walk)
+    test "$state[1]" = "path:$argv[1]"; and test "$state[2]" -eq 0
+end
+
+function __todo_in --description 'True when the command line is inside the given todo command path'
+    set -l state (__todo_walk)
+    test "$state[1]" = "path:$argv[1]"
+end
+`;
+function generateFishCompletions(root) {
+  const keys = [];
+  const paths = [];
+  const lines = [];
+  function visit(node, path) {
+    const at = path.join(" ");
+    for (const child of node.subcommands ?? []) {
+      if (child.hidden === true)
+        continue;
+      const childPath = [...path, child.name];
+      for (const spelling of [child.name, ...child.aliases ?? []].filter((name) => !name.startsWith("-"))) {
+        keys.push([...path, spelling].join(" "));
+        paths.push(childPath.join(" "));
+      }
+      lines.push(`complete -c todo -n ${quote(`__todo_at '${at}'`)} -a ${quote(child.name)} -d ${quote(child.summary)}`);
+    }
+    if (path.length > 0) {
+      const firstArg = node.args?.[0];
+      if (firstArg !== undefined) {
+        const values = valueSource(firstArg.kind);
+        if (values !== undefined)
+          lines.push(`complete -c todo -n ${quote(`__todo_in '${at}'`)} -a ${values}`);
+      }
+      for (const flag of visibleFlags(node)) {
+        const names = flagSpellings(flag).map((spelling) => spelling.startsWith("--") ? `-l ${spelling.slice(2)}` : `-s ${spelling.slice(1)}`);
+        const source = flag.value === undefined ? undefined : valueSource(flag.value);
+        const value = flag.value === undefined ? "" : flag.value === "path" ? " -r -F" : ` -x${source === undefined ? "" : ` -a ${source}`}`;
+        lines.push(`complete -c todo -n ${quote(`__todo_in '${at}'`)} ${names.join(" ")}${value} -d ${quote(flag.description)}`);
+      }
+    }
+    for (const child of node.subcommands ?? []) {
+      if (child.hidden !== true)
+        visit(child, [...path, child.name]);
+    }
+  }
+  visit(root, []);
+  return [
+    PRELUDE,
+    `set -g __todo_node_keys ${keys.map(quote).join(" ")}`,
+    `set -g __todo_node_paths ${paths.map(quote).join(" ")}`,
+    "",
+    "complete -c todo -s h -l help -d 'Show help for the command'",
+    ...lines,
+    ""
+  ].join(`
+`);
+}
+function valueSource(kind) {
+  const dynamic = dynamicKindOf(kind);
+  if (dynamic !== undefined)
+    return `'(todo completions --list ${dynamic})'`;
+  const values = staticValues(kind);
+  return values === undefined ? undefined : quote(values.join(" "));
+}
+function quote(value) {
+  return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+// src/plugins/completions.ts
+var completionsCommand = {
+  name: "completions",
+  summary: "Print shell completions generated from the command tree.",
+  group: "Settings",
+  flags: [{ name: "list", value: { oneOf: [...DYNAMIC_KINDS] }, hidden: true, description: "Print live values for one completion kind" }],
+  details: ["The committed file lives at configs/fish/completions/todo.fish; regenerate it after changing commands."],
+  examples: [{ command: "todo completions fish > ~/.config/fish/completions/todo.fish" }],
+  subcommands: [
+    {
+      name: "fish",
+      summary: "Fish completions for every command, flag and value.",
+      run(_input, { root, stdout }) {
+        stdout.write(generateFishCompletions(root));
+      }
+    }
+  ],
+  async run(input, { store, stdout }) {
+    const kind = input.value("list");
+    if (kind === undefined)
+      throw new UserInputError("Usage: todo completions fish");
+    for (const line of await listCompletionValues(store, kind))
+      stdout.write(`${line}
+`);
+  }
+};
+async function listCompletionValues(store, kind) {
+  if (kind === "board") {
+    const state = await store.loadBoardsFile();
+    return (state?.boards ?? []).map((board) => `${board.name}	${board.name === state?.active ? "active board" : board.expiresAt === undefined ? "board" : "timed board"}`);
+  }
+  if (kind === "archive") {
+    const removed = await store.loadRemoved();
+    const completed = (await store.loadTasks()).filter((task) => task.status === "completed");
+    return [...removed.map((entry) => `r${entry.ref}	${clean(entry.task.description)}`), ...completed.map((task) => `${task.id}	${clean(task.description)}`)];
+  }
+  const tasks = await store.loadTasks();
+  const pending = tasks.filter((task) => task.status === "pending");
+  const matching = kind === "epic" ? pending.filter((task) => isEpic(task, tasks)) : pending;
+  return matching.map((task) => `${task.id}	${clean(task.description)}`);
+}
+function clean(value) {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 // src/plugins/config.ts
-var DIM2 = "\x1B[2m";
-var RESET2 = "\x1B[0m";
+var DIM7 = "\x1B[2m";
+var RESET7 = "\x1B[0m";
+var SWITCH = { oneOf: ["on", "off"] };
 var SETTINGS = [
   {
-    name: "shell-limit",
-    description: "Pending tasks shown in the shell panel (number, or 'all')",
-    read(config) {
-      return formatShellDisplayLimit(normalizeShellDisplayLimit(config.shellDisplayLimit));
-    },
-    apply(config, value) {
-      return { ...config, shellDisplayLimit: parseShellDisplayLimit(value) };
-    }
+    name: "panel-limit",
+    description: "Pending tasks shown per lane in the shell panel (number, or 'all')",
+    value: "count-or-all",
+    read: (config) => formatPanelLimit(normalizePanelLimit(config.panelLimit)),
+    apply: (config, value) => ({ ...config, panelLimit: parsePanelLimit(value) })
+  },
+  {
+    name: "panel-layout",
+    description: "Board lanes in the shell panel: auto (columns when wide), side (always columns) or stack",
+    value: { oneOf: PANEL_LAYOUTS },
+    read: (config) => normalizePanelLayout(config.panelLayout),
+    apply: (config, value) => ({ ...config, panelLayout: parsePanelLayout(value) })
+  },
+  {
+    name: "panel-boards",
+    description: "Boards in the shell panel: active (its Now and Later lanes) or all (one column per board)",
+    value: { oneOf: PANEL_BOARDS },
+    read: (config) => normalizePanelBoards(config.panelBoards),
+    apply: (config, value) => ({ ...config, panelBoards: parsePanelBoards(value) })
   },
   {
     name: "startup-notifications",
     description: "Send desktop notifications for due tasks on startup (on/off)",
-    read(config) {
-      return formatBoolean(config.showNotificationsOnStartup);
-    },
-    apply(config, value) {
-      return { ...config, showNotificationsOnStartup: parseBoolean(value) };
-    }
+    value: SWITCH,
+    read: (config) => formatBoolean(config.showNotificationsOnStartup),
+    apply: (config, value) => ({ ...config, showNotificationsOnStartup: value === "on" })
   },
   {
     name: "show-completed",
     description: "Include completed tasks in listings by default (on/off)",
-    read(config) {
-      return formatBoolean(config.showCompletedTasksByDefault);
-    },
-    apply(config, value) {
-      return { ...config, showCompletedTasksByDefault: parseBoolean(value) };
-    }
+    value: SWITCH,
+    read: (config) => formatBoolean(config.showCompletedTasksByDefault),
+    apply: (config, value) => ({ ...config, showCompletedTasksByDefault: value === "on" })
   },
   {
     name: "autocorrect",
-    description: "Suggest and learn corrections for mistyped commands and options (on/off)",
-    read(config) {
-      return formatBoolean(config.autocorrect);
-    },
-    apply(config, value) {
-      return { ...config, autocorrect: parseBoolean(value) };
-    }
+    description: "Suggest and learn corrections for mistyped commands, options and values (on/off)",
+    value: SWITCH,
+    read: (config) => formatBoolean(config.autocorrect),
+    apply: (config, value) => ({ ...config, autocorrect: value === "on" })
   }
 ];
-var configPlugin = {
-  name: "config",
-  description: "Reads and writes persisted settings.",
-  register(app) {
-    app.command("config", "Read or change persisted settings.", async ({ args, store, stdout }) => {
+function settingCommand(setting) {
+  return {
+    name: setting.name,
+    summary: setting.description,
+    args: [{ name: "value", kind: setting.value, optional: true, description: "New value; omit to print the current one" }],
+    async run(input, { store, stdout }) {
       const config = await store.loadConfig();
-      const [name, ...valueParts] = stripVerb(args);
-      if (name === undefined) {
-        for (const setting2 of SETTINGS) {
-          stdout.write(`${setting2.name.padEnd(22)} ${setting2.read(config)}${DIM2}  ${setting2.description}${RESET2}
-`);
-        }
-        return;
-      }
-      const setting = findSetting(name);
-      if (valueParts.length === 0) {
+      const value = input.optionalArg("value");
+      if (value === undefined) {
         stdout.write(`${setting.read(config)}
 `);
         return;
       }
-      const updated = setting.apply(config, valueParts.join(" "));
+      const updated = setting.apply(config, value);
       await store.saveConfig(updated);
       stdout.write(`${setting.name} = ${setting.read(updated)}
 `);
-    }, {
-      group: "Settings",
-      usage: ["todo config", "todo config <key>", "todo config <key> <value>"],
-      details: [
-        "Settings live in ~/.dotfiles/todo/config.json. An optional set/get verb is accepted.",
-        ...SETTINGS.map((setting) => `${setting.name.padEnd(22)} ${setting.description}`)
-      ],
-      examples: [
-        { command: "todo config shell-limit 15" },
-        { command: "todo config shell-limit all" },
-        { command: "todo config startup-notifications off" },
-        { command: "todo config autocorrect off" }
-      ],
-      positional: "any"
-    });
+    }
+  };
+}
+var configCommand = {
+  name: "config",
+  summary: "Read or change persisted settings.",
+  group: "Settings",
+  subcommandNoun: "setting",
+  subcommands: SETTINGS.map(settingCommand),
+  details: ["Settings live in ~/.dotfiles/todo/config.json. TODO_PANEL_LIMIT, TODO_PANEL_LAYOUT and TODO_PANEL_BOARDS override the panel settings."],
+  examples: [
+    { command: "todo config", note: "every setting with its value" },
+    { command: "todo config panel-limit 15" },
+    { command: "todo config panel-limit all" },
+    { command: "todo config panel-layout side", note: "lanes in columns even on a narrow terminal" },
+    { command: "todo config panel-boards all", note: "every board side by side at shell startup" },
+    { command: "todo config startup-notifications off" }
+  ],
+  async run(_input, { store, stdout }) {
+    const config = await store.loadConfig();
+    for (const setting of SETTINGS) {
+      stdout.write(`${setting.name.padEnd(22)} ${setting.read(config)}${DIM7}  ${setting.description}${RESET7}
+`);
+    }
   }
 };
-function stripVerb(args) {
-  return args[0] === "set" || args[0] === "get" ? args.slice(1) : args;
-}
-function findSetting(name) {
-  const setting = SETTINGS.find((candidate) => candidate.name === name);
-  if (setting === undefined) {
-    const names = SETTINGS.map((candidate) => candidate.name);
-    throw new UnknownTokenError(`Unknown setting: ${name}. Known settings: ${names.join(", ")}`, name, names, "setting");
-  }
-  return setting;
-}
-function parseBoolean(value) {
-  const normalized = value.trim().toLowerCase();
-  if (["on", "true", "yes", "1"].includes(normalized))
-    return true;
-  if (["off", "false", "no", "0"].includes(normalized))
-    return false;
-  throw new UnknownTokenError(`Invalid boolean: ${value}. Use on or off.`, value, ["on", "off"], "value");
-}
 function formatBoolean(value) {
   return value ? "on" : "off";
 }
@@ -1048,17 +3543,17 @@ var COMMAND_TIMEOUT_MS = 60000;
 function createCommandRunner() {
   return {
     run(command, cwd) {
-      return new Promise((resolve2) => {
+      return new Promise((resolve) => {
         const child = spawn2("/bin/sh", ["-c", command], {
           stdio: "ignore",
           timeout: COMMAND_TIMEOUT_MS,
           ...cwd === undefined ? {} : { cwd }
         });
-        child.on("error", (error) => resolve2({ exitCode: -1, error: error.message }));
+        child.on("error", (error) => resolve({ exitCode: -1, error: error.message }));
         child.on("close", (code, signal) => {
           if (signal !== null)
-            return resolve2({ exitCode: -1, error: `terminated by ${signal}` });
-          resolve2({ exitCode: code ?? -1 });
+            return resolve({ exitCode: -1, error: `terminated by ${signal}` });
+          resolve({ exitCode: code ?? -1 });
         });
       });
     }
@@ -1131,7 +3626,7 @@ var WEEKDAYS2 = new Map([
   ["saturday", 6],
   ["sat", 6]
 ]);
-var MONTHS2 = new Map([
+var MONTHS3 = new Map([
   ["jan", 1],
   ["january", 1],
   ["januari", 1],
@@ -1264,9 +3759,9 @@ function normalizeDecimalComma(input) {
   return input.replace(/(\d),(\d)/g, "$1.$2");
 }
 function readExpression(datePart, currentYear) {
-  return readDuration(datePart) ?? readCalendarOffset(datePart) ?? readWeekday(datePart) ?? readNumericDate2(datePart, currentYear) ?? readTextualDate(datePart, currentYear);
+  return readDuration2(datePart) ?? readCalendarOffset(datePart) ?? readWeekday(datePart) ?? readNumericDate2(datePart, currentYear) ?? readTextualDate(datePart, currentYear);
 }
-function readDuration(datePart) {
+function readDuration2(datePart) {
   const match = datePart.match(/^(\d+(?:\.\d+)?)\s*([a-z]+)$/);
   if (match === null)
     return;
@@ -1300,7 +3795,7 @@ function readTextualDate(datePart, currentYear) {
   const match = datePart.match(/^(\d{1,2}) ([a-z]+)(?: (\d{2}|\d{4}))?$/);
   if (match === null)
     return;
-  const month = MONTHS2.get(match[2] ?? "");
+  const month = MONTHS3.get(match[2] ?? "");
   if (month === undefined)
     return;
   return buildDate(readYear(match[3]) ?? currentYear, month, Number(match[1]));
@@ -1322,519 +3817,6 @@ function isRealDate(year, month, day) {
   const probe = new Date(year, month - 1, day);
   return probe.getFullYear() === year && probe.getMonth() === month - 1 && probe.getDate() === day;
 }
-
-// src/presentation/due-format.ts
-var MINUTE_MS = 60000;
-var HOUR_MS = 60 * MINUTE_MS;
-var DAY_MS = 24 * HOUR_MS;
-var SOON_WINDOW_MS = 30 * MINUTE_MS;
-var DUE_COLORS = {
-  reset: "\x1B[0m",
-  dim: "\x1B[2m",
-  bold: "\x1B[1m",
-  overdue: "\x1B[38;5;203m",
-  soon: "\x1B[38;5;229m",
-  upcoming: "\x1B[38;5;116m",
-  label: "\x1B[38;5;147m"
-};
-var MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-function getDueUrgency(dueAt, now) {
-  if (dueAt < now)
-    return "overdue";
-  return dueAt - now <= SOON_WINDOW_MS ? "soon" : "upcoming";
-}
-function getUrgencyColor(dueAt, now) {
-  return DUE_COLORS[getDueUrgency(dueAt, now)];
-}
-function formatAbsoluteDue(dueAt) {
-  const date = new Date(dueAt);
-  const day = `${date.getDate()}`.padStart(2, "0");
-  const month = MONTH_NAMES[date.getMonth()];
-  const hours = `${date.getHours()}`.padStart(2, "0");
-  const minutes = `${date.getMinutes()}`.padStart(2, "0");
-  return `${day} ${month} ${date.getFullYear()} \xB7 ${hours}:${minutes}`;
-}
-function formatRelativeDue(dueAt, now) {
-  const difference = dueAt - now;
-  const parts = splitDuration(Math.abs(difference), 2);
-  return difference < 0 ? `overdue by ${parts}` : `in ${parts}`;
-}
-function formatCompactDue(dueAt, now) {
-  if (dueAt < now)
-    return `overdue ${splitDuration(now - dueAt, 1)}`;
-  const difference = dueAt - now;
-  if (difference < HOUR_MS)
-    return `due in ${splitDuration(difference, 1)}`;
-  const dayGap = countCalendarDaysBetween(now, dueAt);
-  if (dayGap === 0)
-    return `due in ${splitDuration(difference, 1)}`;
-  if (dayGap === 1)
-    return "due tomorrow";
-  return `due ${formatShortDate(dueAt, now)}`;
-}
-function formatShortDate(dueAt, now) {
-  const date = new Date(dueAt);
-  const month = MONTH_NAMES[date.getMonth()];
-  const year = date.getFullYear() === new Date(now).getFullYear() ? "" : ` ${date.getFullYear()}`;
-  return `${date.getDate()} ${month}${year}`;
-}
-function formatSound(reminder) {
-  if (reminder.soundMode === "none")
-    return "none";
-  if (reminder.soundMode === "default")
-    return "default";
-  return reminder.soundPath ?? "custom";
-}
-function formatNotifyState(reminder) {
-  return reminder.firedAt === undefined ? "enabled" : `fired ${formatAbsoluteDue(reminder.firedAt)}`;
-}
-function countCalendarDaysBetween(from, to) {
-  const start = startOfDay(new Date(from));
-  const end = startOfDay(new Date(to));
-  return Math.round((end - start) / DAY_MS);
-}
-function startOfDay(date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-}
-function splitDuration(milliseconds, maximumParts) {
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const units = [
-    [86400, "d"],
-    [3600, "h"],
-    [60, "m"],
-    [1, "s"]
-  ];
-  const parts = [];
-  let remaining = totalSeconds;
-  for (const [size, suffix] of units) {
-    const amount = Math.floor(remaining / size);
-    if (amount === 0 && parts.length === 0)
-      continue;
-    if (amount > 0)
-      parts.push(`${amount}${suffix}`);
-    remaining -= amount * size;
-    if (parts.length >= maximumParts)
-      break;
-  }
-  return parts.length === 0 ? "0s" : parts.join(" ");
-}
-
-// src/domain/visibility-alias.ts
-var ACTION_LETTERS = { t: "toggle", o: "open", c: "close" };
-var TARGET_LETTERS = { a: "all", r: "reset" };
-var HELP_TOKENS = new Set(["help", "-h", "--help"]);
-var VISIBILITY_ALIASES = [
-  { alias: "-tr", meaning: "toggle reset" },
-  { alias: "-oa", meaning: "open all" },
-  { alias: "-ca", meaning: "close all" },
-  { alias: "--t --r", meaning: "toggle reset" },
-  { alias: "--o --a", meaning: "open all" },
-  { alias: "--c --a", meaning: "close all" },
-  { alias: "-t <epic>", meaning: "toggle <epic>" },
-  { alias: "-o <epic>", meaning: "open <epic>" },
-  { alias: "-c <epic>", meaning: "close <epic>" }
-];
-function isHelpToken(token) {
-  return HELP_TOKENS.has(token);
-}
-function expandVisibilityAliases(args) {
-  const letters = [];
-  let index = 0;
-  for (;index < args.length; index += 1) {
-    const parsed = readAliasLetters(args[index]);
-    if (parsed === undefined)
-      break;
-    letters.push(...parsed);
-  }
-  if (letters.length === 0 || new Set(letters).size !== letters.length)
-    return;
-  const actions = letters.filter((letter) => (letter in ACTION_LETTERS));
-  const targets = letters.filter((letter) => (letter in TARGET_LETTERS));
-  const action = actions[0];
-  if (action === undefined || actions.length !== 1)
-    return;
-  const rest = args.slice(index);
-  const help = rest.filter(isHelpToken);
-  const selectors = rest.filter((token) => !isHelpToken(token));
-  if (selectors.some((token) => token.startsWith("-")))
-    return;
-  if (targets.length === 0 && selectors.length === 0 && help.length === 0)
-    return;
-  return [ACTION_LETTERS[action], ...targets.map((letter) => TARGET_LETTERS[letter]), ...selectors, ...help];
-}
-function readAliasLetters(token) {
-  if (token.startsWith("--")) {
-    const body = token.slice(2);
-    return body.length === 1 && isAliasLetter(body) ? [body] : undefined;
-  }
-  if (!token.startsWith("-") || token.length < 2)
-    return;
-  const letters = [...token.slice(1)];
-  return letters.every(isAliasLetter) ? letters : undefined;
-}
-function isAliasLetter(letter) {
-  return letter in ACTION_LETTERS || letter in TARGET_LETTERS;
-}
-
-// src/presentation/help-format.ts
-var GROUP_ORDER = ["Create", "View", "Change", "Epic visibility", "Remove", "Settings"];
-var INDENT = "  ";
-var COLOR_PALETTE = {
-  reset: "\x1B[0m",
-  bold: "\x1B[1m",
-  dim: "\x1B[2m",
-  accent: "\x1B[38;5;208m",
-  heading: "\x1B[38;5;147m",
-  command: "\x1B[38;5;114m",
-  placeholder: "\x1B[38;5;116m",
-  flag: "\x1B[38;5;229m"
-};
-var PLAIN_PALETTE = {
-  reset: "",
-  bold: "",
-  dim: "",
-  accent: "",
-  heading: "",
-  command: "",
-  placeholder: "",
-  flag: ""
-};
-function supportsColor() {
-  if (process.env.NO_COLOR !== undefined)
-    return false;
-  if (process.env.FORCE_COLOR !== undefined)
-    return true;
-  return process.stdout.isTTY === true;
-}
-function formatHelpOverview(commands, useColor = supportsColor()) {
-  const p = useColor ? COLOR_PALETTE : PLAIN_PALETTE;
-  const lines = [""];
-  lines.push(`${INDENT}${p.accent}${p.bold}\u2713 todo${p.reset}  ${p.dim}\xB7${p.reset}  tasks, epics and subtasks from the shell`);
-  lines.push("");
-  lines.push(heading("Usage", p));
-  lines.push(`${INDENT}${INDENT}${highlightUsage("todo <description>[, <description>] [--due <time>] [--priority <level>]", p)}`);
-  lines.push(`${INDENT}${INDENT}${highlightUsage("todo <command> [arguments]", p)}`);
-  lines.push(`${INDENT}${INDENT}${highlightUsage("todo <command> --help", p)}`);
-  const width = Math.max(...commands.map((command) => formatCommandLabel(command).length));
-  for (const group of groupCommands(commands)) {
-    lines.push("");
-    lines.push(heading(group.name, p));
-    for (const command of group.commands) {
-      const label = formatCommandLabel(command);
-      const padding = " ".repeat(width - label.length + 3);
-      lines.push(`${INDENT}${INDENT}${colorCommandLabel(command, p)}${padding}${command.description}`);
-    }
-  }
-  lines.push("");
-  lines.push(heading("Aliases", p));
-  const aliasWidth = Math.max(...VISIBILITY_ALIASES.map((alias) => alias.alias.length));
-  for (const { alias, meaning } of VISIBILITY_ALIASES) {
-    const padding = " ".repeat(aliasWidth - alias.length + 3);
-    lines.push(`${INDENT}${INDENT}${highlightInline(alias, p)}${padding}${p.dim}${meaning}${p.reset}`);
-  }
-  lines.push("");
-  lines.push(`${INDENT}${p.dim}Plain text is added as a task. Run${p.reset} ${p.command}todo <command> --help${p.reset} ${p.dim}for details on any command.${p.reset}`);
-  lines.push("");
-  return `${lines.join(`
-`)}
-`;
-}
-function formatCommandHelp(command, useColor = supportsColor()) {
-  const p = useColor ? COLOR_PALETTE : PLAIN_PALETTE;
-  const help = command.help;
-  const lines = [""];
-  lines.push(`${INDENT}${p.accent}${p.bold}todo ${command.name}${p.reset}  ${p.dim}\xB7${p.reset}  ${command.description}`);
-  if (help.aliases !== undefined && help.aliases.length > 0) {
-    lines.push(`${INDENT}${p.dim}aliases:${p.reset} ${help.aliases.map((alias) => `${p.command}${alias}${p.reset}`).join(`${p.dim},${p.reset} `)}`);
-  }
-  lines.push("");
-  lines.push(heading("Usage", p));
-  for (const usage of help.usage ?? [`todo ${command.name}`]) {
-    lines.push(`${INDENT}${INDENT}${highlightUsage(usage, p)}`);
-  }
-  if (help.aliasNotes !== undefined && help.aliasNotes.length > 0) {
-    lines.push("");
-    lines.push(heading("Aliases", p));
-    for (const alias of help.aliasNotes)
-      lines.push(`${INDENT}${INDENT}${highlightInline(alias, p)}`);
-  }
-  if (help.details !== undefined && help.details.length > 0) {
-    lines.push("");
-    lines.push(heading("Details", p));
-    for (const detail of help.details)
-      lines.push(`${INDENT}${INDENT}${highlightInline(detail, p)}`);
-  }
-  if (help.options !== undefined && help.options.length > 0) {
-    lines.push("");
-    lines.push(heading("Options", p));
-    const width = Math.max(...help.options.map((option) => option.flag.length));
-    for (const option of help.options) {
-      const padding = " ".repeat(width - option.flag.length + 3);
-      lines.push(`${INDENT}${INDENT}${highlightInline(option.flag, p)}${padding}${highlightInline(option.description, p)}`);
-    }
-  }
-  if (help.examples !== undefined && help.examples.length > 0) {
-    lines.push("");
-    lines.push(heading("Examples", p));
-    const width = Math.max(...help.examples.map((example) => example.command.length));
-    for (const example of help.examples) {
-      const note = example.note === undefined ? "" : `${" ".repeat(width - example.command.length + 3)}${p.dim}# ${example.note}${p.reset}`;
-      lines.push(`${INDENT}${INDENT}${p.dim}$${p.reset} ${highlightUsage(example.command, p)}${note}`);
-    }
-  }
-  lines.push("");
-  return `${lines.join(`
-`)}
-`;
-}
-function formatHelpSections(title, subtitle, sections, useColor = supportsColor()) {
-  const p = useColor ? COLOR_PALETTE : PLAIN_PALETTE;
-  const lines = [""];
-  lines.push(`${INDENT}${p.accent}${p.bold}${title}${p.reset}  ${p.dim}\xB7${p.reset}  ${subtitle}`);
-  for (const section of sections) {
-    if (section.rows.length === 0)
-      continue;
-    lines.push("");
-    lines.push(heading(section.heading, p));
-    const width = Math.max(...section.rows.map((row) => row.right === undefined ? 0 : row.left.length));
-    for (const row of section.rows) {
-      if (row.right === undefined) {
-        lines.push(`${INDENT}${INDENT}${highlightUsage(row.left, p)}`);
-        continue;
-      }
-      const padding = " ".repeat(width - row.left.length + 3);
-      lines.push(`${INDENT}${INDENT}${highlightInline(row.left, p)}${padding}${p.dim}${row.right}${p.reset}`);
-    }
-  }
-  lines.push("");
-  return `${lines.join(`
-`)}
-`;
-}
-function formatCommandLabel(command) {
-  const aliases = command.help.aliases ?? [];
-  return aliases.length === 0 ? command.name : `${command.name}, ${aliases.join(", ")}`;
-}
-function colorCommandLabel(command, p) {
-  const aliases = command.help.aliases ?? [];
-  const name = `${p.command}${p.bold}${command.name}${p.reset}`;
-  return aliases.length === 0 ? name : `${name}${p.dim}, ${aliases.join(", ")}${p.reset}`;
-}
-function heading(text, p) {
-  return `${INDENT}${p.heading}${p.bold}${text.toUpperCase()}${p.reset}`;
-}
-function groupCommands(commands) {
-  const groups = new Map(GROUP_ORDER.map((group) => [group, []]));
-  for (const command of commands) {
-    groups.get(command.help.group ?? "Settings")?.push(command);
-  }
-  return [...groups.entries()].filter(([, members]) => members.length > 0).map(([name, members]) => ({ name, commands: members }));
-}
-function highlightUsage(usage, p) {
-  const tokens = usage.split(" ");
-  return tokens.map((token, index) => {
-    if (index === 0 && token === "todo")
-      return `${p.dim}todo${p.reset}`;
-    if (index === 1 && tokens[0] === "todo" && /^[a-z-]+$/.test(token))
-      return `${p.command}${token}${p.reset}`;
-    return highlightInline(token, p);
-  }).join(" ");
-}
-function highlightInline(text, p) {
-  return text.replace(/<[^>]+>/g, (match) => `${p.placeholder}${match}${p.reset}`).replace(/(^|[\s[(|,])(--?[a-z][\w-]*)/g, (_match, lead, flag) => `${lead}${p.flag}${flag}${p.reset}`).replace(/`([^`]+)`/g, (_match, code) => `${p.command}${code}${p.reset}`);
-}
-
-// src/presentation/due-help.ts
-function formatDueHelp(topic, useColor = supportsColor()) {
-  const page = PAGES[topic];
-  return formatHelpSections(page.title, page.subtitle, page.sections, useColor);
-}
-var OVERVIEW = {
-  title: "todo due",
-  subtitle: "due dates, reminders, and what happens when one fires",
-  sections: [
-    {
-      heading: "Usage",
-      rows: [
-        { left: "todo due <todo> <when>" },
-        { left: "todo due <todo> <when> at <time>" },
-        { left: "todo due <todo>" },
-        { left: "todo due <todo> clear" },
-        { left: "todo due <todo> reset" },
-        { left: "todo due list" }
-      ]
-    },
-    {
-      heading: "Relative",
-      rows: [
-        { left: "30s", right: "30 seconds" },
-        { left: "10m", right: "10 minutes" },
-        { left: "1h", right: "1 hour" },
-        { left: "3,5h", right: "3.5 hours (3.5h works too)" },
-        { left: "2d", right: "2 calendar days" }
-      ]
-    },
-    {
-      heading: "Calendar",
-      rows: [
-        { left: "today", right: "today at the current clock time" },
-        { left: "tomorrow", right: "tomorrow at the current clock time" },
-        { left: "yesterday", right: "already overdue, on purpose" },
-        { left: "next week", right: "same weekday, seven days on" },
-        { left: "next monday", right: "the next Monday strictly after today" },
-        { left: "next tue", right: "abbreviations work for every weekday" }
-      ]
-    },
-    {
-      heading: "Dates",
-      rows: [
-        { left: "1206", right: "12 June, current year" },
-        { left: "12-06", right: "day first, the Dutch way" },
-        { left: "12 jul", right: "English or Dutch month names" },
-        { left: "12 juli", right: "same date as 12 jul" },
-        { left: "12-06-2027", right: "two-digit years read as 20YY" }
-      ]
-    },
-    {
-      heading: "Times",
-      rows: [
-        { left: "tomorrow at 09:00", right: "HH:mm or HH:mm:ss, 24 hour" },
-        { left: "next monday at 14:30" },
-        { left: "12-06 at 18:00" }
-      ]
-    },
-    {
-      heading: "Notification",
-      rows: [
-        { left: "--sound default", right: "the desktop notification sound" },
-        { left: "--sound none", right: "notify silently" },
-        { left: "--sound ~/Music/reminder.mp3", right: "validated and stored as an absolute path" }
-      ]
-    },
-    {
-      heading: "Trigger",
-      rows: [
-        { left: '--run "bun run build"', right: "runs once when this reminder fires" },
-        { left: "--cwd ~/projects/dora", right: "directory to run it in" },
-        { left: "--cwd pwd", right: "capture the current directory now" }
-      ]
-    },
-    {
-      heading: "Examples",
-      rows: [
-        { left: "todo due 27 tomorrow" },
-        { left: "todo due 27 10m" },
-        { left: "todo due 27 3,5h" },
-        { left: 'todo due 27 "next monday" at 09:00' },
-        { left: "todo due 27 12-06 at 14:00" },
-        { left: "todo due 27 1h --sound ~/Music/todo.mp3" },
-        { left: 'todo due 27 10m --run "bun run build" --cwd pwd' }
-      ]
-    },
-    {
-      heading: "Notes",
-      rows: [
-        { left: "Omitting a time keeps the current local clock time." },
-        { left: "Past dates are valid; they store, render overdue, and notify once." },
-        { left: "`m` always means minutes. There is no month unit." },
-        { left: "Run `todo due daemon --help` for background delivery." }
-      ]
-    }
-  ]
-};
-var PAGES = {
-  due: OVERVIEW,
-  list: {
-    title: "todo due list",
-    subtitle: "every todo that currently has a due date",
-    sections: [
-      { heading: "Usage", rows: [{ left: "todo due list [overdue|today|week]" }] },
-      {
-        heading: "Filters",
-        rows: [
-          { left: "overdue", right: "only todos already past their due date" },
-          { left: "today", right: "overdue plus anything due before midnight" },
-          { left: "week", right: "overdue plus the next seven days" }
-        ]
-      },
-      {
-        heading: "Details",
-        rows: [
-          { left: "Overdue first, most overdue at the top, then upcoming soonest first." },
-          { left: "Completed todos keep their due date but are left out of this list." }
-        ]
-      },
-      { heading: "Examples", rows: [{ left: "todo due list" }, { left: "todo due list overdue" }] }
-    ]
-  },
-  inspect: {
-    title: "todo due <todo>",
-    subtitle: "show the due date, reminder state, and trigger for one todo",
-    sections: [
-      { heading: "Usage", rows: [{ left: "todo due <todo>" }] },
-      {
-        heading: "Details",
-        rows: [
-          { left: "Shows the exact timestamp, how far away it is, and whether it has notified." },
-          { left: "The todo can be an ID, #ID, or the exact name of a pending todo." }
-        ]
-      },
-      { heading: "Examples", rows: [{ left: "todo due 27" }, { left: "todo due #27" }] }
-    ]
-  },
-  clear: {
-    title: "todo due <todo> clear",
-    subtitle: "remove a due date and its reminder",
-    sections: [
-      { heading: "Usage", rows: [{ left: "todo due <todo> clear" }, { left: "todo due <todo> remove" }] },
-      {
-        heading: "Details",
-        rows: [
-          { left: "Removes the due date and cancels its scheduled reminder." },
-          { left: "The todo itself is kept. `clear` is the canonical spelling." }
-        ]
-      },
-      { heading: "Examples", rows: [{ left: "todo due 27 clear" }] }
-    ]
-  },
-  reset: {
-    title: "todo due <todo> reset",
-    subtitle: "rearm the notification without changing the due date",
-    sections: [
-      { heading: "Usage", rows: [{ left: "todo due <todo> reset" }] },
-      {
-        heading: "Details",
-        rows: [
-          { left: "Clears the fired state of the current schedule so it can notify again." },
-          { left: "The due date, sound, and trigger command are all left alone." },
-          { left: "An already-overdue reminder fires again on the scheduler's next cycle." }
-        ]
-      },
-      { heading: "Examples", rows: [{ left: "todo due 27 reset" }] }
-    ]
-  },
-  daemon: {
-    title: "todo due daemon",
-    subtitle: "the background scheduler that delivers reminders",
-    sections: [
-      {
-        heading: "Usage",
-        rows: [{ left: "todo due daemon run" }, { left: "todo due daemon install" }, { left: "todo due daemon status" }]
-      },
-      {
-        heading: "Details",
-        rows: [
-          { left: "One scheduler handles every reminder; there is no process per todo." },
-          { left: "`install` writes a systemd user service and enables it, so reminders survive a reboot." },
-          { left: "`run` stays in the foreground and is what the service starts." },
-          { left: "Any `todo` command also delivers overdue reminders, so this is a delivery" },
-          { left: "guarantee rather than a requirement." }
-        ]
-      },
-      { heading: "Examples", rows: [{ left: "todo due daemon install" }, { left: "todo due daemon status" }] }
-    ]
-  }
-};
 
 // src/scheduler/daemon.ts
 import { watch } from "fs";
@@ -1959,8 +3941,8 @@ function watchTasksFile(store) {
     handle = undefined;
   }
   return {
-    changed: () => new Promise((resolve2) => {
-      notify = resolve2;
+    changed: () => new Promise((resolve) => {
+      notify = resolve;
     }),
     close() {
       if (timer !== undefined)
@@ -1972,12 +3954,12 @@ function watchTasksFile(store) {
 function sleepUntil(nextWakeAt, changed, signal) {
   const requested = nextWakeAt === undefined ? MAX_SLEEP_MS : nextWakeAt - Date.now();
   const duration = Math.max(MIN_SLEEP_MS, Math.min(MAX_SLEEP_MS, requested));
-  return new Promise((resolve2) => {
+  return new Promise((resolve) => {
     const timer = setTimeout(finish, duration);
     function finish() {
       clearTimeout(timer);
       signal?.removeEventListener("abort", finish);
-      resolve2();
+      resolve();
     }
     signal?.addEventListener("abort", finish, { once: true });
     changed().then(finish);
@@ -2031,93 +4013,148 @@ async function isServiceActive() {
 
 // src/plugins/due.ts
 var { reset, dim, bold, label } = DUE_COLORS;
-var HELP_TOKENS2 = new Set(["help", "-h", "--help"]);
 var CLEAR_WORDS = new Set(["clear", "remove"]);
-var DUE_USAGE = "Usage: todo due <todo> <when> | todo due <todo> [clear|reset] | todo due list";
-var duePlugin = {
+var dueCommand = {
   name: "due",
-  description: "Set, inspect, and clear due dates with reminders.",
-  register(app) {
-    app.command("due", "Set, inspect, and clear due dates with reminders.", dueCommand, {
-      group: "Change",
-      positional: "any",
-      ownHelp: true,
-      usage: [
-        "todo due <todo> <when> [at <time>] [options]",
-        "todo due <todo>",
-        "todo due <todo> clear",
-        "todo due <todo> reset",
-        "todo due list [overdue|today|week]"
-      ],
-      details: [
-        "Relative (10m, 1h, 3,5h, 2d), calendar (tomorrow, next monday), and dates (12-06, 12 juli).",
-        "A due date notifies once, natively, even after the shell that set it has exited.",
-        "Run `todo due --help` for the full date syntax."
-      ],
-      options: [
-        { flag: "--sound <default|none|file>", description: "Notification sound; a custom file is stored as an absolute path" },
-        { flag: "--run <command>", description: "Command to execute once when the reminder fires" },
-        { flag: "--cwd <path|pwd>", description: "Working directory for --run; pwd captures the current one" }
-      ],
-      examples: [
-        { command: "todo due 27 tomorrow" },
-        { command: "todo due 27 3,5h" },
-        { command: 'todo due 27 "next monday" at 09:00' },
-        { command: 'todo due 27 10m --run "bun run build" --cwd pwd' },
-        { command: "todo due list overdue" }
+  summary: "Set, inspect, and clear due dates with reminders.",
+  group: "Change",
+  args: [
+    { name: "todo", kind: "task-selector", description: "Task ID, #ID, or the exact name of a pending task" },
+    { name: "when", kind: "due-time", variadic: true, optional: true, description: "When it is due, or clear / remove / reset; omit to inspect" }
+  ],
+  flags: [
+    { name: "sound", value: "path", description: "default, none, or a sound file stored as an absolute path" },
+    { name: "run", value: "shell-command", description: "Command to execute once when the reminder fires" },
+    { name: "cwd", value: "path", description: "Working directory for --run; pwd captures the current one" }
+  ],
+  details: [
+    "A due date notifies once, natively, even after the shell that set it has exited.",
+    "`todo due <todo>` shows the due date and reminder state; `clear` (or `remove`) drops it; `reset` rearms a fired reminder without changing it.",
+    "Omitting a time keeps the current local clock time. Past dates are valid; they store, render overdue, and notify once.",
+    "`m` always means minutes. There is no month unit."
+  ],
+  sections: [
+    {
+      heading: "Relative",
+      rows: [
+        { left: "30s", right: "30 seconds" },
+        { left: "10m", right: "10 minutes" },
+        { left: "1h", right: "1 hour" },
+        { left: "3,5h", right: "3.5 hours (3.5h works too)" },
+        { left: "2d", right: "2 calendar days" }
       ]
-    });
-  }
+    },
+    {
+      heading: "Calendar",
+      rows: [
+        { left: "today", right: "today at the current clock time" },
+        { left: "tomorrow", right: "tomorrow at the current clock time" },
+        { left: "yesterday", right: "already overdue, on purpose" },
+        { left: "next week", right: "same weekday, seven days on" },
+        { left: "next monday", right: "the next Monday strictly after today" },
+        { left: "next tue", right: "abbreviations work for every weekday" }
+      ]
+    },
+    {
+      heading: "Dates",
+      rows: [
+        { left: "1206", right: "12 June, current year" },
+        { left: "12-06", right: "day first, the Dutch way" },
+        { left: "12 jul", right: "English or Dutch month names" },
+        { left: "12 juli", right: "same date as 12 jul" },
+        { left: "12-06-2027", right: "two-digit years read as 20YY" }
+      ]
+    },
+    {
+      heading: "Times",
+      rows: [
+        { left: "tomorrow at 09:00", right: "HH:mm or HH:mm:ss, 24 hour" },
+        { left: "next monday at 14:30" },
+        { left: "12-06 at 18:00" }
+      ]
+    }
+  ],
+  examples: [
+    { command: "todo due 27 tomorrow" },
+    { command: "todo due 27 3,5h" },
+    { command: "todo due 27 next monday at 09:00" },
+    { command: 'todo due 27 10m --run "bun run build" --cwd pwd' },
+    { command: "todo due 27 clear" },
+    { command: "todo due list overdue" }
+  ],
+  subcommands: [
+    {
+      name: "list",
+      summary: "Every pending todo that has a due date, most urgent first.",
+      args: [{ name: "filter", kind: { oneOf: ["overdue", "today", "week"] }, optional: true, description: "overdue, today (plus overdue) or week (plus overdue)" }],
+      details: ["Overdue first, most overdue at the top, then upcoming soonest first. Completed todos are left out."],
+      examples: [{ command: "todo due list" }, { command: "todo due list overdue" }],
+      run: (input, context) => listDue(context, input.optionalArg("filter") ?? "all")
+    },
+    {
+      name: "daemon",
+      summary: "The background scheduler that delivers reminders.",
+      defaultSubcommand: "run",
+      details: [
+        "One scheduler handles every reminder; there is no process per todo.",
+        "Any `todo` command also delivers overdue reminders, so the daemon is a delivery guarantee rather than a requirement."
+      ],
+      subcommands: [
+        {
+          name: "run",
+          summary: "Run the scheduler in the foreground; this is what the service starts.",
+          details: ["Useful for debugging reminders. Stop it with Ctrl+C."],
+          examples: [{ command: "todo due daemon run" }],
+          async run(_input, { store }) {
+            await runScheduler(store);
+          }
+        },
+        {
+          name: "install",
+          summary: "Write and enable a systemd user service so reminders survive a reboot.",
+          examples: [{ command: "todo due daemon install" }, { command: "todo due daemon status", note: "check it is running" }],
+          async run(_input, { stdout }) {
+            const { path, enabled } = await installService();
+            stdout.write(`${DUE_COLORS.upcoming}Wrote ${path}${reset}
+`);
+            stdout.write(enabled ? `${DUE_COLORS.upcoming}Enabled and started ${SERVICE_NAME}${reset}
+` : `${DUE_COLORS.overdue}Could not enable ${SERVICE_NAME}; start it with 'systemctl --user enable --now ${SERVICE_NAME}'${reset}
+`);
+          }
+        },
+        {
+          name: "status",
+          summary: "Report whether the service is running.",
+          examples: [{ command: "todo due daemon status" }],
+          async run(_input, { stdout }) {
+            const active = await isServiceActive();
+            stdout.write(active ? `${DUE_COLORS.upcoming}${SERVICE_NAME} is running${reset}
+` : `${dim}${SERVICE_NAME} is not running. Install it with 'todo due daemon install'.${reset}
+`);
+          }
+        }
+      ]
+    }
+  ],
+  run: runDue
 };
-async function dueCommand(context) {
-  const { args, stdout } = context;
-  const helpIndex = args.findIndex((argument) => HELP_TOKENS2.has(argument));
-  if (helpIndex !== -1) {
-    stdout.write(formatDueHelp(readHelpTopic(args.slice(0, helpIndex))));
-    return;
-  }
-  const [first, ...rest] = args;
-  if (first === undefined)
-    throw new UserInputError(DUE_USAGE);
-  if (first === "list")
-    return await listDue(context, rest);
-  if (first === "daemon")
-    return await daemonCommand(context, rest);
-  return await targetedDueCommand(context, first, rest);
-}
-function readHelpTopic(prefix) {
-  if (prefix.length === 0)
-    return "due";
-  if (prefix[0] === "list")
-    return "list";
-  if (prefix[0] === "daemon")
-    return "daemon";
-  if (prefix[1] !== undefined && CLEAR_WORDS.has(prefix[1]))
-    return "clear";
-  if (prefix[1] === "reset")
-    return "reset";
-  if (prefix.length === 1)
-    return "inspect";
-  return "due";
-}
-async function targetedDueCommand({ store, stdout }, selector, rest) {
-  const verb = rest[0];
+async function runDue(input, context) {
+  const { store, stdout } = context;
+  const selector = input.arg("todo");
+  const when = input.args("when");
+  const verb = when[0];
   if (verb === undefined) {
     const task = findTaskByIdOrDescription(await store.loadTasks(), selector);
     stdout.write(formatInspect(task, Date.now()));
     return;
   }
-  if (CLEAR_WORDS.has(verb)) {
-    if (rest.length !== 1)
-      throw new UserInputError(`Usage: todo due ${selector} clear`);
+  if (CLEAR_WORDS.has(verb) && when.length === 1) {
     return await mutate(store, selector, (tasks, task) => clearDue(tasks, task, stdout));
   }
-  if (verb === "reset") {
-    if (rest.length !== 1)
-      throw new UserInputError(`Usage: todo due ${selector} reset`);
+  if (verb === "reset" && when.length === 1) {
     return await mutate(store, selector, (tasks, task) => resetDue(tasks, task, stdout));
   }
-  const options = parseDueOptions(rest);
+  const options = readDueOptions(input);
   return await mutate(store, selector, (tasks, task) => setDue(tasks, task, options, stdout));
 }
 async function mutate(store, selector, change) {
@@ -2180,54 +4217,15 @@ function resetDue(_tasks, task, stdout) {
 `);
   return true;
 }
-var DUE_FLAGS = ["--sound", "--run", "--cwd"];
-function parseDueOptions(rest) {
-  const flagStart = rest.findIndex((argument) => argument.startsWith("--"));
-  const whenParts = flagStart === -1 ? rest : rest.slice(0, flagStart);
-  const when = whenParts.join(" ").trim();
-  if (when.length === 0)
-    throw new UserInputError(DUE_USAGE);
-  let sound = { soundMode: "default" };
-  let run;
-  let cwd;
-  let rawCwd;
-  const flagArguments = flagStart === -1 ? [] : rest.slice(flagStart);
-  for (let index = 0;index < flagArguments.length; index += 1) {
-    const argument = flagArguments[index];
-    if (argument === undefined)
-      continue;
-    const equalsIndex = argument.indexOf("=");
-    const name = equalsIndex === -1 ? argument : argument.slice(0, equalsIndex);
-    let value = equalsIndex === -1 ? "" : argument.slice(equalsIndex + 1);
-    if (equalsIndex === -1) {
-      const valueParts = [];
-      while (index + 1 < flagArguments.length) {
-        const next = flagArguments[index + 1];
-        if (next === undefined || next.startsWith("--"))
-          break;
-        valueParts.push(next);
-        index += 1;
-      }
-      value = valueParts.join(" ");
-    }
-    if (value.length === 0)
-      throw new UserInputError(`Missing value for ${name}`);
-    if (name === "--sound")
-      sound = resolveSoundChoice(value);
-    else if (name === "--run")
-      run = value;
-    else if (name === "--cwd")
-      rawCwd = value;
-    else
-      throw new UserInputError(`Unknown option: ${name}
-Supported: ${DUE_FLAGS.join(", ")}`);
-  }
-  if (rawCwd !== undefined) {
-    if (run === undefined)
-      throw new UserInputError("--cwd only applies to --run; add a --run command or drop --cwd.");
-    cwd = resolveCommandCwd(rawCwd);
-  }
-  return { when, sound, run, cwd };
+function readDueOptions(input) {
+  const when = input.args("when").join(" ").trim();
+  const soundValue = input.value("sound");
+  const sound = soundValue === undefined ? { soundMode: "default" } : resolveSoundChoice(soundValue);
+  const run = input.value("run");
+  const rawCwd = input.value("cwd");
+  if (rawCwd !== undefined && run === undefined)
+    throw new UserInputError("--cwd only applies to --run; add a --run command or drop --cwd.");
+  return { when, sound, run, cwd: rawCwd === undefined ? undefined : resolveCommandCwd(rawCwd) };
 }
 function formatInspect(task, now) {
   const lines = [`${bold}Todo #${task.id}${reset} ${dim}${task.description}${reset}`];
@@ -2272,8 +4270,7 @@ function formatRunResult(reminder) {
 function row(name, value) {
   return `${label}${`${name}:`.padEnd(11)}${reset}${value}`;
 }
-async function listDue({ store, stdout }, rest) {
-  const filter = readListFilter(rest);
+async function listDue({ store, stdout }, filter) {
   const now = Date.now();
   const tasks = (await store.loadTasks()).filter((task) => task.status === "pending" && task.dueDate !== undefined);
   const matching = tasks.filter((task) => matchesFilter(task.dueDate, filter, now)).sort(compareByUrgency);
@@ -2287,21 +4284,10 @@ async function listDue({ store, stdout }, rest) {
     const dueAt = task.dueDate;
     const color = getUrgencyColor(dueAt, now);
     const id = `${dim}#${task.id.padStart(2, "0")}${reset}`;
-    const description = truncate(task.description, width).padEnd(width);
+    const description = truncate2(task.description, width).padEnd(width);
     stdout.write(`${id}  ${description}  ${color}${formatCompactDue(dueAt, now)}${reset}
 `);
   }
-}
-function readListFilter(rest) {
-  const [filter, ...extra] = rest;
-  if (filter === undefined)
-    return "all";
-  if (extra.length > 0)
-    throw new UserInputError("Usage: todo due list [overdue|today|week]");
-  if (filter === "overdue" || filter === "today" || filter === "week")
-    return filter;
-  throw new UserInputError(`Unknown filter: ${filter}
-Usage: todo due list [overdue|today|week]`);
 }
 function matchesFilter(dueAt, filter, now) {
   if (filter === "all")
@@ -2318,104 +4304,99 @@ function matchesFilter(dueAt, filter, now) {
 function compareByUrgency(left, right) {
   return left.dueDate - right.dueDate;
 }
-function truncate(value, maximumLength) {
+function truncate2(value, maximumLength) {
   return value.length > maximumLength ? `${value.slice(0, maximumLength - 1)}\u2026` : value;
-}
-async function daemonCommand({ store, stdout }, rest) {
-  const action = rest[0] ?? "run";
-  if (rest.length > 1)
-    throw new UserInputError("Usage: todo due daemon [run|install|status]");
-  if (action === "run") {
-    await runScheduler(store);
-    return;
-  }
-  if (action === "install") {
-    const { path, enabled } = await installService();
-    stdout.write(`${DUE_COLORS.upcoming}Wrote ${path}${reset}
-`);
-    stdout.write(enabled ? `${DUE_COLORS.upcoming}Enabled and started ${SERVICE_NAME}${reset}
-` : `${DUE_COLORS.overdue}Could not enable ${SERVICE_NAME}; start it with 'systemctl --user enable --now ${SERVICE_NAME}'${reset}
-`);
-    return;
-  }
-  if (action === "status") {
-    const active = await isServiceActive();
-    stdout.write(active ? `${DUE_COLORS.upcoming}${SERVICE_NAME} is running${reset}
-` : `${dim}${SERVICE_NAME} is not running. Install it with 'todo due daemon install'.${reset}
-`);
-    return;
-  }
-  throw new UserInputError("Usage: todo due daemon [run|install|status]");
 }
 
 // src/plugins/epic.ts
-var GREEN = "\x1B[32m";
-var RESET3 = "\x1B[0m";
-var epicPlugin = {
+var GREEN6 = "\x1B[32m";
+var RESET8 = "\x1B[0m";
+var epicCommand = {
   name: "epic",
-  description: "Groups tasks under epics and moves them around the tree.",
-  register(app) {
-    app.command("epic", "Create an epic that groups subtasks.", async ({ args, store, stdout }) => {
-      if (args.length === 0)
-        throw new UserInputError("Usage: todo epic <name>[, <name>] [--under <id>]");
-      const epics = await createTasks(store, args, { kind: "epic" });
-      for (const epic of epics)
-        stdout.write(formatAddedTask(epic));
-    }, {
-      group: "Create",
-      positional: "text",
-      usage: ["todo epic <name>[, <name>] [options]"],
-      details: [
-        "An epic is a task that renders bold with a [done/total] badge even while empty.",
-        "Accepts the same options as `todo add`."
-      ],
-      options: [
-        { flag: "--due <time>", description: "Due date for the epic itself" },
-        { flag: "--priority <level>", description: "none, low, medium, or high" },
-        { flag: "--under <id>", description: "Nest the epic under another task" }
-      ],
-      examples: [
-        { command: "todo epic Website redesign" },
-        { command: "todo epic Q4 launch, Hiring --priority high" }
-      ]
-    });
-    app.command("sub", "Add subtasks under an existing task.", async ({ args, store, stdout }) => {
-      const { parentId, rest } = resolveSubTarget(await store.loadTasks(), args);
-      const tasks = await createTasks(store, rest, { parentId });
-      for (const task of tasks)
-        stdout.write(formatAddedTask(task));
-    }, {
-      group: "Create",
-      positional: "task-id",
-      usage: ["todo sub <id|name> <description>[, <description>] [options]"],
-      details: [
-        "The parent can be a task ID or the exact name of an existing task; the longest matching",
-        "name wins and the description starts right after it.",
-        "Nesting has no depth limit. Accepts the same options as `todo add` except --under."
-      ],
-      options: [
-        { flag: "--due <time>", description: "Due date for each new subtask" },
-        { flag: "--priority <level>", description: "none, low, medium, or high" },
-        { flag: "--reminders <minutes>", description: "Minutes before the due date to notify" }
-      ],
-      examples: [
-        { command: "todo sub 1 fix header, fix footer", note: "two subtasks under #1" },
-        { command: "todo sub new month pay rent", note: "under the task named new month" },
-        { command: "todo sub 3 write tests --due friday" }
-      ]
-    });
-    app.command("move", "Re-parent a task inside the tree.", moveCommand, {
-      group: "Change",
-      positional: "task-id",
-      aliases: ["mv"],
-      usage: ["todo move <id> <parent-id>", "todo move <id> root"],
-      details: ["The whole subtree moves along. root, top, and - all mean the top level."],
-      examples: [
-        { command: "todo move 5 2", note: "nest #5 under #2" },
-        { command: "todo move 5 root", note: "back to the top level" }
-      ]
-    });
+  summary: "Create an epic that groups subtasks.",
+  group: "Create",
+  args: [{ name: "name", kind: "text", variadic: true, description: "Epic name; separate several with commas" }],
+  flags: [...TASK_FLAGS, { name: "under", aliases: ["parent", "in"], value: "task-id", description: "Nest the epic under another task" }, ...PLACEMENT_FLAGS],
+  details: [
+    "An epic is a task that renders bold with a [done/total] badge even while empty.",
+    "Accepts the same options as `todo add`."
+  ],
+  examples: [
+    { command: "todo epic Website redesign" },
+    { command: "todo epic Q4 launch, Hiring --priority high" }
+  ],
+  async run(input, { store, stdout }) {
+    const epics = await insertTasks(store, readAddOptions(input, new Date, { kind: "epic" }, input.args("name")), readPlacement(input));
+    for (const epic of epics)
+      stdout.write(formatAddedTask(epic));
   }
+};
+var subCommand = {
+  name: "sub",
+  summary: "Add subtasks under an existing task.",
+  group: "Create",
+  args: [
+    { name: "parent", kind: "task-selector", description: "Parent task ID, or the exact name of a task" },
+    { name: "description", kind: "text", variadic: true, description: "Subtask text; separate several with commas" }
+  ],
+  flags: [...TASK_FLAGS, ...PLACEMENT_FLAGS],
+  details: [
+    "The parent can be a task ID or the exact name of an existing task; the longest matching",
+    "name wins and the description starts right after it. `todo 3 fix header` is the same as `todo sub 3 fix header`.",
+    "Nesting has no depth limit. Subtasks of a task on the active board follow it there."
+  ],
+  examples: [
+    { command: "todo sub 1 fix header, fix footer", note: "two subtasks under #1" },
+    { command: "todo sub new month pay rent", note: "under the task named new month" },
+    { command: "todo sub 3 write tests --due friday" }
+  ],
+  async run(input, { store, stdout }) {
+    const { parentId, rest } = resolveSubTarget(await store.loadTasks(), [...input.positionals]);
+    const tasks = await insertTasks(store, readAddOptions(input, new Date, { parentId }, rest), readPlacement(input));
+    for (const task of tasks)
+      stdout.write(formatAddedTask(task));
+  }
+};
+var moveCommand = {
+  name: "move",
+  aliases: ["mv"],
+  summary: "Re-parent a task inside the tree.",
+  group: "Change",
+  args: [
+    { name: "id", kind: "task-id", description: "Task to move" },
+    { name: "parent", kind: "parent-id", description: "New parent ID, or root / top / - for the top level" }
+  ],
+  details: [
+    "The whole subtree moves along. root, top, and - all mean the top level.",
+    "This changes the tree, not boards. To move a task to another board, use `todo board move <id> --to <board>`."
+  ],
+  examples: [
+    { command: "todo move 5 2", note: "nest #5 under #2" },
+    { command: "todo move 5 root", note: "back to the top level" }
+  ],
+  run: runMove
+};
+var reorderCommand = {
+  name: "reorder",
+  summary: "Change a task's position among its siblings.",
+  group: "Change",
+  args: [{ name: "id", kind: "task-id", description: "Task to reposition" }],
+  flags: [
+    { name: "before", value: "task-id", description: "Place right above this sibling" },
+    { name: "after", value: "task-id", description: "Place right below this sibling" },
+    { name: "top", description: "First among its siblings" },
+    { name: "bottom", description: "Last among its siblings" }
+  ],
+  details: [
+    "Only changes position among siblings under the same epic, or the top level; it never re-parents.",
+    "Use `todo move` to change parents. Give exactly one of the options."
+  ],
+  examples: [
+    { command: "todo reorder 5 --before 2", note: "#5 goes right above #2" },
+    { command: "todo reorder 5 --after 2", note: "#5 goes right below #2" },
+    { command: "todo reorder 5 --top", note: "first among its siblings" }
+  ],
+  run: runReorder
 };
 function resolveSubTarget(tasks, args) {
   const [first, ...rest] = args;
@@ -2452,25 +4433,49 @@ function findTaskByName(tasks, name) {
 function normalizeName(value) {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
-var SUB_USAGE = "Usage: todo sub <id|name> <description>[, <description>]";
-async function moveCommand({ args, store, stdout }) {
-  const [id, target] = args;
-  if (id === undefined || target === undefined || args.length !== 2)
-    throw new UserInputError("Usage: todo move <id> <parent-id|root>");
+var SUB_USAGE = "Usage: todo sub <parent> <description\u2026>";
+async function runMove(input, { store, stdout }) {
   const tasks = await store.loadTasks();
+  const target = input.arg("parent");
   const parentId = isRootTarget(target) ? undefined : parseTaskIdArgument(target);
-  const task = moveTask(tasks, parseTaskIdArgument(id), parentId);
+  const task = moveTask(tasks, input.arg("id"), parentId);
   await store.saveTasks(tasks);
-  stdout.write(parentId === undefined ? `${GREEN}Moved #${task.id} to the top level${RESET3}
-` : `${GREEN}Moved #${task.id} under #${parentId}${RESET3}
+  stdout.write(parentId === undefined ? `${GREEN6}Moved #${task.id} to the top level${RESET8}
+` : `${GREEN6}Moved #${task.id} under #${parentId}${RESET8}
 `);
 }
 function isRootTarget(value) {
   return value === "root" || value === "top" || value === "-";
 }
+async function runReorder(input, { store, stdout }) {
+  const position = readReorderPosition(input);
+  const tasks = await store.loadTasks();
+  const task = reorderTask(tasks, input.arg("id"), position);
+  await store.saveTasks(tasks);
+  stdout.write(`${GREEN6}Reordered #${task.id}${RESET8}
+`);
+}
+function readReorderPosition(input) {
+  const positions = [];
+  const before = input.value("before");
+  const after = input.value("after");
+  if (before !== undefined)
+    positions.push({ type: "before", anchorId: before });
+  if (after !== undefined)
+    positions.push({ type: "after", anchorId: after });
+  if (input.flag("top"))
+    positions.push({ type: "top" });
+  if (input.flag("bottom"))
+    positions.push({ type: "bottom" });
+  const [position] = positions;
+  if (position === undefined || positions.length > 1)
+    throw new UserInputError("Usage: todo reorder <id> --before <id>|--after <id>|--top|--bottom");
+  return position;
+}
+var epicCommands = [epicCommand, subCommand, moveCommand, reorderCommand];
 
 // src/plugins/help.ts
-import { emitKeypressEvents } from "readline";
+import { emitKeypressEvents as emitKeypressEvents2 } from "readline";
 
 // src/domain/help-search.ts
 function findMatches(lines, query) {
@@ -2503,84 +4508,11 @@ function matchesOnLine(matches, line) {
   return matches.filter((match) => match.line === line);
 }
 
-// src/presentation/ansi-text.ts
-var ANSI_PATTERN = /\u001B\[[0-9;]*m/g;
-function stripAnsi(value) {
-  return value.replace(ANSI_PATTERN, "");
-}
-function getVisibleWidth(value) {
-  return stripAnsi(value).length;
-}
-function clipVisible(value, width) {
-  if (width <= 0)
-    return "";
-  if (getVisibleWidth(value) <= width)
-    return value;
-  let result = "";
-  let visible = 0;
-  for (const token of tokenize(value)) {
-    if (token.escape) {
-      result += token.text;
-      continue;
-    }
-    for (const character of token.text) {
-      if (visible === width)
-        return `${result}\x1B[0m`;
-      result += character;
-      visible += 1;
-    }
-  }
-  return `${result}\x1B[0m`;
-}
-function highlightVisibleRanges(value, ranges, on, off) {
-  if (ranges.length === 0)
-    return value;
-  const starts = new Map(ranges.map((range) => [range.start, range]));
-  const ends = new Map(ranges.map((range) => [range.end, range]));
-  let result = "";
-  let visible = 0;
-  let activeOff;
-  for (const token of tokenize(value)) {
-    if (token.escape) {
-      result += token.text;
-      continue;
-    }
-    for (const character of token.text) {
-      const ending = ends.get(visible);
-      if (activeOff !== undefined && ending !== undefined) {
-        result += activeOff;
-        activeOff = undefined;
-      }
-      const starting = starts.get(visible);
-      if (starting !== undefined) {
-        result += starting.on ?? on;
-        activeOff = starting.off ?? off;
-      }
-      result += character;
-      visible += 1;
-    }
-  }
-  return activeOff === undefined ? result : `${result}${activeOff}`;
-}
-function tokenize(value) {
-  const tokens = [];
-  let lastIndex = 0;
-  for (const match of value.matchAll(ANSI_PATTERN)) {
-    if (match.index > lastIndex)
-      tokens.push({ text: value.slice(lastIndex, match.index), escape: false });
-    tokens.push({ text: match[0], escape: true });
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < value.length)
-    tokens.push({ text: value.slice(lastIndex), escape: false });
-  return tokens;
-}
-
 // src/presentation/help-browser.ts
-var RESET4 = "\x1B[0m";
-var DIM3 = "\x1B[2m";
-var BOLD2 = "\x1B[1m";
-var ACCENT = "\x1B[38;5;208m";
+var RESET9 = "\x1B[0m";
+var DIM8 = "\x1B[2m";
+var BOLD5 = "\x1B[1m";
+var ACCENT2 = "\x1B[38;5;208m";
 var HEADING = "\x1B[38;5;147m";
 var MATCH_ON = "\x1B[48;5;238m";
 var MATCH_OFF = "\x1B[49m";
@@ -2737,22 +4669,22 @@ class HelpBrowser {
     this.offset = Math.max(0, this.offset + amount);
   }
   renderHeader(width, bodyLength) {
-    const counter = `${HEADING}${this.counterText(bodyLength)}${RESET4}`;
-    const name = `${ACCENT}${BOLD2}\u2713 todo help${RESET4}`;
-    const subtitle = `  ${DIM3}\xB7  searchable command reference${RESET4}`;
+    const counter = `${HEADING}${this.counterText(bodyLength)}${RESET9}`;
+    const name = `${ACCENT2}${BOLD5}\u2713 todo help${RESET9}`;
+    const subtitle = `  ${DIM8}\xB7  searchable command reference${RESET9}`;
     const title = getVisibleWidth(name) + getVisibleWidth(subtitle) + getVisibleWidth(counter) + 6 <= width ? `${name}${subtitle}` : name;
     return [
       clipVisible(padBetween(`  ${title}`, `${counter}  `, width), width),
       clipVisible(`  ${this.renderSearchBar()}`, width),
-      `${DIM3}${"\u2500".repeat(width)}${RESET4}`
+      `${DIM8}${"\u2500".repeat(width)}${RESET9}`
     ];
   }
   renderSearchBar() {
     if (this.mode === "search")
-      return `${HEADING}/${RESET4} ${this.draft}${BOLD2}\u258F${RESET4}`;
+      return `${HEADING}/${RESET9} ${this.draft}${BOLD5}\u258F${RESET9}`;
     if (this.query.length > 0)
-      return `${HEADING}/${RESET4} ${this.query}   ${DIM3}n next \xB7 N previous \xB7 Esc clear${RESET4}`;
-    return `${DIM3}/ to search \xB7 j k \u2191 \u2193 to scroll${RESET4}`;
+      return `${HEADING}/${RESET9} ${this.query}   ${DIM8}n next \xB7 N previous \xB7 Esc clear${RESET9}`;
+    return `${DIM8}/ to search \xB7 j k \u2191 \u2193 to scroll${RESET9}`;
   }
   counterText(bodyLength) {
     if (this.mode === "search") {
@@ -2771,7 +4703,7 @@ class HelpBrowser {
   renderFooter(width) {
     const options = this.mode === "search" ? [["Enter search", "Esc cancel", "^u clear"], ["Enter search", "Esc cancel"]] : [["j k \u2191 \u2193 scroll", "^d ^u page", "g G ends", "/ search", "n N matches", "q quit"], ["j k scroll", "/ search", "n N matches", "q quit"], ["/ search", "q quit"]];
     const hints = options.find((candidate) => candidate.join(" \xB7 ").length + 2 <= width) ?? options[options.length - 1];
-    return clipVisible(`${DIM3}  ${hints.join(" \xB7 ")}${RESET4}`, width);
+    return clipVisible(`${DIM8}  ${hints.join(" \xB7 ")}${RESET9}`, width);
   }
   renderLine(index, width) {
     const line = this.lines[index];
@@ -2801,9 +4733,9 @@ function clamp(value, minimum, maximum) {
 }
 
 // src/presentation/help-document.ts
-function buildHelpDocument(commands, useColor) {
-  const sections = [formatHelpOverview(commands, useColor), ...commands.map((command) => formatCommandHelp(command, useColor))];
-  const lines = sections.join(`
+function buildHelpDocument(root, useColor) {
+  const pages = walkSpecs(root).filter(({ path }) => path.every((node) => node.hidden !== true)).map(({ path }) => formatCommandHelp(path, useColor));
+  const lines = [formatHelpOverview(root, useColor), ...pages].join(`
 `).split(`
 `);
   return collapseBlankRuns(lines).map((text) => ({ text, plain: stripAnsi(text) }));
@@ -2822,50 +4754,50 @@ function collapseBlankRuns(lines) {
 }
 
 // src/plugins/help.ts
-var PLAIN_FLAG = "--plain";
-var helpPlugin = {
+var helpCommand = {
   name: "help",
-  description: "Browse the searchable help, or show details for one command.",
-  register(app) {
-    app.command("help", "Browse the searchable help, or show details for one command.", async ({ args, stdout, commands }) => {
-      const [name] = args.filter((argument) => argument !== PLAIN_FLAG);
-      if (name !== undefined) {
-        stdout.write(formatCommandHelp(findCommand(commands, name)));
-        return;
-      }
-      if (args.includes(PLAIN_FLAG) || !isInteractiveTerminal()) {
-        stdout.write(formatHelpOverview(commands));
-        return;
-      }
-      await browseHelp(commands);
-    }, {
-      group: "Settings",
-      usage: ["todo help", "todo help <command>", "todo help --plain", "todo <command> --help"],
-      details: [
-        "With no arguments in a terminal this opens the searchable help browser:",
-        "j/k or the arrow keys scroll, ^d/^u page, g/G jump to the ends, / searches,",
-        "Enter runs the search, n and N step through the matches, and q quits.",
-        "Piped or redirected output stays plain, as does `todo help --plain`."
-      ],
-      options: [{ flag: "--plain", description: "Print the overview instead of opening the browser" }],
-      examples: [{ command: "todo help rm" }, { command: "todo sub --help" }, { command: "todo help --plain | less" }],
-      positional: "any"
-    });
+  summary: "Browse the searchable help, or show help for one command.",
+  group: "Settings",
+  args: [{ name: "command", kind: "text", variadic: true, optional: true, description: "Command path, e.g. board add" }],
+  flags: [{ name: "plain", description: "Print the overview instead of opening the browser" }],
+  details: [
+    "With no arguments in a terminal this opens the searchable help browser:",
+    "j/k or the arrow keys scroll, ^d/^u page, g/G jump to the ends, / searches,",
+    "Enter runs the search, n and N step through the matches, and q quits.",
+    "Piped or redirected output stays plain, as does `todo help --plain`."
+  ],
+  examples: [{ command: "todo help rm" }, { command: "todo help board later" }, { command: "todo board add --help" }, { command: "todo help --plain | less" }],
+  async run(input, { root, stdout }) {
+    const words = input.args("command");
+    if (words.length > 0) {
+      stdout.write(formatCommandHelp(resolveHelpPath(root, words)));
+      return;
+    }
+    if (input.flag("plain") || !isInteractiveTerminal()) {
+      stdout.write(formatHelpOverview(root));
+      return;
+    }
+    await browseHelp(root);
   }
 };
-function findCommand(commands, name) {
-  const command = commands.find((candidate) => candidate.name === name || candidate.help.aliases?.includes(name));
-  if (command === undefined) {
-    const names = commands.flatMap((candidate) => [candidate.name, ...candidate.help.aliases ?? []]);
-    throw new UnknownTokenError(`Unknown command: ${name}
-Run 'todo help' for the list of commands.`, name, names, "command");
+function resolveHelpPath(root, words) {
+  const path = [];
+  let node = root;
+  for (const word of words) {
+    const child = findChild(node, word);
+    if (child === undefined) {
+      const noun = path.length === 0 ? "command" : node.subcommandNoun ?? "subcommand";
+      throw new UnknownTokenError(`Unknown ${noun}: ${word}`, word, childNames(node), noun === "setting" ? "setting" : "command");
+    }
+    path.push(child);
+    node = child;
   }
-  return command;
+  return path;
 }
 function isInteractiveTerminal() {
   return process.stdin.isTTY === true && process.stdout.isTTY === true;
 }
-async function browseHelp(commands) {
+async function browseHelp(root) {
   const terminal = {
     write(text) {
       process.stdout.write(text);
@@ -2877,25 +4809,25 @@ async function browseHelp(commands) {
       return process.stdout.rows ?? 24;
     }
   };
-  const browser = new HelpBrowser(buildHelpDocument(commands, supportsColor()), terminal);
+  const browser = new HelpBrowser(buildHelpDocument(root, supportsColor()), terminal);
   const wasRaw = process.stdin.isRaw;
   const draw = () => {
     terminal.write(`\x1B[H${browser.render().split(`
 `).join(`\x1B[K
 `)}\x1B[K\x1B[J`);
   };
-  emitKeypressEvents(process.stdin);
+  emitKeypressEvents2(process.stdin);
   process.stdin.setRawMode(true);
   process.stdin.resume();
   terminal.write("\x1B[?1049h\x1B[?1007h\x1B[?25l");
-  await new Promise((resolve2) => {
+  await new Promise((resolve) => {
     const handleKeypress = (_character, key) => {
       if (key !== undefined)
         browser.handleKey(key);
       if (browser.closed) {
         process.stdin.off("keypress", handleKeypress);
         process.stdout.off("resize", draw);
-        resolve2();
+        resolve();
         return;
       }
       draw();
@@ -2911,244 +4843,16 @@ async function browseHelp(commands) {
 }
 
 // src/plugins/interactive.ts
-import { emitKeypressEvents as emitKeypressEvents2 } from "readline";
-
-// src/presentation/task-format.ts
-var RESET5 = "\x1B[0m";
-var DIM4 = "\x1B[2m";
-var BOLD3 = "\x1B[1m";
-var GREEN2 = "\x1B[38;5;114m";
-var RED = "\x1B[38;5;203m";
-var YELLOW = "\x1B[38;5;229m";
-var PEACH = "\x1B[38;5;208m";
-var SKY = "\x1B[38;5;116m";
-var SUBTEXT = "\x1B[38;5;217m";
-var PRIORITY_COLORS = {
-  none: SUBTEXT,
-  low: SKY,
-  medium: YELLOW,
-  high: RED
-};
-function formatTaskForDisplay(task, now = Date.now()) {
-  return formatTask(task, task.description, now, true);
-}
-function formatTaskTreeRowForDisplay(row2, now = Date.now()) {
-  const description = row2.hasChildren || row2.task.kind === "epic" ? `${BOLD3}${row2.task.description}${RESET5}` : row2.task.description;
-  return `${formatTreePrefix(row2)}${formatTask(row2.task, description, now, true)}${formatRowSuffix(row2)}`;
-}
-function formatTaskRowForShellDisplay(row2, now = Date.now()) {
-  const prefix = formatTreePrefix(row2);
-  const badge = formatRowSuffix(row2);
-  const description = truncate2(row2.task.description, Math.max(12, 38 - getVisibleLength(prefix) - getVisibleLength(badge)));
-  const emphasized = row2.hasChildren || row2.task.kind === "epic" ? `${BOLD3}${description}${RESET5}` : description;
-  const taskText = formatTask(row2.task, emphasized, now, false);
-  const id = `${DIM4}#${row2.task.id.padStart(2, "0")}${RESET5}`;
-  return {
-    left: `${id}  ${prefix}${taskText}${badge}`,
-    right: `${DIM4}${formatCreatedAt(row2.task.createdAt)}${RESET5}`
-  };
-}
-function formatTreePrefix(row2) {
-  if (row2.depth === 0)
-    return "";
-  const guides = row2.siblingFollows.slice(1, -1).map((follows) => follows ? "\u2502  " : "   ");
-  const connector = row2.siblingFollows[row2.siblingFollows.length - 1] ? "\u251C\u2500 " : "\u2514\u2500 ";
-  return `${DIM4}${guides.join("")}${connector}${RESET5}`;
-}
-function formatProgressBadge(row2) {
-  if (row2.progress.total > 0) {
-    const color = row2.progress.completed === row2.progress.total ? GREEN2 : SKY;
-    return ` ${color}[${row2.progress.completed}/${row2.progress.total}]${RESET5}`;
-  }
-  return row2.task.kind === "epic" ? ` ${DIM4}[epic]${RESET5}` : "";
-}
-function formatCollapsedSummary(row2) {
-  return ` ${SKY}\u25CF${RESET5} ${DIM4}${row2.childCount} subticket${row2.childCount === 1 ? "" : "s"}${RESET5}`;
-}
-function formatRowSuffix(row2) {
-  return row2.collapsed ? formatCollapsedSummary(row2) : formatProgressBadge(row2);
-}
-function formatTask(task, description, now, includeId) {
-  const parts = [];
-  if (task.priority !== "none") {
-    parts.push(`${PRIORITY_COLORS[task.priority]}[${task.priority.toUpperCase()}]${RESET5}`);
-  }
-  parts.push(`${getUrgencyColor2(task.dueDate, now)}${description}${RESET5}`);
-  if (task.dueDate !== undefined) {
-    parts.push(`${getUrgencyColor2(task.dueDate, now)}${formatCompactDue(task.dueDate, now)}${RESET5}`);
-  }
-  if (includeId)
-    parts.push(`${DIM4}(${task.id})${RESET5}`);
-  return parts.join(" ");
-}
-function isUpcoming(timestamp, now = Date.now()) {
-  const difference = timestamp - now;
-  return difference > 0 && difference < 30 * 60 * 1000;
-}
-function isOverdue(timestamp, now = Date.now()) {
-  return timestamp < now;
-}
-function getUrgencyColor2(timestamp, now) {
-  if (timestamp === undefined)
-    return SUBTEXT;
-  if (isOverdue(timestamp, now))
-    return RED;
-  if (isUpcoming(timestamp, now))
-    return YELLOW;
-  if ((timestamp - now) / (60 * 60 * 1000) < 2)
-    return PEACH;
-  return SUBTEXT;
-}
-function truncate2(value, maximumLength) {
-  return value.length > maximumLength ? `${value.slice(0, maximumLength - 3)}...` : value;
-}
-function getVisibleLength(value) {
-  return value.replace(/\u001B\[[0-9;]*m/g, "").length;
-}
-function formatCreatedAt(timestamp) {
-  const date = new Date(timestamp);
-  const month = date.toLocaleString(undefined, { month: "short" });
-  const day = date.getDate().toString().padStart(2, "0");
-  const time = `${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
-  return `${day} ${month} \xB7 ${time}`;
-}
-
-// src/notifications.ts
-import { spawnSync } from "child_process";
-async function sendDueNotifications(store, now = Date.now()) {
-  const tasks = await store.loadTasks();
-  let changed = false;
-  for (const task of tasks) {
-    if (task.status !== "pending" || task.dueDate === undefined)
-      continue;
-    if (task.reminder !== undefined)
-      continue;
-    if (task.dueDate < now && !task.notificationsSent.overdue) {
-      sendNotification("Task Overdue", `${task.description} - due ${formatDueDate(task.dueDate)}`);
-      task.notificationsSent.overdue = true;
-      changed = true;
-    }
-    for (const offset of task.reminderOffsets) {
-      if (now < task.dueDate - offset * 60000 || task.notificationsSent.reminders.includes(offset))
-        continue;
-      sendNotification("Task Reminder", `${task.description} - due in ${offset} minutes`);
-      task.notificationsSent.reminders.push(offset);
-      changed = true;
-    }
-  }
-  if (changed)
-    await store.saveTasks(tasks);
-}
-function sendNotification(title, message) {
-  spawnSync("notify-send", [title, message], { stdio: "ignore" });
-}
-function formatDueDate(timestamp) {
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short"
-  }).format(timestamp);
-}
-function resetNotificationState(task) {
-  task.notificationsSent = { reminders: [], overdue: false };
-  if (task.reminder !== undefined)
-    delete task.reminder.firedAt;
-}
-
-// src/plugins/undo.ts
-var DIM5 = "\x1B[2m";
-var GREEN3 = "\x1B[32m";
-var RESET6 = "\x1B[0m";
-var undoPlugin = {
-  name: "undo",
-  description: "Restores the most recently deleted tasks or snoozes a task.",
-  register(app) {
-    app.command("undo", "Restore the most recently deleted task or tasks.", async ({ args, store, stdout }) => {
-      if (args.length > 0)
-        throw new UserInputError("Usage: todo undo");
-      const undo = await store.loadUndo();
-      if (undo === undefined || undo.tasks.length === 0) {
-        stdout.write(`${DIM5}Nothing to undo${RESET6}
-`);
-        return;
-      }
-      const tasks = await store.loadTasks();
-      const restoredTasks = restoreTasks(tasks, undo.tasks);
-      await store.saveTasks([...tasks, ...restoredTasks]);
-      await store.clearUndo();
-      stdout.write(`${GREEN3}Restored ${restoredTasks.length} task(s)${RESET6}
-`);
-    }, {
-      group: "Remove",
-      usage: ["todo undo"],
-      details: ["Only the most recent rm, rmall, or taskboard delete is kept. Restored tasks get fresh IDs."]
-    });
-    app.command("snooze", "Push a task's due date forward.", async ({ args, store, stdout }) => {
-      if (args.length < 2)
-        throw new UserInputError("Usage: todo snooze <id> <1h|30m|tomorrow|monday|next week|16/08/2026>");
-      const id = args[0];
-      if (id === undefined)
-        throw new UserInputError("Missing task ID");
-      const dueDate = tryParseDueDate(args.slice(1).join(" "));
-      if (dueDate === undefined)
-        throw new UserInputError("Invalid snooze time");
-      const tasks = await store.loadTasks();
-      const task = tasks.find((item) => item.id === id);
-      if (task === undefined)
-        throw new UserInputError(`Task not found: ${id}`);
-      task.dueDate = dueDate;
-      task.updatedAt = Date.now();
-      if (task.reminder !== undefined)
-        task.reminder.dueAt = dueDate;
-      resetNotificationState(task);
-      await store.saveTasks(tasks);
-      stdout.write(`${GREEN3}Snoozed #${task.id}${RESET6}
-`);
-    }, {
-      group: "Change",
-      positional: "task-id",
-      usage: ["todo snooze <id> <time>"],
-      details: ["Sets a new due date and resets reminder notifications for the task."],
-      examples: [
-        { command: "todo snooze 4 1h" },
-        { command: "todo snooze 4 tomorrow" },
-        { command: "todo snooze 4 next week" },
-        { command: "todo snooze 4 16/08/2026" }
-      ]
-    });
-  }
-};
-function restoreTasks(tasks, deletedTasks) {
-  let nextId = getNextId2(tasks);
-  const existingIds = new Set(tasks.map((task) => task.id));
-  const idMap = new Map(deletedTasks.map((task) => [task.id, `${nextId++}`]));
-  const now = Date.now();
-  return deletedTasks.map((task) => {
-    const restored = { ...task, id: idMap.get(task.id) ?? task.id, updatedAt: now };
-    const parentId = task.parentId === undefined ? undefined : idMap.get(task.parentId) ?? (existingIds.has(task.parentId) ? task.parentId : undefined);
-    if (parentId === undefined)
-      delete restored.parentId;
-    else
-      restored.parentId = parentId;
-    return restored;
-  });
-}
-function getNextId2(tasks) {
-  const ids = tasks.map((task) => Number.parseInt(task.id, 10)).filter(Number.isFinite);
-  return (ids.length === 0 ? 0 : Math.max(...ids)) + 1;
-}
-
-// src/plugins/interactive.ts
-var DIM6 = "\x1B[2m";
-var RESET7 = "\x1B[0m";
+import { emitKeypressEvents as emitKeypressEvents3 } from "readline";
+var DIM9 = "\x1B[2m";
+var RESET10 = "\x1B[0m";
 var BRIGHT = "\x1B[1m";
-var MAUVE = "\x1B[38;5;147m";
-var GREEN4 = "\x1B[38;5;166m";
-var RED2 = "\x1B[38;5;203m";
+var MAUVE2 = "\x1B[38;5;147m";
+var GREEN7 = "\x1B[38;5;166m";
+var RED3 = "\x1B[38;5;203m";
 var BLUE = "\x1B[38;5;116m";
-var SELECTED = "\x1B[48;5;60m";
-var PANEL_WIDTH = 72;
+var SELECTED2 = "\x1B[48;5;60m";
+var PANEL_WIDTH2 = 72;
 var VISIBLE_TASK_COUNT = 8;
 var ADD_MODES = new Set(["adding", "adding-subtask", "adding-epic"]);
 var WORKSPACES = [
@@ -3158,19 +4862,18 @@ var WORKSPACES = [
   { key: "high", label: "high priority" },
   { key: "archive", label: "archive" }
 ];
-var interactivePlugin = {
+var interactiveCommand = {
   name: "interactive",
-  description: "Open the keyboard-controlled taskboard.",
-  register(app) {
-    app.command("interactive", "Open the keyboard-driven taskboard.", async ({ store }) => {
-      const taskboard = new Taskboard(store);
-      await taskboard.start();
-    }, {
-      group: "View",
-      aliases: ["i", "-i", "--interactive"],
-      usage: ["todo interactive", "todo i", "todo -i", "todo --interactive", "todo"],
-      details: ["Opens automatically when todo runs with no arguments in a terminal. Press ? inside for the key map."]
-    });
+  aliases: ["i", "-i", "--interactive"],
+  summary: "Open the keyboard-driven taskboard.",
+  group: "View",
+  details: [
+    "Opens automatically when todo runs with no arguments in a terminal; the `todo` wrapper starts the Go TUI when it is installed.",
+    "This built-in taskboard is the fallback. Press ? inside for the key map."
+  ],
+  async run(_input, { store }) {
+    const taskboard = new Taskboard(store);
+    await taskboard.start();
   }
 };
 
@@ -3204,14 +4907,14 @@ class Taskboard {
     }
     await this.refresh();
     this.wasRaw = process.stdin.isRaw;
-    emitKeypressEvents2(process.stdin);
+    emitKeypressEvents3(process.stdin);
     process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stdin.on("keypress", this.handleKeypress);
     process.stdout.write("\x1B[?25l");
     this.draw();
-    await new Promise((resolve2) => {
-      this.resolveClose = resolve2;
+    await new Promise((resolve) => {
+      this.resolveClose = resolve;
     });
   }
   handleKeypress = (_, key) => {
@@ -3359,41 +5062,41 @@ class Taskboard {
     this.message = "";
   }
   collapseOrAscend() {
-    const row2 = this.selectedRow;
-    if (row2 === undefined)
+    const row = this.selectedRow;
+    if (row === undefined)
       return;
-    if (row2.hasChildren && !row2.collapsed) {
-      this.collapsedIds.add(row2.task.id);
-      this.rebuildRows(row2.task.id);
+    if (row.hasChildren && !row.collapsed) {
+      this.collapsedIds.add(row.task.id);
+      this.rebuildRows(row.task.id);
       return;
     }
-    const parentIndex = this.rows.findIndex((candidate) => candidate.task.id === row2.task.parentId);
+    const parentIndex = this.rows.findIndex((candidate) => candidate.task.id === row.task.parentId);
     if (parentIndex !== -1) {
       this.selectedIndex = parentIndex;
       this.ensureSelectedTaskIsVisible();
     }
   }
   expandOrDescend() {
-    const row2 = this.selectedRow;
-    if (row2 === undefined || !row2.hasChildren)
+    const row = this.selectedRow;
+    if (row === undefined || !row.hasChildren)
       return;
-    if (row2.collapsed) {
-      this.collapsedIds.delete(row2.task.id);
-      this.rebuildRows(row2.task.id);
+    if (row.collapsed) {
+      this.collapsedIds.delete(row.task.id);
+      this.rebuildRows(row.task.id);
       return;
     }
     this.moveSelection(1);
   }
   async indentSelectedTask() {
-    const row2 = this.selectedRow;
-    if (row2 === undefined || this.view === "archive")
+    const row = this.selectedRow;
+    if (row === undefined || this.view === "archive")
       return;
     let target;
     for (let index = this.selectedIndex - 1;index >= 0; index -= 1) {
       const candidate = this.rows[index];
-      if (candidate === undefined || candidate.depth < row2.depth)
+      if (candidate === undefined || candidate.depth < row.depth)
         break;
-      if (candidate.depth === row2.depth) {
+      if (candidate.depth === row.depth) {
         target = candidate.task;
         break;
       }
@@ -3402,18 +5105,18 @@ class Taskboard {
       this.message = "No task above to nest under";
       return;
     }
-    await this.reparent(row2.task.id, target.id);
+    await this.reparent(row.task.id, target.id);
   }
   async outdentSelectedTask() {
-    const row2 = this.selectedRow;
-    if (row2 === undefined || this.view === "archive")
+    const row = this.selectedRow;
+    if (row === undefined || this.view === "archive")
       return;
-    if (row2.task.parentId === undefined) {
+    if (row.task.parentId === undefined) {
       this.message = "Already at the top level";
       return;
     }
-    const parent = this.allTasks.find((candidate) => candidate.id === row2.task.parentId);
-    await this.reparent(row2.task.id, parent?.parentId);
+    const parent = this.allTasks.find((candidate) => candidate.id === row.task.parentId);
+    await this.reparent(row.task.id, parent?.parentId);
   }
   async reparent(id, parentId) {
     const tasks = await this.store.loadTasks();
@@ -3567,6 +5270,7 @@ class Taskboard {
     const tasks = await this.store.loadTasks();
     const restoredTasks = restoreTasks(tasks, undo.tasks);
     await this.store.saveTasks([...tasks, ...restoredTasks]);
+    await this.store.forgetRemovedBatch(undo.timestamp);
     await this.store.clearUndo();
     this.message = `Restored ${restoredTasks.length} task${restoredTasks.length === 1 ? "" : "s"}`;
     await this.refresh(restoredTasks[0]?.id);
@@ -3658,14 +5362,14 @@ class Taskboard {
     this.rebuildRows();
   }
   rebuildRows(selectedId) {
-    this.rows = buildTaskTreeRows(this.tasks, this.allTasks, { compare: compareTasks, collapsedIds: this.collapsedIds });
+    this.rows = buildTaskTreeRows(this.tasks, this.allTasks, { compare: compareTasks2, collapsedIds: this.collapsedIds });
     if (selectedId !== undefined)
       this.selectRow(selectedId);
     this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.rows.length - 1));
     this.ensureSelectedTaskIsVisible();
   }
   selectRow(id) {
-    const matchingIndex = this.rows.findIndex((row2) => row2.task.id === id);
+    const matchingIndex = this.rows.findIndex((row) => row.task.id === id);
     if (matchingIndex !== -1)
       this.selectedIndex = matchingIndex;
   }
@@ -3714,18 +5418,18 @@ class Taskboard {
     if ((process.stdout.columns ?? 0) >= 100)
       return this.renderWorkspaceLayout();
     const lines = this.mode === "help" ? this.helpLines() : this.taskLines();
-    const output = [formatPanelBorder("\u256D", "\u256E")];
+    const output = [formatPanelBorder2("\u256D", "\u256E")];
     const status = this.view === "pending" ? `${this.tasks.length} open` : `${this.tasks.length} done`;
     const dueTodayCount = this.tasks.filter((task) => task.dueDate !== undefined && isToday(task.dueDate)).length;
-    const dueToday = this.view === "pending" && dueTodayCount > 0 ? `${DIM6} \xB7 ${dueTodayCount} due today${RESET7}` : "";
-    const title = this.view === "archive" ? `${BRIGHT}${MAUVE}todo${RESET7} ${DIM6}\xB7 archive${RESET7}` : `${BRIGHT}${MAUVE}todo${RESET7}`;
-    output.push(formatPanelLine(title, `${GREEN4}\u25CF ${status}${RESET7}${dueToday}`));
-    output.push(formatPanelBorder("\u251C", "\u2524"));
+    const dueToday = this.view === "pending" && dueTodayCount > 0 ? `${DIM9} \xB7 ${dueTodayCount} due today${RESET10}` : "";
+    const title = this.view === "archive" ? `${BRIGHT}${MAUVE2}todo${RESET10} ${DIM9}\xB7 archive${RESET10}` : `${BRIGHT}${MAUVE2}todo${RESET10}`;
+    output.push(formatPanelLine2(title, `${GREEN7}\u25CF ${status}${RESET10}${dueToday}`));
+    output.push(formatPanelBorder2("\u251C", "\u2524"));
     for (const line of lines)
-      output.push(formatPanelLine(line));
-    output.push(formatPanelBorder("\u251C", "\u2524"));
-    output.push(formatPanelLine(this.footerLeft, this.footerRight));
-    output.push(formatPanelBorder("\u2570", "\u256F"));
+      output.push(formatPanelLine2(line));
+    output.push(formatPanelBorder2("\u251C", "\u2524"));
+    output.push(formatPanelLine2(this.footerLeft, this.footerRight));
+    output.push(formatPanelBorder2("\u2570", "\u256F"));
     return `${output.join(`
 `)}
 `;
@@ -3745,7 +5449,7 @@ class Taskboard {
     }
     output.push(formatSplitBorder("\u251C", "\u2534", "\u2524", sidebarWidth, taskWidth));
     output.push(formatStatusLine(this.footerLeft, this.footerRight, width - 2));
-    output.push(`${DIM6}\u2570${"\u2500".repeat(width - 2)}\u256F${RESET7}`);
+    output.push(`${DIM9}\u2570${"\u2500".repeat(width - 2)}\u256F${RESET10}`);
     return `${output.join(`
 `)}
 `;
@@ -3754,9 +5458,9 @@ class Taskboard {
     return WORKSPACES.map((workspace, index) => {
       const count = filterWorkspaceTasks(this.allTasks, workspace.key).length;
       const selected = this.focus === "workspaces" && index === this.workspaceIndex;
-      const marker = index === this.workspaceIndex ? `${GREEN4}\u203A${RESET7}` : " ";
-      const content = `${marker} ${workspace.label} ${DIM6}(${count})${RESET7}`;
-      return selected ? `${SELECTED}${fit(content, width)}${RESET7}` : content;
+      const marker = index === this.workspaceIndex ? `${GREEN7}\u203A${RESET10}` : " ";
+      const content = `${marker} ${workspace.label} ${DIM9}(${count})${RESET10}`;
+      return selected ? `${SELECTED2}${fit(content, width)}${RESET10}` : content;
     });
   }
   workspaceTaskLines(width) {
@@ -3765,23 +5469,23 @@ class Taskboard {
     if (ADD_MODES.has(this.mode))
       return this.addPromptLines();
     if (this.mode === "editing")
-      return [`${GREEN4}edit #${this.selectedTask?.id ?? ""}${RESET7}`, `${DIM6}>${RESET7} ${this.draft}${BRIGHT}\u258F${RESET7}`, `${DIM6}Enter to save \xB7 Esc to cancel${RESET7}`];
+      return [`${GREEN7}edit #${this.selectedTask?.id ?? ""}${RESET10}`, `${DIM9}>${RESET10} ${this.draft}${BRIGHT}\u258F${RESET10}`, `${DIM9}Enter to save \xB7 Esc to cancel${RESET10}`];
     if (this.mode === "snoozing")
-      return [`${GREEN4}snooze #${this.selectedTask?.id ?? ""}${RESET7}`, `${DIM6}>${RESET7} ${this.draft}${BRIGHT}\u258F${RESET7}`, `${DIM6}30m \xB7 1h \xB7 tomorrow \xB7 monday \xB7 next week${RESET7}`];
+      return [`${GREEN7}snooze #${this.selectedTask?.id ?? ""}${RESET10}`, `${DIM9}>${RESET10} ${this.draft}${BRIGHT}\u258F${RESET10}`, `${DIM9}30m \xB7 1h \xB7 tomorrow \xB7 monday \xB7 next week${RESET10}`];
     if (this.mode === "setting-due")
-      return [`${GREEN4}due date #${this.selectedTask?.id ?? ""}${RESET7}`, `${DIM6}>${RESET7} ${this.draft}${BRIGHT}\u258F${RESET7}`, `${DIM6}30m \xB7 1h \xB7 tomorrow \xB7 monday \xB7 next week \xB7 none${RESET7}`];
+      return [`${GREEN7}due date #${this.selectedTask?.id ?? ""}${RESET10}`, `${DIM9}>${RESET10} ${this.draft}${BRIGHT}\u258F${RESET10}`, `${DIM9}30m \xB7 1h \xB7 tomorrow \xB7 monday \xB7 next week \xB7 none${RESET10}`];
     if (this.mode === "searching")
-      return [`${GREEN4}search${RESET7}`, `${DIM6}/${RESET7} ${this.searchQuery}${BRIGHT}\u258F${RESET7}`, `${DIM6}Enter to keep filter \xB7 Esc to clear${RESET7}`];
+      return [`${GREEN7}search${RESET10}`, `${DIM9}/${RESET10} ${this.searchQuery}${BRIGHT}\u258F${RESET10}`, `${DIM9}Enter to keep filter \xB7 Esc to clear${RESET10}`];
     if (this.mode === "confirming-delete")
       return this.deletePromptLines();
     if (this.rows.length === 0)
-      return [`${GREEN4}\u2713 All caught up${RESET7}`, `${DIM6}Press a to add a task \xB7 E for an epic${RESET7}`];
-    const header = `${DIM6}PRI  ID    TITLE${" ".repeat(Math.max(1, width - 53))}CREATED       UPDATED       DUE${RESET7}`;
-    const rows = this.rows.slice(this.scrollOffset, this.scrollOffset + VISIBLE_TASK_COUNT).map((row2, index) => {
+      return [`${GREEN7}\u2713 All caught up${RESET10}`, `${DIM9}Press a to add a task \xB7 E for an epic${RESET10}`];
+    const header = `${DIM9}PRI  ID    TITLE${" ".repeat(Math.max(1, width - 53))}CREATED       UPDATED       DUE${RESET10}`;
+    const rows = this.rows.slice(this.scrollOffset, this.scrollOffset + VISIBLE_TASK_COUNT).map((row, index) => {
       const selected = this.scrollOffset + index === this.selectedIndex;
-      const marked = this.selectedTaskIds.has(row2.task.id);
-      const marker = selected ? `${GREEN4}\u203A${RESET7}` : marked ? `${GREEN4}\u2713${RESET7}` : `${DIM6}\xB7${RESET7}`;
-      const content = `${marker} ${formatWorkspaceTask(row2, width - 2)}`;
+      const marked = this.selectedTaskIds.has(row.task.id);
+      const marker = selected ? `${GREEN7}\u203A${RESET10}` : marked ? `${GREEN7}\u2713${RESET10}` : `${DIM9}\xB7${RESET10}`;
+      const content = `${marker} ${formatWorkspaceTask(row, width - 2)}`;
       return selected && this.focus === "tasks" ? highlight(fit(content, width)) : content;
     });
     return [header, ...rows];
@@ -3790,74 +5494,74 @@ class Taskboard {
     if (ADD_MODES.has(this.mode))
       return this.addPromptLines();
     if (this.mode === "editing")
-      return [`${GREEN4}edit #${this.selectedTask?.id ?? ""}${RESET7}`, `${DIM6}>${RESET7} ${this.draft}${BRIGHT}\u258F${RESET7}`, `${DIM6}Enter to save \xB7 Esc to cancel${RESET7}`];
+      return [`${GREEN7}edit #${this.selectedTask?.id ?? ""}${RESET10}`, `${DIM9}>${RESET10} ${this.draft}${BRIGHT}\u258F${RESET10}`, `${DIM9}Enter to save \xB7 Esc to cancel${RESET10}`];
     if (this.mode === "snoozing")
-      return [`${GREEN4}snooze #${this.selectedTask?.id ?? ""}${RESET7}`, `${DIM6}>${RESET7} ${this.draft}${BRIGHT}\u258F${RESET7}`, `${DIM6}30m \xB7 1h \xB7 tomorrow \xB7 monday \xB7 next week${RESET7}`];
+      return [`${GREEN7}snooze #${this.selectedTask?.id ?? ""}${RESET10}`, `${DIM9}>${RESET10} ${this.draft}${BRIGHT}\u258F${RESET10}`, `${DIM9}30m \xB7 1h \xB7 tomorrow \xB7 monday \xB7 next week${RESET10}`];
     if (this.mode === "setting-due")
-      return [`${GREEN4}due date #${this.selectedTask?.id ?? ""}${RESET7}`, `${DIM6}>${RESET7} ${this.draft}${BRIGHT}\u258F${RESET7}`, `${DIM6}30m \xB7 1h \xB7 tomorrow \xB7 monday \xB7 next week \xB7 none${RESET7}`];
+      return [`${GREEN7}due date #${this.selectedTask?.id ?? ""}${RESET10}`, `${DIM9}>${RESET10} ${this.draft}${BRIGHT}\u258F${RESET10}`, `${DIM9}30m \xB7 1h \xB7 tomorrow \xB7 monday \xB7 next week \xB7 none${RESET10}`];
     if (this.mode === "searching")
-      return [`${GREEN4}search${RESET7}`, `${DIM6}/${RESET7} ${this.searchQuery}${BRIGHT}\u258F${RESET7}`, `${DIM6}Enter to keep filter \xB7 Esc to clear${RESET7}`];
+      return [`${GREEN7}search${RESET10}`, `${DIM9}/${RESET10} ${this.searchQuery}${BRIGHT}\u258F${RESET10}`, `${DIM9}Enter to keep filter \xB7 Esc to clear${RESET10}`];
     if (this.mode === "confirming-delete")
       return this.deletePromptLines();
     if (this.rows.length === 0) {
       const emptyAction = this.view === "pending" ? "Press a to add a task \xB7 E for an epic" : "Press v to return to open tasks";
-      return [`${GREEN4}\u2713 All caught up${RESET7}`, `${DIM6}${emptyAction}${RESET7}`];
+      return [`${GREEN7}\u2713 All caught up${RESET10}`, `${DIM9}${emptyAction}${RESET10}`];
     }
-    const header = formatCompactHeader(PANEL_WIDTH - 3);
+    const header = formatCompactHeader(PANEL_WIDTH2 - 3);
     const visibleRows = this.rows.slice(this.scrollOffset, this.scrollOffset + VISIBLE_TASK_COUNT);
-    const rows = visibleRows.map((row2, index) => {
+    const rows = visibleRows.map((row, index) => {
       const selected = this.scrollOffset + index === this.selectedIndex;
-      const marked = this.selectedTaskIds.has(row2.task.id);
-      const marker = selected ? `${GREEN4}\u203A${RESET7}` : marked ? `${GREEN4}\u2713${RESET7}` : `${DIM6}\xB7${RESET7}`;
-      const content = `${marker} ${formatCompactTask(row2, PANEL_WIDTH - 3)}`;
-      return selected ? highlight(fit(content, PANEL_WIDTH - 1)) : content;
+      const marked = this.selectedTaskIds.has(row.task.id);
+      const marker = selected ? `${GREEN7}\u203A${RESET10}` : marked ? `${GREEN7}\u2713${RESET10}` : `${DIM9}\xB7${RESET10}`;
+      const content = `${marker} ${formatCompactTask(row, PANEL_WIDTH2 - 3)}`;
+      return selected ? highlight(fit(content, PANEL_WIDTH2 - 1)) : content;
     });
     return [header, ...rows];
   }
   addPromptLines() {
     const title = this.mode === "adding-epic" ? "new epic" : this.mode === "adding-subtask" ? `new subtask under #${this.selectedTask?.id ?? ""}` : "new task";
-    return [`${GREEN4}${title}${RESET7}`, `${DIM6}>${RESET7} ${this.draft}${BRIGHT}\u258F${RESET7}`, `${DIM6}Enter to save \xB7 comma separates several \xB7 Esc to cancel${RESET7}`];
+    return [`${GREEN7}${title}${RESET10}`, `${DIM9}>${RESET10} ${this.draft}${BRIGHT}\u258F${RESET10}`, `${DIM9}Enter to save \xB7 comma separates several \xB7 Esc to cancel${RESET10}`];
   }
   deletePromptLines() {
     const id = this.selectedTask?.id ?? "";
     const subtaskCount = id.length > 0 ? this.subtaskCountOf(id) : 0;
     const subtaskText = subtaskCount > 0 ? ` and ${subtaskCount} subtask${subtaskCount === 1 ? "" : "s"}` : "";
-    return [`${RED2}Delete #${id}${subtaskText}?${RESET7}`, `${DIM6}Press y to delete \xB7 n or Esc to cancel${RESET7}`];
+    return [`${RED3}Delete #${id}${subtaskText}?${RESET10}`, `${DIM9}Press y to delete \xB7 n or Esc to cancel${RESET10}`];
   }
   helpLines() {
     return [
-      `${GREEN4}\u2191/k  \u2193/j${RESET7}  move selection`,
-      `${GREEN4}\u2190/h  \u2192/l${RESET7}  collapse or expand \xB7 jump to parent/child`,
-      `${GREEN4}Enter${RESET7}  complete selected task (and its subtasks)`,
-      `${GREEN4}a${RESET7}  add task    ${GREEN4}A${RESET7}  add subtask under selected    ${GREEN4}E${RESET7}  add epic`,
-      `${GREEN4}>${RESET7}  nest under the task above    ${GREEN4}<${RESET7}  move up one level`,
-      `${GREEN4}e${RESET7}  edit selected task`,
-      `${GREEN4}d${RESET7}  delete selected task and its subtasks`,
-      `${GREEN4}u / Ctrl+Z${RESET7}  undo last deletion (within 5s)`,
-      `${GREEN4}s${RESET7}  snooze selected task`,
-      `${GREEN4}p${RESET7}  cycle priority`,
-      `${GREEN4}t${RESET7}  set or clear due date`,
-      `${GREEN4}x${RESET7}  mark task for batch completion`,
-      `${GREEN4}c${RESET7}  complete marked task(s)`,
-      `${GREEN4}/${RESET7}  search current view`,
-      `${GREEN4}v${RESET7}  toggle completed archive`,
-      `${GREEN4}Enter${RESET7}  restore selected task in archive`,
-      `${GREEN4}r${RESET7}  refresh`,
-      `${GREEN4}q${RESET7}  quit`,
-      `${DIM6}Press Esc, Enter, ? or q to return${RESET7}`
+      `${GREEN7}\u2191/k  \u2193/j${RESET10}  move selection`,
+      `${GREEN7}\u2190/h  \u2192/l${RESET10}  collapse or expand \xB7 jump to parent/child`,
+      `${GREEN7}Enter${RESET10}  complete selected task (and its subtasks)`,
+      `${GREEN7}a${RESET10}  add task    ${GREEN7}A${RESET10}  add subtask under selected    ${GREEN7}E${RESET10}  add epic`,
+      `${GREEN7}>${RESET10}  nest under the task above    ${GREEN7}<${RESET10}  move up one level`,
+      `${GREEN7}e${RESET10}  edit selected task`,
+      `${GREEN7}d${RESET10}  delete selected task and its subtasks`,
+      `${GREEN7}u / Ctrl+Z${RESET10}  undo last deletion (within 5s)`,
+      `${GREEN7}s${RESET10}  snooze selected task`,
+      `${GREEN7}p${RESET10}  cycle priority`,
+      `${GREEN7}t${RESET10}  set or clear due date`,
+      `${GREEN7}x${RESET10}  mark task for batch completion`,
+      `${GREEN7}c${RESET10}  complete marked task(s)`,
+      `${GREEN7}/${RESET10}  search current view`,
+      `${GREEN7}v${RESET10}  toggle completed archive`,
+      `${GREEN7}Enter${RESET10}  restore selected task in archive`,
+      `${GREEN7}r${RESET10}  refresh`,
+      `${GREEN7}q${RESET10}  quit`,
+      `${DIM9}Press Esc, Enter, ? or q to return${RESET10}`
     ];
   }
   get footerLeft() {
     if (this.mode === "help")
-      return `${DIM6}?${RESET7} help`;
+      return `${DIM9}?${RESET10} help`;
     const action = this.view === "pending" ? "complete" : "restore";
     const position = this.tasks.length > 0 ? `${this.selectedIndex + 1}/${this.tasks.length} \xB7 ` : "";
-    return this.message.length > 0 ? `${GREEN4}${this.message}${RESET7}` : `${DIM6}${position}\u2191\u2193${RESET7} navigate \xB7 ${DIM6}Enter${RESET7} ${action}`;
+    return this.message.length > 0 ? `${GREEN7}${this.message}${RESET10}` : `${DIM9}${position}\u2191\u2193${RESET10} navigate \xB7 ${DIM9}Enter${RESET10} ${action}`;
   }
   get footerRight() {
     if (this.mode === "help")
-      return `${DIM6}q${RESET7} close`;
-    return `${DIM6}A${RESET7} sub \xB7 ${DIM6}E${RESET7} epic \xB7 ${DIM6}?${RESET7} help \xB7 ${DIM6}q${RESET7} quit`;
+      return `${DIM9}q${RESET10} close`;
+    return `${DIM9}A${RESET10} sub \xB7 ${DIM9}E${RESET10} epic \xB7 ${DIM9}?${RESET10} help \xB7 ${DIM9}q${RESET10} quit`;
   }
   close() {
     process.stdin.off("keypress", this.handleKeypress);
@@ -3869,7 +5573,7 @@ class Taskboard {
     this.resolveClose?.();
   }
 }
-function compareTasks(left, right) {
+function compareTasks2(left, right) {
   if (left.dueDate !== undefined && right.dueDate !== undefined)
     return left.dueDate - right.dueDate;
   if (left.dueDate !== undefined)
@@ -3878,12 +5582,12 @@ function compareTasks(left, right) {
     return 1;
   return left.createdAt - right.createdAt;
 }
-function formatPanelLine(left, right = "") {
-  const padding = " ".repeat(Math.max(1, PANEL_WIDTH - getVisibleLength(left) - getVisibleLength(right)));
-  return `${DIM6}\u2502${RESET7} ${left}${padding}${right} ${DIM6}\u2502${RESET7}`;
+function formatPanelLine2(left, right = "") {
+  const padding = " ".repeat(Math.max(1, PANEL_WIDTH2 - getVisibleLength(left) - getVisibleLength(right)));
+  return `${DIM9}\u2502${RESET10} ${left}${padding}${right} ${DIM9}\u2502${RESET10}`;
 }
-function formatPanelBorder(left, right) {
-  return `${DIM6}${left}${"\u2500".repeat(PANEL_WIDTH + 2)}${right}${RESET7}`;
+function formatPanelBorder2(left, right) {
+  return `${DIM9}${left}${"\u2500".repeat(PANEL_WIDTH2 + 2)}${right}${RESET10}`;
 }
 function filterWorkspaceTasks(tasks, workspace) {
   if (workspace === "archive")
@@ -3902,60 +5606,60 @@ function isToday(timestamp) {
   const date = new Date(timestamp);
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
 }
-function formatTreeLabel(row2, width) {
-  const prefix = formatTreePrefix(row2);
-  const toggle = row2.hasChildren ? row2.collapsed ? `${MAUVE}\u25B8${RESET7} ` : `${DIM6}\u25BE${RESET7} ` : "";
-  const badge = formatProgressBadge(row2);
+function formatTreeLabel(row, width) {
+  const prefix = formatTreePrefix(row);
+  const toggle = row.hasChildren ? row.collapsed ? `${MAUVE2}\u25B8${RESET10} ` : `${DIM9}\u25BE${RESET10} ` : "";
+  const badge = formatProgressBadge(row);
   const descriptionWidth = Math.max(8, width - getVisibleLength(prefix) - getVisibleLength(toggle) - getVisibleLength(badge));
-  const description = truncateTaskDescription(row2.task.description, descriptionWidth);
-  const emphasized = row2.hasChildren || row2.task.kind === "epic" ? `${BRIGHT}${description}${RESET7}` : description;
+  const description = truncateTaskDescription(row.task.description, descriptionWidth);
+  const emphasized = row.hasChildren || row.task.kind === "epic" ? `${BRIGHT}${description}${RESET10}` : description;
   return `${prefix}${toggle}${emphasized}${badge}`;
 }
-function formatWorkspaceTask(row2, width) {
-  const task = row2.task;
-  const priority = task.priority === "high" ? `${RED2}high${RESET7}` : task.priority === "medium" ? `${MAUVE}med${RESET7}` : task.priority === "low" ? `${BLUE}low${RESET7}` : `${DIM6}\u2014${RESET7}`;
-  const id = `${DIM6}#${task.id.padStart(2, "0")}${RESET7}`;
+function formatWorkspaceTask(row, width) {
+  const task = row.task;
+  const priority = task.priority === "high" ? `${RED3}high${RESET10}` : task.priority === "medium" ? `${MAUVE2}med${RESET10}` : task.priority === "low" ? `${BLUE}low${RESET10}` : `${DIM9}\u2014${RESET10}`;
+  const id = `${DIM9}#${task.id.padStart(2, "0")}${RESET10}`;
   const createdAt = formatTaskDate(task.createdAt);
   const updatedAt = formatTaskDate(task.updatedAt);
   const due = formatDueLabel(task);
   const metadataWidth = getVisibleLength(priority) + getVisibleLength(id) + getVisibleLength(createdAt) + getVisibleLength(updatedAt) + getVisibleLength(due) + 12;
   const descriptionWidth = Math.max(12, width - metadataWidth);
-  const description = formatTreeLabel(row2, descriptionWidth);
+  const description = formatTreeLabel(row, descriptionWidth);
   const content = `${fit(priority, 4)} ${id}  ${description}`;
   const padding = " ".repeat(Math.max(1, width - getVisibleLength(content) - getVisibleLength(createdAt) - getVisibleLength(updatedAt) - getVisibleLength(due) - 6));
   return `${content}${padding}${createdAt}  ${updatedAt}  ${due}`;
 }
-function formatCompactTask(row2, width) {
-  const task = row2.task;
-  const id = `${DIM6}#${task.id.padStart(2, "0")}${RESET7}`;
-  const updatedAt = `${DIM6}${formatRelativeTime(task.updatedAt)}${RESET7}`;
+function formatCompactTask(row, width) {
+  const task = row.task;
+  const id = `${DIM9}#${task.id.padStart(2, "0")}${RESET10}`;
+  const updatedAt = `${DIM9}${formatRelativeTime(task.updatedAt)}${RESET10}`;
   const due = formatDueLabel(task);
   const fixedWidth = 4 + 2 + 9 + 2 + 12;
-  const description = formatTreeLabel(row2, Math.max(12, width - fixedWidth));
+  const description = formatTreeLabel(row, Math.max(12, width - fixedWidth));
   return `${fit(id, 4)}  ${fit(description, Math.max(12, width - fixedWidth))}  ${fit(updatedAt, 9)}  ${fit(due, 12)}`;
 }
 function formatCompactHeader(width) {
   const fixedWidth = 4 + 2 + 9 + 2 + 12;
   const descriptionWidth = Math.max(12, width - fixedWidth);
-  return `${DIM6}  ${fit("ID", 4)}  ${fit("TASK", descriptionWidth)}  ${fit("UPDATED", 9)}  ${fit("DUE", 12)}${RESET7}`;
+  return `${DIM9}  ${fit("ID", 4)}  ${fit("TASK", descriptionWidth)}  ${fit("UPDATED", 9)}  ${fit("DUE", 12)}${RESET10}`;
 }
 function formatDueLabel(task) {
   if (task.dueDate === undefined)
-    return `${DIM6}\u2014${RESET7}`;
+    return `${DIM9}\u2014${RESET10}`;
   if (isOverdue(task.dueDate))
-    return `${RED2}overdue${RESET7}`;
+    return `${RED3}overdue${RESET10}`;
   if (isUpcoming(task.dueDate))
-    return `${MAUVE}soon${RESET7}`;
+    return `${MAUVE2}soon${RESET10}`;
   const date = new Date(task.dueDate);
-  const label2 = isToday(task.dueDate) ? `today ${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}` : formatTaskDate(task.dueDate);
-  return `${DIM6}${label2}${RESET7}`;
+  const label = isToday(task.dueDate) ? `today ${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}` : formatTaskDate(task.dueDate);
+  return `${DIM9}${label}${RESET10}`;
 }
 function formatTaskDate(timestamp) {
   const date = new Date(timestamp);
   const day = date.getDate().toString().padStart(2, "0");
   const month = date.toLocaleString(undefined, { month: "short" });
   const time = `${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
-  return `${DIM6}${day} ${month} ${time}${RESET7}`;
+  return `${DIM9}${day} ${month} ${time}${RESET10}`;
 }
 function formatRelativeTime(timestamp, now = Date.now()) {
   const elapsedMinutes = Math.max(0, Math.floor((now - timestamp) / 60000));
@@ -3976,15 +5680,15 @@ function fit(value, width) {
   return `${value}${" ".repeat(Math.max(0, width - getVisibleLength(value)))}`;
 }
 function highlight(value) {
-  return `${SELECTED}${value.replaceAll(RESET7, `${RESET7}${SELECTED}`)}${RESET7}`;
+  return `${SELECTED2}${value.replaceAll(RESET10, `${RESET10}${SELECTED2}`)}${RESET10}`;
 }
 function formatSplitLine(left, right, leftWidth, rightWidth) {
-  return `${DIM6}\u2502${RESET7} ${fit(left, leftWidth)} ${DIM6}\u2502${RESET7} ${fit(right, rightWidth)} ${DIM6}\u2502${RESET7}`;
+  return `${DIM9}\u2502${RESET10} ${fit(left, leftWidth)} ${DIM9}\u2502${RESET10} ${fit(right, rightWidth)} ${DIM9}\u2502${RESET10}`;
 }
 function formatSplitBorder(left, middle, right, leftWidth, rightWidth, leftTitle, rightTitle) {
   const leftSegment = formatBorderSegment(leftWidth + 2, leftTitle);
   const rightSegment = formatBorderSegment(rightWidth + 2, rightTitle);
-  return `${DIM6}${left}${leftSegment}${middle}${rightSegment}${right}${RESET7}`;
+  return `${DIM9}${left}${leftSegment}${middle}${rightSegment}${right}${RESET10}`;
 }
 function formatBorderSegment(width, title) {
   if (title === undefined)
@@ -3992,115 +5696,102 @@ function formatBorderSegment(width, title) {
   return `\u2500 ${title} ${"\u2500".repeat(Math.max(0, width - title.length - 3))}`;
 }
 function formatStatusLine(left, right, width) {
-  const status = `${BRIGHT}${MAUVE}\u25CF NORMAL${RESET7}`;
-  const date = `${DIM6}${new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short" }).format()}${RESET7}`;
+  const status = `${BRIGHT}${MAUVE2}\u25CF NORMAL${RESET10}`;
+  const date = `${DIM9}${new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short" }).format()}${RESET10}`;
   const content = `${status}  ${left}`;
   const padding = " ".repeat(Math.max(1, width - getVisibleLength(content) - getVisibleLength(right) - getVisibleLength(date)));
-  return `${DIM6}\u2502${RESET7} ${content}${padding}${right}  ${date} ${DIM6}\u2502${RESET7}`;
+  return `${DIM9}\u2502${RESET10} ${content}${padding}${right}  ${date} ${DIM9}\u2502${RESET10}`;
 }
 
 // src/plugins/lifecycle.ts
-var DIM7 = "\x1B[2m";
-var GREEN5 = "\x1B[32m";
-var RESET8 = "\x1B[0m";
-var lifecyclePlugin = {
-  name: "lifecycle",
-  description: "Completes, edits, and archives tasks.",
-  register(app) {
-    app.command("done", "Complete a task and everything under it.", async ({ args, store, stdout }) => {
-      const id = requireTaskId(args, "Usage: todo done <id>").replace(/^#/, "");
-      const tasks = await store.loadTasks();
-      const task = tasks.find((candidate) => candidate.id === id);
-      if (task === undefined)
-        throw new UserInputError(`Task not found: ${id}`);
-      const descendantIds = collectDescendantIds(tasks, [id]);
-      const pendingSubtaskCount = tasks.filter((candidate) => descendantIds.has(candidate.id) && candidate.status === "pending").length;
-      if (task.status === "completed" && pendingSubtaskCount === 0) {
-        stdout.write(`${DIM7}Task already completed${RESET8}
+var DIM10 = "\x1B[2m";
+var GREEN8 = "\x1B[32m";
+var RESET11 = "\x1B[0m";
+var doneCommand = {
+  name: "done",
+  summary: "Complete a task and everything under it.",
+  group: "Change",
+  args: [{ name: "id", kind: "pending-task-id", description: "Task to complete" }],
+  details: ["Completed tasks leave the list and show up in `todo archive`."],
+  examples: [{ command: "todo done 1" }, { command: "todo done #12" }],
+  async run(input, { store, stdout }) {
+    const id = input.arg("id");
+    const tasks = await store.loadTasks();
+    const task = tasks.find((candidate) => candidate.id === id);
+    if (task === undefined)
+      throw new UserInputError(`Task not found: ${id}`);
+    const descendantIds = collectDescendantIds(tasks, [id]);
+    const pendingSubtaskCount = tasks.filter((candidate) => descendantIds.has(candidate.id) && candidate.status === "pending").length;
+    if (task.status === "completed" && pendingSubtaskCount === 0) {
+      stdout.write(`${DIM10}Task already completed${RESET11}
 `);
-        return;
-      }
-      completeSubtrees(tasks, [id]);
-      await store.saveTasks(tasks);
-      const subtaskText = pendingSubtaskCount > 0 ? ` with ${pendingSubtaskCount} subtask(s)` : "";
-      stdout.write(`${GREEN5}Task marked as completed${subtaskText}${RESET8}
+      return;
+    }
+    completeSubtrees(tasks, [id]);
+    await store.saveTasks(tasks);
+    const subtaskText = pendingSubtaskCount > 0 ? ` with ${pendingSubtaskCount} subtask(s)` : "";
+    stdout.write(`${GREEN8}Task marked as completed${subtaskText}${RESET11}
 `);
-    }, {
-      group: "Change",
-      positional: "task-id",
-      usage: ["todo done <id>"],
-      details: ["Completed tasks leave the list and show up in `todo archive`."],
-      examples: [{ command: "todo done 1" }, { command: "todo done #12" }]
-    });
-    app.command("edit", "Replace a task description.", async ({ args, store, stdout }) => {
-      const id = requireFirstArgument(args, "Usage: todo edit <id> <description>");
-      const description = args.slice(1).join(" ").trim();
-      if (description.length === 0)
-        throw new UserInputError("Usage: todo edit <id> <description>");
-      const tasks = await store.loadTasks();
-      const task = tasks.find((candidate) => candidate.id === id);
-      if (task === undefined)
-        throw new UserInputError(`Task not found: ${id}`);
-      task.description = description;
-      task.updatedAt = Date.now();
-      await store.saveTasks(tasks);
-      stdout.write(`${GREEN5}Updated task ${task.id}${RESET8}
-`);
-    }, {
-      group: "Change",
-      positional: "task-id",
-      usage: ["todo edit <id> <description>"],
-      examples: [{ command: "todo edit 1 buy oat milk" }]
-    });
-    app.command("hide", "Hide a task or epic from the shell panel and list.", (context) => setHidden(context, true), {
-      group: "Change",
-      positional: "any",
-      usage: ["todo hide <id>", "todo hide <epic or task name>"],
-      details: [
-        "Only recognised as the first word: `todo fix hide button` still adds a task.",
-        "A numeric target is a task ID; anything else must match a pending description exactly.",
-        "Hidden tasks stay pending and keep their subtasks; `todo list --all` and `todo unhide` bring them back."
-      ],
-      examples: [
-        { command: "todo hide 33" },
-        { command: "todo hide my-epic" },
-        { command: 'todo hide "Website redesign"', note: "quote names with spaces" }
-      ]
-    });
-    app.command("unhide", "Show a hidden task or epic again.", (context) => setHidden(context, false), {
-      group: "Change",
-      positional: "any",
-      usage: ["todo unhide <id>", "todo unhide <epic or task name>"],
-      examples: [{ command: "todo unhide 33" }, { command: "todo unhide my-epic" }]
-    });
-    app.command("archive", "List completed tasks, newest first.", async ({ args, store, stdout }) => {
-      if (args.length > 0)
-        throw new UserInputError("Usage: todo archive");
-      const tasks = await store.loadTasks();
-      const archivedTasks = tasks.filter((task) => task.status === "completed").sort((left, right) => right.updatedAt - left.updatedAt);
-      if (archivedTasks.length === 0) {
-        stdout.write(`${DIM7}No archived tasks found${RESET8}
-`);
-        return;
-      }
-      for (const task of archivedTasks)
-        stdout.write(`${formatTaskForDisplay(task)}
-`);
-    }, {
-      group: "View",
-      usage: ["todo archive"]
-    });
   }
 };
-async function setHidden({ args, store, stdout }, hidden) {
-  const verb = hidden ? "hide" : "unhide";
-  const target = args.join(" ").trim();
-  if (target.length === 0)
-    throw new UserInputError(`Usage: todo ${verb} <id|name>`);
+var editCommand = {
+  name: "edit",
+  summary: "Replace a task description.",
+  group: "Change",
+  args: [
+    { name: "id", kind: "task-id", description: "Task to edit" },
+    { name: "description", kind: "text", variadic: true, description: "The new description" }
+  ],
+  details: ["Only the text changes. Due date, priority, subtasks and boards stay as they are."],
+  examples: [{ command: "todo edit 1 buy oat milk" }, { command: "todo edit 7 -- -v flag is broken", note: "text that starts with a dash" }],
+  async run(input, { store, stdout }) {
+    const id = input.arg("id");
+    const description = input.args("description").join(" ").trim();
+    if (description.length === 0)
+      throw new UserInputError("Usage: todo edit <id> <description\u2026>");
+    const tasks = await store.loadTasks();
+    const task = tasks.find((candidate) => candidate.id === id);
+    if (task === undefined)
+      throw new UserInputError(`Task not found: ${id}`);
+    task.description = description;
+    task.updatedAt = Date.now();
+    await store.saveTasks(tasks);
+    stdout.write(`${GREEN8}Updated task ${task.id}${RESET11}
+`);
+  }
+};
+var hideCommand = {
+  name: "hide",
+  summary: "Hide a task or epic from the shell panel and list.",
+  group: "Change",
+  args: [{ name: "task", kind: "task-selector", variadic: true, description: "Task ID, or the exact name of a pending task or epic" }],
+  details: [
+    "Only recognised as the first word: `todo fix hide button` still adds a task.",
+    "A numeric target is a task ID; anything else must match a pending description exactly.",
+    "Hidden tasks stay pending and keep their subtasks; `todo list --all` and `todo unhide` bring them back.",
+    "Hiding is separate from boards: a hidden task stays out of every default view."
+  ],
+  examples: [
+    { command: "todo hide 33" },
+    { command: "todo hide my-epic" },
+    { command: 'todo hide "Website redesign"', note: "quote names with spaces" }
+  ],
+  run: (input, context) => setHidden(input, context, true)
+};
+var unhideCommand = {
+  name: "unhide",
+  summary: "Show a hidden task or epic again.",
+  group: "Change",
+  args: [{ name: "task", kind: "task-selector", variadic: true, description: "Task ID, or the exact name of a hidden task or epic" }],
+  examples: [{ command: "todo unhide 33" }, { command: "todo unhide my-epic" }],
+  run: (input, context) => setHidden(input, context, false)
+};
+async function setHidden(input, { store, stdout }, hidden) {
+  const target = input.args("task").join(" ").trim();
   const tasks = await store.loadTasks();
   const task = findTaskByIdOrDescription(tasks, target);
   if (task.hidden === true === hidden) {
-    stdout.write(`${DIM7}Task #${task.id} is already ${hidden ? "hidden" : "visible"}${RESET8}
+    stdout.write(`${DIM10}Task #${task.id} is already ${hidden ? "hidden" : "visible"}${RESET11}
 `);
     return;
   }
@@ -4110,88 +5801,78 @@ async function setHidden({ args, store, stdout }, hidden) {
     delete task.hidden;
   task.updatedAt = Date.now();
   await store.saveTasks(tasks);
-  stdout.write(`${GREEN5}${hidden ? "Hid" : "Unhid"} #${task.id}: ${task.description}${RESET8}
+  stdout.write(`${GREEN8}${hidden ? "Hid" : "Unhid"} #${task.id}: ${task.description}${RESET11}
 `);
 }
-function requireTaskId(args, usage) {
-  const id = args[0];
-  if (args.length !== 1 || id === undefined || id.trim().length === 0)
-    throw new UserInputError(usage);
-  return id;
-}
-function requireFirstArgument(args, usage) {
-  const value = args[0];
-  if (value === undefined || value.trim().length === 0)
-    throw new UserInputError(usage);
-  return value;
-}
+var lifecycleCommands = [doneCommand, editCommand, hideCommand, unhideCommand];
 
 // src/plugins/remove.ts
-var DIM8 = "\x1B[2m";
-var GREEN6 = "\x1B[32m";
-var RESET9 = "\x1B[0m";
-var removePlugin = {
-  name: "remove",
-  description: "Removes tasks.",
-  register(app) {
-    app.command("rm", "Remove tasks and their subtasks.", removeById, {
-      group: "Remove",
-      positional: "task-ids",
-      aliases: ["delete"],
-      usage: ["todo rm <id...>", "todo rm <id[,id|start-end,...]>", "todo rm all"],
-      details: ["Removed tasks go to the undo buffer; `todo undo` restores them with fresh IDs."],
-      examples: [
-        { command: "todo rm 4", note: "one task and everything nested under it" },
-        { command: "todo rm 1 2 3 4", note: "several IDs separated by spaces" },
-        { command: "todo rm 1,5,9,10-15", note: "IDs and inclusive ranges" },
-        { command: "todo rm all", note: "every pending task" }
-      ]
-    });
-    app.command("rmall", "Remove every pending task.", async ({ args, store, stdout }) => {
-      if (args.length > 0)
-        throw new UserInputError("Usage: todo rmall");
-      await removeAllPendingTasks(store, stdout);
-    }, {
-      group: "Remove",
-      usage: ["todo rmall"],
-      details: ["Completed tasks stay in the archive. `todo undo` brings the removed tasks back."]
-    });
+var DIM11 = "\x1B[2m";
+var GREEN9 = "\x1B[32m";
+var RESET12 = "\x1B[0m";
+var rmCommand = {
+  name: "rm",
+  aliases: ["delete"],
+  summary: "Remove tasks and their subtasks.",
+  group: "Remove",
+  args: [{ name: "ids", kind: "task-ids", variadic: true, description: "IDs, comma lists, or inclusive ranges like 10-15" }],
+  subcommands: [
+    {
+      name: "all",
+      summary: "Remove every pending task.",
+      details: ["Removed tasks move to the archive. `todo undo` brings them back."],
+      examples: [{ command: "todo rm all" }, { command: "todo undo", note: "bring them all back" }],
+      async run(_input, { store, stdout }) {
+        await removeAllPendingTasks(store, stdout);
+      }
+    }
+  ],
+  details: [
+    "Nothing is deleted: removed tasks move to the archive (`todo archive --removed`). `todo undo` restores the last removal; `todo archive restore r<n>` any older one.",
+    "Removed tasks also leave every board."
+  ],
+  examples: [
+    { command: "todo rm 4", note: "one task and everything nested under it" },
+    { command: "todo rm 1 2 3 4", note: "several IDs separated by spaces" },
+    { command: "todo rm 1,5,9,10-15", note: "IDs and inclusive ranges" },
+    { command: "todo rm all", note: "every pending task" }
+  ],
+  async run(input, { store, stdout }) {
+    const ids = parseTaskIds(input.args("ids").join(","));
+    const tasks = await store.loadTasks();
+    const requestedIds = tasks.filter((task) => ids.has(task.id)).map((task) => task.id);
+    if (requestedIds.length === 0) {
+      throw new UserInputError(`No tasks found with ID(s): ${[...ids].join(", ")}`);
+    }
+    const matchingIds = collectSubtreeIds(tasks, requestedIds);
+    await store.saveUndo(tasks.filter((task) => matchingIds.has(task.id)));
+    await store.saveTasks(tasks.filter((task) => !matchingIds.has(task.id)));
+    await purgeFromBoards(store, matchingIds);
+    const subtaskCount = matchingIds.size - requestedIds.length;
+    const subtaskText = subtaskCount > 0 ? ` including ${subtaskCount} subtask(s)` : "";
+    stdout.write(`${GREEN9}Deleted ${matchingIds.size} task(s)${subtaskText}${RESET12} ${DIM11}\xB7 archived, restore with todo undo or todo archive -i${RESET12}
+`);
   }
 };
-async function removeById({ args, store, stdout }) {
-  if (args.length === 0) {
-    throw new UserInputError("Usage: todo rm <id...> | todo rm <id[,id|start-end,...]> | todo rm all");
-  }
-  if (args.length === 1 && args[0] === "all") {
-    await removeAllPendingTasks(store, stdout);
-    return;
-  }
-  const ids = parseTaskIds(args.join(","));
-  const tasks = await store.loadTasks();
-  const requestedIds = tasks.filter((task) => ids.has(task.id)).map((task) => task.id);
-  if (requestedIds.length === 0) {
-    throw new UserInputError(`No tasks found with ID(s): ${[...ids].join(", ")}`);
-  }
-  const matchingIds = collectSubtreeIds(tasks, requestedIds);
-  await store.saveUndo(tasks.filter((task) => matchingIds.has(task.id)));
-  await store.saveTasks(tasks.filter((task) => !matchingIds.has(task.id)));
-  const subtaskCount = matchingIds.size - requestedIds.length;
-  const subtaskText = subtaskCount > 0 ? ` including ${subtaskCount} subtask(s)` : "";
-  stdout.write(`${GREEN6}Deleted ${matchingIds.size} task(s)${subtaskText}${RESET9}
-`);
-}
 async function removeAllPendingTasks(store, stdout) {
   const tasks = await store.loadTasks();
   const pendingTasks = tasks.filter((task) => task.status === "pending");
   if (pendingTasks.length === 0) {
-    stdout.write(`${DIM8}No tasks to delete${RESET9}
+    stdout.write(`${DIM11}No tasks to delete${RESET12}
 `);
     return;
   }
   await store.saveUndo(pendingTasks);
   await store.saveTasks(tasks.filter((task) => task.status !== "pending"));
-  stdout.write(`${GREEN6}Deleted ${pendingTasks.length} task(s)${RESET9}
+  await purgeFromBoards(store, new Set(pendingTasks.map((task) => task.id)));
+  stdout.write(`${GREEN9}Deleted ${pendingTasks.length} task(s)${RESET12} ${DIM11}\xB7 archived, restore with todo undo or todo archive -i${RESET12}
 `);
+}
+async function purgeFromBoards(store, ids) {
+  const state = await store.loadBoardsFile();
+  if (state === undefined)
+    return;
+  await store.saveBoards(purgeTaskIds(state, ids));
 }
 function parseTaskIds(value) {
   const ids = new Set;
@@ -4215,203 +5896,61 @@ function parseTaskIds(value) {
   return ids;
 }
 
-// src/plugins/tasks.ts
-var DIM9 = "\x1B[2m";
-var RESET10 = "\x1B[0m";
-var GREEN7 = "\x1B[38;5;166m";
-var PANEL_WIDTH2 = 72;
-var tasksPlugin = {
-  name: "tasks",
-  description: "Lists tasks.",
-  register(app) {
-    app.command("shell-display", "Print the compact pending-task panel used at shell startup.", async ({ args, store, stdout }) => {
-      const tasks = await store.loadTasks();
-      const pendingTasks = excludeHiddenSubtrees(tasks).filter((task) => task.status === "pending");
-      if (pendingTasks.length === 0) {
-        const completedCount = tasks.filter((task) => task.status === "completed").length;
-        const completedText = completedCount > 0 ? `${DIM9} \xB7 ${completedCount} completed${RESET10}` : "";
-        stdout.write(formatShellPanel([{ left: `${GREEN7}\u2713 All caught up${RESET10}${completedText}`, right: "" }]));
-        return;
-      }
-      const config = await store.loadConfig();
-      const limit = resolveShellDisplayLimit(args, config.shellDisplayLimit);
-      const now = Date.now();
-      const rows = buildTaskTreeRows(pendingTasks, tasks, { compare: compareTasksForShell, collapsedIds: await store.loadCollapsedEpicIds() });
-      const lines = rows.slice(0, limit).map((row2) => formatTaskRowForShellDisplay(row2, now));
-      const hiddenTaskCount = rows.length - lines.length;
-      if (hiddenTaskCount > 0) {
-        lines.push({
-          left: `${DIM9}\u21B3 ${hiddenTaskCount} more task${hiddenTaskCount === 1 ? "" : "s"}${RESET10}`,
-          right: `${DIM9}todo config shell-limit all${RESET10}`
-        });
-      }
-      stdout.write(formatShellPanel(lines));
-    }, {
-      group: "View",
-      usage: ["todo shell-display [--limit <n|all>]"],
-      details: ["Runs automatically when stdin is not a terminal. TODO_SHELL_LIMIT overrides the configured count too.", "Tasks hidden with `todo hide` stay out of the panel."],
-      options: [
-        { flag: "--limit <n|all>", description: "Rows to show before folding the rest into a summary line" },
-        { flag: "--all", description: "Same as --limit all" }
-      ]
-    });
-    app.command("list", "List tasks as a tree.", async ({ args, store, stdout }) => {
-      if (args[0] === "delete" && args[1] === "all") {
-        if (args.length !== 2)
-          throw new UserInputError("Usage: todo list delete all");
-        await removeAllPendingTasks(store, stdout);
-        return;
-      }
-      await listTasks(args, store, stdout);
-    }, {
-      group: "View",
-      aliases: ["tree"],
-      usage: ["todo list [filter]"],
-      details: ["Pending tasks by default, without anything hidden via `todo hide`. Filtered views show matches flat when their parent is not part of the result."],
-      options: [
-        { flag: "--all", description: "Include completed and hidden tasks" },
-        { flag: "--overdue", description: "Only pending tasks past their due date" },
-        { flag: "--upcoming", description: "Only pending tasks due soon" }
-      ],
-      examples: [{ command: "todo list" }, { command: "todo tree --overdue" }, { command: "todo list delete all", note: "same as todo rm all" }]
-    });
-  }
-};
-async function listTasks(args, store, stdout) {
-  const tasks = await store.loadTasks();
-  const now = Date.now();
-  const rows = buildTaskTreeRows(filterTasks(tasks, args[0], now), tasks, { compare: compareTasks2, collapsedIds: await store.loadCollapsedEpicIds() });
-  if (rows.length === 0) {
-    stdout.write(`${DIM9}No tasks found${RESET10}
-`);
-    return;
-  }
-  for (const row2 of rows) {
-    stdout.write(`${formatTaskTreeRowForDisplay(row2, now)}
-`);
-  }
-}
-function resolveShellDisplayLimit(args, configuredLimit) {
-  const requested = readLimitArgument(args) ?? process.env.TODO_SHELL_LIMIT;
-  const limit = requested === undefined ? normalizeShellDisplayLimit(configuredLimit) : parseShellDisplayLimit(requested);
-  return toShellDisplayCount(limit);
-}
-function readLimitArgument(args) {
-  if (args.includes("--all"))
-    return "all";
-  const inlineArgument = args.find((argument) => argument.startsWith("--limit="));
-  if (inlineArgument !== undefined)
-    return inlineArgument.slice("--limit=".length);
-  const flagIndex = args.indexOf("--limit");
-  if (flagIndex === -1)
-    return;
-  const value = args[flagIndex + 1];
-  if (value === undefined)
-    throw new UserInputError("Usage: todo shell-display --limit <count|all>");
-  return value;
-}
-var LIST_FILTERS = ["--all", "--overdue", "--upcoming"];
-function filterTasks(tasks, filter, now) {
-  if (filter !== undefined && filter.startsWith("-") && !LIST_FILTERS.includes(filter)) {
-    throw new UnknownTokenError(`Unknown option: ${filter}`, filter, LIST_FILTERS, "option");
-  }
-  if (filter === "--all")
-    return [...tasks];
-  const pendingTasks = excludeHiddenSubtrees(tasks).filter((task) => task.status === "pending");
-  if (filter === "--overdue") {
-    return pendingTasks.filter((task) => task.dueDate !== undefined && isOverdue(task.dueDate, now));
-  }
-  if (filter === "--upcoming") {
-    return pendingTasks.filter((task) => task.dueDate !== undefined && isUpcoming(task.dueDate, now));
-  }
-  return pendingTasks;
-}
-function compareTasks2(left, right) {
-  if (left.dueDate !== undefined && right.dueDate !== undefined)
-    return left.dueDate - right.dueDate;
-  if (left.dueDate !== undefined)
-    return -1;
-  if (right.dueDate !== undefined)
-    return 1;
-  return 0;
-}
-function compareTasksForShell(left, right) {
-  const dueDateOrder = compareTasks2(left, right);
-  return dueDateOrder === 0 ? left.createdAt - right.createdAt : dueDateOrder;
-}
-function formatShellPanel(lines) {
-  const output = [formatPanelBorder2("\u256D", "\u256E")];
-  for (const line of lines) {
-    output.push(formatPanelLine2(line.left, line.right));
-  }
-  output.push(formatPanelBorder2("\u2570", "\u256F"));
-  return `${output.join(`
-`)}
-`;
-}
-function formatPanelLine2(left, right = "") {
-  const padding = " ".repeat(Math.max(1, PANEL_WIDTH2 - getVisibleLength(left) - getVisibleLength(right)));
-  return `${DIM9}\u2502${RESET10} ${left}${padding}${right} ${DIM9}\u2502${RESET10}`;
-}
-function formatPanelBorder2(left, right) {
-  return `${DIM9}${left}${"\u2500".repeat(PANEL_WIDTH2 + 2)}${right}${RESET10}`;
-}
-
 // src/plugins/typos.ts
-var DIM10 = "\x1B[2m";
-var GREEN8 = "\x1B[32m";
-var RESET11 = "\x1B[0m";
-var typosPlugin = {
+var DIM12 = "\x1B[2m";
+var GREEN10 = "\x1B[32m";
+var RESET13 = "\x1B[0m";
+var typosCommand = {
   name: "typos",
-  description: "Shows and forgets learned typo corrections.",
-  register(app) {
-    app.command("typos", "Review or forget learned typo corrections.", async ({ args, store, stdout }) => {
-      const [verb, target] = args;
-      const memory = await store.loadTypoMemory();
-      if (verb === undefined) {
-        const entries = Object.entries(memory).flatMap(([typo, corrections]) => Object.entries(corrections).map(([correction, record]) => ({ typo, correction, record })));
-        if (entries.length === 0) {
-          stdout.write(`${DIM10}No learned typos yet. Corrections are learned when you answer a "did you mean" prompt.${RESET11}
-`);
-          return;
-        }
-        for (const { typo, correction, record } of entries) {
-          const state = isAutoCorrected(record) ? "auto" : isIgnored(record) ? "ignored" : `prompts (${record.accepted}/${AUTO_CORRECT_THRESHOLD} until auto)`;
-          stdout.write(`${typo.padEnd(18)} \u2192 ${correction.padEnd(18)} ${DIM10}${state}${RESET11}
-`);
-        }
-        return;
-      }
-      if (verb === "forget") {
-        if (target === undefined || args.length !== 2)
-          throw new UserInputError("Usage: todo typos forget <typo>");
+  summary: "Review or forget learned typo corrections.",
+  group: "Settings",
+  details: [
+    'A mistyped command, subcommand, option, value or board name with one close match prompts "did you mean".',
+    `Accepting the same correction ${AUTO_CORRECT_THRESHOLD} times makes it run automatically, with a notice each time.`,
+    "Declining the same correction twice stops the prompt for that word. Without a terminal the suggestion is printed and the command fails.",
+    "Turn everything off with `todo config autocorrect off`."
+  ],
+  examples: [{ command: "todo typos" }, { command: "todo typos forget dne" }],
+  subcommands: [
+    {
+      name: "forget",
+      summary: "Forget what was learned for one typo.",
+      args: [{ name: "typo", kind: "text", description: "The mistyped word as shown by todo typos" }],
+      examples: [{ command: "todo typos forget borad" }],
+      async run(input, { store, stdout }) {
+        const target = input.arg("typo");
+        const memory = await store.loadTypoMemory();
         if (memory[target] === undefined)
           throw new UserInputError(`Nothing learned for: ${target}`);
         await store.saveTypoMemory(forgetTypo(memory, target));
-        stdout.write(`${GREEN8}Forgot ${target}${RESET11}
+        stdout.write(`${GREEN10}Forgot ${target}${RESET13}
 `);
-        return;
       }
-      if (verb === "reset") {
-        if (args.length !== 1)
-          throw new UserInputError("Usage: todo typos reset");
+    },
+    {
+      name: "reset",
+      summary: "Forget every learned typo.",
+      examples: [{ command: "todo typos reset" }],
+      async run(_input, { store, stdout }) {
         await store.saveTypoMemory({});
-        stdout.write(`${GREEN8}Forgot all learned typos${RESET11}
+        stdout.write(`${GREEN10}Forgot all learned typos${RESET13}
 `);
-        return;
       }
-      throw new UserInputError("Usage: todo typos [forget <typo> | reset]");
-    }, {
-      group: "Settings",
-      positional: "any",
-      usage: ["todo typos", "todo typos forget <typo>", "todo typos reset"],
-      details: [
-        'A mistyped command or option with one close match prompts "did you mean".',
-        `Accepting the same correction ${AUTO_CORRECT_THRESHOLD} times makes it run automatically, with a notice each time.`,
-        "Declining the same correction twice stops the prompt for that word. Turn everything off with `todo config autocorrect off`."
-      ],
-      examples: [{ command: "todo typos" }, { command: "todo typos forget dne" }]
-    });
+    }
+  ],
+  async run(_input, { store, stdout }) {
+    const memory = await store.loadTypoMemory();
+    const entries = Object.entries(memory).flatMap(([typo, corrections]) => Object.entries(corrections).map(([correction, record]) => ({ typo, correction, record })));
+    if (entries.length === 0) {
+      stdout.write(`${DIM12}No learned typos yet. Corrections are learned when you answer a "did you mean" prompt.${RESET13}
+`);
+      return;
+    }
+    for (const { typo, correction, record } of entries) {
+      const state = isAutoCorrected(record) ? "auto" : isIgnored(record) ? "ignored" : `prompts (${record.accepted}/${AUTO_CORRECT_THRESHOLD} until auto)`;
+      stdout.write(`${typo.padEnd(18)} \u2192 ${correction.padEnd(18)} ${DIM12}${state}${RESET13}
+`);
+    }
   }
 };
 
@@ -4454,196 +5993,89 @@ function pruneCollapsedIds(collapsedIds, tasks) {
 }
 
 // src/plugins/visibility.ts
-var GREEN9 = "\x1B[32m";
-var RESET12 = "\x1B[0m";
-var visibilityPlugin = {
-  name: "visibility",
-  description: "Collapses and expands epics in the task list.",
-  register(app) {
-    for (const action of ["toggle", "open", "close"]) {
-      app.command(action, ACTION_DESCRIPTIONS[action], (context) => runVisibility(action, context), COMMAND_HELP[action]);
-    }
-  }
-};
-async function runVisibility(action, { args, store, stdout }) {
-  const request = parseVisibilityRequest(action, args);
-  if (request.help) {
-    stdout.write(formatCommandHelp(getHelpPage(request)));
-    return;
-  }
-  const tasks = await store.loadTasks();
-  const collapsedIds = pruneCollapsedIds(await store.loadCollapsedEpicIds(), tasks);
-  if (request.target === "reset") {
-    await store.saveCollapsedEpicIds([]);
-    stdout.write(`${GREEN9}Epic visibility reset${RESET12}
-`);
-    return;
-  }
-  if (request.target === "all") {
-    const epicIds = listEpicIds(tasks);
-    await store.saveCollapsedEpicIds(setEpicVisibility(collapsedIds, epicIds, action));
-    stdout.write(`${GREEN9}${formatAllMessage(action, epicIds.length)}${RESET12}
-`);
-    return;
-  }
-  const epic = resolveEpic(tasks, request.selector ?? "");
-  const next = setEpicVisibility(collapsedIds, [epic.id], action);
-  await store.saveCollapsedEpicIds(next);
-  stdout.write(`${GREEN9}${next.has(epic.id) ? "Closed" : "Opened"} epic: ${epic.description}${RESET12}
-`);
-}
-function parseVisibilityRequest(action, args) {
-  const help = args.some(isHelpToken);
-  const rest = args.filter((argument) => !isHelpToken(argument));
-  const keywords = rest.filter((argument) => argument === "all" || argument === "reset");
-  if (keywords.length > 1) {
-    throw new UserInputError(`all and reset are mutually exclusive selectors for todo ${action}.
-` + `Usage: todo ${action} all${action === "toggle" ? `
-       todo toggle reset` : ""}`);
-  }
-  if (rest.length === 0) {
-    if (help)
-      return { action, target: "epic", help: true };
-    throw new UserInputError(formatUsage(action));
-  }
-  if (rest.length === 1 && rest[0] === "all")
-    return { action, target: "all", help };
-  if (rest.length === 1 && rest[0] === "reset") {
-    if (action !== "toggle")
-      throw new UserInputError(`Resetting epic visibility is only available as 'todo toggle reset'.`);
-    return { action, target: "reset", help };
-  }
-  return { action, target: "epic", selector: rest.join(" "), help };
-}
-function formatUsage(action) {
-  return `Usage: todo ${action} <epic>
-       todo ${action} all${action === "toggle" ? `
-       todo toggle reset` : ""}`;
-}
-function formatAllMessage(action, epicCount) {
-  if (action === "open")
-    return "Opened all epics";
-  if (action === "close")
-    return "Closed all epics";
-  return `Toggled ${epicCount} epic${epicCount === 1 ? "" : "s"}`;
-}
-var ACTION_DESCRIPTIONS = {
-  toggle: "Collapse an expanded epic, or expand a collapsed one.",
-  open: "Expand an epic so its subtickets render again.",
-  close: "Collapse an epic into a single subticket-count line."
-};
+var GREEN11 = "\x1B[32m";
+var RESET14 = "\x1B[0m";
 var EPIC_DETAILS = [
   "<epic> is an epic name or an epic ID, with or without the leading #. Quote names with spaces.",
   "Visibility is presentation state only: nothing about the tasks themselves changes."
 ];
-var COMMAND_HELP = {
-  toggle: {
+function visibilityCommand(action) {
+  const verb = action === "open" ? "Expand" : "Collapse";
+  const letter = action === "open" ? "o" : "c";
+  return {
+    name: action,
+    summary: action === "open" ? "Expand an epic so its subtickets render again." : "Collapse an epic into a single subticket-count line.",
     group: "Epic visibility",
-    positional: "any",
-    ownHelp: true,
-    aliasNotes: ["-t <epic>", "--t <epic>", "-ta", "-tr"],
-    usage: ["todo toggle <epic>", "todo toggle all", "todo toggle reset"],
-    details: [...EPIC_DETAILS, "`todo toggle all` inverts every epic independently; `todo toggle reset` expands everything again."],
+    args: [{ name: "epic", kind: "epic-selector", variadic: true, description: "Epic ID or exact epic name" }],
+    details: [
+      ...EPIC_DETAILS,
+      `Idempotent: ${action === "open" ? "opening an already-open" : "closing an already-closed"} epic leaves it that way.`,
+      `Shorthand: \`todo -${letter} <epic>\`, \`todo -${letter}a\` for all.`
+    ],
     examples: [
-      { command: "todo toggle joram" },
-      { command: "todo toggle 36" },
-      { command: "todo toggle #36" },
-      { command: "todo toggle all", note: "same as todo -ta" },
-      { command: "todo toggle reset", note: "same as todo -tr" }
-    ]
-  },
-  open: {
-    group: "Epic visibility",
-    positional: "any",
-    ownHelp: true,
-    aliasNotes: ["-o <epic>", "--o <epic>", "-oa"],
-    usage: ["todo open <epic>", "todo open all"],
-    details: [...EPIC_DETAILS, "Idempotent: opening an already-open epic leaves it open."],
-    examples: [{ command: "todo open joram" }, { command: "todo open 36" }, { command: "todo open all", note: "same as todo -oa" }]
-  },
-  close: {
-    group: "Epic visibility",
-    positional: "any",
-    ownHelp: true,
-    aliasNotes: ["-c <epic>", "--c <epic>", "-ca"],
-    usage: ["todo close <epic>", "todo close all"],
-    details: [...EPIC_DETAILS, "Idempotent: closing an already-closed epic leaves it closed.", "A closed epic renders as `name \u25CF 2 subtickets` and hides its children."],
-    examples: [{ command: "todo close joram" }, { command: "todo close #36" }, { command: "todo close all", note: "same as todo -ca" }]
-  }
-};
-var TARGET_HELP = {
-  "toggle all": {
-    name: "toggle all",
-    description: "Invert every epic's visibility independently.",
-    help: {
-      aliasNotes: ["-ta", "--t --a"],
-      usage: ["todo toggle all"],
-      details: ["Each epic flips on its own: open epics close, closed epics open.", "This is not a bulk 'set everything to one state' \u2014 use `todo open all` or `todo close all` for that."],
-      examples: [{ command: "todo toggle all" }, { command: "todo -ta" }]
-    }
-  },
-  "toggle reset": {
-    name: "toggle reset",
-    description: "Drop all persisted epic visibility overrides.",
-    help: {
-      aliasNotes: ["-tr", "--t --r"],
-      usage: ["todo toggle reset"],
-      details: ["Clears the stored state instead of writing an explicit open state per epic.", "The default is expanded, so every epic \u2014 including future ones \u2014 renders open again."],
-      examples: [{ command: "todo toggle reset" }, { command: "todo -tr" }]
-    }
-  },
-  "open all": {
-    name: "open all",
-    description: "Expand every epic.",
-    help: {
-      aliasNotes: ["-oa", "--o --a"],
-      usage: ["todo open all"],
-      details: ["Idempotent: epics that are already open stay open."],
-      examples: [{ command: "todo open all" }, { command: "todo -oa" }]
-    }
-  },
-  "close all": {
-    name: "close all",
-    description: "Collapse every epic.",
-    help: {
-      aliasNotes: ["-ca", "--c --a"],
-      usage: ["todo close all"],
-      details: ["Idempotent: epics that are already closed stay closed.", "Epics created later still default to open."],
-      examples: [{ command: "todo close all" }, { command: "todo -ca" }]
-    }
-  }
-};
-function getHelpPage(request) {
-  const page = TARGET_HELP[`${request.action} ${request.target}`];
-  if (page !== undefined)
-    return page;
-  return { name: request.action, description: ACTION_DESCRIPTIONS[request.action], help: COMMAND_HELP[request.action] };
+      { command: `todo ${action} joram` },
+      { command: `todo ${action} #36` },
+      { command: `todo ${action} all`, note: `same as todo -${letter}a` }
+    ],
+    subcommands: [
+      {
+        name: "all",
+        summary: `${verb} every epic.`,
+        details: ["Idempotent: epics already in that state stay there. Epics created later still default to open."],
+        examples: [{ command: `todo ${action} all` }, { command: `todo -${letter}a`, note: "shorthand" }],
+        run: (_input, context) => applyToAll(action, context)
+      }
+    ],
+    run: (input, context) => applyToEpic(action, input, context)
+  };
 }
+async function applyToAll(action, { store, stdout }) {
+  const tasks = await store.loadTasks();
+  const collapsedIds = pruneCollapsedIds(await store.loadCollapsedEpicIds(), tasks);
+  await store.saveCollapsedEpicIds(setEpicVisibility(collapsedIds, listEpicIds(tasks), action));
+  stdout.write(`${GREEN11}${action === "open" ? "Opened" : "Closed"} all epics${RESET14}
+`);
+  await listTasks(store, stdout);
+}
+async function applyToEpic(action, input, { store, stdout }) {
+  const tasks = await store.loadTasks();
+  const collapsedIds = pruneCollapsedIds(await store.loadCollapsedEpicIds(), tasks);
+  const epic = resolveEpic(tasks, input.args("epic").join(" "));
+  const next = setEpicVisibility(collapsedIds, [epic.id], action);
+  await store.saveCollapsedEpicIds(next);
+  stdout.write(`${GREEN11}${next.has(epic.id) ? "Closed" : "Opened"} epic: ${epic.description}${RESET14}
+`);
+  await listTasks(store, stdout);
+}
+var visibilityCommands = [visibilityCommand("open"), visibilityCommand("close")];
 
 // src/plugins/builtins.ts
-var builtInPlugins = [addPlugin, configPlugin, duePlugin, epicPlugin, helpPlugin, interactivePlugin, lifecyclePlugin, removePlugin, tasksPlugin, typosPlugin, undoPlugin, visibilityPlugin];
-
-// src/plugins/registry.ts
-class PluginRegistry {
-  commands = new Map;
-  use(plugin) {
-    plugin.register(this);
-  }
-  command(name, description, handler, help = {}) {
-    const registered = { name, description, handler, help };
-    for (const commandName of [name, ...help.aliases ?? []]) {
-      if (this.commands.has(commandName)) {
-        throw new Error(`Command already registered: ${commandName}`);
-      }
-      this.commands.set(commandName, registered);
-    }
-  }
-  getCommand(name) {
-    return this.commands.get(name);
-  }
-  listCommands() {
-    return [...this.commands.entries()].filter(([name, command]) => name === command.name).map(([name, command]) => ({ name, description: command.description, help: command.help })).sort((left, right) => left.name.localeCompare(right.name));
-  }
+function createCommandTree() {
+  return {
+    name: "todo",
+    summary: "tasks, epics and boards from the shell",
+    subcommands: [
+      addCommand,
+      ...epicCommands.filter((command) => command.group === "Create"),
+      boardCommand,
+      focusCommand,
+      listCommand,
+      panelCommand,
+      archiveCommand,
+      interactiveCommand,
+      ...lifecycleCommands,
+      dueCommand,
+      ...epicCommands.filter((command) => command.group !== "Create"),
+      snoozeCommand,
+      ...visibilityCommands,
+      rmCommand,
+      undoCommand,
+      configCommand,
+      helpCommand,
+      typosCommand,
+      completionsCommand
+    ]
+  };
 }
 
 // src/storage/todo-store.ts
@@ -4770,7 +6202,10 @@ function getTodoPaths(dataDir = process.env.DOTFILES_DATA_DIR ?? join2(process.e
     tasksFile: join2(todoDir, "tasks.json"),
     configFile: join2(todoDir, "config.json"),
     undoFile: join2(todoDir, "undo.json"),
+    removedFile: join2(todoDir, "removed.json"),
     typosFile: join2(todoDir, "typos.json"),
+    boardsFile: join2(todoDir, "boards.json"),
+    focusFile: join2(todoDir, "focus.json"),
     lockFile: join2(todoDir, "reminders.lock")
   };
 }
@@ -4841,8 +6276,16 @@ class TodoStore {
     await this.writeJsonAtomically(this.paths.tasksFile, tasks);
   }
   async loadConfig() {
-    const saved = await this.readJson(this.paths.configFile, {});
-    return { ...DEFAULT_CONFIG, ...saved, schemaVersion: 1, undoTimeout: DEFAULT_CONFIG.undoTimeout };
+    const { shellDisplayLimit, shellLayout, ...saved } = await this.readJson(this.paths.configFile, {});
+    const undoTimeout = typeof saved.undoTimeout === "number" && saved.undoTimeout > 0 ? saved.undoTimeout : DEFAULT_CONFIG.undoTimeout;
+    return {
+      ...DEFAULT_CONFIG,
+      ...shellDisplayLimit === undefined ? {} : { panelLimit: shellDisplayLimit },
+      ...shellLayout === undefined ? {} : { panelLayout: shellLayout },
+      ...saved,
+      schemaVersion: 1,
+      undoTimeout
+    };
   }
   async saveConfig(config) {
     await this.writeJsonAtomically(this.paths.configFile, config);
@@ -4858,7 +6301,9 @@ class TodoStore {
   }
   async saveUndo(tasks) {
     const config = await this.loadConfig();
-    const timestamp = Date.now();
+    const removed = await this.loadRemoved();
+    const timestamp = Math.max(Date.now(), ...removed.map((entry) => entry.removedAt + 1));
+    await this.appendRemoved(removed, tasks, timestamp);
     await this.writeJsonAtomically(this.paths.undoFile, {
       tasks,
       timestamp,
@@ -4873,11 +6318,54 @@ class TodoStore {
     }
     return undo;
   }
+  async loadRemoved() {
+    const saved = await this.readJson(this.paths.removedFile, []);
+    if (!Array.isArray(saved))
+      return [];
+    const tasks = normalizeTasks(saved.map((entry) => entry.task));
+    return saved.map((entry, index) => ({ ref: entry.ref, removedAt: entry.removedAt, task: tasks[index] }));
+  }
+  async saveRemoved(entries) {
+    await this.writeJsonAtomically(this.paths.removedFile, entries);
+  }
+  async forgetRemovedBatch(removedAt) {
+    const entries = await this.loadRemoved();
+    const kept = entries.filter((entry) => entry.removedAt !== removedAt);
+    if (kept.length !== entries.length)
+      await this.saveRemoved(kept);
+  }
+  async appendRemoved(entries, tasks, removedAt) {
+    if (tasks.length === 0)
+      return;
+    let nextRef = entries.reduce((max, entry) => Math.max(max, entry.ref), 0) + 1;
+    await this.saveRemoved([...entries, ...tasks.map((task) => ({ ref: nextRef++, removedAt, task }))]);
+  }
   async loadTypoMemory() {
     return await this.readJson(this.paths.typosFile, {});
   }
   async saveTypoMemory(memory) {
     await this.writeJsonAtomically(this.paths.typosFile, memory);
+  }
+  async loadBoardsFile() {
+    const saved = await this.readJson(this.paths.boardsFile, undefined);
+    return saved === undefined ? undefined : normalizeBoards(saved);
+  }
+  async saveBoards(state) {
+    await this.writeJsonAtomically(this.paths.boardsFile, state);
+  }
+  async loadLegacyFocus() {
+    const board = await this.readJson(this.paths.focusFile, undefined);
+    if (board === undefined || typeof board.startedAt !== "number" || typeof board.expiresAt !== "number")
+      return;
+    return board;
+  }
+  async deleteLegacyFocus() {
+    try {
+      await unlink(this.paths.focusFile);
+    } catch (error) {
+      if (!isMissingFile(error))
+        throw error;
+    }
   }
   async clearUndo() {
     try {
@@ -4911,81 +6399,67 @@ function isExistingFile(error) {
   return typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST";
 }
 function delay(milliseconds) {
-  return new Promise((resolve2) => setTimeout(resolve2, milliseconds));
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 function formatError(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
 // src/cli.ts
-var HELP_FLAGS = new Set(["-h", "--help"]);
-function isSchedulerInvocation(args) {
-  return args[0] === "due" && args[1] === "daemon";
+var MAX_CORRECTIONS_PER_RUN = 4;
+function skipsStartupWork(args) {
+  return args[0] === "due" && args[1] === "daemon" || args[0] === "completions";
 }
 async function run(args) {
-  const registry = new PluginRegistry;
-  for (const plugin of builtInPlugins)
-    registry.use(plugin);
+  const root = createCommandTree();
   const store = new TodoStore;
   const config = await store.loadConfig();
-  if (config.showNotificationsOnStartup && !isSchedulerInvocation(args)) {
+  if (config.showNotificationsOnStartup && !skipsStartupWork(args)) {
     await sendDueNotifications(store);
     await processDueReminders(store, createDefaultEffects());
   }
   const io = createTerminalIo();
-  let invocation = expandVisibilityAliases(args) ?? args;
-  const requestedCommandName = invocation[0];
-  let commandName = requestedCommandName !== undefined && HELP_FLAGS.has(requestedCommandName) ? "help" : requestedCommandName ?? (process.stdin.isTTY && process.stdout.isTTY ? "interactive" : "shell-display");
-  let command = registry.getCommand(commandName);
-  if (command === undefined && config.autocorrect) {
-    const corrected = await correctCommandName(invocation, registry, store, io);
-    if (corrected !== undefined && corrected[0] !== undefined) {
-      invocation = corrected;
-      commandName = corrected[0];
-      command = registry.getCommand(commandName);
-    }
-  }
-  const addCommand = registry.getCommand("add");
-  const useImplicitAdd = command === undefined && invocation.length > 0 && !commandName.startsWith("--");
-  const handler = command?.handler ?? (useImplicitAdd ? addCommand?.handler : undefined);
-  if (handler === undefined) {
-    process.stderr.write(`Unknown command: ${commandName}
-Run 'todo help' for usage.
-`);
-    process.exitCode = 1;
-    return;
-  }
-  if (command !== undefined && command.name !== "help" && command.help.ownHelp !== true && invocation.slice(1).some((argument) => HELP_FLAGS.has(argument))) {
-    process.stdout.write(formatCommandHelp(findCommand(registry.listCommands(), command.name)));
-    return;
-  }
-  let commandArgs = command === undefined ? invocation : invocation.slice(1);
-  for (let attempt = 0;attempt < MAX_CORRECTIONS_PER_RUN; attempt += 1) {
+  const expanded = expandVisibilityAliases(args) ?? args;
+  let argv = expanded.length > 0 ? expanded : [process.stdin.isTTY && process.stdout.isTTY ? "interactive" : "panel"];
+  const typoMemory = config.autocorrect ? await store.loadTypoMemory() : undefined;
+  const options = {
+    boardNames: await readBoardNames(store),
+    tasks: await store.loadTasks(),
+    ...typoMemory === undefined ? {} : { isNearMiss: (token, candidates) => decideCorrection(typoMemory, token, candidates) !== undefined }
+  };
+  const context = { store, stdout: process.stdout, stderr: process.stderr, root };
+  for (let attempt = 0;attempt <= MAX_CORRECTIONS_PER_RUN; attempt += 1) {
     try {
-      await runCommand(handler, commandArgs, registry, store);
+      await executeCommand(root, argv, context, options);
       return;
     } catch (error) {
       if (!(error instanceof UserInputError))
         throw error;
       if (error instanceof UnknownTokenError && config.autocorrect) {
-        const corrected = await correctRejectedToken(error, command?.name, commandArgs, store, io);
-        if (corrected !== undefined) {
-          commandArgs = corrected;
+        const outcome = await resolveTypo(error, argv, store, io);
+        if (outcome.kind === "corrected") {
+          argv = outcome.argv;
           continue;
         }
+        if (outcome.kind === "declined" && error.implicitAddFallback) {
+          options.forceImplicitAdd = true;
+          continue;
+        }
+        if (outcome.kind === "unanswered") {
+          fail(`${error.message}. Did you mean ${outcome.suggestion}?`);
+          return;
+        }
       }
-      process.stderr.write(`${error.message}
-`);
-      if (command !== undefined && error.message.startsWith("Usage:")) {
-        process.stderr.write(`Run 'todo ${command.name} --help' for details.
-`);
-      }
-      process.exitCode = 1;
+      fail(error.message);
       return;
     }
   }
 }
-var MAX_CORRECTIONS_PER_RUN = 4;
+function fail(message) {
+  process.stderr.write(`${message}
+`);
+  process.exitCode = 1;
+}
 function createTerminalIo() {
   return {
     async confirm(question) {
@@ -5003,15 +6477,6 @@ function createTerminalIo() {
       process.stderr.write(message);
     }
   };
-}
-async function runCommand(handler, args, registry, store) {
-  await handler({
-    args,
-    store,
-    stdout: process.stdout,
-    stderr: process.stderr,
-    commands: registry.listCommands()
-  });
 }
 
 // todo.ts

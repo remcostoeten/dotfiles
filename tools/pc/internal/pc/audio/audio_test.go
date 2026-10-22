@@ -20,6 +20,40 @@ Sink #53
 	if len(got) != 2 || !got[0].Default || got[0].Volume != 61 || got[1].Default || !got[1].Muted || got[1].Volume != 100 {
 		t.Errorf("ParseSinks = %+v", got)
 	}
+	if got[0].Index != 52 || got[1].Index != 53 {
+		t.Errorf("ParseSinks indexes = %d, %d", got[0].Index, got[1].Index)
+	}
+}
+
+func TestParseStreams(t *testing.T) {
+	out := `[
+	{"index": 7, "sink": 52, "mute": false, "corked": false,
+	 "volume": {"front-left": {"value": 65536}, "front-right": {"value": 32768}},
+	 "properties": {"application.name": "Firefox", "media.name": "Playback"}},
+	{"index": 9, "sink": 4294967295, "mute": true, "corked": true,
+	 "volume": {"mono": {"value": 65536}},
+	 "properties": {"node.name": "mpv", "target.object": "alsa_output.hdmi"}},
+	{"index": 11, "sink": 52, "mute": false, "corked": false, "volume": {},
+	 "properties": {"node.virtual": "true", "media.name": "Rear Jack output"}}
+]`
+	sinks := []Sink{{Index: 52, Name: "alsa_output.usb"}, {Index: 53, Name: "alsa_output.hdmi"}}
+
+	got := ParseStreams(out, sinks)
+	if len(got) != 2 {
+		t.Fatalf("ParseStreams kept %d streams, want 2: %+v", len(got), got)
+	}
+	if first := got[0]; first.Index != 7 || first.App != "Firefox" || first.Media != "Playback" || first.Sink != "alsa_output.usb" || first.Volume != 75 || first.Muted || first.Corked {
+		t.Errorf("first stream = %+v", first)
+	}
+	if second := got[1]; second.App != "mpv" || second.Sink != "alsa_output.hdmi" || !second.Muted || !second.Corked || second.Volume != 100 {
+		t.Errorf("pinned stream = %+v", second)
+	}
+}
+
+func TestParseStreamsRejectsBrokenJSON(t *testing.T) {
+	if got := ParseStreams("not json", nil); got != nil {
+		t.Errorf("ParseStreams = %+v, want nil", got)
+	}
 }
 
 func TestParseBluetooth(t *testing.T) {

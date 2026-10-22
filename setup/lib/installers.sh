@@ -47,6 +47,7 @@ map_pacman_package_name() {
         fd-find) echo "fd" ;;
         gh) echo "github-cli" ;;
         docker.io) echo "docker" ;;
+        avahi-daemon) echo "avahi" ;;
         docker-compose) echo "docker-compose" ;;
         fastfetch) echo "fastfetch" ;;
         btop) echo "btop" ;;
@@ -411,6 +412,63 @@ install_keyd() {
     log_success "keyd configured"
 }
 
+install_keybind_manager() {
+    log_info "Installing keybind-manager..."
+
+    local app_dir="$SCRIPT_DIR/../apps/keybind-manager"
+    if [[ ! -x "$app_dir/scripts/install.sh" ]]; then
+        log_warn "apps/keybind-manager/scripts/install.sh not found, skipping"
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "$app_dir/scripts/install.sh"
+        return 0
+    fi
+
+    if ! ( cd "$app_dir" && ./scripts/install.sh ); then
+        log_error "keybind-manager install failed"
+        return 1
+    fi
+
+    log_success "keybind-manager installed"
+}
+
+install_phonedrop() {
+    log_info "Installing phonedrop..."
+
+    local app_dir
+    app_dir="$(cd "$SCRIPT_DIR/../scripts/phonedrop" 2>/dev/null && pwd)"
+    if [[ -z "$app_dir" || ! -x "$app_dir/phonedrop" ]]; then
+        log_warn "scripts/phonedrop not found, skipping"
+        return 0
+    fi
+
+    local pkg
+    for pkg in python3 ffmpeg openssl qrencode avahi-daemon v4l2loopback-dkms v4l2loopback-utils; do
+        install_apt "$pkg" "$pkg" || return 1
+    done
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "link phonedrop.service, enable phonedrop-webcam.service and avahi-daemon"
+        return 0
+    fi
+
+    ln -sfn ../scripts/phonedrop/phonedrop "$app_dir/../../bin/phonedrop"
+    mkdir -p "$HOME/phone-drop" "$HOME/.config/systemd/user"
+
+    sudo install -m 0644 "$app_dir/phonedrop-webcam.service" /etc/systemd/system/phonedrop-webcam.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now avahi-daemon >/dev/null 2>&1 || log_warn "avahi-daemon not started; mDNS address unavailable"
+    sudo systemctl enable --now phonedrop-webcam.service >/dev/null 2>&1 || log_warn "phonedrop webcam device not created (reboot after the v4l2loopback DKMS build)"
+
+    ln -sfn "$app_dir/phonedrop.service" "$HOME/.config/systemd/user/phonedrop.service"
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now phonedrop.service 2>/dev/null || true
+
+    log_success "phonedrop installed (starts at login)"
+}
+
 install_wayland_clipboard_prereqs() {
     install_npm "tsx" "tsx" || return 1
     install_wl_clipboard || return 1
@@ -691,6 +749,7 @@ setup_config_symlinks() {
         "fish/config.fish:$home_config_dir/fish/config.fish"
         "fish/conf.d:$home_config_dir/fish/conf.d"
         "zsh:$HOME/.config/zsh"
+        "zsh/.zshenv:$HOME/.zshenv"
         "bash:$HOME/.config/bash"
         "agents:$HOME/.agents"
         # No "zed"/"cursor" entries: the editor configs live under
@@ -748,6 +807,8 @@ setup_config_symlinks() {
         fi
         ensure_symlink "$vimrc_src" "$vimrc_dst" "$SETUP_BACKUP_ROOT"
     fi
+
+    "$SCRIPT_DIR/../scripts/skill" sync || log_warn "agent skill sync failed"
 
     if [[ "$links_changed" == "false" ]]; then
         log_success "Config symlinks already current"

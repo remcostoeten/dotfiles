@@ -52,12 +52,20 @@ export interface Task {
   reminder?: TaskReminder;
 }
 
+/** How the shell panel places the active board's two lanes: by terminal width, always in columns, or always stacked. */
+export type PanelLayout = "auto" | "side" | "stack";
+
+/** Which boards the shell panel shows: the active one with both lanes, or every board as a column. */
+export type PanelBoards = "active" | "all";
+
 export interface TodoConfig {
   schemaVersion: 1;
   defaultReminderOffsets: number[];
   showNotificationsOnStartup: boolean;
   showCompletedTasksByDefault: boolean;
-  shellDisplayLimit: number;
+  panelLimit: number;
+  panelLayout: PanelLayout;
+  panelBoards: PanelBoards;
   undoTimeout: number;
   autocorrect: boolean;
   /** Ids of epics collapsed in the list and shell panel; everything else renders expanded. */
@@ -70,15 +78,25 @@ export interface UndoData {
   expiresAt: number;
 }
 
+/** A task removed with rm, rm all or a taskboard delete, kept in `removed.json` so it can be restored later. */
+export interface RemovedTask {
+  /** Stable archive reference shown as `r<ref>`; never reused. */
+  ref: number;
+  removedAt: number;
+  task: Task;
+}
+
 export const DEFAULT_CONFIG: TodoConfig = {
   schemaVersion: 1,
   defaultReminderOffsets: [10, 30, 60],
   showNotificationsOnStartup: true,
   showCompletedTasksByDefault: false,
-  shellDisplayLimit: 5,
+  panelLimit: 5,
+  panelLayout: "auto",
+  panelBoards: "active",
   undoTimeout: 86_400_000,
   autocorrect: true,
   collapsedEpicIds: [],
 };
 
-export const UNLIMITED_SHELL_DISPLAY = 0;
+export const UNLIMITED_PANEL_ROWS = 0;

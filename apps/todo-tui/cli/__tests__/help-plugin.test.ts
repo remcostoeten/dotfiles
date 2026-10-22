@@ -1,69 +1,60 @@
 import { expect, test } from "bun:test";
 
-import { builtInPlugins } from "@/src/plugins/builtins";
-import { PluginRegistry } from "@/src/plugins/registry";
+import { createCommandTree } from "@/src/plugins/builtins";
+import { resolveHelpPath } from "@/src/plugins/help";
 import { formatCommandHelp, formatHelpOverview } from "@/src/presentation/help-format";
+import { findChild } from "@/src/command-spec/tree";
+import { UnknownTokenError } from "@/src/domain/unknown-token-error";
+import { runTodo } from "./support/run-todo";
+import { getTodoPaths, TodoStore } from "@/src/storage/todo-store";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const ESCAPE = "\u001B";
 
-function createRegistry(): PluginRegistry {
-  const registry = new PluginRegistry();
-  for (const plugin of builtInPlugins) registry.use(plugin);
-  return registry;
-}
-
-test("aliases resolve to the primary command and stay out of the command list", () => {
-  const registry = createRegistry();
-  expect(registry.getCommand("delete")).toBe(registry.getCommand("rm"));
-  expect(registry.getCommand("mv")).toBe(registry.getCommand("move"));
-  expect(registry.getCommand("tree")).toBe(registry.getCommand("list"));
+test("aliases resolve to the primary command", () => {
+  const root = createCommandTree();
+  expect(findChild(root, "delete")).toBe(findChild(root, "rm"));
+  expect(findChild(root, "mv")).toBe(findChild(root, "move"));
+  expect(findChild(root, "tree")).toBe(findChild(root, "list"));
   for (const alias of ["i", "-i", "--interactive"]) {
-    expect(registry.getCommand(alias)).toBe(registry.getCommand("interactive"));
+    expect(findChild(root, alias)).toBe(findChild(root, "interactive"));
   }
-  const names = registry.listCommands().map((command) => command.name);
-  expect(names).not.toContain("delete");
-  expect(names).toContain("rm");
 });
 
 test("overview groups commands and shows aliases inline", () => {
-  const output = formatHelpOverview(createRegistry().listCommands(), false);
+  const output = formatHelpOverview(createCommandTree(), false);
   expect(output).toContain("CREATE");
+  expect(output).toContain("BOARDS");
   expect(output).toContain("REMOVE");
   expect(output).toContain("rm, delete");
   expect(output).toContain("list, tree");
-  expect(output.indexOf("CREATE")).toBeLessThan(output.indexOf("VIEW"));
+  expect(output).not.toMatch(/^\s+toggle\s/m);
+  expect(output).not.toContain("rmall");
+  expect(output.indexOf("CREATE")).toBeLessThan(output.indexOf("BOARDS"));
   expect(output).not.toContain(ESCAPE);
 });
 
-test("command help renders usage, options, and examples", () => {
-  const registry = createRegistry();
-  const add = registry.listCommands().find((command) => command.name === "add");
-  if (add === undefined) throw new Error("add command missing");
-  const output = formatCommandHelp(add, false);
+test("command help renders generated usage, options, and examples", () => {
+  const root = createCommandTree();
+  const output = formatCommandHelp(resolveHelpPath(root, ["add"]), false);
   expect(output).toContain("todo add  ·  Add one or more tasks.");
   expect(output).toContain("USAGE");
   expect(output).toContain("--due <time>");
+  expect(output).toContain("--later");
   expect(output).toContain("$ todo buy oat milk");
 });
 
-test("help <command> writes that command's help and accepts aliases", () => {
-  const registry = createRegistry();
-  const help = registry.getCommand("help");
-  if (help === undefined) throw new Error("help command missing");
-  let output = "";
-  const stdout = {
-    write(chunk: string) {
-      output += chunk;
-      return true;
-    },
-  };
-  help.handler({ args: ["delete"], store: {} as never, stdout, stderr: stdout, commands: registry.listCommands() });
-  expect(output).toContain("todo rm");
-  expect(output).toContain("aliases: delete");
+test("help follows nested paths and aliases", async () => {
+  const store = new TodoStore(getTodoPaths(await mkdtemp(join(tmpdir(), "dotfiles-todo-help-"))));
+  expect(await runTodo(store, ["help", "delete"])).toContain("aliases: delete");
+  expect(await runTodo(store, ["help", "board", "later"])).toContain("todo board later  ·");
+  expect(() => resolveHelpPath(createCommandTree(), ["board", "latr"])).toThrow(UnknownTokenError);
 });
 
 test("colored output uses the palette escapes", () => {
-  const output = formatHelpOverview(createRegistry().listCommands(), true);
+  const output = formatHelpOverview(createCommandTree(), true);
   expect(output).toContain(`${ESCAPE}[38;5;208m`);
   expect(output).toContain(`${ESCAPE}[0m`);
 });

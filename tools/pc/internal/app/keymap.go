@@ -129,4 +129,45 @@ func registerGlobals(r *registry.Registrar) {
 	r.Bind(input.LayerOverlay, input.Binding{
 		Keys: []string{"esc"}, Command: "overlay.close", When: command.WhenOverlay(),
 	})
+
+	registerSidebar(r)
+}
+
+// registerSidebar installs the keys that work while the sidebar holds focus.
+// They sit on the component layer, above every screen's own bindings, so enter
+// opens the highlighted section instead of triggering the screen's verb.
+func registerSidebar(r *registry.Registrar) {
+	onSidebar := command.OnRegion(string(registry.SidebarRegion))
+
+	commands := []command.Command{
+		{
+			ID: "nav.sidebar.next", Title: "Sidebar Down", Category: "Navigation", When: onSidebar,
+			Run: func(command.Scope) tea.Cmd { return registry.SidebarMove(1) },
+		},
+		{
+			ID: "nav.sidebar.prev", Title: "Sidebar Up", Category: "Navigation", When: onSidebar,
+			Run: func(command.Scope) tea.Cmd { return registry.SidebarMove(-1) },
+		},
+		{
+			ID: "nav.sidebar.open", Title: "Sidebar Open", Category: "Navigation", When: onSidebar,
+			Run: func(command.Scope) tea.Cmd { return registry.SidebarOpen() },
+		},
+	}
+	for _, c := range commands {
+		r.Command(c)
+	}
+
+	bindings := []input.Binding{
+		{Keys: []string{"j"}, Command: "nav.sidebar.next", Hint: "Move", Priority: 66},
+		{Keys: []string{"down"}, Command: "nav.sidebar.next"},
+		{Keys: []string{"k"}, Command: "nav.sidebar.prev"},
+		{Keys: []string{"up"}, Command: "nav.sidebar.prev"},
+		{Keys: []string{"enter"}, Command: "nav.sidebar.open", Hint: "Open", Priority: 67},
+		{Keys: []string{"l"}, Command: "nav.sidebar.open"},
+		{Keys: []string{"right"}, Command: "nav.sidebar.open"},
+	}
+	for _, b := range bindings {
+		b.When = onSidebar
+		r.Bind(input.LayerComponent, b)
+	}
 }

@@ -13,6 +13,7 @@ export namespace main {
 	    packageName: string;
 	    command: string;
 	    requiresSudo: boolean;
+	    uninstallCommand: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new CatalogItem(source);
@@ -32,6 +33,7 @@ export namespace main {
 	        this.packageName = source["packageName"];
 	        this.command = source["command"];
 	        this.requiresSudo = source["requiresSudo"];
+	        this.uninstallCommand = source["uninstallCommand"];
 	    }
 	}
 	export class CatalogCategory {
@@ -79,38 +81,50 @@ export namespace main {
 		}
 	}
 	
-	export class KeydBinding {
-	    layer: string;
-	    key: string;
-	    action: string;
+	export class PackageSource {
+	    method: string;
+	    package?: string;
+	    shell?: string;
+	    args?: string;
+	    script?: string;
+	    uninstall?: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new KeydBinding(source);
+	        return new PackageSource(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.layer = source["layer"];
-	        this.key = source["key"];
-	        this.action = source["action"];
+	        this.method = source["method"];
+	        this.package = source["package"];
+	        this.shell = source["shell"];
+	        this.args = source["args"];
+	        this.script = source["script"];
+	        this.uninstall = source["uninstall"];
 	    }
 	}
-	export class KeydProfile {
+	export class PackageEntry {
+	    id: string;
 	    name: string;
-	    path: string;
-	    bindings: KeydBinding[];
-	    active: boolean;
+	    category: string;
+	    description?: string;
+	    disabled?: boolean;
+	    checks?: string[];
+	    sources: PackageSource[];
 	
 	    static createFrom(source: any = {}) {
-	        return new KeydProfile(source);
+	        return new PackageEntry(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
 	        this.name = source["name"];
-	        this.path = source["path"];
-	        this.bindings = this.convertValues(source["bindings"], KeydBinding);
-	        this.active = source["active"];
+	        this.category = source["category"];
+	        this.description = source["description"];
+	        this.disabled = source["disabled"];
+	        this.checks = source["checks"];
+	        this.sources = this.convertValues(source["sources"], PackageSource);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -131,42 +145,193 @@ export namespace main {
 		    return a;
 		}
 	}
-	export class KeydResult {
-	    ok: boolean;
-	    output: string;
+	export class PackageCategory {
+	    id: string;
+	    name: string;
+	    description?: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new KeydResult(source);
+	        return new PackageCategory(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.ok = source["ok"];
-	        this.output = source["output"];
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
 	    }
 	}
-	export class KeydStatus {
-	    installed: boolean;
-	    daemonActive: boolean;
-	    profilesDir: string;
-	    activeProfile: string;
-	    systemDirty: boolean;
+	export class PackageManifest {
+	    version: number;
+	    aurHelper: string;
+	    categories: PackageCategory[];
+	    packages: PackageEntry[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PackageManifest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.aurHelper = source["aurHelper"];
+	        this.categories = this.convertValues(source["categories"], PackageCategory);
+	        this.packages = this.convertValues(source["packages"], PackageEntry);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ImportResult {
+	    manifest: PackageManifest;
+	    source: string;
+	    added: string[];
+	    skipped: string[];
+	    categories: string[];
+	    notes: string[];
 	    error: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new KeydStatus(source);
+	        return new ImportResult(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.installed = source["installed"];
-	        this.daemonActive = source["daemonActive"];
-	        this.profilesDir = source["profilesDir"];
-	        this.activeProfile = source["activeProfile"];
-	        this.systemDirty = source["systemDirty"];
+	        this.manifest = this.convertValues(source["manifest"], PackageManifest);
+	        this.source = source["source"];
+	        this.added = source["added"];
+	        this.skipped = source["skipped"];
+	        this.categories = source["categories"];
+	        this.notes = source["notes"];
 	        this.error = source["error"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
+	
+	
+	
+	
+	export class PackagesEnv {
+	    packageManager: string;
+	    osFamily: string;
+	    hasSudo: boolean;
+	    aurHelpers: string[];
+	    aurHelper: string;
+	    methods: Record<string, boolean>;
+	
+	    static createFrom(source: any = {}) {
+	        return new PackagesEnv(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.packageManager = source["packageManager"];
+	        this.osFamily = source["osFamily"];
+	        this.hasSudo = source["hasSudo"];
+	        this.aurHelpers = source["aurHelpers"];
+	        this.aurHelper = source["aurHelper"];
+	        this.methods = source["methods"];
+	    }
+	}
+	export class ResolvedPackage {
+	    id: string;
+	    sourceIndex: number;
+	    method: string;
+	    command: string;
+	    uninstallCommand: string;
+	    reason: string;
+	    installed: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResolvedPackage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.sourceIndex = source["sourceIndex"];
+	        this.method = source["method"];
+	        this.command = source["command"];
+	        this.uninstallCommand = source["uninstallCommand"];
+	        this.reason = source["reason"];
+	        this.installed = source["installed"];
+	    }
+	}
+	export class PackagesState {
+	    path: string;
+	    exists: boolean;
+	    setupScript: string;
+	    manifest: PackageManifest;
+	    env: PackagesEnv;
+	    resolved: Record<string, ResolvedPackage>;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PackagesState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.exists = source["exists"];
+	        this.setupScript = source["setupScript"];
+	        this.manifest = this.convertValues(source["manifest"], PackageManifest);
+	        this.env = this.convertValues(source["env"], PackagesEnv);
+	        this.resolved = this.convertValues(source["resolved"], ResolvedPackage, true);
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class SystemInfo {
 	    hostname: string;
 	    user: string;
@@ -182,6 +347,10 @@ export namespace main {
 	    uptime: string;
 	    cpu: string;
 	    memory: string;
+	    machine: string;
+	    gpu: string;
+	    storage: string;
+	    disks: string;
 	    hasSudo: boolean;
 	    workspaceRoot: string;
 	    setupScriptFound: boolean;
@@ -206,9 +375,29 @@ export namespace main {
 	        this.uptime = source["uptime"];
 	        this.cpu = source["cpu"];
 	        this.memory = source["memory"];
+	        this.machine = source["machine"];
+	        this.gpu = source["gpu"];
+	        this.storage = source["storage"];
+	        this.disks = source["disks"];
 	        this.hasSudo = source["hasSudo"];
 	        this.workspaceRoot = source["workspaceRoot"];
 	        this.setupScriptFound = source["setupScriptFound"];
+	    }
+	}
+	export class VerifyResult {
+	    id: string;
+	    ok: boolean;
+	    lines: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new VerifyResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.ok = source["ok"];
+	        this.lines = source["lines"];
 	    }
 	}
 

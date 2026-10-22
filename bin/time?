@@ -1,0 +1,704 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ZONES=(
+  "Los Angeles|US West|America/Los_Angeles"
+  "Chicago|US Central|America/Chicago"
+  "New York|US East|America/New_York"
+  "Sao Paulo|Brazil|America/Sao_Paulo"
+  "London|United Kingdom|Europe/London"
+  "Amsterdam|Netherlands|Europe/Amsterdam"
+  "Dubai|UAE|Asia/Dubai"
+  "Mumbai|India|Asia/Kolkata"
+  "Shanghai|China|Asia/Shanghai"
+  "Tokyo|Japan|Asia/Tokyo"
+  "Sydney|Australia|Australia/Sydney"
+)
+
+COMMANDS=(now in alarm zones timer help)
+UNIT_WORDS=(s sec secs second seconds m min mins minute minutes h hr hrs hour hours d day days)
+
+if [[ -t 1 ]]; then
+  BOLD=$'\e[1m'
+  DIM=$'\e[2m'
+  CYAN=$'\e[36m'
+  GREEN=$'\e[32m'
+  YELLOW=$'\e[33m'
+  RED=$'\e[31m'
+  RESET=$'\e[0m'
+else
+  BOLD="" DIM="" CYAN="" GREEN="" YELLOW="" RED="" RESET=""
+fi
+
+function is_help() {
+  [[ ${1:-} == "help" || ${1:-} == "--help" || ${1:-} == "-h" ]]
+}
+
+function heading() {
+  echo "${BOLD}${CYAN}$1${RESET}"
+}
+
+function help_row() {
+  printf "  ${BOLD}%-24s${RESET} %s\n" "$1" "$2"
+}
+
+function help_main() {
+  cat <<EOF
+
+${BOLD}current-time${RESET} ${DIM}Show the time here, in the Netherlands and around the world${RESET}
+
+$(heading USAGE)
+  current-time ${DIM}[command] [args]${RESET}
+  current-time ${DIM}<duration>${RESET}           ${DIM}shorthand for 'current-time in <duration>'${RESET}
+
+$(heading COMMANDS)
+$(help_row "now" "Show the current time everywhere (default)")
+$(help_row "in <duration>" "Show what the time will be after a duration")
+$(help_row "alarm <duration|HH:MM>" "Ring an alarm after a duration or at a clock time")
+$(help_row "zones" "List the tracked locations and their time zones")
+$(help_row "timer <command...>" "Measure how long a command takes")
+$(help_row "help [command]" "Show help for current-time or a command")
+
+$(heading OPTIONS)
+$(help_row "-h, --help, help" "Show help. Works after any command too")
+
+$(heading EXAMPLES)
+  current-time
+  current-time in 2h30m
+  current-time 45m
+  current-time alarm 25m
+  current-time alarm 07:30
+  current-time in --help
+
+EOF
+}
+
+function help_timer() {
+  cat <<EOF
+
+${BOLD}current-time timer${RESET} ${DIM}Measure how long a command takes${RESET}
+
+$(heading USAGE)
+  current-time timer <timer options> <command...>
+
+$(heading EXAMPLES)
+  current-time timer bun run build
+  current-time timer --run 5 "npm test"
+  current-time timer --quick "make"
+  current-time timer --help
+
+EOF
+}
+
+function help_now() {
+  cat <<EOF
+
+${BOLD}current-time now${RESET} ${DIM}Show the current time everywhere${RESET}
+
+$(heading USAGE)
+  current-time now
+  current-time
+
+$(heading OUTPUT)
+  One row per location, ordered west to east, with the time, the zone
+  abbreviation (CEST, CDT, JST), the UTC offset, the difference from your
+  own time zone and the date. Your own zone is highlighted with ${GREEN}${BOLD}▸${RESET},
+  night hours (23:00 to 07:00) are dimmed and ${YELLOW}+1d${RESET}/${YELLOW}-1d${RESET} marks
+  locations on a different day.
+
+EOF
+}
+
+function help_in() {
+  cat <<EOF
+
+${BOLD}current-time in${RESET} ${DIM}Show what the time will be after a duration${RESET}
+
+$(heading USAGE)
+  current-time in <duration>
+  current-time <duration>
+
+$(heading UNITS)
+$(help_row "s, sec, second(s)" "Seconds")
+$(help_row "m, min, minute(s)" "Minutes")
+$(help_row "h, hr, hour(s)" "Hours")
+$(help_row "d, day(s)" "Days")
+  Units can be combined. A bare number counts as minutes.
+
+$(heading EXAMPLES)
+  current-time in 30m
+  current-time in 1h30m
+  current-time in 2 hours 15 minutes
+  current-time in 90
+  current-time 1d
+
+EOF
+}
+
+function help_alarm() {
+  cat <<EOF
+
+${BOLD}current-time alarm${RESET} ${DIM}Ring an alarm after a duration or at a clock time${RESET}
+
+$(heading USAGE)
+  current-time alarm <duration> [label]
+  current-time alarm [at] <HH:MM> [label]
+
+$(heading NOTES)
+  Durations use the same units as 'current-time in'. A clock time rings at
+  the next occurrence, so 07:30 typed in the evening means tomorrow morning.
+  The alarm runs in the background with a tray icon showing the minutes
+  left, so closing the terminal keeps it running. Anything after the time is
+  used as the label. While counting down, press q or Ctrl+C to cancel, or d
+  to leave it in the tray. The tray menu can cancel, stop or snooze it.
+
+  When it rings, a popup appears above every window. The first key press
+  focuses its snooze field: type a length like 90s, 1,5m or 6.5m and press
+  Enter to snooze, or Esc to stop. In the terminal, s snoozes and any other
+  key stops it.
+
+$(heading EXAMPLES)
+  current-time alarm 25m
+  current-time alarm 1h30m
+  current-time alarm 07:30
+  current-time alarm at 14:05
+  current-time alarm 10m tea is ready
+
+EOF
+}
+
+function help_zones() {
+  cat <<EOF
+
+${BOLD}current-time zones${RESET} ${DIM}List the tracked locations${RESET}
+
+$(heading USAGE)
+  current-time zones
+
+$(heading NOTES)
+  Locations are defined in the ZONES list at the top of the script.
+
+EOF
+}
+
+function help_help() {
+  cat <<EOF
+
+${BOLD}current-time help${RESET} ${DIM}Show help${RESET}
+
+$(heading USAGE)
+  current-time help [command]
+  current-time [command] --help
+  current-time [command] -h
+
+$(heading COMMANDS)
+  ${COMMANDS[*]}
+
+EOF
+}
+
+function levenshtein() {
+  local a=$1 b=$2
+  local la=${#a} lb=${#b} i j cost
+  local -a prev curr
+  for ((j = 0; j <= lb; j++)); do prev[j]=$j; done
+  for ((i = 1; i <= la; i++)); do
+    curr=("$i")
+    for ((j = 1; j <= lb; j++)); do
+      [[ ${a:i-1:1} == "${b:j-1:1}" ]] && cost=0 || cost=1
+      local del=$((prev[j] + 1)) ins=$((curr[j - 1] + 1)) sub=$((prev[j - 1] + cost))
+      local min=$del
+      ((ins < min)) && min=$ins
+      ((sub < min)) && min=$sub
+      curr[j]=$min
+    done
+    prev=("${curr[@]}")
+  done
+  echo "${prev[lb]}"
+}
+
+function closest() {
+  local input=$1 best="" best_score=99 candidate score
+  shift
+  for candidate in "$@"; do
+    score=$(levenshtein "$input" "$candidate")
+    if ((score < best_score)); then
+      best=$candidate
+      best_score=$score
+    fi
+  done
+  local limit=$(((${#input} + 1) / 2))
+  ((limit < 1)) && limit=1
+  ((best_score <= limit)) && echo "$best"
+  return 0
+}
+
+function fail() {
+  echo "${RED}error:${RESET} $1" >&2
+  if [[ -n ${2:-} ]]; then
+    if [[ -t 0 && -t 2 ]]; then
+      local answer=""
+      printf "${YELLOW}Did you mean:${RESET} ${BOLD}%s${RESET}? ${DIM}[Y/n]${RESET} " "$2" >&2
+      read -r answer </dev/tty || answer="n"
+      if [[ -z $answer || $answer == [yY] || $answer == [yY][eE][sS] ]]; then
+        local -a suggestion
+        read -ra suggestion <<<"${2#current-time}"
+        exec "$0" "${suggestion[@]}"
+      fi
+    else
+      echo "${YELLOW}Did you mean:${RESET} ${BOLD}$2${RESET}" >&2
+    fi
+  fi
+  echo "${DIM}Run 'current-time ${3:-}--help' for usage.${RESET}" >&2
+  exit 1
+}
+
+function normalize_unit() {
+  case $1 in
+    s | sec | secs | second | seconds) echo s ;;
+    m | min | mins | minute | minutes) echo m ;;
+    h | hr | hrs | hour | hours) echo h ;;
+    d | day | days) echo d ;;
+    *) return 1 ;;
+  esac
+}
+
+function to_seconds() {
+  local input
+  input=$(tr '[:upper:]' '[:lower:]' <<<"$*" | tr -d ' ')
+  input=${input#+}
+  [[ -z $input ]] && return 1
+  [[ $input =~ ^[0-9]+$ ]] && input="${input}m"
+
+  local total=0 amount unit
+  while [[ $input =~ ^([0-9]+)([a-z]+)(.*)$ ]]; do
+    amount=$((10#${BASH_REMATCH[1]}))
+    unit=$(normalize_unit "${BASH_REMATCH[2]}") || return 1
+    input=${BASH_REMATCH[3]}
+    case $unit in
+      s) total=$((total + amount)) ;;
+      m) total=$((total + amount * 60)) ;;
+      h) total=$((total + amount * 3600)) ;;
+      d) total=$((total + amount * 86400)) ;;
+    esac
+  done
+  [[ -z $input ]] || return 1
+  echo "$total"
+}
+
+function suggest_duration() {
+  local input rest="" fixed="" amount word unit match
+  input=$(tr '[:upper:]' '[:lower:]' <<<"$*" | tr -d ' ')
+  rest=${input#+}
+  while [[ $rest =~ ^([0-9]+)([a-z]+)(.*)$ ]]; do
+    amount=${BASH_REMATCH[1]}
+    word=${BASH_REMATCH[2]}
+    rest=${BASH_REMATCH[3]}
+    if unit=$(normalize_unit "$word"); then
+      fixed+="$amount$unit"
+      continue
+    fi
+    match=$(closest "$word" "${UNIT_WORDS[@]}")
+    [[ -z $match ]] && return 0
+    fixed+="$amount$(normalize_unit "$match")"
+  done
+  [[ -z $rest && -n $fixed ]] && echo "current-time in $fixed"
+  return 0
+}
+
+function humanize() {
+  local seconds=$1 parts=()
+  local days=$((seconds / 86400)) hours=$((seconds % 86400 / 3600))
+  local minutes=$((seconds % 3600 / 60)) secs=$((seconds % 60))
+  ((days)) && parts+=("${days}d")
+  ((hours)) && parts+=("${hours}h")
+  ((minutes)) && parts+=("${minutes}m")
+  ((secs)) && parts+=("${secs}s")
+  ((${#parts[@]})) || parts=("0s")
+  echo "${parts[*]}"
+}
+
+function local_zone() {
+  [[ -n ${TZ:-} ]] && echo "$TZ" && return
+  timedatectl show -p Timezone --value 2>/dev/null || readlink /etc/localtime | sed 's|.*/zoneinfo/||'
+}
+
+function offset_seconds() {
+  local offset=$1 sign=1
+  [[ ${offset:0:1} == "-" ]] && sign=-1
+  echo $((sign * (10#${offset:1:2} * 3600 + 10#${offset:4:2} * 60)))
+}
+
+function format_diff() {
+  local diff=$1 sign="+"
+  ((diff == 0)) && echo "0h" && return
+  ((diff < 0)) && sign="-" diff=$((-diff))
+  local hours=$((diff / 3600)) minutes=$((diff % 3600 / 60))
+  if ((minutes)); then
+    printf "%s%dh%02d\n" "$sign" "$hours" "$minutes"
+  else
+    printf "%s%dh\n" "$sign" "$hours"
+  fi
+}
+
+function rule() {
+  local line
+  printf -v line '%*s' 78 ""
+  echo "  ${DIM}${line// /─}${RESET}"
+}
+
+function print_row() {
+  local city=$1 region=$2 zone=$3 epoch=$4 local_day=$5 local_offset=$6 is_local=$7
+  local time hour abbr offset day ymd
+  IFS='|' read -r time hour abbr offset day ymd < <(TZ=$zone date -d "@$epoch" '+%H:%M|%-H|%Z|%:z|%a %d %b|%F')
+
+  local diff shift_tag="" pointer="  " tone="" strong=$BOLD
+  diff=$(format_diff $(($(offset_seconds "$offset") - local_offset)))
+  [[ $ymd > $local_day ]] && shift_tag="${YELLOW}+1d${RESET}"
+  [[ $ymd < $local_day ]] && shift_tag="${YELLOW}-1d${RESET}"
+
+  if [[ $is_local == 1 ]]; then
+    pointer="${GREEN}${BOLD}▸${RESET} "
+    tone="${GREEN}${BOLD}"
+    diff="you"
+  elif ((hour < 7 || hour >= 23)); then
+    tone=$DIM
+    strong=""
+  fi
+
+  printf "  %s${tone}%-14s${RESET}${DIM}%-16s${RESET}${tone}${strong}%-8s${RESET}${tone}%-6s${RESET}${DIM}%-9s${RESET}${tone}%-7s%-12s${RESET}%s\n" \
+    "$pointer" "$city" "$region" "$time" "$abbr" "$offset" "$diff" "$day" "$shift_tag"
+}
+
+function print_table() {
+  local offset=$1 now zone local_day local_offset entry city region tz found=0
+  now=$(date +%s)
+  local epoch=$((now + offset))
+  zone=$(local_zone)
+  local_day=$(date -d "@$epoch" '+%F')
+  local_offset=$(offset_seconds "$(date -d "@$epoch" '+%:z')")
+
+  echo
+  if ((offset)); then
+    echo "  ${BOLD}In $(humanize "$offset")${RESET}  ${DIM}from $(date -d "@$now" '+%H:%M:%S')${RESET}"
+    echo "  ${GREEN}${BOLD}$(date -d "@$epoch" '+%H:%M:%S')${RESET} ${DIM}$(date -d "@$epoch" '+%Z')${RESET}  $(date -d "@$epoch" '+%A %-d %B %Y')  ${DIM}${zone:-local}${RESET}"
+  else
+    echo "  ${GREEN}${BOLD}$(date -d "@$epoch" '+%H:%M:%S')${RESET} ${DIM}$(date -d "@$epoch" '+%Z')${RESET}  $(date -d "@$epoch" '+%A %-d %B %Y')  ${DIM}${zone:-local}${RESET}"
+  fi
+  echo
+  printf "    ${DIM}%-14s%-16s%-8s%-6s%-9s%-7s%s${RESET}\n" CITY REGION TIME ZONE UTC DIFF DATE
+  rule
+
+  for entry in "${ZONES[@]}"; do
+    [[ ${entry##*|} == "$zone" ]] && found=1
+  done
+  ((found)) || print_row "${zone##*/}" "This machine" "${zone:-}" "$epoch" "$local_day" "$local_offset" 1
+
+  for entry in "${ZONES[@]}"; do
+    IFS='|' read -r city region tz <<<"$entry"
+    print_row "$city" "$region" "$tz" "$epoch" "$local_day" "$local_offset" "$([[ $tz == "$zone" ]] && echo 1 || echo 0)"
+  done
+
+  rule
+  echo "  ${GREEN}${BOLD}▸${RESET} ${DIM}your zone   night hours are dimmed   ${RESET}${YELLOW}+1d${RESET}${DIM} different day${RESET}"
+  echo
+}
+
+function cmd_now() {
+  (($#)) && fail "'now' takes no arguments, got '$*'" "current-time in $*" "now "
+  print_table 0
+}
+
+function cmd_in() {
+  (($#)) || fail "'in' needs a duration" "current-time in 30m" "in "
+  local offset
+  offset=$(to_seconds "$@") || fail "invalid duration '$*'" "$(suggest_duration "$@")" "in "
+  print_table "$offset"
+}
+
+function seconds_until() {
+  [[ $1 =~ ^([0-9]{1,2})[:.]([0-9]{2})$ ]] || return 1
+  local hour=$((10#${BASH_REMATCH[1]})) minute=$((10#${BASH_REMATCH[2]}))
+  ((hour < 24 && minute < 60)) || return 1
+  local now target
+  now=$(date +%s)
+  target=$(date -d "$(printf '%02d:%02d' "$hour" "$minute")" +%s)
+  ((target <= now)) && target=$(date -d "tomorrow $(printf '%02d:%02d' "$hour" "$minute")" +%s)
+  echo $((target - now))
+}
+
+DIGITS=(
+  "█▀█|█ █|▀▀▀"
+  " ▀█|  █|  ▀"
+  "▀▀█|█▀▀|▀▀▀"
+  "▀▀█| ▀█|▀▀▀"
+  "█ █|▀▀█|  ▀"
+  "█▀▀|▀▀█|▀▀▀"
+  "█▀▀|█▀█|▀▀▀"
+  "▀▀█|  █|  ▀"
+  "█▀█|█▀█|▀▀▀"
+  "█▀█|▀▀█|▀▀▀"
+)
+ALARM_LINES=8
+ALARM_SNOOZE=300
+ALARM_DIR="${XDG_RUNTIME_DIR:-/tmp}/current-time-alarm"
+
+function big_text() {
+  local text=$1 row char glyph rows i
+  for row in 0 1 2; do
+    local line=""
+    for ((i = 0; i < ${#text}; i++)); do
+      char=${text:i:1}
+      if [[ $char == ":" ]]; then
+        glyph=("   " " ▀ " " ▀ ")
+        line+="${glyph[row]}"
+      else
+        IFS='|' read -ra rows <<<"${DIGITS[char]}"
+        line+="${rows[row]} "
+      fi
+    done
+    echo "$line"
+  done
+}
+
+function clock_text() {
+  local seconds=$1
+  local hours=$((seconds / 3600)) minutes=$((seconds % 3600 / 60)) secs=$((seconds % 60))
+  if ((hours)); then
+    printf "%d:%02d:%02d" "$hours" "$minutes" "$secs"
+  else
+    printf "%02d:%02d" "$minutes" "$secs"
+  fi
+}
+
+function progress_bar() {
+  local done=$1 total=$2 width=36 color=$3
+  local filled=$((total ? done * width / total : width)) bar="" rest=""
+  printf -v bar '%*s' "$filled" ""
+  printf -v rest '%*s' $((width - filled)) ""
+  printf "%s%s%s%s%s %3d%%" "$color" "${bar// /━}" "$DIM" "${rest// /─}" "$RESET" $((total ? done * 100 / total : 100))
+}
+
+function draw_alarm() {
+  local title=$1 digits=$2 tone=$3 bar=$4 hint=$5 line
+  ((ALARM_DRAWN)) && printf '\e[%dA' "$ALARM_LINES"
+  ALARM_DRAWN=1
+  printf '\e[2K\n'
+  printf '\e[2K  %s\n' "$title"
+  printf '\e[2K\n'
+  while IFS= read -r line; do
+    printf '\e[2K  %s%s%s\n' "$tone" "$line" "$RESET"
+  done < <(big_text "$digits")
+  printf '\e[2K  %s\n' "$bar"
+  printf '\e[2K  %s%s%s\n' "$DIM" "$hint" "$RESET"
+}
+
+function alarm_exit() {
+  printf '\e[?25h'
+  [[ -n ${1:-} ]] && echo "  ${DIM}$1${RESET}"
+  echo
+  exit 0
+}
+
+function wait_key() {
+  WAIT_KEY=""
+  if [[ -r /dev/tty ]]; then
+    read -rsn1 -t "$1" WAIT_KEY </dev/tty 2>/dev/null && return 0
+    return 1
+  fi
+  sleep "$1"
+  return 1
+}
+
+function at_text() {
+  local text
+  text=$(date -d "@$1" '+%H:%M')
+  [[ $(date -d "@$1" +%F) != $(date +%F) ]] && text+=" $(date -d "@$1" '+%a %-d %b')"
+  echo "$text"
+}
+
+function read_state() {
+  local key value
+  [[ -f $1 ]] || return 1
+  STATE_PHASE="" STATE_END=0 STATE_START=0 STATE_SNOOZE=$ALARM_SNOOZE STATE_REASON=""
+  while IFS='=' read -r key value; do
+    case $key in
+      phase) STATE_PHASE=$value ;;
+      end) STATE_END=$value ;;
+      start) STATE_START=$value ;;
+      snooze) STATE_SNOOZE=$value ;;
+      reason) STATE_REASON=$value ;;
+    esac
+  done <"$1"
+  [[ -n $STATE_PHASE ]]
+}
+
+function start_daemon() {
+  local daemon
+  daemon="$(dirname "$(realpath "$0")")/../scripts/lib/alarm/daemon.py"
+  [[ -f $daemon ]] || fail "alarm daemon not found at $daemon"
+  command -v python3 >/dev/null || fail "python3 is required to run the alarm"
+  mkdir -p "$ALARM_DIR"
+  setsid python3 "$daemon" --end "$1" --label "$2" --popup "$3" --snooze "$ALARM_SNOOZE" \
+    --state-dir "$ALARM_DIR" </dev/null >/dev/null 2>&1 &
+  ALARM_PID=$!
+  local tries=0
+  until [[ -f $ALARM_DIR/$ALARM_PID.state ]]; do
+    kill -0 "$ALARM_PID" 2>/dev/null || fail "alarm daemon failed to start"
+    ((tries++ < 40)) || fail "alarm daemon did not report its state"
+    sleep 0.05
+  done
+}
+
+function cmd_alarm() {
+  [[ ${1:-} == "at" ]] && shift
+  (($#)) || fail "'alarm' needs a duration or a time" "current-time alarm 25m" "alarm "
+
+  local offset label=""
+  if ! offset=$(seconds_until "$*") && ! offset=$(to_seconds "$@"); then
+    label="${*:2}"
+    offset=$(seconds_until "$1") || offset=$(to_seconds "$1") ||
+      fail "invalid duration or time '$1'" "$(suggest_duration "$1" | sed 's/ in / alarm /')" "alarm "
+  fi
+  ((offset > 0)) || fail "alarm duration must be more than 0 seconds" "" "alarm "
+
+  local end at
+  end=$(($(date +%s) + offset))
+  at=$(at_text "$end")
+  start_daemon "$end" "${label:-Alarm}" "${label:-Alarm for $at}"
+  label=${label:-Alarm}
+  local state="$ALARM_DIR/$ALARM_PID.state"
+
+  if [[ ! -t 1 ]]; then
+    echo "$label rings at $at (running in the tray, pid $ALARM_PID)"
+    return
+  fi
+
+  trap 'kill -TERM "$ALARM_PID" 2>/dev/null; alarm_exit "Alarm cancelled"' INT TERM
+  trap 'exit 0' HUP
+  printf '\e[?25l'
+  ALARM_DRAWN=0
+
+  local now left total last="" tone tick=0 frame
+  while true; do
+    if ! read_state "$state"; then
+      kill -0 "$ALARM_PID" 2>/dev/null || alarm_exit "Alarm stopped"
+      wait_key 0.25 || true
+      continue
+    fi
+    case $STATE_PHASE in
+      waiting)
+        now=$(date +%s)
+        left=$((STATE_END - now))
+        ((left < 0)) && left=0
+        total=$((STATE_END - STATE_START))
+        frame="w$left$STATE_END"
+        if [[ $frame != "$last" ]]; then
+          last=$frame
+          at=$(at_text "$STATE_END")
+          tone="${GREEN}${BOLD}"
+          ((left <= 60)) && tone="${YELLOW}${BOLD}"
+          ((left <= 10)) && tone="${RED}${BOLD}"
+          draw_alarm "${BOLD}◷  ${label}${RESET}  ${DIM}rings at${RESET} ${BOLD}${at}${RESET}" \
+            "$(clock_text "$left")" "$tone" \
+            "$(progress_bar $((total - left)) "$total" "$CYAN")" \
+            "q cancel · d keep running in the tray · closing the terminal keeps it running"
+        fi
+        if wait_key 0.25; then
+          case $WAIT_KEY in
+            [qQ]) kill -TERM "$ALARM_PID" 2>/dev/null; alarm_exit "Alarm cancelled" ;;
+            [dD]) alarm_exit "Alarm keeps running in the tray (pid $ALARM_PID)" ;;
+          esac
+        fi
+        ;;
+      ringing)
+        frame="r$((tick / 2 % 2))"
+        if [[ $frame != "$last" ]]; then
+          last=$frame
+          if ((tick / 2 % 2 == 0)); then tone="${RED}${BOLD}"; else tone=$DIM; fi
+          draw_alarm "${RED}${BOLD}🔔 ${label}${RESET}  ${DIM}rang at${RESET} ${BOLD}$(at_text "$STATE_END")${RESET}" \
+            "00:00" "$tone" "$(progress_bar 1 1 "$RED")" \
+            "s snooze $(humanize "$STATE_SNOOZE") · any other key to stop"
+        fi
+        tick=$((tick + 1))
+        if wait_key 0.25; then
+          case $WAIT_KEY in
+            [sS]) kill -USR2 "$ALARM_PID" 2>/dev/null ;;
+            *) kill -USR1 "$ALARM_PID" 2>/dev/null ;;
+          esac
+        fi
+        ;;
+      ended)
+        case $STATE_REASON in
+          dismissed) alarm_exit "Alarm dismissed" ;;
+          timeout) alarm_exit "Alarm stopped after 2 minutes" ;;
+          *) alarm_exit "Alarm cancelled" ;;
+        esac
+        ;;
+      *) wait_key 0.25 || true ;;
+    esac
+  done
+}
+
+function cmd_zones() {
+  (($#)) && fail "'zones' takes no arguments, got '$*'" "" "zones "
+  local entry city region tz
+  echo
+  heading "  LOCATIONS"
+  printf "  %-30s ${GREEN}%s${RESET}\n" "This machine" "$(local_zone)"
+  for entry in "${ZONES[@]}"; do
+    IFS='|' read -r city region tz <<<"$entry"
+    printf "  %-30s ${DIM}%s${RESET}\n" "$city ($region)" "$tz"
+  done
+  echo
+}
+
+function cmd_help() {
+  case ${1:-} in
+    "") help_main ;;
+    now | in | alarm | zones | timer | help) "help_$1" ;;
+    *) fail "unknown help topic '$1'" "$(closest "$1" "${COMMANDS[@]}" | sed 's/^/current-time help /')" ;;
+  esac
+}
+
+function has_help_flag() {
+  local arg
+  for arg in "$@"; do
+    [[ $arg == "--help" || $arg == "-h" || $arg == "help" ]] && return 0
+  done
+  return 1
+}
+
+function main() {
+  local command=${1:-now}
+  (($#)) && shift
+
+  case $command in
+    help | --help | -h)
+      cmd_help "$@"
+      return
+      ;;
+  esac
+
+  if has_help_flag "$@"; then
+    case $command in
+      now | in | alarm | zones | timer) "help_$command" ;;
+      *) help_main ;;
+    esac
+    return
+  fi
+
+  case $command in
+    now | in | alarm | zones) "cmd_$command" "$@" ;;
+    timer) exec bun "$HOME/.config/dotfiles/scripts/timer.ts" "$@" ;;
+    [0-9]* | +[0-9]*) cmd_in "$command" "$@" ;;
+    -*) fail "unknown option '$command'" "$(closest "${command##*-}" help | sed 's/^/current-time --/')" ;;
+    *)
+      local match
+      match=$(closest "$command" "${COMMANDS[@]}")
+      fail "unknown command '$command'" "${match:+current-time $match${*:+ $*}}"
+      ;;
+  esac
+}
+
+main "$@"

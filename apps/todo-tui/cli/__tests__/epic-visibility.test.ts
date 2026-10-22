@@ -25,22 +25,18 @@ function createTask(id: string, description: string, extra: Partial<Task> = {}):
 
 describe("alias expansion", () => {
   test.each([
-    [["-tr"], ["toggle", "reset"]],
-    [["--t", "--r"], ["toggle", "reset"]],
     [["-oa"], ["open", "all"]],
     [["--o", "--a"], ["open", "all"]],
     [["-ca"], ["close", "all"]],
     [["--c", "--a"], ["close", "all"]],
-    [["-ta"], ["toggle", "all"]],
-    [["-t", "joram"], ["toggle", "joram"]],
-    [["--t", "36"], ["toggle", "36"]],
     [["-o", "client work"], ["open", "client work"]],
     [["-c", "#36"], ["close", "#36"]],
-    [["-tr", "-h"], ["toggle", "reset", "-h"]],
     [["-oa", "--help"], ["open", "all", "--help"]],
-    [["-ca", "help"], ["close", "all", "help"]],
-    [["-ta", "reset", "--help"], ["toggle", "all", "reset", "--help"]],
-  ])("%p expands to %p", (args, expected) => {
+    [["-ca", "help"], ["close", "all", "--help"]],
+    [["-tr"], undefined],
+    [["-ta"], undefined],
+    [["-t", "joram"], undefined],
+  ])("%p expands to %p", (args, expected: string[] | undefined) => {
     expect(expandVisibilityAliases(args)).toEqual(expected);
   });
 
@@ -151,7 +147,7 @@ describe("commands", () => {
 
   test("a new epic defaults to open and renders exactly as before", async () => {
     await seed();
-    await run(["shell-display", "--all"]);
+    await run(["panel", "--all"]);
     const rendered = plain();
     expect(rendered).toContain("rjl [0/1]");
     expect(rendered).toContain("└─ navigation");
@@ -166,7 +162,7 @@ describe("commands", () => {
     expect(plain()).toContain("Closed epic: joram");
     output = "";
 
-    await run(["shell-display", "--all"]);
+    await run(["panel", "--all"]);
     const rendered = plain();
     expect(rendered).toContain("joram ● 2 subtickets");
     expect(rendered).not.toContain("turboturbo");
@@ -182,7 +178,7 @@ describe("commands", () => {
     await run(["close", "misc"]);
     output = "";
 
-    await run(["shell-display", "--all"]);
+    await run(["panel", "--all"]);
     expect(plain()).toContain("rjl ● 1 subticket");
     expect(plain()).toContain("misc ● 0 subtickets");
   });
@@ -194,7 +190,7 @@ describe("commands", () => {
 
     await run(["edit", "1", "rjl renamed"]);
     output = "";
-    await run(["shell-display", "--all"]);
+    await run(["panel", "--all"]);
     expect(plain()).toContain("rjl renamed ● 1 subticket");
     expect(await collapsed()).toEqual(["1"]);
   });
@@ -209,35 +205,28 @@ describe("commands", () => {
     expect(await collapsed()).toEqual([]);
   });
 
-  test("toggle inverts one epic", async () => {
+  test("every visibility change re-renders the task list in its new view", async () => {
     await seed();
-    await run(["toggle", "#3"]);
-    expect(await collapsed()).toEqual(["3"]);
-    expect(plain()).toContain("Closed epic: joram");
+    await run(["close", "joram"]);
+    expect(plain()).toContain("joram (3) ● 2 subtickets");
+    expect(plain()).not.toContain("turboturbo");
+    expect(plain()).toContain("rjl (1) [0/1]");
+
     output = "";
-    await run(["toggle", "3"]);
-    expect(await collapsed()).toEqual([]);
-    expect(plain()).toContain("Opened epic: joram");
+    await run(["close", "all"]);
+    expect(plain()).toContain("rjl (1) ● 1 subticket");
+
+    output = "";
+    await run(["open", "all"]);
+    expect(plain()).toContain("└─ navigation (2)");
+    expect(plain()).toContain("├─ turboturbo");
   });
 
-  test("toggle all inverts every epic independently", async () => {
-    await seed();
-    await run(["close", "rjl"]);
-    output = "";
-    await run(["toggle", "all"]);
-    expect(plain()).toContain("Toggled 2 epics");
-    expect(await collapsed()).toEqual(["3"]);
-  });
-
-  test("open all, close all and toggle reset", async () => {
+  test("open all and close all", async () => {
     await seed();
     await run(["close", "all"]);
     expect(await collapsed()).toEqual(["1", "3"]);
     await run(["open", "all"]);
-    expect(await collapsed()).toEqual([]);
-
-    await run(["close", "all"]);
-    await run(["toggle", "reset"]);
     expect(await collapsed()).toEqual([]);
     expect(JSON.parse(await Bun.file(getTodoPaths(dataDirectory).configFile).text()).collapsedEpicIds).toEqual([]);
   });
@@ -248,7 +237,7 @@ describe("commands", () => {
     await run(["rm", "3"]);
     output = "";
 
-    await run(["shell-display", "--all"]);
+    await run(["panel", "--all"]);
     expect(plain()).toContain("rjl [0/1]");
     expect(plain()).not.toContain("Unknown command");
 
@@ -269,20 +258,12 @@ describe("commands", () => {
     [["-ca"], ["1", "3"]],
     [["--c", "--a"], ["1", "3"]],
     [["close", "all"], ["1", "3"]],
-    [["-t", "joram"], ["3"]],
-    [["--t", "3"], ["3"]],
     [["-c", "#3"], ["3"]],
+    [["-c", "joram"], ["3"]],
   ])("%p resolves to the same internal command", async (args, expected) => {
     await seed();
     await run(args);
     expect(await collapsed()).toEqual(expected);
-  });
-
-  test.each([[["-tr"]], [["--t", "--r"]], [["toggle", "reset"]]])("%p resets the stored state", async (args) => {
-    await seed();
-    await run(["close", "all"]);
-    await run(args);
-    expect(await collapsed()).toEqual([]);
   });
 
   test.each([[["-oa"]], [["--o", "--a"]], [["open", "all"]]])("%p expands every epic", async (args) => {
@@ -294,15 +275,15 @@ describe("commands", () => {
     expect(await collapsed()).toEqual([]);
   });
 
-  test.each([[["-t"]], [["-o"]], [["-c"]], [["-a"]], [["-r"]]])("%p keeps its existing meaning: an added task", async (args) => {
+  test.each([[["-t"]], [["-o"]], [["-c"]], [["-a"]], [["-tr"]], [["--t"]], [["--o"]], [["--c"]], [["--a"]], [["--r"]]])("%p alone is an unknown option and adds nothing", async (args) => {
     await run(args);
-    const tasks = await store.loadTasks();
-    expect(tasks.map((task) => task.description)).toEqual([args[0] as string]);
+    expect(plain()).toContain("Unknown option:");
+    expect(await store.loadTasks()).toEqual([]);
   });
 
-  test.each([[["--t"]], [["--o"]], [["--c"]], [["--a"]], [["--r"]]])("%p stays an unknown command", async (args) => {
-    await run(args);
-    expect(plain()).toContain("Unknown command:");
+  test("toggle is gone as a command and becomes a task", async () => {
+    await run(["toggle", "stuff"]);
+    expect((await store.loadTasks()).map((task) => task.description)).toEqual(["toggle stuff"]);
   });
 
   test("-i and --interactive are not captured by the alias parser", async () => {
@@ -317,25 +298,11 @@ describe("commands", () => {
 
     await run(["close", "joram2"]);
     await run(["open", "999"]);
-    await run(["toggle", "2"]);
+    await run(["close", "2"]);
     expect(plain()).toContain("Epic not found: joram2");
     expect(plain()).toContain("Epic #999 not found");
     expect(plain()).toContain("Todo #2 is not an epic.");
     expect(await collapsed()).toEqual(["1", "3"]);
-  });
-
-  test("all and reset together are rejected without mutating", async () => {
-    await seed();
-    await run(["-ta", "reset", "--help"]);
-    expect(plain()).toContain("mutually exclusive");
-    expect(await collapsed()).toEqual([]);
-  });
-
-  test("reset is only available on toggle", async () => {
-    await seed();
-    await run(["close", "reset"]);
-    expect(plain()).toContain("only available as 'todo toggle reset'");
-    expect(await collapsed()).toEqual([]);
   });
 
   test.each([[["help"]], [["--help"]], [["-h"]]])("global help %p lists the epic visibility API", async (args) => {
@@ -343,35 +310,19 @@ describe("commands", () => {
     const rendered = plain();
     expect(rendered).toContain("EPIC VISIBILITY");
     expect(rendered).toContain("ALIASES");
-    expect(rendered).toContain("-tr");
     expect(rendered).toContain("-oa");
     expect(rendered).toContain("-ca");
   });
 
   test.each([
-    [["toggle", "help"], "todo toggle  ·"],
-    [["toggle", "--help"], "todo toggle  ·"],
-    [["toggle", "-h"], "todo toggle  ·"],
-    [["open", "help"], "todo open  ·"],
     [["open", "--help"], "todo open  ·"],
     [["open", "-h"], "todo open  ·"],
-    [["close", "help"], "todo close  ·"],
     [["close", "--help"], "todo close  ·"],
     [["close", "-h"], "todo close  ·"],
-    [["toggle", "all", "help"], "todo toggle all  ·"],
-    [["toggle", "all", "--help"], "todo toggle all  ·"],
-    [["toggle", "all", "-h"], "todo toggle all  ·"],
-    [["toggle", "reset", "help"], "todo toggle reset  ·"],
-    [["toggle", "reset", "--help"], "todo toggle reset  ·"],
-    [["toggle", "reset", "-h"], "todo toggle reset  ·"],
-    [["open", "all", "help"], "todo open all  ·"],
     [["open", "all", "--help"], "todo open all  ·"],
     [["open", "all", "-h"], "todo open all  ·"],
-    [["close", "all", "help"], "todo close all  ·"],
     [["close", "all", "--help"], "todo close all  ·"],
     [["close", "all", "-h"], "todo close all  ·"],
-    [["--t", "--r", "-h"], "todo toggle reset  ·"],
-    [["-tr", "--help"], "todo toggle reset  ·"],
     [["--o", "--a", "-h"], "todo open all  ·"],
     [["-oa", "--help"], "todo open all  ·"],
     [["--c", "--a", "-h"], "todo close all  ·"],

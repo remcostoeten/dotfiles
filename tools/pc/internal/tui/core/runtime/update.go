@@ -154,6 +154,13 @@ func (m Model) framework(msg tea.Msg) (bool, tea.Model, tea.Cmd) {
 		model, cmd := m.cycleRoute(msg.Delta)
 		return true, model, cmd
 
+	case registry.SidebarMoveMsg:
+		return true, m.moveSidebar(msg.Delta), nil
+
+	case registry.SidebarOpenMsg:
+		model, cmd := m.openSidebarRoute()
+		return true, model, cmd
+
 	case registry.CloseMsg:
 		return true, m.closeOverlay(msg.Overlay), nil
 
@@ -210,6 +217,7 @@ func (m Model) navigate(msg navigation.NavigateMsg) (tea.Model, tea.Cmd) {
 
 	model, cmd := m.ensureView(m.nav.Current().Route)
 	model.focus = model.focus.SwitchScope(scopeFor(model.nav.Current().Route), nil)
+	model.ui.Sidebar = model.sidebarIndex()
 	return model.resolveLayout(), cmd
 }
 
@@ -308,6 +316,9 @@ func (m Model) syncFocus() Model {
 	regions := m.activeRegions()
 	m.focus = m.focus.Revalidate(regions)
 
+	if m.hasSidebarRegion() {
+		m.frame = m.frame.WithRegion(registry.SidebarRegion, m.frame.Sidebar)
+	}
 	if placed, ok := m.activeSurface().(registry.Placed); ok {
 		frame := m.frame
 		for id, rect := range placed.RegionRects(m.workspace()) {
@@ -326,10 +337,55 @@ func (m Model) activeSurface() any {
 }
 
 func (m Model) activeRegions() []focus.Region {
+	var regions []focus.Region
 	if f, ok := m.activeSurface().(registry.Focusable); ok {
-		return f.FocusRegions()
+		regions = f.FocusRegions()
 	}
-	return nil
+	if m.hasSidebarRegion() {
+		regions = append(slices.Clone(regions), focus.Region{ID: registry.SidebarRegion, Order: sidebarOrder, Label: "Sidebar"})
+	}
+	return regions
+}
+
+// sidebarOrder puts the sidebar last in the focus ring, so a screen's own first
+// region stays the default focus when it opens.
+const sidebarOrder = 1 << 16
+
+// hasSidebarRegion reports whether the sidebar is focusable: it is on screen
+// and no overlay is trapping focus.
+func (m Model) hasSidebarRegion() bool {
+	return len(m.ui.Overlays) == 0 && !m.frame.Sidebar.IsEmpty()
+}
+
+// sidebarIndex is the row of the current section in the sidebar.
+func (m Model) sidebarIndex() int {
+	routes := m.reg.NavRoutes()
+	return max(0, slices.IndexFunc(routes, func(r navigation.Route) bool { return r.ID == m.nav.Root() }))
+}
+
+func (m Model) moveSidebar(delta int) Model {
+	routes := m.reg.NavRoutes()
+	if len(routes) == 0 {
+		return m
+	}
+	m.ui.Sidebar = min(max(m.ui.Sidebar+delta, 0), len(routes)-1)
+	return m
+}
+
+// openSidebarRoute switches to the section under the cursor. Opening the
+// section already showing just moves focus into it, which is the next region
+// round the ring because the sidebar is last.
+func (m Model) openSidebarRoute() (Model, tea.Cmd) {
+	routes := m.reg.NavRoutes()
+	if m.ui.Sidebar < 0 || m.ui.Sidebar >= len(routes) {
+		return m, nil
+	}
+	target := routes[m.ui.Sidebar].ID
+	if target == m.nav.Root() {
+		m.focus = m.focus.Next()
+		return m, nil
+	}
+	return m, navigation.Switch(target, nil)
 }
 
 func (m Model) regionRects() map[focus.ID]kernel.Rect {

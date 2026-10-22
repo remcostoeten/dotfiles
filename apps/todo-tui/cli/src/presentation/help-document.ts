@@ -1,4 +1,5 @@
-import type { CommandSummary } from "../plugins/types";
+import { walkSpecs } from "../command-spec/tree";
+import type { CommandSpec } from "../command-spec/types";
 import { stripAnsi } from "./ansi-text";
 import { formatCommandHelp, formatHelpOverview } from "./help-format";
 
@@ -9,10 +10,12 @@ export interface HelpLine {
   plain: string;
 }
 
-/** The overview followed by every command's own help, so one buffer holds everything worth searching. */
-export function buildHelpDocument(commands: ReadonlyArray<CommandSummary>, useColor: boolean): HelpLine[] {
-  const sections = [formatHelpOverview(commands, useColor), ...commands.map((command) => formatCommandHelp(command, useColor))];
-  const lines = sections.join("\n").split("\n");
+/** The overview followed by every visible command's own help, so one buffer holds everything worth searching. */
+export function buildHelpDocument(root: CommandSpec, useColor: boolean): HelpLine[] {
+  const pages = walkSpecs(root)
+    .filter(({ path }) => path.every((node) => node.hidden !== true))
+    .map(({ path }) => formatCommandHelp(path, useColor));
+  const lines = [formatHelpOverview(root, useColor), ...pages].join("\n").split("\n");
   return collapseBlankRuns(lines).map((text) => ({ text, plain: stripAnsi(text) }));
 }
 

@@ -1,4 +1,5 @@
 use crate::error::CoreError;
+use crate::keyd::actions;
 use crate::keys;
 use crate::model::{
     ActionKind, InputMode, KeyAction, KeyInput, Layer, Mapping, PreservedEntry, Profile,
@@ -13,6 +14,7 @@ pub fn parse_profile(id: &str, name: &str, content: &str) -> Result<Profile, Cor
         mappings: Vec::new(),
         layers: Vec::new(),
         preserved: Vec::new(),
+        replaces: Vec::new(),
     };
     let mut section = String::new();
     let mut counter = 0u32;
@@ -139,6 +141,7 @@ fn parse_expr(value: &str) -> Option<Vec<(InputMode, KeyAction)>> {
                 mods: Vec::new(),
                 layer: None,
                 macro_text: None,
+                ..Default::default()
             },
         )]);
     }
@@ -153,6 +156,33 @@ fn parse_expr(value: &str) -> Option<Vec<(InputMode, KeyAction)>> {
             (InputMode::Hold, layer_or_mod_action(hold.trim())),
         ]);
     }
+    if let Some(inner) = call_arg(value, "command") {
+        let action = match actions::unwrap_command(&inner) {
+            actions::Unwrapped::Command { command, run_as } => KeyAction {
+                kind: ActionKind::Command,
+                command: Some(command),
+                run_as,
+                ..Default::default()
+            },
+            actions::Unwrapped::Launch { app, run_as } => KeyAction {
+                kind: ActionKind::Launch,
+                app: Some(app),
+                run_as,
+                ..Default::default()
+            },
+        };
+        return Some(vec![(InputMode::Press, action)]);
+    }
+    if let Some(text) = call_arg(value, "macro").and_then(|inner| actions::decode_text(&inner)) {
+        return Some(vec![(
+            InputMode::Press,
+            KeyAction {
+                kind: ActionKind::Text,
+                text: Some(text),
+                ..Default::default()
+            },
+        )]);
+    }
     if let Some(inner) = call_arg(value, "macro") {
         return Some(vec![(
             InputMode::Press,
@@ -162,6 +192,7 @@ fn parse_expr(value: &str) -> Option<Vec<(InputMode, KeyAction)>> {
                 mods: Vec::new(),
                 layer: None,
                 macro_text: Some(inner),
+                ..Default::default()
             },
         )]);
     }
@@ -184,6 +215,7 @@ fn layer_or_mod_action(name: &str) -> KeyAction {
             mods: Vec::new(),
             layer: None,
             macro_text: None,
+            ..Default::default()
         }
     } else {
         KeyAction {
@@ -192,6 +224,7 @@ fn layer_or_mod_action(name: &str) -> KeyAction {
             mods: Vec::new(),
             layer: Some(name.to_string()),
             macro_text: None,
+            ..Default::default()
         }
     }
 }
@@ -204,6 +237,7 @@ fn parse_simple(value: &str) -> Option<KeyAction> {
             mods: Vec::new(),
             layer: None,
             macro_text: None,
+            ..Default::default()
         });
     }
     let parts: Vec<&str> = value.split('-').collect();
@@ -224,6 +258,7 @@ fn parse_simple(value: &str) -> Option<KeyAction> {
         mods,
         layer: None,
         macro_text: None,
+        ..Default::default()
     })
 }
 
@@ -281,6 +316,7 @@ mod tests {
                     mods: Vec::new(),
                     layer: None,
                     macro_text: None,
+                    ..Default::default()
                 },
                 enabled: true,
             },
@@ -297,6 +333,7 @@ mod tests {
                     mods: Vec::new(),
                     layer: None,
                     macro_text: None,
+                    ..Default::default()
                 },
                 enabled: true,
             },

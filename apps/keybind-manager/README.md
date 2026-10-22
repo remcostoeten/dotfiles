@@ -24,6 +24,11 @@ systemd, polkit), not hardcoded per distribution.
 
 See [docs/arch-linux.md](docs/arch-linux.md) and [docs/ubuntu.md](docs/ubuntu.md).
 
+For a fresh machine, `scripts/install.sh` builds and installs the app, the
+privileged helper, and the polkit policy in one step (Arch and Debian/Ubuntu;
+`--uninstall`, `--no-build`, `--dry-run` supported). Run `scripts/doctor.sh`
+to check keyd, the helper, the polkit policy, and a running polkit agent.
+
 ## Quick start
 
 1. Open Keybind Manager (no root needed).

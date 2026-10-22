@@ -83,7 +83,7 @@ test("epic hide and epic hide-menu create epics named hide", async () => {
 test("hide without a target reports usage and creates nothing", async () => {
   await run(["hide"]);
 
-  expect(output).toContain("Usage: todo hide <id|name>");
+  expect(output).toContain("Usage: todo hide <task…>");
   expect(output).toContain("Run 'todo hide --help' for details.");
   expect(process.exitCode).toBe(1);
   expect(await store.loadTasks()).toEqual([]);
@@ -91,10 +91,60 @@ test("hide without a target reports usage and creates nothing", async () => {
 
 test("hide --help documents the command", async () => {
   await run(["hide", "--help"]);
-  expect(output).toContain("todo hide <id>");
-  expect(output).toContain("todo hide <epic or task name>");
+  expect(output).toContain("todo hide <task…>");
+  expect(output).toContain("Task ID, or the exact name");
 
   output = "";
   await run(["--help"]);
   expect(output).toMatch(/hide\s+Hide a task or epic/);
 });
+
+test.each([
+  [["bord"], "Unknown command: bord. Did you mean board?"],
+  [["board", "ad", "3"], "Unknown subcommand: ad. Did you mean add?"],
+  [["board", "use", "projcten"], "Unknown board: projcten. Did you mean projecten?"],
+  [["add", "x", "--laetr"], "Unknown option: --laetr. Did you mean --later?"],
+  [["panel", "--sied"], "Unknown option: --sied. Did you mean --side?"],
+  [["config", "panel-layot", "side"], "Unknown setting: panel-layot. Did you mean panel-layout?"],
+  [["config", "panel-layout", "sid"], "Unknown value for panel-layout: sid. Did you mean side?"],
+])("without a terminal %p fails with a suggestion and changes nothing", async (args, message) => {
+  await store.saveConfig({ ...DEFAULT_CONFIG, showNotificationsOnStartup: false, autocorrect: true });
+  await store.saveTasks([]);
+  await store.saveBoards({ boards: [{ name: "projecten", createdAt: 0, now: [], later: [] }] });
+  const restore = withoutTerminal();
+  try {
+    await run(args);
+  } finally {
+    restore();
+  }
+
+  expect(output).toContain(message);
+  expect(process.exitCode).toBe(1);
+  expect(await store.loadTasks()).toEqual([]);
+  expect((await store.loadConfig()).panelLayout).toBe("auto");
+});
+
+test("implicit add still works and a far-off first word is a task", async () => {
+  await store.saveConfig({ ...DEFAULT_CONFIG, showNotificationsOnStartup: false, autocorrect: true });
+  const restore = withoutTerminal();
+  try {
+    await run(["buy", "milk"]);
+  } finally {
+    restore();
+  }
+  expect((await store.loadTasks()).map((task) => task.description)).toEqual(["buy milk"]);
+  expect(process.exitCode).toBe(0);
+});
+
+function withoutTerminal(): () => void {
+  const stdinTty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+  const stdoutTty = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+  Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+  Object.defineProperty(process.stdout, "isTTY", { value: false, configurable: true });
+  return () => {
+    for (const [stream, descriptor] of [[process.stdin, stdinTty], [process.stdout, stdoutTty]] as const) {
+      if (descriptor === undefined) delete (stream as { isTTY?: boolean }).isTTY;
+      else Object.defineProperty(stream, "isTTY", descriptor);
+    }
+  };
+}

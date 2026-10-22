@@ -52,10 +52,6 @@ deployed = "~/.config/autostart/plasma-sxhkd.desktop"
 repository = "configs/sxhkd/plasma-sxhkd.desktop"
 
 [[deployment]]
-deployed = "~/.config/bash"
-repository = "configs/bash"
-
-[[deployment]]
 deployed = "~/.config/dunst"
 repository = "configs/dunst"
 
@@ -66,6 +62,10 @@ repository = "configs/fastfetch"
 [[deployment]]
 deployed = "~/.config/fish/completions/ai-history.fish"
 repository = "configs/fish/completions/ai-history.fish"
+
+[[deployment]]
+deployed = "~/.config/fish/completions/current-time.fish"
+repository = "configs/fish/completions/current-time.fish"
 
 [[deployment]]
 deployed = "~/.config/fish/completions/kill.fish"
@@ -146,10 +146,6 @@ repository = "configs/ide/all-editors/keybindings.json"
 [[deployment]]
 deployed = "~/.config/zed/settings.json"
 repository = "configs/ide/all-editors/settings.json"
-
-[[deployment]]
-deployed = "~/.config/zsh"
-repository = "configs/zsh"
 
 [[deployment]]
 deployed = "~/.gitconfig"

@@ -3,8 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Task } from "@/src/domain/task";
-import { removePlugin } from "@/src/plugins/remove";
-import { PluginRegistry } from "@/src/plugins/registry";
+import { runTodo } from "./support/run-todo";
 import { getTodoPaths, TodoStore } from "@/src/storage/todo-store";
 
 const temporaryDirectories: string[] = [];
@@ -31,7 +30,7 @@ test("rm removes space-separated IDs, mixed with commas and ranges", async () =>
 test("rm all with extra arguments is rejected", async () => {
   const store = await createStore([createTask(1)]);
 
-  await expect(runCommand("rm", ["all", "1"], store)).rejects.toThrow("Invalid task ID: all");
+  await expect(runCommand("rm", ["all", "1"], store)).rejects.toThrow("Unexpected argument: 1");
   expect((await store.loadTasks()).map((task) => task.id)).toEqual(["1"]);
 });
 
@@ -49,10 +48,10 @@ test("delete all removes pending tasks and preserves completed tasks", async () 
   expect((await store.loadTasks()).map((task) => task.id)).toEqual(["2"]);
 });
 
-test("rmall removes pending tasks and preserves completed tasks", async () => {
+test("rm all removes pending tasks and preserves completed tasks", async () => {
   const store = await createStore([createTask(1), createTask(2, "completed")]);
 
-  expect(await runCommand("rmall", [], store)).toContain("Deleted 1 task(s)");
+  expect(await runCommand("rm", ["all"], store)).toContain("Deleted 1 task(s)");
   expect((await store.loadTasks()).map((task) => task.id)).toEqual(["2"]);
 });
 
@@ -78,13 +77,5 @@ async function createStore(tasks: Task[]): Promise<TodoStore> {
 }
 
 async function runCommand(name: string, args: string[], store: TodoStore): Promise<string> {
-  const registry = new PluginRegistry();
-  registry.use(removePlugin);
-  const command = registry.getCommand(name);
-  if (!command) throw new Error(`Command not registered: ${name}`);
-
-  let output = "";
-  const stdout = { write(chunk: string | Uint8Array) { output += chunk.toString(); return true; } } as Pick<typeof process.stdout, "write">;
-  await command.handler({ args, store, stdout, stderr: stdout, commands: registry.listCommands() });
-  return output;
+  return await runTodo(store, [name, ...args]);
 }

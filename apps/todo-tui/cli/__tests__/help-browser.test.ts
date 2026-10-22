@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { findMatches, findMatchingLines, stepMatch } from "@/src/domain/help-search";
-import { builtInPlugins } from "@/src/plugins/builtins";
-import { PluginRegistry } from "@/src/plugins/registry";
+import { createCommandTree } from "@/src/plugins/builtins";
 import { clipVisible, getVisibleWidth, highlightVisibleRanges, stripAnsi } from "@/src/presentation/ansi-text";
 import { HelpBrowser, type HelpTerminal } from "@/src/presentation/help-browser";
 import { buildHelpDocument, type HelpLine } from "@/src/presentation/help-document";
@@ -63,16 +62,14 @@ describe("help search", () => {
 });
 
 describe("help document", () => {
-  const registry = new PluginRegistry();
-  for (const plugin of builtInPlugins) registry.use(plugin);
-  const document = buildHelpDocument(registry.listCommands(), false);
+  const document = buildHelpDocument(createCommandTree(), false);
   const text = document.map((line) => line.plain).join("\n");
 
   test("holds the overview and every command's own help", () => {
     expect(text).toContain("USAGE");
     expect(text).toContain("EPIC VISIBILITY");
     expect(text).toContain("todo add  ·");
-    expect(text).toContain("todo toggle  ·");
+    expect(text).toContain("todo board add  ·");
     expect(text).toContain("--due <time>");
   });
 

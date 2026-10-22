@@ -2,8 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addPlugin, parseAddArguments } from "@/src/plugins/add";
-import { PluginRegistry } from "@/src/plugins/registry";
+import { parseAddArguments } from "@/src/plugins/add";
+import { runTodo } from "./support/run-todo";
 import { getTodoPaths, TodoStore } from "@/src/storage/todo-store";
 
 const temporaryDirectories: string[] = [];
@@ -16,8 +16,8 @@ test("treats unquoted words before options as one description", () => {
   expect(parseAddArguments(["buy", "oat", "milk", "--priority", "high"])).toMatchObject([{ description: "buy oat milk", priority: "high" }]);
 });
 
-test("accepts an explicit option separator", () => {
-  expect(parseAddArguments(["review", "todo", "architecture", "--", "--priority=low"])).toMatchObject([{ description: "review todo architecture", priority: "low" }]);
+test("a standalone -- ends option parsing so descriptions may start with a dash", () => {
+  expect(parseAddArguments(["--priority=low", "--", "--weird", "flag"])).toMatchObject([{ description: "--weird flag", priority: "low" }]);
 });
 
 test("parses due dates and reminder offsets", () => {
@@ -29,8 +29,7 @@ test("parses due dates and reminder offsets", () => {
   expect(parseAddArguments(["call", "dentist", "--due", "tomorrow", "--reminders", "10,30"], now)).toEqual([{ description: "call dentist", priority: "none", dueDate: tomorrow.getTime(), reminderOffsets: [10, 30] }]);
 });
 
-test("accepts the legacy reminder option aliases", () => {
-  expect(parseAddArguments(["call", "dentist", "--r", "10,30"])).toMatchObject([{ reminderOffsets: [10, 30] }]);
+test("accepts the reminder option alias", () => {
   expect(parseAddArguments(["call", "dentist", "--remind", "10,30"])).toMatchObject([{ reminderOffsets: [10, 30] }]);
 });
 
@@ -52,25 +51,7 @@ test("persists the complete unquoted description", async () => {
   const dataDirectory = await mkdtemp(join(tmpdir(), "dotfiles-todo-"));
   temporaryDirectories.push(dataDirectory);
   const store = new TodoStore(getTodoPaths(dataDirectory));
-  const registry = new PluginRegistry();
-  registry.use(addPlugin);
-  const command = registry.getCommand("add");
-  if (!command) throw new Error("Add command not registered");
-  const output: string[] = [];
-  const stdout = {
-    write(chunk: string | Uint8Array) {
-      output.push(chunk.toString());
-      return true;
-    },
-  } as Pick<typeof process.stdout, "write">;
-
-  await command.handler({
-    args: ["write", "migration", "tests", "--priority", "medium"],
-    store,
-    stdout,
-    stderr: stdout,
-    commands: registry.listCommands(),
-  });
+  const output = [await runTodo(store, ["add", "write", "migration", "tests", "--priority", "medium"])];
 
   expect(await store.loadTasks()).toMatchObject([
     {
@@ -87,14 +68,7 @@ test("creates multiple tasks with the same options", async () => {
   const dataDirectory = await mkdtemp(join(tmpdir(), "dotfiles-todo-"));
   temporaryDirectories.push(dataDirectory);
   const store = new TodoStore(getTodoPaths(dataDirectory));
-  const registry = new PluginRegistry();
-  registry.use(addPlugin);
-  const command = registry.getCommand("add");
-  if (!command) throw new Error("Add command not registered");
-  const output: string[] = [];
-  const stdout = { write(chunk: string | Uint8Array) { output.push(chunk.toString()); return true; } } as Pick<typeof process.stdout, "write">;
-
-  await command.handler({ args: ["first", ",", "second", "--priority", "high"], store, stdout, stderr: stdout, commands: registry.listCommands() });
+  const output = [await runTodo(store, ["add", "first", ",", "second", "--priority", "high"])];
 
   expect(await store.loadTasks()).toMatchObject([
     { id: "1", description: "first", priority: "high" },

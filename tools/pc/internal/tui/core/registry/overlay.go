@@ -73,7 +73,7 @@ func Notify(t ui.Toast) tea.Cmd {
 // The runtime holds it as an interface so that it never imports the shell.
 type Chrome interface {
 	TopBar(rc render.Context, nav navigation.State, routes []navigation.Route) string
-	Sidebar(rc render.Context, nav navigation.State, routes []navigation.Route) string
+	Sidebar(rc render.Context, nav navigation.State, routes []navigation.Route, state SidebarState) string
 	StatusBar(rc render.Context, status Status) string
 	Boot(rc render.Context) string
 	TooSmall(rc render.Context, need kernel.Size) string
@@ -134,4 +134,34 @@ type CycleRouteMsg struct {
 // CycleRoute returns a command that steps through the nav strip.
 func CycleRoute(delta int) tea.Cmd {
 	return func() tea.Msg { return CycleRouteMsg{Delta: delta} }
+}
+
+// SidebarRegion is the focus region the runtime adds for the sidebar, after
+// the active view's own regions. It exists only while no overlay is open.
+const SidebarRegion focus.ID = "shell.sidebar"
+
+// SidebarState is what the sidebar draws besides the routes: which row the
+// cursor is on, and whether the sidebar holds focus.
+type SidebarState struct {
+	Cursor  int
+	Focused bool
+}
+
+// SidebarMoveMsg moves the sidebar cursor without leaving the current screen.
+type SidebarMoveMsg struct {
+	Delta int
+}
+
+// SidebarMove returns a command that moves the sidebar cursor.
+func SidebarMove(delta int) tea.Cmd {
+	return func() tea.Msg { return SidebarMoveMsg{Delta: delta} }
+}
+
+// SidebarOpenMsg switches to the section under the sidebar cursor, which also
+// moves focus into that screen.
+type SidebarOpenMsg struct{}
+
+// SidebarOpen returns a command that opens the section under the cursor.
+func SidebarOpen() tea.Cmd {
+	return func() tea.Msg { return SidebarOpenMsg{} }
 }

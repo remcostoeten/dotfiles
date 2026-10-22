@@ -1,29 +1,45 @@
-// Package audio reads and controls PulseAudio/PipeWire sinks, paired bluetooth
-// devices and MPRIS players.
+// Package audio reads and controls PulseAudio/PipeWire sinks, application
+// streams, paired bluetooth devices and MPRIS players.
 package audio
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"pc/internal/pc/sh"
 )
 
 const (
-	VolumeStep    = 5
-	maxBluetooth  = 8
-	playerFormat  = "{{status}}\t{{playerName}}\t{{artist}}\t{{title}}"
-	defaultTarget = "@DEFAULT_SINK@"
+	VolumeStep   = 5
+	maxBluetooth = 8
+	playerFormat = "{{status}}\t{{playerName}}\t{{artist}}\t{{title}}"
+	testSound    = "/usr/share/sounds/alsa/Front_Center.wav"
+	fullScale    = 65536
 )
 
 // Sink is an output device.
 type Sink struct {
+	Index       int
 	Name        string
 	Description string
 	Default     bool
 	Muted       bool
 	Volume      int
+}
+
+// Stream is one application's playback and the output it is routed to. Sink is
+// empty when the route cannot be resolved to a known output.
+type Stream struct {
+	Index  int
+	App    string
+	Media  string
+	Sink   string
+	Volume int
+	Muted  bool
+	Corked bool
 }
 
 // Bluetooth is a paired device.
@@ -49,6 +65,7 @@ func (p Player) Playing() bool {
 // Snapshot is everything the audio screen shows.
 type Snapshot struct {
 	Sinks     []Sink
+	Streams   []Stream
 	Bluetooth []Bluetooth
 	Players   []Player
 }
@@ -66,18 +83,23 @@ const (
 type Source interface {
 	Read() Snapshot
 	SetDefault(sink string) error
-	ChangeVolume(delta int) error
-	ToggleMute() error
+	ChangeVolume(sink string, delta int) error
+	ToggleMute(sink string) error
+	ChangeStreamVolume(stream, delta int) error
+	ToggleStreamMute(stream int) error
+	MoveStream(stream int, sink string) error
+	Test(sink string) error
 	SetConnected(mac string, connected bool) error
 	Media(action MediaAction) error
 }
 
-// Host is the Source backed by pactl, bluetoothctl and playerctl.
+// Host is the Source backed by pactl, paplay, bluetoothctl and playerctl.
 type Host struct{}
 
 // Read samples every audio source. A missing tool leaves its section empty.
 func (Host) Read() Snapshot {
-	return Snapshot{Sinks: readSinks(), Bluetooth: readBluetooth(), Players: readPlayers()}
+	sinks := readSinks()
+	return Snapshot{Sinks: sinks, Streams: readStreams(sinks), Bluetooth: readBluetooth(), Players: readPlayers()}
 }
 
 // SetDefault makes a sink the default output.
@@ -85,14 +107,34 @@ func (Host) SetDefault(sink string) error {
 	return sh.Exec("pactl", "set-default-sink", sink)
 }
 
-// ChangeVolume nudges the default sink by delta percent.
-func (Host) ChangeVolume(delta int) error {
-	return sh.Exec("pactl", "set-sink-volume", defaultTarget, fmt.Sprintf("%+d%%", delta))
+// ChangeVolume nudges a sink by delta percent.
+func (Host) ChangeVolume(sink string, delta int) error {
+	return sh.Exec("pactl", "set-sink-volume", sink, fmt.Sprintf("%+d%%", delta))
 }
 
-// ToggleMute mutes or unmutes the default sink.
-func (Host) ToggleMute() error {
-	return sh.Exec("pactl", "set-sink-mute", defaultTarget, "toggle")
+// ToggleMute mutes or unmutes a sink.
+func (Host) ToggleMute(sink string) error {
+	return sh.Exec("pactl", "set-sink-mute", sink, "toggle")
+}
+
+// ChangeStreamVolume nudges one application's volume by delta percent.
+func (Host) ChangeStreamVolume(stream, delta int) error {
+	return sh.Exec("pactl", "set-sink-input-volume", strconv.Itoa(stream), fmt.Sprintf("%+d%%", delta))
+}
+
+// ToggleStreamMute mutes or unmutes one application.
+func (Host) ToggleStreamMute(stream int) error {
+	return sh.Exec("pactl", "set-sink-input-mute", strconv.Itoa(stream), "toggle")
+}
+
+// MoveStream routes one application to a sink.
+func (Host) MoveStream(stream int, sink string) error {
+	return sh.Exec("pactl", "move-sink-input", strconv.Itoa(stream), sink)
+}
+
+// Test plays a short sample on a sink.
+func (Host) Test(sink string) error {
+	return sh.Exec("paplay", "--device="+sink, testSound)
 }
 
 // SetConnected connects or disconnects a paired device.
@@ -116,6 +158,14 @@ func readSinks() []Sink {
 	}
 	def, _ := sh.Run("pactl", "get-default-sink")
 	return ParseSinks(out, strings.TrimSpace(def))
+}
+
+func readStreams(sinks []Sink) []Stream {
+	out, err := sh.Run("pactl", "-f", "json", "list", "sink-inputs")
+	if err != nil {
+		return nil
+	}
+	return ParseStreams(out, sinks)
 }
 
 func readBluetooth() []Bluetooth {
@@ -144,9 +194,10 @@ func ParseSinks(out, def string) []Sink {
 	var sinks []Sink
 	blocks := strings.Split(out, "Sink #")
 	for _, block := range blocks[min(1, len(blocks)):] {
-		var s Sink
+		header, body, _ := strings.Cut(block, "\n")
+		s := Sink{Index: sh.Atoi(header)}
 		seenVolume := false
-		for _, line := range strings.Split(block, "\n") {
+		for _, line := range strings.Split(body, "\n") {
 			trimmed := strings.TrimSpace(line)
 			switch {
 			case strings.HasPrefix(trimmed, "Name: "):
@@ -168,6 +219,81 @@ func ParseSinks(out, def string) []Sink {
 		}
 	}
 	return sinks
+}
+
+type rawStream struct {
+	Index      int                      `json:"index"`
+	Sink       int                      `json:"sink"`
+	Mute       bool                     `json:"mute"`
+	Corked     bool                     `json:"corked"`
+	Volume     map[string]channelVolume `json:"volume"`
+	Properties map[string]any           `json:"properties"`
+}
+
+type channelVolume struct {
+	Value int `json:"value"`
+}
+
+// ParseStreams reads `pactl -f json list sink-inputs` output. Internal
+// loopback streams are left out, and a stream pinned to an output by name
+// keeps that route when pactl reports it as unlinked.
+func ParseStreams(out string, sinks []Sink) []Stream {
+	var raw []rawStream
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		return nil
+	}
+	names := make(map[int]string, len(sinks))
+	known := make(map[string]bool, len(sinks))
+	for _, s := range sinks {
+		names[s.Index] = s.Name
+		known[s.Name] = true
+	}
+
+	var streams []Stream
+	for _, r := range raw {
+		if property(r.Properties, "node.virtual") == "true" {
+			continue
+		}
+		sink := names[r.Sink]
+		if pinned := property(r.Properties, "target.object"); sink == "" && known[pinned] {
+			sink = pinned
+		}
+		streams = append(streams, Stream{
+			Index:  r.Index,
+			App:    firstOf(property(r.Properties, "application.name"), property(r.Properties, "node.name"), property(r.Properties, "media.name"), "unknown"),
+			Media:  property(r.Properties, "media.name"),
+			Sink:   sink,
+			Volume: percent(r.Volume),
+			Muted:  r.Mute,
+			Corked: r.Corked,
+		})
+	}
+	return streams
+}
+
+func property(props map[string]any, key string) string {
+	value, _ := props[key].(string)
+	return value
+}
+
+func firstOf(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func percent(channels map[string]channelVolume) int {
+	if len(channels) == 0 {
+		return 0
+	}
+	sum := 0
+	for _, c := range channels {
+		sum += c.Value
+	}
+	return (sum*100/len(channels) + fullScale/2) / fullScale
 }
 
 // ParseBluetooth reads `bluetoothctl devices` output.

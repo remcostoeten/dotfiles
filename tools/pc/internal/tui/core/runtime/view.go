@@ -74,7 +74,10 @@ func (m Model) chromeBlocks(rc render.Context) []render.Block {
 	}
 	if !m.frame.Sidebar.IsEmpty() {
 		blocks = append(blocks, render.At(m.frame.Sidebar,
-			m.chrome.Sidebar(rc.For(m.frame.Sidebar), m.nav, routes)))
+			m.chrome.Sidebar(rc.For(m.frame.Sidebar), m.nav, routes, registry.SidebarState{
+				Cursor:  m.ui.Sidebar,
+				Focused: m.focus.Focused(registry.SidebarRegion),
+			})))
 	}
 	return blocks
 }

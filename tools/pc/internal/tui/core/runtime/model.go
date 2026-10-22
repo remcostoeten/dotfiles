@@ -46,6 +46,7 @@ type uiState struct {
 	Overlays   []registry.Overlay
 	Toasts     []toast
 	Breakpoint layout.Breakpoint
+	Sidebar    int
 	nextToast  int
 }
 
@@ -119,6 +120,8 @@ func New(o Options) (Model, error) {
 		options: o.Layout,
 	}
 
+	m.ui.Sidebar = m.sidebarIndex()
+
 	if root.IsZero() {
 		return m, nil
 	}
@@ -150,6 +153,7 @@ func (m Model) Context() registry.Context {
 		Log:      m.log,
 		Route:    m.nav.Current(),
 		Depth:    m.nav.Depth(),
+		Overlay:  m.Overlay(),
 		Focus:    m.focus,
 		Size:     m.core.Size,
 		Dispatch: dispatch,

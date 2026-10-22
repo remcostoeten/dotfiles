@@ -14,82 +14,140 @@ import {
   formatSound,
   getUrgencyColor,
 } from "../presentation/due-format";
-import { formatDueHelp, type DueHelpTopic } from "../presentation/due-help";
 import { runScheduler } from "../scheduler/daemon";
 import { installService, isServiceActive, SERVICE_NAME } from "../scheduler/service";
 import type { TodoStore } from "../storage/todo-store";
-import type { CommandContext, TodoPlugin } from "./types";
+import type { ParsedInput } from "../command-spec/parsed-input";
+import type { CommandContext, CommandSpec } from "../command-spec/types";
 
 const { reset, dim, bold, label } = DUE_COLORS;
-const HELP_TOKENS = new Set(["help", "-h", "--help"]);
 const CLEAR_WORDS = new Set(["clear", "remove"]);
-const DUE_USAGE = "Usage: todo due <todo> <when> | todo due <todo> [clear|reset] | todo due list";
 
-export const duePlugin: TodoPlugin = {
+export const dueCommand: CommandSpec = {
   name: "due",
-  description: "Set, inspect, and clear due dates with reminders.",
-  register(app) {
-    app.command("due", "Set, inspect, and clear due dates with reminders.", dueCommand, {
-      group: "Change",
-      positional: "any",
-      ownHelp: true,
-      usage: [
-        "todo due <todo> <when> [at <time>] [options]",
-        "todo due <todo>",
-        "todo due <todo> clear",
-        "todo due <todo> reset",
-        "todo due list [overdue|today|week]",
+  summary: "Set, inspect, and clear due dates with reminders.",
+  group: "Change",
+  args: [
+    { name: "todo", kind: "task-selector", description: "Task ID, #ID, or the exact name of a pending task" },
+    { name: "when", kind: "due-time", variadic: true, optional: true, description: "When it is due, or clear / remove / reset; omit to inspect" },
+  ],
+  flags: [
+    { name: "sound", value: "path", description: "default, none, or a sound file stored as an absolute path" },
+    { name: "run", value: "shell-command", description: "Command to execute once when the reminder fires" },
+    { name: "cwd", value: "path", description: "Working directory for --run; pwd captures the current one" },
+  ],
+  details: [
+    "A due date notifies once, natively, even after the shell that set it has exited.",
+    "`todo due <todo>` shows the due date and reminder state; `clear` (or `remove`) drops it; `reset` rearms a fired reminder without changing it.",
+    "Omitting a time keeps the current local clock time. Past dates are valid; they store, render overdue, and notify once.",
+    "`m` always means minutes. There is no month unit.",
+  ],
+  sections: [
+    {
+      heading: "Relative",
+      rows: [
+        { left: "30s", right: "30 seconds" },
+        { left: "10m", right: "10 minutes" },
+        { left: "1h", right: "1 hour" },
+        { left: "3,5h", right: "3.5 hours (3.5h works too)" },
+        { left: "2d", right: "2 calendar days" },
       ],
+    },
+    {
+      heading: "Calendar",
+      rows: [
+        { left: "today", right: "today at the current clock time" },
+        { left: "tomorrow", right: "tomorrow at the current clock time" },
+        { left: "yesterday", right: "already overdue, on purpose" },
+        { left: "next week", right: "same weekday, seven days on" },
+        { left: "next monday", right: "the next Monday strictly after today" },
+        { left: "next tue", right: "abbreviations work for every weekday" },
+      ],
+    },
+    {
+      heading: "Dates",
+      rows: [
+        { left: "1206", right: "12 June, current year" },
+        { left: "12-06", right: "day first, the Dutch way" },
+        { left: "12 jul", right: "English or Dutch month names" },
+        { left: "12 juli", right: "same date as 12 jul" },
+        { left: "12-06-2027", right: "two-digit years read as 20YY" },
+      ],
+    },
+    {
+      heading: "Times",
+      rows: [
+        { left: "tomorrow at 09:00", right: "HH:mm or HH:mm:ss, 24 hour" },
+        { left: "next monday at 14:30" },
+        { left: "12-06 at 18:00" },
+      ],
+    },
+  ],
+  examples: [
+    { command: "todo due 27 tomorrow" },
+    { command: "todo due 27 3,5h" },
+    { command: "todo due 27 next monday at 09:00" },
+    { command: "todo due 27 10m --run \"bun run build\" --cwd pwd" },
+    { command: "todo due 27 clear" },
+    { command: "todo due list overdue" },
+  ],
+  subcommands: [
+    {
+      name: "list",
+      summary: "Every pending todo that has a due date, most urgent first.",
+      args: [{ name: "filter", kind: { oneOf: ["overdue", "today", "week"] }, optional: true, description: "overdue, today (plus overdue) or week (plus overdue)" }],
+      details: ["Overdue first, most overdue at the top, then upcoming soonest first. Completed todos are left out."],
+      examples: [{ command: "todo due list" }, { command: "todo due list overdue" }],
+      run: (input, context) => listDue(context, (input.optionalArg("filter") ?? "all") as DueListFilter),
+    },
+    {
+      name: "daemon",
+      summary: "The background scheduler that delivers reminders.",
+      defaultSubcommand: "run",
       details: [
-        "Relative (10m, 1h, 3,5h, 2d), calendar (tomorrow, next monday), and dates (12-06, 12 juli).",
-        "A due date notifies once, natively, even after the shell that set it has exited.",
-        "Run `todo due --help` for the full date syntax.",
+        "One scheduler handles every reminder; there is no process per todo.",
+        "Any `todo` command also delivers overdue reminders, so the daemon is a delivery guarantee rather than a requirement.",
       ],
-      options: [
-        { flag: "--sound <default|none|file>", description: "Notification sound; a custom file is stored as an absolute path" },
-        { flag: "--run <command>", description: "Command to execute once when the reminder fires" },
-        { flag: "--cwd <path|pwd>", description: "Working directory for --run; pwd captures the current one" },
+      subcommands: [
+        {
+          name: "run",
+          summary: "Run the scheduler in the foreground; this is what the service starts.",
+          details: ["Useful for debugging reminders. Stop it with Ctrl+C."],
+          examples: [{ command: "todo due daemon run" }],
+          async run(_input, { store }) {
+            await runScheduler(store);
+          },
+        },
+        {
+          name: "install",
+          summary: "Write and enable a systemd user service so reminders survive a reboot.",
+          examples: [{ command: "todo due daemon install" }, { command: "todo due daemon status", note: "check it is running" }],
+          async run(_input, { stdout }) {
+            const { path, enabled } = await installService();
+            stdout.write(`${DUE_COLORS.upcoming}Wrote ${path}${reset}\n`);
+            stdout.write(enabled ? `${DUE_COLORS.upcoming}Enabled and started ${SERVICE_NAME}${reset}\n` : `${DUE_COLORS.overdue}Could not enable ${SERVICE_NAME}; start it with 'systemctl --user enable --now ${SERVICE_NAME}'${reset}\n`);
+          },
+        },
+        {
+          name: "status",
+          summary: "Report whether the service is running.",
+          examples: [{ command: "todo due daemon status" }],
+          async run(_input, { stdout }) {
+            const active = await isServiceActive();
+            stdout.write(active ? `${DUE_COLORS.upcoming}${SERVICE_NAME} is running${reset}\n` : `${dim}${SERVICE_NAME} is not running. Install it with 'todo due daemon install'.${reset}\n`);
+          },
+        },
       ],
-      examples: [
-        { command: "todo due 27 tomorrow" },
-        { command: "todo due 27 3,5h" },
-        { command: "todo due 27 \"next monday\" at 09:00" },
-        { command: "todo due 27 10m --run \"bun run build\" --cwd pwd" },
-        { command: "todo due list overdue" },
-      ],
-    });
-  },
+    },
+  ],
+  run: runDue,
 };
 
-async function dueCommand(context: CommandContext): Promise<void> {
-  const { args, stdout } = context;
-
-  const helpIndex = args.findIndex((argument) => HELP_TOKENS.has(argument));
-  if (helpIndex !== -1) {
-    stdout.write(formatDueHelp(readHelpTopic(args.slice(0, helpIndex))));
-    return;
-  }
-
-  const [first, ...rest] = args;
-  if (first === undefined) throw new UserInputError(DUE_USAGE);
-  if (first === "list") return await listDue(context, rest);
-  if (first === "daemon") return await daemonCommand(context, rest);
-  return await targetedDueCommand(context, first, rest);
-}
-
-/** Picks the most specific help page for the arguments that came before the help token. */
-function readHelpTopic(prefix: string[]): DueHelpTopic {
-  if (prefix.length === 0) return "due";
-  if (prefix[0] === "list") return "list";
-  if (prefix[0] === "daemon") return "daemon";
-  if (prefix[1] !== undefined && CLEAR_WORDS.has(prefix[1])) return "clear";
-  if (prefix[1] === "reset") return "reset";
-  if (prefix.length === 1) return "inspect";
-  return "due";
-}
-
-async function targetedDueCommand({ store, stdout }: CommandContext, selector: string, rest: string[]): Promise<void> {
-  const verb = rest[0];
+async function runDue(input: ParsedInput, context: CommandContext): Promise<void> {
+  const { store, stdout } = context;
+  const selector = input.arg("todo");
+  const when = input.args("when");
+  const verb = when[0];
 
   if (verb === undefined) {
     const task = findTaskByIdOrDescription(await store.loadTasks(), selector);
@@ -97,18 +155,15 @@ async function targetedDueCommand({ store, stdout }: CommandContext, selector: s
     return;
   }
 
-  if (CLEAR_WORDS.has(verb)) {
-    if (rest.length !== 1) throw new UserInputError(`Usage: todo due ${selector} clear`);
+  if (CLEAR_WORDS.has(verb) && when.length === 1) {
     return await mutate(store, selector, (tasks, task) => clearDue(tasks, task, stdout));
   }
 
-  if (verb === "reset") {
-    if (rest.length !== 1) throw new UserInputError(`Usage: todo due ${selector} reset`);
+  if (verb === "reset" && when.length === 1) {
     return await mutate(store, selector, (tasks, task) => resetDue(tasks, task, stdout));
   }
 
-  // Options are validated before the lock is taken, so bad input fails fast holding nothing.
-  const options = parseDueOptions(rest);
+  const options = readDueOptions(input);
   return await mutate(store, selector, (tasks, task) => setDue(tasks, task, options, stdout));
 }
 
@@ -184,52 +239,14 @@ interface DueOptions {
   cwd: string | undefined;
 }
 
-const DUE_FLAGS = ["--sound", "--run", "--cwd"];
-
-/** Splits the when-expression from the flags. Everything before the first `--flag` is the date. */
-function parseDueOptions(rest: string[]): DueOptions {
-  const flagStart = rest.findIndex((argument) => argument.startsWith("--"));
-  const whenParts = flagStart === -1 ? rest : rest.slice(0, flagStart);
-  const when = whenParts.join(" ").trim();
-  if (when.length === 0) throw new UserInputError(DUE_USAGE);
-
-  let sound: SoundChoice = { soundMode: "default" };
-  let run: string | undefined;
-  let cwd: string | undefined;
-  let rawCwd: string | undefined;
-
-  const flagArguments = flagStart === -1 ? [] : rest.slice(flagStart);
-  for (let index = 0; index < flagArguments.length; index += 1) {
-    const argument = flagArguments[index];
-    if (argument === undefined) continue;
-    const equalsIndex = argument.indexOf("=");
-    const name = equalsIndex === -1 ? argument : argument.slice(0, equalsIndex);
-
-    let value = equalsIndex === -1 ? "" : argument.slice(equalsIndex + 1);
-    if (equalsIndex === -1) {
-      const valueParts: string[] = [];
-      while (index + 1 < flagArguments.length) {
-        const next = flagArguments[index + 1];
-        if (next === undefined || next.startsWith("--")) break;
-        valueParts.push(next);
-        index += 1;
-      }
-      value = valueParts.join(" ");
-    }
-    if (value.length === 0) throw new UserInputError(`Missing value for ${name}`);
-
-    if (name === "--sound") sound = resolveSoundChoice(value);
-    else if (name === "--run") run = value;
-    else if (name === "--cwd") rawCwd = value;
-    else throw new UserInputError(`Unknown option: ${name}\nSupported: ${DUE_FLAGS.join(", ")}`);
-  }
-
-  if (rawCwd !== undefined) {
-    if (run === undefined) throw new UserInputError("--cwd only applies to --run; add a --run command or drop --cwd.");
-    cwd = resolveCommandCwd(rawCwd);
-  }
-
-  return { when, sound, run, cwd };
+function readDueOptions(input: ParsedInput): DueOptions {
+  const when = input.args("when").join(" ").trim();
+  const soundValue = input.value("sound");
+  const sound: SoundChoice = soundValue === undefined ? { soundMode: "default" } : resolveSoundChoice(soundValue);
+  const run = input.value("run");
+  const rawCwd = input.value("cwd");
+  if (rawCwd !== undefined && run === undefined) throw new UserInputError("--cwd only applies to --run; add a --run command or drop --cwd.");
+  return { when, sound, run, cwd: rawCwd === undefined ? undefined : resolveCommandCwd(rawCwd) };
 }
 
 function formatInspect(task: Task, now: number): string {
@@ -271,8 +288,7 @@ function row(name: string, value: string): string {
 
 type DueListFilter = "all" | "overdue" | "today" | "week";
 
-async function listDue({ store, stdout }: CommandContext, rest: string[]): Promise<void> {
-  const filter = readListFilter(rest);
+async function listDue({ store, stdout }: CommandContext, filter: DueListFilter): Promise<void> {
   const now = Date.now();
   const tasks = (await store.loadTasks()).filter((task) => task.status === "pending" && task.dueDate !== undefined);
   const matching = tasks.filter((task) => matchesFilter(task.dueDate as number, filter, now)).sort(compareByUrgency);
@@ -292,14 +308,6 @@ async function listDue({ store, stdout }: CommandContext, rest: string[]): Promi
   }
 }
 
-function readListFilter(rest: string[]): DueListFilter {
-  const [filter, ...extra] = rest;
-  if (filter === undefined) return "all";
-  if (extra.length > 0) throw new UserInputError("Usage: todo due list [overdue|today|week]");
-  if (filter === "overdue" || filter === "today" || filter === "week") return filter;
-  throw new UserInputError(`Unknown filter: ${filter}\nUsage: todo due list [overdue|today|week]`);
-}
-
 function matchesFilter(dueAt: number, filter: DueListFilter, now: number): boolean {
   if (filter === "all") return true;
   if (filter === "overdue") return dueAt < now;
@@ -316,29 +324,4 @@ function compareByUrgency(left: Task, right: Task): number {
 
 function truncate(value: string, maximumLength: number): string {
   return value.length > maximumLength ? `${value.slice(0, maximumLength - 1)}…` : value;
-}
-
-async function daemonCommand({ store, stdout }: CommandContext, rest: string[]): Promise<void> {
-  const action = rest[0] ?? "run";
-  if (rest.length > 1) throw new UserInputError("Usage: todo due daemon [run|install|status]");
-
-  if (action === "run") {
-    await runScheduler(store);
-    return;
-  }
-
-  if (action === "install") {
-    const { path, enabled } = await installService();
-    stdout.write(`${DUE_COLORS.upcoming}Wrote ${path}${reset}\n`);
-    stdout.write(enabled ? `${DUE_COLORS.upcoming}Enabled and started ${SERVICE_NAME}${reset}\n` : `${DUE_COLORS.overdue}Could not enable ${SERVICE_NAME}; start it with 'systemctl --user enable --now ${SERVICE_NAME}'${reset}\n`);
-    return;
-  }
-
-  if (action === "status") {
-    const active = await isServiceActive();
-    stdout.write(active ? `${DUE_COLORS.upcoming}${SERVICE_NAME} is running${reset}\n` : `${dim}${SERVICE_NAME} is not running. Install it with 'todo due daemon install'.${reset}\n`);
-    return;
-  }
-
-  throw new UserInputError("Usage: todo due daemon [run|install|status]");
 }

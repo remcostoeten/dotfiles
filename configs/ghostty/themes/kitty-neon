@@ -1,0 +1,25 @@
+# Kitty Neon - ported from kitty themes/neon.conf + lunar-mono.conf
+palette = 0=#121212
+palette = 1=#fa2573
+palette = 2=#97e123
+palette = 3=#dfd460
+palette = 4=#0f7fcf
+palette = 5=#8700ff
+palette = 6=#42a7cf
+palette = 7=#bbbbbb
+palette = 8=#545454
+palette = 9=#f5669c
+palette = 10=#b0e05e
+palette = 11=#fef26c
+palette = 12=#00afff
+palette = 13=#af87ff
+palette = 14=#50cdfe
+palette = 15=#ffffff
+
+background = #121212
+foreground = #bbbbbb
+cursor-color = #bbbbbb
+cursor-text = #19191b
+selection-background = #b4d5ff
+selection-foreground = #121212
+split-divider-color = #2a2a2c

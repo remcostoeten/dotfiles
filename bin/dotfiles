@@ -1,1 +1,1546 @@
-../scripts/dotfiles.ts
+#!/usr/bin/env bun
+import { readdirSync, statSync, lstatSync, existsSync, readFileSync, writeFileSync, readlinkSync } from 'fs';
+import { join, basename, resolve, dirname, extname } from 'path';
+import { spawnSync, spawn } from 'child_process';
+import readline from 'readline';
+type TItemType = 'bin' | 'script' | 'alias' | 'function' | 'docker' | 'wezterm' | 'system' | 'dev';
+
+type TItem = {
+    id: string;
+    type: TItemType;
+    category: string;
+    name: string;
+    path?: string;
+    aliases?: string[];
+    target?: string;
+    doc?: string;
+    description?: string;
+    usageCount?: number;
+};
+
+type TSymlinkEntry = {
+    name: string;
+    source: string;
+    target: string;
+};
+
+type TConfig = {
+    layout: 'single' | 'double' | 'categories';
+    banner: 'classic' | 'modern' | 'none';
+    includeAliases: boolean;
+    includeFunctions: boolean;
+    groupAliases: boolean;
+    preferBinOverScripts: boolean;
+    fzfHeight: string;
+    showDescriptions: boolean;
+    enableCategories: boolean;
+    recentItems: string[];
+    excludeCategories: string[];
+};
+
+type TExecResult = {
+    code: number;
+    stdout: string;
+    stderr: string;
+};
+
+type TRow = {
+    kind: 'alias' | 'function';
+    category: string;
+    name: string;
+    doc?: string;
+    prog?: string;
+};
+
+const CATEGORIES = {
+    dotfiles: { name: 'Dotfiles', icon: '🧰', color: '\x1b[38;5;111m' },
+    navigation: { name: 'Navigation', icon: '🧭', color: '\x1b[38;5;117m' },
+    'shell-utils': { name: 'Shell Utils', icon: '🖥️', color: '\x1b[38;5;208m' },
+    dev: { name: 'Development', icon: '💻', color: '\x1b[38;5;219m' },      // Pink
+    system: { name: 'System', icon: '⚙️', color: '\x1b[38;5;208m' },      // Peach
+    docker: { name: 'Docker', icon: '🐳', color: '\x1b[38;5;116m' },       // Teal
+    wezterm: { name: 'Wezterm', icon: '🖥️', color: '\x1b[38;5;147m' },      // Mauve
+    utility: { name: 'Utilities', icon: '🔧', color: '\x1b[38;5;183m' },    // Lavender
+    git: { name: 'Git', icon: '📦', color: '\x1b[38;5;166m' },            // Green
+    fzf: { name: 'FZF', icon: '🔎', color: '\x1b[38;5;117m' },
+    drizzle: { name: 'Drizzle', icon: '💧', color: '\x1b[38;5;221m' },
+    apps: { name: 'Apps', icon: '📱', color: '\x1b[38;5;81m' },
+    gnome: { name: 'GNOME', icon: '🖥️', color: '\x1b[38;5;252m' },
+    database: { name: 'Database', icon: '🗄️', color: '\x1b[38;5;203m' },    // Red
+    config: { name: 'Configuration', icon: '⚡', color: '\x1b[38;5;150m' },  // Sky
+    wallpaper: { name: 'Wallpaper', icon: '🖼️', color: '\x1b[38;5;225m' }   // Pastel pink
+};
+
+function loadConfig(dotfilesRoot: string): TConfig {
+    const cfgPath = join(dotfilesRoot, '.dotfiles-cli.json');
+    const defaults: TConfig = {
+        layout: 'categories',
+        banner: 'modern',
+        includeAliases: true,
+        includeFunctions: true,
+        groupAliases: true,
+        preferBinOverScripts: true,
+        fzfHeight: '90%',
+        showDescriptions: true,
+        enableCategories: true,
+        recentItems: [],
+        excludeCategories: ['apps']
+    };
+    if (!existsSync(cfgPath)) return defaults;
+    try {
+        const raw = readFileSync(cfgPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        return { ...defaults, ...parsed } as TConfig;
+    } catch {
+        return defaults;
+    }
+}
+
+function saveConfig(dotfilesRoot: string, cfg: TConfig) {
+    const cfgPath = join(dotfilesRoot, '.dotfiles-cli.json');
+    writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+}
+
+function managedSymlinks(dotfilesRoot: string): TSymlinkEntry[] {
+    const home = process.env.HOME!;
+    const configRoot = join(home, '.config');
+    const entries: TSymlinkEntry[] = [
+        { name: 'nvim', source: join(dotfilesRoot, 'configs/nvim'), target: join(configRoot, 'nvim') },
+        { name: 'starship', source: join(dotfilesRoot, 'configs/starship/starship.toml'), target: join(configRoot, 'starship.toml') },
+        { name: 'fastfetch', source: join(dotfilesRoot, 'configs/fastfetch'), target: join(configRoot, 'fastfetch') },
+        { name: 'ghostty', source: join(dotfilesRoot, 'configs/ghostty'), target: join(configRoot, 'ghostty') },
+        { name: 'fuzzel', source: join(dotfilesRoot, 'configs/fuzzel'), target: join(configRoot, 'fuzzel') },
+        { name: 'fish config', source: join(dotfilesRoot, 'configs/fish/config.fish'), target: join(home, '.config/fish/config.fish') },
+        { name: 'fish conf.d', source: join(dotfilesRoot, 'configs/fish/conf.d'), target: join(home, '.config/fish/conf.d') },
+        { name: 'zed', source: join(dotfilesRoot, 'configs/zed'), target: join(configRoot, 'zed') },
+        { name: 'cursor', source: join(dotfilesRoot, 'configs/cursor'), target: join(configRoot, 'cursor') },
+        { name: 'hypr', source: join(dotfilesRoot, 'configs/hypr'), target: join(configRoot, 'hypr') },
+        { name: 'waybar', source: join(dotfilesRoot, 'configs/waybar'), target: join(configRoot, 'waybar') },
+        { name: 'dunst', source: join(dotfilesRoot, 'configs/dunst'), target: join(configRoot, 'dunst') },
+        { name: 'swayosd', source: join(dotfilesRoot, 'configs/swayosd'), target: join(configRoot, 'swayosd') },
+        { name: 'git ignore', source: join(dotfilesRoot, 'configs/git/ignore'), target: join(configRoot, 'git/ignore') },
+        { name: '.gitconfig', source: join(dotfilesRoot, 'configs/git/.gitconfig'), target: join(home, '.gitconfig') },
+        { name: '.vimrc', source: join(dotfilesRoot, 'configs/.vimrc'), target: join(home, '.vimrc') }
+    ];
+
+    return entries.filter(entry => existsSync(entry.source));
+}
+
+function reportSymlinks(dotfilesRoot: string) {
+    const c = colors();
+    const links = managedSymlinks(dotfilesRoot);
+    let present = 0;
+    let missing = 0;
+    let broken = 0;
+
+    console.log('');
+    console.log(`${c.bright}${c.cyan}Managed Symlinks:${c.reset} ${c.dim}(${links.length} configured)${c.reset}`);
+    console.log('');
+
+    for (const link of links) {
+        if (!existsSync(link.target)) {
+            missing++;
+            console.log(`  ${c.yellow}!${c.reset} ${link.name} ${c.dim}->${c.reset} ${link.target}`);
+            console.log(`    ${c.dim}source${c.reset} ${link.source}`);
+            continue;
+        }
+
+        const stats = lstatSync(link.target);
+        if (!stats.isSymbolicLink()) {
+            broken++;
+            console.log(`  ${c.red}x${c.reset} ${link.name} ${c.dim}->${c.reset} ${link.target}`);
+            console.log(`    ${c.dim}source${c.reset} ${link.source}`);
+            console.log(`    ${c.dim}status${c.reset} target exists but is not a symlink`);
+            continue;
+        }
+
+        const actual = readlinkSync(link.target);
+        const resolvedActual = resolve(dirname(link.target), actual);
+        const expected = resolve(link.source);
+
+        if (resolvedActual === expected) {
+            present++;
+            console.log(`  ${c.green}✓${c.reset} ${link.name} ${c.dim}->${c.reset} ${link.target}`);
+        } else {
+            broken++;
+            console.log(`  ${c.red}x${c.reset} ${link.name} ${c.dim}->${c.reset} ${link.target}`);
+            console.log(`    ${c.dim}source${c.reset} ${link.source}`);
+            console.log(`    ${c.dim}points to${c.reset} ${actual}`);
+        }
+    }
+
+    console.log('');
+    console.log(`${c.dim}present${c.reset} ${present}  ${c.dim}missing${c.reset} ${missing}  ${c.dim}broken${c.reset} ${broken}`);
+    console.log('');
+}
+
+function clearScreen() {
+    process.stdout.write('\x1B[2J\x1B[0f');
+}
+
+function bannerModern(): string {
+    const c = colors();
+    return [
+    `${c.lavender}╭────────────────────────────────────────────╮${c.reset}`,
+    `${c.lavender}│${c.reset}  ${c.bright}${c.pink}⚡ DOTFILES${c.reset} ${c.dim}v2.0${c.reset}                  ${c.lavender}│${c.reset}`,
+    `${c.lavender}╰────────────────────────────────────────────╯${c.reset}`
+    ].join('\n');
+}
+
+function bannerClassic(): string {
+    return [
+        '    ██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗███████╗',
+        '    ██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝██╔════╝',
+        '    ██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗  ███████╗',
+        '    ██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝  ╚════██║',
+        '    ██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗███████║',
+        '    ╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝╚══════╝'
+    ].join('\n');
+}
+
+function showBanner(cfg: TConfig) {
+    if (cfg.banner === 'none') return;
+    console.log(cfg.banner === 'classic' ? bannerClassic() : bannerModern());
+    console.log('');
+}
+
+function isExecutable(mode: number): boolean {
+    return (mode & 0o111) !== 0;
+}
+
+function isDocFile(name: string): boolean {
+    return name.endsWith('.md') || name.endsWith('.txt') || name.endsWith('.json') ||
+           name.endsWith('.yml') || name.endsWith('.yaml') || name.includes('README') ||
+           name.includes('readme') || name === 'package-lock.json' || name === '.gitignore';
+}
+
+function isSourceFile(name: string): boolean {
+    return name.endsWith('.ts') || name.endsWith('.js') || name.endsWith('.d.ts') ||
+           name.endsWith('.mjs') || name.endsWith('.py') || name.endsWith('.html') ||
+           name.endsWith('.css') || name.endsWith('.fish') || name.endsWith('.sh');
+}
+
+function isUtilityFile(name: string): boolean {
+    return ['.', '..', '..', '....'].includes(name) ||
+           name.startsWith('.') ||
+           name.includes('debug') || name.includes('test') ||
+           name.includes('example') || name.includes('sample') ||
+           name === 'postgres' || name === 'click' || name === 'clip' ||
+           name === 'cat' ||
+           name === 'setup-android-emulator' || name === 'version-manager';
+}
+
+function isUnwantedAliasOrFunction(name: string): boolean {
+    const unwanted = [
+        '.', '..', '..', '....',
+        'fish_variables', 'scripts', 'ui-import-transformer',
+        'setup-env', 'minimal-fish-config', 'welcome_banner'
+    ];
+    return unwanted.includes(name) ||
+           name.startsWith('_') ||
+           name.includes('internal') ||
+           name === 'fish_prompt' ||
+           name === '...';
+}
+
+function isUnwantedExecutable(name: string): boolean {
+    const unwanted = [
+        '.', '..', '..', '....',
+        'fish_variables', 'scripts', 'ui-import-transformer',
+        'setup-env', 'minimal-fish-config', 'welcome_banner',
+        'wallpaper',
+        'stop_alarm', 'cat'
+    ];
+    return unwanted.includes(name) ||
+           name.startsWith('.') ||
+           name.includes('internal') ||
+           name.includes('config') ||
+           name.includes('manager') ||
+           name === '...' ||
+           name.startsWith('alarm');
+}
+
+function uniqueId(parts: string[]): string {
+    return parts.join('::');
+}
+
+function getScriptDescription(filePath: string): string | undefined {
+    try {
+        const lines = readFileSync(filePath, 'utf8').split('\n').slice(0, 20);
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('#!/')) continue;
+            if (trimmed.startsWith('# DOCSTRING:')) {
+                return trimmed.replace('# DOCSTRING:', '').trim();
+            }
+            if (trimmed.startsWith('# ') && !trimmed.startsWith('#!')) {
+                return trimmed.replace('#', '').trim();
+            }
+            if (trimmed.startsWith('// ')) {
+                return trimmed.replace('//', '').trim();
+            }
+        }
+        return undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+function categorizeItem(name: string, path: string): { type: TItemType; category: string } {
+    if (name.includes('wallpaper') || path.includes('wallpaper')) return { type: 'bin', category: 'wallpaper' };
+    if (path.includes('docker')) return { type: 'docker', category: 'docker' };
+    if (path.includes('wezterm')) return { type: 'wezterm', category: 'wezterm' };
+    if (name.includes('postgres') || name.includes('db') || name.includes('database')) return { type: 'script', category: 'database' };
+    if (name.includes('git') || name.includes('commit') || name.includes('push')) return { type: 'script', category: 'git' };
+    if (name.includes('bun') || name.includes('npm') || name.includes('node') || name.includes('dev')) return { type: 'script', category: 'dev' };
+    if (name.includes('todo') || name.includes('task')) return { type: 'bin', category: 'utility' };
+    if (path.includes('bin')) return { type: 'bin', category: 'utility' };
+    return { type: 'script', category: 'system' };
+}
+
+function collectAllExecutables(dotfilesRoot: string, cfg: TConfig): TItem[] {
+    const items: TItem[] = [];
+    const byName = new Map<string, TItem>();
+
+    // Define search directories
+    const searchDirs = [
+        { path: join(dotfilesRoot, 'bin'), relPath: 'bin' },
+        { path: join(dotfilesRoot, 'scripts'), relPath: 'scripts' },
+        { path: join(dotfilesRoot, 'configs/wezterm/.config/wezterm'), relPath: 'wezterm' },
+        { path: join(dotfilesRoot, 'configs/fish'), relPath: 'fish' },
+        { path: join(dotfilesRoot, 'scripts/docker'), relPath: 'docker' }
+    ];
+
+    for (const { path: dir, relPath } of searchDirs) {
+        if (!existsSync(dir)) continue;
+
+        function scanDirectory(currentDir: string, depth = 0) {
+            if (depth > 3) return; // Prevent infinite recursion
+
+            let files: string[] = [];
+            try {
+                files = readdirSync(currentDir);
+            } catch {
+                return;
+            }
+
+            for (const file of files) {
+                if (isDocFile(file)) continue;
+                if (isSourceFile(file)) continue;
+                if (isUtilityFile(file)) continue;
+                if (file === 'node_modules' || file === '__pycache__') continue;
+                if (file === 'simple-menu.ts' || file === 'dotfiles') continue;
+
+                const fullPath = join(currentDir, file);
+                try {
+                    const stats = lstatSync(fullPath);
+                    const name = basename(file);
+
+                    if (stats.isDirectory()) {
+                        scanDirectory(fullPath, depth + 1);
+                        continue;
+                    }
+
+                    if (stats.isFile() && isExecutable(stats.mode) && !isUnwantedExecutable(name)) {
+                        const { type, category } = categorizeItem(name, fullPath);
+                        const description = getScriptDescription(fullPath);
+                        const candidate: TItem = {
+                            id: uniqueId([type, category, name, fullPath]),
+                            type,
+                            category,
+                            name,
+                            path: fullPath,
+                            description
+                        };
+
+                        const existing = byName.get(name);
+                        if (!existing) {
+                            byName.set(name, candidate);
+                        } else if (cfg.preferBinOverScripts && existing.type !== 'bin' && type === 'bin') {
+                            byName.set(name, candidate);
+                        }
+                    }
+                } catch {
+                    continue;
+                }
+            }
+        }
+
+        scanDirectory(dir);
+    }
+
+    for (const item of byName.values()) {
+        items.push(item);
+    }
+
+    items.sort((a, b) => {
+        if (a.category !== b.category) {
+            return a.category.localeCompare(b.category);
+        }
+        return a.name.localeCompare(b.name);
+    });
+
+    return items;
+}
+
+function readLines(path: string): string[] {
+    try {
+        const raw = readFileSync(path, 'utf8');
+        return raw.split(/\r?\n/);
+    } catch {
+        return [];
+    }
+}
+
+// Helper function to safely read directory contents
+function safeReadDir(dir: string): string[] {
+    try {
+        return readdirSync(dir);
+    } catch {
+        return [];
+    }
+}
+
+// Helper function to collect fish files from multiple directories
+function collectFishFiles(dotfilesRoot: string, subDirs: string[]): string[] {
+    const paths: string[] = [];
+    for (const subDir of subDirs) {
+        const dir = join(dotfilesRoot, subDir);
+        const configDir = join(dotfilesRoot, 'configs', 'fish', subDir);
+        const altDir = join(dotfilesRoot, 'fish', subDir);
+
+        for (const checkDir of [dir, configDir, altDir]) {
+            if (existsSync(checkDir)) {
+                const files = safeReadDir(checkDir).filter(x => x.endsWith('.fish'));
+                paths.push(...files.map(f => join(checkDir, f)));
+            }
+        }
+    }
+    return paths;
+}
+
+function detectModuleCategory(filePath: string): string {
+    const category = basename(filePath, extname(filePath));
+    if (category in CATEGORIES) return category;
+    return 'utility';
+}
+
+// Helper function to parse fish file content (consolidates alias and function parsing)
+function parseFishFile(filePath: string): { aliasRows: TRow[], fnRows: TRow[] } {
+    const aliasRows: TRow[] = [];
+    const fnRows: TRow[] = [];
+    const lines = readLines(filePath);
+    const category = detectModuleCategory(filePath);
+
+    let currentDoc = '';
+    let inFn = false;
+    let fnName = '';
+    const body: string[] = [];
+
+    for (const line of lines) {
+        if (line.includes('# NO DOCSTRING:')) { currentDoc = ''; continue; }
+        if (line.includes('# DOCSTRING:')) { currentDoc = line.replace('# DOCSTRING:', '').trim(); continue; }
+
+        if (line.trim().startsWith('alias ')) {
+            const parsed = parseAliasLine(line);
+            if (parsed) {
+                const prog = primaryToken(parsed.target);
+                aliasRows.push({ kind: 'alias', category, name: parsed.name, doc: currentDoc || undefined, prog });
+                currentDoc = '';
+            }
+            continue;
+        }
+
+        if (!inFn && line.trim().startsWith('function ')) {
+            inFn = true;
+            fnName = (line.trim().split(/\s+/)[1] || '').trim();
+            body.length = 0;
+            continue;
+        }
+
+        if (inFn) {
+            if (line.trim() === 'end') {
+                const prog = primaryToken(detectFunctionTarget(body));
+                const isInternal = fnName.startsWith('_') || fnName === 'fish_prompt';
+                if (!isInternal) {
+                    fnRows.push({ kind: 'function', category, name: fnName, doc: currentDoc || undefined, prog });
+                }
+                inFn = false; fnName = ''; currentDoc = '';
+                continue;
+            }
+            body.push(line);
+        }
+    }
+
+    return { aliasRows, fnRows };
+}
+
+// Helper function to group items by category
+function groupItemsByCategory(items: TItem[]): Map<string, TItem[]> {
+    return items.reduce((acc, item) => {
+        const categoryItems = acc.get(item.category) || [];
+        categoryItems.push(item);
+        acc.set(item.category, categoryItems);
+        return acc;
+    }, new Map<string, TItem[]>());
+}
+
+// Helper function to check if item matches search term
+function itemMatches(item: TItem, searchTerm: string): boolean {
+    return item.name === searchTerm || item.name.split(',').includes(searchTerm);
+}
+
+function collectFishToolFiles(dotfilesRoot: string): string[] {
+    return collectFishFiles(dotfilesRoot, ['tools']);
+}
+
+function collectFishFunctionFiles(dotfilesRoot: string): string[] {
+    return collectFishFiles(dotfilesRoot, ['functions']);
+}
+
+function parseAliasLine(line: string): { name: string; target: string } | null {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('alias ')) return null;
+    const restRaw = trimmed.slice(6).trim();
+    const rest = restRaw.split('#')[0].trim();
+    if (rest.includes('=')) {
+        const name = rest.split('=')[0].trim();
+        const target = rest.split('=').slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
+        return { name, target };
+    }
+    const parts = rest.split(/\s+/);
+    if (parts.length >= 2) {
+        const name = parts[0];
+        const target = parts.slice(1).join(' ').trim().replace(/^['"]|['"]$/g, '');
+        return { name, target };
+    }
+    return null;
+}
+
+function detectFunctionTarget(body: string[]): string | undefined {
+    for (const ln of body) {
+        const t = ln.trim();
+        if (!t || t.startsWith('#')) continue;
+        if (t.startsWith('set ') || t.startsWith('if ') || t.startsWith('for ') || t.startsWith('switch ')) continue;
+        const tok = t.split(/\s+/)[0];
+        if (tok && !['function', 'end'].includes(tok)) return tok;
+    }
+    return undefined;
+}
+
+function isBuiltinFishTarget(cmd: string | undefined): boolean {
+    if (!cmd) return false;
+    const builtins = new Set([
+        'set', 'set_color', 'echo', 'printf', 'cd', 'case', 'eval', 'source', 'exec',
+        'end', 'read', 'string', 'math', 'if', 'for', 'while', 'switch', 'command'
+    ]);
+    return builtins.has(cmd);
+}
+
+function commandExists(cmd: string): boolean {
+    try {
+        const result = spawnSync('command', ['-v', cmd], { encoding: 'utf8', shell: false });
+        return result.status === 0;
+    } catch {
+        return false;
+    }
+}
+
+function primaryToken(s: string | undefined): string | undefined {
+    if (!s) return undefined;
+    const t = s.trim().split(/\s+/)[0] || '';
+    return t || undefined;
+}
+
+function collectAliasesAndFunctions(dotfilesRoot: string, cfg: TConfig): TItem[] {
+    const aliasRows: TRow[] = [];
+    const fnRows: TRow[] = [];
+
+    if (cfg.includeAliases) {
+        const toolFiles = collectFishToolFiles(dotfilesRoot);
+        for (const file of toolFiles) {
+            const { aliasRows: fileAliasRows, fnRows: fileFnRows } = parseFishFile(file);
+            aliasRows.push(...fileAliasRows);
+            fnRows.push(...fileFnRows);
+        }
+    }
+
+    if (cfg.includeFunctions) {
+        const fnFiles = collectFishFunctionFiles(dotfilesRoot);
+        for (const file of fnFiles) {
+            const { aliasRows: fileAliasRows, fnRows: fileFnRows } = parseFishFile(file);
+            aliasRows.push(...fileAliasRows);
+            fnRows.push(...fileFnRows);
+        }
+    }
+
+    const items: TItem[] = [];
+
+    if (cfg.groupAliases) {
+        const byProg = new Map<string, { category: string; names: Set<string>; doc?: string }>();
+        function addToGroup(row: TRow) {
+            if (!row.prog || isBuiltinFishTarget(row.prog)) return;
+            if (row.prog.startsWith('_')) return;
+            if (row.prog.startsWith('$')) return;
+            if (!commandExists(row.prog)) return;
+            const groupKey = `${row.category}::${row.prog}`;
+            const g = byProg.get(groupKey) || { category: row.category, names: new Set<string>(), doc: undefined };
+            g.names.add(row.name);
+            if (!g.doc && row.doc) g.doc = row.doc;
+            byProg.set(groupKey, g);
+        }
+        for (const r of aliasRows) addToGroup(r);
+        for (const r of fnRows) addToGroup(r);
+        function toItem(prog: string, g: { category: string; names: Set<string>; doc?: string }): TItem {
+            const names = Array.from(g.names).sort(function compare(a, b) { return a.localeCompare(b); });
+            const filteredNames = names.filter(name => !isUnwantedAliasOrFunction(name));
+            if (filteredNames.length === 0) return null as any;
+            const nameJoined = filteredNames.join(',');
+            let category = g.category || 'utility';
+            if (prog === 'git') category = 'git';
+            else if (['bun', 'npm', 'pnpm', 'node'].includes(prog)) category = 'dev';
+            else if (['sudo'].includes(prog)) category = 'system';
+
+            return { id: uniqueId(['alias-group', nameJoined, prog]), type: 'alias', category, name: nameJoined, target: prog, doc: g.doc };
+        }
+        for (const [groupKey, g] of byProg.entries()) {
+            const prog = groupKey.split('::').slice(1).join('::');
+            const item = toItem(prog, g);
+            if (item) items.push(item);
+        }
+
+        for (const r of fnRows) {
+            if (!r.prog || isBuiltinFishTarget(r.prog)) {
+                if (!isUnwantedAliasOrFunction(r.name)) {
+                    items.push({ id: uniqueId(['function', r.name]), type: 'function', category: r.category || 'utility', name: r.name, doc: r.doc });
+                }
+            }
+        }
+        for (const r of aliasRows) {
+            if (!r.prog || isBuiltinFishTarget(r.prog)) {
+                if (!isUnwantedAliasOrFunction(r.name)) {
+                    if (!r.prog || commandExists(r.prog)) {
+                        items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: r.category || 'utility', name: r.name, doc: r.doc });
+                    }
+                }
+            }
+        }
+    } else {
+        for (const r of aliasRows) {
+            if (!isUnwantedAliasOrFunction(r.name)) {
+                if (!r.prog || commandExists(r.prog)) {
+                    items.push({ id: uniqueId(['alias', r.name]), type: 'alias', category: r.category || 'utility', name: r.name, target: r.prog, doc: r.doc });
+                }
+            }
+        }
+        for (const r of fnRows) {
+            if (!isUnwantedAliasOrFunction(r.name)) {
+                items.push({ id: uniqueId(['function', r.name]), type: 'function', category: r.category || 'utility', name: r.name, target: r.prog, doc: r.doc });
+            }
+        }
+    }
+
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    return items;
+}
+
+function tryRunHelp(pathOrCmd: string): string {
+    if (pathOrCmd.endsWith('.ts') || pathOrCmd.endsWith('.py')) return '';
+    const candidates = [['--help'], ['-h'], ['help']];
+    for (const args of candidates) {
+        try {
+            const res = spawnSync(pathOrCmd, args, { encoding: 'utf8', shell: false, timeout: 1200, stdio: ['ignore', 'pipe', 'ignore'] });
+            if (typeof res.status === 'number' && res.status >= 0) {
+                const out = `${res.stdout || ''}`.trim();
+                if (out && !out.includes('Syntax error')) return out.slice(0, 4000);
+            }
+        } catch {
+            continue;
+        }
+    }
+    return '';
+}
+
+function formatLabel(item: TItem, cfg: TConfig): string {
+    const category = CATEGORIES[item.category] || CATEGORIES.utility;
+    let label = '';
+
+    if (cfg.enableCategories && cfg.layout === 'categories') {
+        label = `${category.icon} ${item.name}`;
+    } else {
+        if (item.type === 'alias') {
+            label = `[alias] ${item.name}`;
+            if (item.target) label += ` → ${item.target}`;
+        } else if (item.type === 'function') {
+            label = `[fn] ${item.name}`;
+        } else if (item.type === 'bin') {
+            label = `[bin] ${item.name}`;
+        } else {
+            label = `[${item.category}] ${item.name}`;
+        }
+    }
+
+    return label;
+}
+
+function formatLabelColored(item: TItem, cfg: TConfig): string {
+    const c = colors();
+    const category = CATEGORIES[item.category] || CATEGORIES.utility;
+
+    let label = '';
+    if (cfg.enableCategories && cfg.layout === 'categories') {
+        const icon = category.color + category.icon + c.reset;
+        const name = c.bright + c.text + item.name + c.reset;
+        label = `${icon} ${name}`;
+    } else {
+        if (item.type === 'alias') {
+            const badge = c.sky + '[alias]' + c.reset;
+            const name = c.bright + c.text + item.name + c.reset;
+            if (item.target) {
+                label = `${badge} ${name} ${c.dim}${c.subtext0}→${c.reset} ${c.mauve}${item.target}${c.reset}`;
+            } else {
+                label = `${badge} ${name}`;
+            }
+        } else if (item.type === 'function') {
+            label = `${c.pink}[fn]${c.reset} ${c.bright}${c.text}${item.name}${c.reset}`;
+        } else if (item.type === 'bin') {
+            label = `${c.green}[bin]${c.reset} ${c.bright}${c.text}${item.name}${c.reset}`;
+        } else {
+            const categoryInfo = CATEGORIES[item.category] || CATEGORIES.utility;
+            label = `${categoryInfo.color}[${item.category}]${c.reset} ${c.bright}${c.text}${item.name}${c.reset}`;
+        }
+    }
+
+    if (cfg.showDescriptions && item.description) {
+        label += ` ${c.dim}${c.subtext1}- ${item.description}${c.reset}`;
+    }
+
+    return label;
+}
+
+function encodePayload(item: TItem): string {
+    const json = JSON.stringify(item);
+    const b64 = Buffer.from(json, 'utf8').toString('base64');
+    return b64;
+}
+
+function decodePayload(b64: string): TItem | null {
+    try {
+        const json = Buffer.from(b64, 'base64').toString('utf8');
+        return JSON.parse(json) as TItem;
+    } catch {
+        return null;
+    }
+}
+
+function haveFzf(): boolean {
+    try {
+        const res = spawnSync('fzf', ['--version'], { encoding: 'utf8' });
+        return typeof res.status === 'number' && res.status === 0;
+    } catch {
+        return false;
+    }
+}
+
+function buildFzfInput(items: TItem[], cfg: TConfig): string {
+    const lines: string[] = [];
+    const c = colors();
+
+    // Group by category for better organization
+    const byCategory = groupItemsByCategory(items);
+
+    for (const [category, categoryItems] of byCategory.entries()) {
+        const categoryInfo = CATEGORIES[category] || CATEGORIES.utility;
+        for (const item of categoryItems) {
+            const desc = item.description ? ` ${c.dim}- ${item.description}${c.reset}` : '';
+            const label = `${categoryInfo.color}${categoryInfo.icon}${c.reset} ${c.text}${item.name}${c.reset}${desc}`;
+            lines.push(label);
+        }
+    }
+
+    return lines.join('\n');
+}
+
+function runFzf(dotfilesRoot: string, cfg: TConfig, items: TItem[]): Promise<TItem | null> {
+    return new Promise<TItem | null>((resolveSel) => {
+        const input = buildFzfInput(items, cfg);
+        const itemsJson = JSON.stringify(items);
+
+        // Write items to temp file for matching
+        const tmpFile = join(dotfilesRoot, '.dotfiles-items.tmp');
+        writeFileSync(tmpFile, itemsJson);
+
+        try {
+            // Use a simpler approach: pipe input directly to fzf
+            const fzf = spawn('fzf', [
+                '--ansi',
+                '--height=90%',
+                '--layout=reverse',
+                '--border=rounded',
+                '--prompt=> ',
+                '--header=DOTFILES MANAGER'
+            ], {
+                stdio: ['pipe', 'pipe', 'inherit'],
+                env: { ...process.env, TERM: 'xterm-256color' }
+            });
+
+            let sel = '';
+
+            fzf.stdout.on('data', (chunk: Buffer) => {
+                sel += chunk.toString('utf8');
+            });
+
+            // Write input to fzf stdin
+            fzf.stdin.write(input);
+            fzf.stdin.end();
+
+            fzf.on('exit', (code: number | null) => {
+                // Clean up temp file
+                try {
+                    if (existsSync(tmpFile)) {
+                        const fs = require('fs');
+                        fs.unlinkSync(tmpFile);
+                    }
+                } catch {}
+
+                const selection = sel.trim();
+                if (!selection || code !== 0) {
+                    return resolveSel(null);
+                }
+
+                // Remove color codes and clean up the selection
+                const cleanSelection = selection.replace(/\x1b\[[0-9;]*m/g, '').trim();
+
+                // Extract just the name (everything before the first dash if there's a description)
+                const namePart = cleanSelection.split(' - ')[0].trim();
+                // Remove the icon if present (first emoji character)
+                const nameOnly = namePart.replace(/^[^\w\s]+\s*/, '').trim();
+
+                // Find the matching item by name
+                const selectedItem = items.find(item => {
+                    return item.name === nameOnly ||
+                           cleanSelection.includes(item.name) ||
+                           nameOnly === item.name;
+                });
+
+                resolveSel(selectedItem || null);
+            });
+
+            fzf.on('error', (error) => {
+                console.error('Failed to run fzf:', error.message);
+                resolveSel(null);
+            });
+
+        } catch (error) {
+            console.error('Error:', error);
+            resolveSel(null);
+        }
+    });
+}
+
+function showPreview(item: TItem): string {
+    const c = colors();
+    let output = [];
+
+    if (item.type === 'alias') {
+        output.push(`${c.bright}${c.sky}Alias${c.reset}`);
+        if (item.doc) output.push(`${c.dim}${c.subtext0}${item.doc}${c.reset}`);
+        if (item.target) output.push(`${c.mauve}Target: ${c.text}${item.target}${c.reset}`);
+        output.push(`${c.peach}Usage: ${c.text}${item.name.split(',')[0]}${c.reset}`);
+    } else if (item.type === 'function') {
+        output.push(`${c.bright}${c.pink}Function${c.reset}`);
+        if (item.doc) output.push(`${c.dim}${c.subtext0}${item.doc}${c.reset}`);
+        output.push(`${c.peach}Usage: ${c.text}${item.name}${c.reset}`);
+    } else {
+        const categoryInfo = CATEGORIES[item.category] || CATEGORIES.utility;
+        output.push(`${categoryInfo.color}${categoryInfo.name} - ${c.text}${item.type}${c.reset}`);
+        if (item.description) output.push(`${c.dim}${c.subtext1}${item.description}${c.reset}`);
+        if (item.path) output.push(`${c.mauve}Path: ${c.text}${item.path}${c.reset}`);
+
+        const help = tryRunHelp(item.path || item.name);
+        if (help) {
+            output.push('');
+            output.push(`${c.bright}${c.lavender}Help:${c.reset}`);
+            const lines = help.split('\n').slice(0, 15);
+            output.push(lines.map(line => `${c.dim}${c.subtext0}${line}${c.reset}`).join('\n'));
+        }
+    }
+
+    return output.join('\n');
+}
+
+function runItem(item: TItem): Promise<number> {
+    return new Promise<number>((resolveCode) => {
+        if (item.type === 'alias' || item.type === 'function') {
+            const primary = item.name.split(',')[0];
+            const cmd = `fish -c ${JSON.stringify(primary)}`;
+            const child = spawn(cmd, { stdio: 'inherit', shell: true } as any);
+            child.on('exit', function onExit(code) { resolveCode((code as number) || 0); });
+            return;
+        }
+        const cmd = item.path || item.name;
+        const child = spawn(cmd, [], { stdio: 'inherit', shell: true });
+        child.on('exit', (code) => resolveCode(code || 0));
+    });
+}
+
+type TColor = {
+    reset: string;
+    bright: string;
+    dim: string;
+    cyan: string;
+    blue: string;
+    green: string;
+    yellow: string;
+    magenta: string;
+    red: string;
+    gray: string;
+};
+
+function colors(): TColor {
+    return {
+        reset: '\x1b[0m',
+        bright: '\x1b[1m',
+        dim: '\x1b[2m',
+        // Catppuccin Mocha colors
+        cyan: '\x1b[38;5;116m',    // Teal
+        blue: '\x1b[38;5;137m',    // Mauve
+        green: '\x1b[38;5;166m',   // Peach
+        yellow: '\x1b[38;5;231m',  // Text
+        magenta: '\x1b[38;5;219m', // Pink
+        red: '\x1b[38;5;203m',     // Red
+        gray: '\x1b[38;5;147m',    // Lavender
+        // Additional Catppuccin colors
+        rosewater: '\x1b[38;5;226m',
+        flamingo: '\x1b[38;5;217m',
+        pink: '\x1b[38;5;219m',
+        mauve: '\x1b[38;5;147m',
+        red2: '\x1b[38;5;203m',
+        maroon: '\x1b[38;5;167m',
+        peach: '\x1b[38;5;208m',
+        yellow2: '\x1b[38;5;229m',
+        green2: '\x1b[38;5;166m',
+        teal: '\x1b[38;5;150m',
+        sky: '\x1b[38;5;116m',
+        sapphire: '\x1b[38;5;125m',
+        blue2: '\x1b[38;5;137m',
+        lavender: '\x1b[38;5;183m',
+        text: '\x1b[38;5;231m',
+        subtext1: '\x1b[38;5;224m',
+        subtext0: '\x1b[38;5;217m',
+        overlay2: '\x1b[38;5;210m',
+        overlay1: '\x1b[38;5;203m',
+        overlay0: '\x1b[38;5;196m',
+        surface2: '\x1b[38;5;189m',
+        surface1: '\x1b[38;5;182m',
+        surface0: '\x1b[38;5;175m',
+        base: '\x1b[38;5;168m',
+        mantle: '\x1b[38;5;161m',
+        crust: '\x1b[38;5;154m'
+    } as TColor & { [key: string]: string };
+}
+
+const PROMPT_NOTES: Record<string, string> = {
+    ascii: 'ASCII-only amber terminal look, safe without a Nerd Font',
+    capsule: 'Ember path pill + dark git pill in the Sleepy Hollow palette, runtimes as plain text',
+    catppuccin: 'Catppuccin mocha powerline chain with clock, pastel segments',
+    ghostty: 'Lunar pill layout in ANSI colors, follows the active Ghostty theme',
+    gruvbox: 'Gruvbox rainbow powerline chain, warm earthy segments',
+    hollow: 'Two-line prompt in the Sleepy Hollow palette, ember accents, compact git symbols',
+    minimal: 'Single line, muted ink palette, only path + git + duration',
+    noir: 'Orange block path + charcoal git segment, mirrors the noir nvim statusline',
+    powerline: 'Powerline segments with solid backgrounds, right-aligned clock',
+    rice: 'Two-line box-drawing prompt, pastel rice palette, verbose runtime versions',
+    tokyo: 'Tokyo Night rounded blue gradient segments with clock'
+};
+
+function promptsDir(dotfilesRoot: string): string {
+    return join(dotfilesRoot, 'configs', 'starship', 'prompts');
+}
+
+function activePromptFile(dotfilesRoot: string): string {
+    return join(dotfilesRoot, 'configs', 'starship', '.active-prompt');
+}
+
+function starshipConfigFile(dotfilesRoot: string): string {
+    return join(dotfilesRoot, 'configs', 'starship', 'starship.toml');
+}
+
+function listPrompts(dotfilesRoot: string): string[] {
+    const dir = promptsDir(dotfilesRoot);
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir)
+        .filter(f => extname(f) === '.toml')
+        .map(f => basename(f, '.toml'))
+        .sort();
+}
+
+function readActivePrompt(dotfilesRoot: string): string | null {
+    const f = activePromptFile(dotfilesRoot);
+    if (!existsSync(f)) return null;
+    const name = readFileSync(f, 'utf8').trim();
+    return listPrompts(dotfilesRoot).includes(name) ? name : null;
+}
+
+const OPACITY_LINE = /^#\s*ghostty-opacity\s*=\s*([0-9]*\.?[0-9]+)\s*$/m;
+
+function ghosttyConfigFile(dotfilesRoot: string): string {
+    return join(dotfilesRoot, 'configs', 'ghostty', 'config');
+}
+
+function promptFile(dotfilesRoot: string, name: string): string {
+    return join(promptsDir(dotfilesRoot), `${name}.toml`);
+}
+
+function readPromptOpacity(dotfilesRoot: string, name: string): number | null {
+    const match = readFileSync(promptFile(dotfilesRoot, name), 'utf8').match(OPACITY_LINE);
+    return match ? Number(match[1]) : null;
+}
+
+function writePromptOpacity(dotfilesRoot: string, name: string, opacity: number): void {
+    const file = promptFile(dotfilesRoot, name);
+    const body = readFileSync(file, 'utf8');
+    const line = `# ghostty-opacity = ${opacity}`;
+    writeFileSync(file, OPACITY_LINE.test(body) ? body.replace(OPACITY_LINE, line) : `${line}\n${body}`);
+}
+
+/**
+ * Sets `background-opacity` in the dotfiles Ghostty config and signals running
+ * Ghostty instances (SIGUSR2) to reload. Returns false when the config is missing.
+ */
+function applyGhosttyOpacity(dotfilesRoot: string, opacity: number): boolean {
+    const file = ghosttyConfigFile(dotfilesRoot);
+    if (!existsSync(file)) return false;
+    const body = readFileSync(file, 'utf8');
+    const line = `background-opacity = ${opacity}`;
+    const next = /^background-opacity\s*=.*$/m.test(body)
+        ? body.replace(/^background-opacity\s*=.*$/m, line)
+        : `${line}\n${body}`;
+    if (next !== body) writeFileSync(file, next);
+    spawnSync('pkill', ['-USR2', '-x', 'ghostty']);
+    return true;
+}
+
+function applyPrompt(dotfilesRoot: string, name: string): void {
+    const body = readFileSync(promptFile(dotfilesRoot, name), 'utf8');
+    const header = `# generated by \`dotfiles prompt ${name}\` — edit configs/starship/prompts/${name}.toml instead\n\n`;
+    writeFileSync(starshipConfigFile(dotfilesRoot), header + body);
+    writeFileSync(activePromptFile(dotfilesRoot), `${name}\n`);
+    const opacity = readPromptOpacity(dotfilesRoot, name);
+    if (opacity !== null) applyGhosttyOpacity(dotfilesRoot, opacity);
+}
+
+function formatOpacity(opacity: number | null): string {
+    return opacity === null ? '' : `${Math.round(opacity * 100)}%`;
+}
+
+function renderPrompt(dotfilesRoot: string, name: string): string {
+    const res = spawnSync('starship', ['prompt', '--status=0', '--cmd-duration=0'], {
+        encoding: 'utf8',
+        env: { ...process.env, STARSHIP_CONFIG: join(promptsDir(dotfilesRoot), `${name}.toml`) }
+    });
+    if (res.status !== 0 || !res.stdout) return '';
+    return res.stdout.replace(/\n+$/, '');
+}
+
+function printPrompts(dotfilesRoot: string, withPreview: boolean): void {
+    const c = colors();
+    const names = listPrompts(dotfilesRoot);
+    const active = readActivePrompt(dotfilesRoot);
+    const width = Math.max(...names.map(n => n.length));
+
+    console.log('');
+    console.log(`${c.bright}${c.cyan}Starship prompts:${c.reset} ${c.dim}(${names.length}) · opacity = Ghostty background${c.reset}`);
+    console.log('');
+    for (const name of names) {
+        const mark = name === active ? `${c.green}●${c.reset}` : `${c.dim}○${c.reset}`;
+        const opacity = formatOpacity(readPromptOpacity(dotfilesRoot, name)).padStart(4);
+        console.log(`  ${mark} ${c.bright}${c.mauve}${name.padEnd(width)}${c.reset} ${c.sky}${opacity}${c.reset}  ${c.dim}${PROMPT_NOTES[name] || ''}${c.reset}`);
+        if (withPreview) {
+            const preview = renderPrompt(dotfilesRoot, name);
+            if (preview) {
+                console.log('');
+                for (const line of preview.split('\n')) console.log(`      ${line}`);
+            }
+            console.log('');
+        }
+    }
+    if (!withPreview) console.log('');
+    console.log(`${c.dim}prompt help for all commands${c.reset}`);
+    console.log('');
+}
+
+function handlePromptCommand(dotfilesRoot: string, args: string[]): number {
+    const c = colors();
+    const names = listPrompts(dotfilesRoot);
+
+    if (names.length === 0) {
+        console.log(`${c.red}No prompts found in configs/starship/prompts${c.reset}`);
+        return 1;
+    }
+
+    const sub = args[0];
+    const active = readActivePrompt(dotfilesRoot);
+
+    if (sub === 'help' || sub === '-h' || sub === '--help') {
+        printPromptHelp();
+        return 0;
+    }
+
+    if (sub === 'opacity') {
+        return handlePromptOpacity(dotfilesRoot, active, args[1]);
+    }
+
+    if (!sub || sub === 'list') {
+        printPrompts(dotfilesRoot, false);
+        return 0;
+    }
+
+    if (sub === 'preview') {
+        if (args[1]) {
+            if (!names.includes(args[1])) {
+                console.log(`${c.red}Unknown prompt:${c.reset} ${args[1]}`);
+                return 1;
+            }
+            const out = renderPrompt(dotfilesRoot, args[1]);
+            console.log('');
+            console.log(out || `${c.dim}starship not available${c.reset}`);
+            console.log('');
+            return 0;
+        }
+        printPrompts(dotfilesRoot, true);
+        return 0;
+    }
+
+    if (sub === 'current') {
+        console.log(active || 'none');
+        return 0;
+    }
+
+    let target = sub;
+    if (sub === 'toggle') {
+        target = active === 'powerline' ? 'hollow' : 'powerline';
+    }
+    if (sub === 'next' || sub === 'cycle' || sub === 'prev') {
+        const idx = active ? names.indexOf(active) : -1;
+        const step = sub === 'prev' ? -1 : 1;
+        target = names[(idx + step + names.length) % names.length];
+    }
+
+    if (!names.includes(target)) {
+        console.log('');
+        console.log(`${c.red}✗${c.reset} ${c.bright}Unknown prompt:${c.reset} ${target}`);
+        console.log(`${c.dim}Available: ${names.join(', ')}${c.reset}`);
+        console.log('');
+        return 1;
+    }
+
+    applyPrompt(dotfilesRoot, target);
+    const preview = renderPrompt(dotfilesRoot, target);
+    console.log('');
+    console.log(`${c.green}✓${c.reset} ${c.bright}Prompt:${c.reset} ${c.mauve}${target}${c.reset} ${c.dim}${PROMPT_NOTES[target] || ''}${c.reset}`);
+    if (preview) {
+        console.log('');
+        for (const line of preview.split('\n')) console.log(`  ${line}`);
+    }
+    const opacity = readPromptOpacity(dotfilesRoot, target);
+    console.log('');
+    if (opacity !== null) console.log(`${c.dim}Ghostty opacity → ${formatOpacity(opacity)}${c.reset}`);
+    console.log(`${c.dim}Applies on your next prompt.${c.reset}`);
+    console.log('');
+    return 0;
+}
+
+function handlePromptOpacity(dotfilesRoot: string, active: string | null, value: string | undefined): number {
+    const c = colors();
+    if (!active) {
+        console.log(`${c.red}No active prompt${c.reset}`);
+        return 1;
+    }
+    if (value === undefined) {
+        console.log(formatOpacity(readPromptOpacity(dotfilesRoot, active)) || 'unset');
+        return 0;
+    }
+    const isPercent = value.endsWith('%');
+    const parsed = Number(isPercent ? value.slice(0, -1) : value);
+    const opacity = isPercent ? parsed / 100 : parsed;
+    if (value.trim() === '' || !Number.isFinite(opacity) || opacity < 0 || opacity > 1) {
+        console.log(`${c.red}✗${c.reset} Opacity must be 0–1 or 0–100%, got ${value}`);
+        return 1;
+    }
+    const rounded = Math.round(opacity * 100) / 100;
+    writePromptOpacity(dotfilesRoot, active, rounded);
+    applyGhosttyOpacity(dotfilesRoot, rounded);
+    console.log(`${c.green}✓${c.reset} ${c.mauve}${active}${c.reset} opacity → ${c.sky}${formatOpacity(rounded)}${c.reset}`);
+    return 0;
+}
+
+function printPromptHelp(): void {
+    const c = colors();
+    const rows: [string, string][] = [
+        ['prompt', 'Cycle to the next prompt'],
+        ['prompt <name>', 'Switch to a specific prompt'],
+        ['prompt next | prev', 'Cycle forward / backward'],
+        ['prompt toggle', 'Toggle between hollow and powerline'],
+        ['prompt list', 'List prompts with their Ghostty opacity'],
+        ['prompt preview [name]', 'Render all prompts, or one'],
+        ['prompt current', 'Print the active prompt'],
+        ['prompt opacity [value]', 'Show or set the active prompt\'s opacity (0.9 or 90%)'],
+        ['prompt help', 'Show this menu']
+    ];
+    const width = Math.max(...rows.map(([cmd]) => cmd.length));
+    console.log('');
+    console.log(`${c.bright}${c.cyan}prompt${c.reset} ${c.dim}— switch starship prompts; each prompt carries its own Ghostty opacity${c.reset}`);
+    console.log('');
+    for (const [cmd, desc] of rows) console.log(`  ${c.mauve}${cmd.padEnd(width)}${c.reset}  ${c.dim}${desc}${c.reset}`);
+    console.log('');
+    console.log(`${c.dim}Opacity lives in configs/starship/prompts/<name>.toml as: # ghostty-opacity = 0.9${c.reset}`);
+    console.log('');
+}
+
+function printUsage() {
+    const c = colors();
+    console.log('');
+    console.log(`${c.lavender}┌─────────────────────────────────────────────────────────────────┐${c.reset}`);
+    console.log(`${c.lavender}│${c.reset}  ${c.bright}${c.pink}DOTFILES CLI v2.0${c.reset} ${c.dim}${c.lavender}- Interactive Command Center${c.reset}  ${c.lavender}│${c.reset}`);
+    console.log(`${c.lavender}└─────────────────────────────────────────────────────────────────┘${c.reset}`);
+    console.log('');
+    console.log(`${c.bright}${c.peach}USAGE${c.reset}`);
+    console.log(`  ${c.green}dotfiles${c.reset} ${c.dim}${c.subtext0}# Launch interactive menu (default)${c.reset}`);
+    console.log(`  ${c.green}dotfiles${c.reset} ${c.dim}${c.subtext0}[command]${c.reset} ${c.sky}[options]${c.reset}`);
+    console.log('');
+    console.log(`${c.bright}${c.peach}COMMANDS${c.reset}`);
+    console.log(`  ${c.bright}${c.mauve}interactive${c.reset}, ${c.mauve}i${c.reset}        Launch enhanced interactive menu`);
+    console.log(`  ${c.bright}${c.mauve}list${c.reset}                  List all available tools by category`);
+    console.log(`  ${c.bright}${c.mauve}search${c.reset} ${c.sky}<term>${c.reset}         Search for tools matching ${c.sky}<term>${c.reset}`);
+    console.log(`  ${c.bright}${c.mauve}run${c.reset} ${c.sky}<name>${c.reset}            Execute tool by ${c.sky}<name>${c.reset}`);
+    console.log(`  ${c.bright}${c.mauve}help${c.reset} ${c.sky}<name>${c.reset}           Show help for ${c.sky}<name>${c.reset}`);
+    console.log(`  ${c.bright}${c.mauve}categories${c.reset}           Show all available categories`);
+    console.log(`  ${c.bright}${c.mauve}links${c.reset}, ${c.mauve}symlinks${c.reset}   Show managed symlinks and their status`);
+    console.log(`  ${c.bright}${c.mauve}prompt${c.reset}                List starship prompts (${c.sky}●${c.reset} = active)`);
+    console.log(`  ${c.bright}${c.mauve}prompt${c.reset} ${c.sky}<name>${c.reset}         Switch to prompt ${c.sky}<name>${c.reset}`);
+    console.log(`  ${c.bright}${c.mauve}prompt${c.reset} ${c.sky}next|prev${c.reset}      Cycle through prompts`);
+    console.log(`  ${c.bright}${c.mauve}prompt toggle${c.reset}         Toggle between ${c.sky}hollow${c.reset} and ${c.sky}powerline${c.reset}`);
+    console.log(`  ${c.bright}${c.mauve}prompt preview${c.reset} ${c.sky}[name]${c.reset} Render prompts live`);
+    console.log(`  ${c.bright}${c.mauve}config${c.reset} ${c.sky}show${c.reset}           Display current configuration`);
+    console.log(`  ${c.bright}${c.mauve}config set${c.reset} ${c.sky}<key> <val>${c.reset} Update config ${c.sky}<key>${c.reset} to ${c.sky}<val>${c.reset}`);
+    console.log('');
+    console.log(`${c.bright}${c.peach}CONFIG OPTIONS${c.reset}`);
+    console.log(`  ${c.sky}layout${c.reset}         single, double, categories`);
+    console.log(`  ${c.sky}banner${c.reset}         classic, modern, none`);
+    console.log(`  ${c.sky}enableCategories${c.reset} true, false`);
+    console.log(`  ${c.sky}showDescriptions${c.reset} true, false`);
+    console.log('');
+    console.log(`${c.dim}${c.subtext0}Just type ${c.bright}${c.pink}dotfiles${c.reset}${c.dim}${c.subtext0} to launch the interactive interface!${c.reset}`);
+    console.log('');
+}
+
+function buildIndex(dotfilesRoot: string, cfg: TConfig): TItem[] {
+    const execs = collectAllExecutables(dotfilesRoot, cfg);
+    const all = execs;
+
+    // Filter out excluded categories
+    const excludeCats = cfg.excludeCategories || [];
+    const filtered = all.filter(item => !excludeCats.includes(item.category));
+
+    // Sort by category first, then by name
+    filtered.sort((a, b) => {
+        if (a.category !== b.category) {
+            return a.category.localeCompare(b.category);
+        }
+        return a.name.localeCompare(b.name);
+    });
+
+    return filtered;
+}
+
+function printCategories(items: TItem[]) {
+    const c = colors();
+    const byCategory = groupItemsByCategory(items);
+
+    console.log('');
+    console.log(`${c.bright}${c.cyan}Available Categories:${c.reset}`);
+    console.log('');
+
+    for (const [category, categoryItems] of byCategory.entries()) {
+        const categoryInfo = CATEGORIES[category] || CATEGORIES.utility;
+        console.log(`  ${categoryInfo.color}${categoryInfo.icon} ${categoryInfo.name}${c.reset} ${c.dim}(${categoryItems.length} tools)${c.reset}`);
+    }
+    console.log('');
+}
+
+async function main() {
+    const dotfilesRoot = join(process.env.HOME!, '.config', 'dotfiles');
+    const cfg = loadConfig(dotfilesRoot);
+    let args = process.argv.slice(2);
+
+    if (args.length === 0) {
+        // Default to interactive mode when no arguments provided
+        args = ['interactive'];
+    }
+
+    if (args[0] === 'interactive' || args[0] === 'i') {
+        const items = buildIndex(dotfilesRoot, cfg);
+        if (haveFzf()) {
+            try {
+                const sel = await runFzf(dotfilesRoot, cfg, items);
+                if (sel) {
+                    // Update recent items
+                    const recentItems = cfg.recentItems || [];
+                    const newRecent = [sel.id, ...recentItems.filter(id => id !== sel.id)].slice(0, 10);
+                    saveConfig(dotfilesRoot, { ...cfg, recentItems: newRecent });
+
+                    const code = await runItem(sel);
+                    process.exit(code);
+                }
+                process.exit(0);
+            } catch (error) {
+                console.error('Error in interactive mode:', error.message);
+                console.log('Falling back to list mode...');
+                // Fall back to showing the list
+                console.log('');
+                console.log('Available tools:');
+                for (const item of items.slice(0, 20)) { // Show first 20 items
+                    console.log(`  ${formatLabelColored(item, cfg)}`);
+                }
+                console.log(`  ... and ${items.length - 20} more tools`);
+                console.log('');
+                process.exit(0);
+            }
+        } else {
+            console.log('fzf not found. Please install fzf for interactive mode.');
+            process.exit(1);
+        }
+    }
+
+    if (args[0] === '--help' || args[0] === '-h') {
+        printUsage();
+        process.exit(0);
+    }
+
+    if (args[0] === '__preview') {
+        const encodedIdx = args.indexOf('--encoded');
+        if (encodedIdx >= 0 && args[encodedIdx + 1]) {
+            const item = decodePayload(args[encodedIdx + 1]);
+            if (item) {
+                const out = showPreview(item);
+                console.log(out);
+                process.exit(0);
+            }
+        }
+        process.exit(1);
+    }
+
+    if (args[0] === 'list') {
+        const c = colors();
+        const items = buildIndex(dotfilesRoot, cfg);
+
+        if (cfg.layout === 'categories') {
+            const byCategory = groupItemsByCategory(items);
+
+            console.log('');
+            console.log(`${c.bright}${c.cyan}All Available Tools:${c.reset} ${c.dim}(${items.length} total)${c.reset}`);
+            console.log('');
+
+            for (const [category, categoryItems] of byCategory.entries()) {
+                const categoryInfo = CATEGORIES[category] || CATEGORIES.utility;
+                console.log(`${categoryInfo.color}${categoryInfo.icon} ${categoryInfo.name.toUpperCase()}${c.reset}`);
+                for (const item of categoryItems) {
+                    console.log(`  ${formatLabelColored(item, cfg)}`);
+                }
+                console.log('');
+            }
+        } else {
+            console.log('');
+            console.log(`${c.bright}${c.cyan}All Available Tools:${c.reset} ${c.dim}(${items.length} total)${c.reset}`);
+            console.log('');
+            for (const item of items) {
+                console.log(`  ${formatLabelColored(item, cfg)}`);
+            }
+            console.log('');
+        }
+        process.exit(0);
+    }
+
+    if (args[0] === 'categories') {
+        const items = buildIndex(dotfilesRoot, cfg);
+        printCategories(items);
+        process.exit(0);
+    }
+
+    if (args[0] === 'links' || args[0] === 'symlinks') {
+        reportSymlinks(dotfilesRoot);
+        process.exit(0);
+    }
+
+    if (args[0] === 'search') {
+        const c = colors();
+        const q = args.slice(1).join(' ').toLowerCase();
+        if (!q) {
+            console.log(`${c.red}Error: Search term required${c.reset}`);
+            console.log(`Usage: dotfiles search <term>`);
+            process.exit(1);
+        }
+
+        const all = buildIndex(dotfilesRoot, cfg);
+        function match(it: TItem): boolean {
+            const searchText = `${it.name} ${it.description || ''} ${it.category}`.toLowerCase();
+            return searchText.includes(q);
+        }
+
+        const items = all.filter(match);
+        console.log('');
+        console.log(`${c.bright}${c.cyan}Search Results for "${c.yellow}${q}${c.cyan}":${c.reset} ${c.dim}(${items.length} found)${c.reset}`);
+        console.log('');
+
+        if (items.length === 0) {
+            console.log(`  ${c.dim}No items found matching "${q}"${c.reset}`);
+        } else {
+            for (const item of items) {
+                console.log(`  ${formatLabelColored(item, cfg)}`);
+            }
+        }
+        console.log('');
+        process.exit(0);
+    }
+
+    if (args[0] === 'help') {
+        const c = colors();
+        const name = args.slice(1).join(' ');
+        if (!name) {
+            printUsage();
+            process.exit(0);
+        }
+
+        const items = buildIndex(dotfilesRoot, cfg);
+        const found = items.find(it => itemMatches(it, name));
+        if (!found) {
+            console.log('');
+            console.log(`${c.red}✗${c.reset} ${c.bright}Not found:${c.reset} ${name}`);
+            console.log('');
+            process.exit(1);
+        }
+
+        console.log('');
+        console.log(`${c.bright}${c.cyan}Help for:${c.reset} ${formatLabelColored(found, cfg)}`);
+        console.log('');
+        const preview = showPreview(found);
+        if (preview) {
+            console.log(preview);
+        } else {
+            console.log(`${c.dim}No help available for this item${c.reset}`);
+        }
+        console.log('');
+        process.exit(0);
+    }
+
+    if (args[0] === 'run') {
+        const encodedIdx = args.indexOf('--encoded');
+        if (encodedIdx >= 0 && args[encodedIdx + 1]) {
+            const item = decodePayload(args[encodedIdx + 1]);
+            if (item) {
+                const code = await runItem(item);
+                process.exit(code);
+            }
+            process.exit(1);
+        }
+
+        const name = args.slice(1).join(' ');
+        if (!name) {
+            printUsage();
+            process.exit(1);
+        }
+
+        const items = buildIndex(dotfilesRoot, cfg);
+        const found = items.find(it => itemMatches(it, name));
+        if (!found) {
+            const c = colors();
+            console.log('');
+            console.log(`${c.red}✗${c.reset} ${c.bright}Not found:${c.reset} ${name}`);
+            console.log('');
+            process.exit(1);
+        }
+
+        const code = await runItem(found);
+        process.exit(code);
+    }
+
+    if (args[0] === 'prompt' || args[0] === 'prompts') {
+        process.exit(handlePromptCommand(dotfilesRoot, args.slice(1)));
+    }
+
+    if (args[0] === 'config') {
+        if (args[1] === 'show') {
+            console.log(JSON.stringify(cfg, null, 2));
+            process.exit(0);
+        }
+
+        if (args[1] === 'set') {
+            const c = colors();
+            const key = args[2];
+            const value = args[3];
+            if (!key || !value) {
+                console.log(`${c.red}Error: Both key and value required${c.reset}`);
+            console.log(`Usage: dotfiles config set <key> <value>`);
+                process.exit(1);
+            }
+
+            const next = { ...cfg } as any;
+            let v: any = value;
+            if (value === 'true') v = true;
+            else if (value === 'false') v = false;
+            else if (!isNaN(Number(value))) v = Number(value);
+
+            next[key] = v;
+            saveConfig(dotfilesRoot, next as TConfig);
+            console.log('');
+            console.log(`${c.green}✓${c.reset} ${c.bright}Config updated:${c.reset} ${c.cyan}${key}${c.reset} = ${c.yellow}${v}${c.reset}`);
+            console.log('');
+            process.exit(0);
+        }
+
+        if (args[1] === 'banner') {
+            const c = colors();
+            const v = args[2] as TConfig['banner'];
+            if (!v || !['classic', 'modern', 'none'].includes(v)) {
+                console.log(`${c.red}Error: Invalid banner option${c.reset}`);
+                console.log(`Options: classic, modern, none`);
+                process.exit(1);
+            }
+            const next = { ...cfg, banner: v };
+            saveConfig(dotfilesRoot, next);
+            console.log('');
+            console.log(`${c.green}✓${c.reset} ${c.bright}Banner updated:${c.reset} ${c.yellow}${v}${c.reset}`);
+            console.log('');
+            process.exit(0);
+        }
+
+        if (args[1] === 'layout') {
+            const c = colors();
+            const v = args[2] as TConfig['layout'];
+            if (!v || !['single', 'double', 'categories'].includes(v)) {
+                console.log(`${c.red}Error: Invalid layout option${c.reset}`);
+                console.log(`Options: single, double, categories`);
+                process.exit(1);
+            }
+            const next = { ...cfg, layout: v };
+            saveConfig(dotfilesRoot, next);
+            console.log('');
+            console.log(`${c.green}✓${c.reset} ${c.bright}Layout updated:${c.reset} ${c.yellow}${v}${c.reset}`);
+            console.log('');
+            process.exit(0);
+        }
+
+        printUsage();
+        process.exit(1);
+    }
+
+    printUsage();
+    process.exit(1);
+}
+
+main().catch(function onErr(err) {
+    console.error('Error:', err);
+    process.exit(1);
+});

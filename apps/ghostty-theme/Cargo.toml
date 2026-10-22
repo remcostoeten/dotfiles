@@ -1,0 +1,23 @@
+[package]
+name = "ghostty-theme"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+crossterm = "0.29"
+fast_image_resize = { version = "6", features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "qoi"] }
+ratatui = "0.30"
+ratatui-image = { version = "11.1", default-features = false, features = ["crossterm"] }
+rayon = "1"
+rustix = { version = "1", features = ["process"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev.package."*"]
+opt-level = 3

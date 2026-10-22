@@ -1,13 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Intro } from "./Intro";
-import { Keybinds } from "./Keybinds";
+import { Intro } from "./intro";
 import { useZoom } from "./lib/zoom";
+import { Packages } from "./packages";
+import {
+  installLabels,
+  MorphButton,
+  UninstallButton,
+  VERIFY_LABELS,
+  type Outcome,
+  type Verdict,
+} from "./ui/morph";
 import {
   catalog as fetchCatalog,
   checkPresence,
   specRows,
   systemInfo as fetchSystemInfo,
   runInstall,
+  runUninstall,
+  verifyInstall,
   cancelInstall,
   onInstallStart,
   onInstallLine,
@@ -17,14 +27,29 @@ import {
   type InstallExit,
   type InstallStart,
   type SystemInfo,
+  type VerifyResult,
 } from "./lib/api";
 
 type Running = InstallStart | null;
-type View = "setup" | "keybinds";
+
+const MIN_VERIFY_MS = 420;
+
+const OUTCOME_ACTIONS: Record<string, Outcome["action"]> = {
+  package: "install",
+  uninstall: "uninstall",
+  "pkg-install": "install",
+  "pkg-uninstall": "uninstall",
+};
+const OUTCOME_HOLD_MS = 2400;
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+type View = "setup" | "packages";
 
 function App() {
   const [view, setView] = useState<View>("setup");
-  const zoom = useZoom();
+  const { zoom } = useZoom();
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [presence, setPresence] = useState<Record<string, boolean>>({});
@@ -35,6 +60,11 @@ function App() {
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [error, setError] = useState("");
   const [introDone, setIntroDone] = useState(false);
+  const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [outcomes, setOutcomes] = useState<Record<string, Outcome>>({});
+  const runDryRef = useRef(false);
+  const runningRef = useRef<Running>(null);
 
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +85,7 @@ function App() {
   // Stream install lifecycle from the Go backend.
   useEffect(() => {
     const offStart = onInstallStart((e) => {
+      runningRef.current = e;
       setRunning(e);
       setExit(null);
       setLines([]);
@@ -63,6 +94,8 @@ function App() {
     const offLine = onInstallLine((line) => setLines((prev) => [...prev, line]));
     const offExit = onInstallExit((e) => {
       setExit(e);
+      if (runningRef.current) recordOutcome(runningRef.current, e.ok);
+      runningRef.current = null;
       setRunning(null);
       void refreshPresence(categories);
     });
@@ -79,6 +112,24 @@ function App() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [lines]);
 
+  function recordOutcome(run: InstallStart, ok: boolean) {
+    const action = OUTCOME_ACTIONS[run.kind];
+    if (!action) return;
+    const outcome: Outcome = {
+      action,
+      ok,
+      dryRun: runDryRef.current,
+    };
+    setOutcomes((prev) => ({ ...prev, [run.id]: outcome }));
+    setTimeout(() => {
+      setOutcomes((prev) => {
+        if (prev[run.id] !== outcome) return prev;
+        const { [run.id]: _, ...rest } = prev;
+        return rest;
+      });
+    }, OUTCOME_HOLD_MS);
+  }
+
   async function refreshPresence(cats: CatalogCategory[]) {
     const checks = Array.from(
       new Set(cats.flatMap((c) => c.items.map((i) => presenceKey(i)).filter(Boolean))),
@@ -94,6 +145,7 @@ function App() {
   async function start(kind: "all" | "category" | "package", id: string) {
     if (running) return;
     setError("");
+    runDryRef.current = dryRun;
     try {
       const result = await runInstall(kind, id, dryRun);
       if (result) setLines((prev) => [...prev, `! ${result}`]);
@@ -102,7 +154,50 @@ function App() {
     }
   }
 
+  async function uninstall(item: CatalogItem) {
+    if (running) return;
+    setError("");
+    runDryRef.current = dryRun;
+    try {
+      const result = await runUninstall(item.id, dryRun);
+      if (result) {
+        setLines((prev) => [...prev, `! ${result}`]);
+        setConsoleOpen(true);
+      }
+      if (!dryRun) setVerdicts(({ [item.id]: _, ...rest }) => rest);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Uninstall failed to start");
+    }
+  }
+
+  async function verify(item: CatalogItem) {
+    if (running || verifyingId) return;
+    setError("");
+    setVerifyingId(item.id);
+    try {
+      const [result] = await Promise.all([verifyInstall(item.id), wait(MIN_VERIFY_MS)]);
+      report(result);
+      setVerdicts((prev) => ({ ...prev, [item.id]: result.ok ? "ok" : "fail" }));
+      void refreshPresence(categories);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verify failed");
+    } finally {
+      setVerifyingId(null);
+    }
+  }
+
   const busy = running !== null;
+
+  function report(result: VerifyResult) {
+    setLines(result.lines);
+    setExit({ code: result.ok ? 0 : 1, ok: result.ok });
+    setConsoleOpen(true);
+  }
+
+  function reportError(message: string) {
+    setLines((prev) => [...prev, `! ${message}`]);
+    setConsoleOpen(true);
+  }
 
   return (
     <div className={`app ${introDone ? "revealed" : ""}`}>
@@ -122,34 +217,40 @@ function App() {
             Setup
           </button>
           <button
-            className={`tab ${view === "keybinds" ? "tab-on" : ""}`}
-            onClick={() => setView("keybinds")}
+            className={`tab ${view === "packages" ? "tab-on" : ""}`}
+            onClick={() => setView("packages")}
           >
-            Keybinds
+            Packages
           </button>
         </nav>
-        {view === "setup" ? (
-          <div className="topbar-actions">
-            <label className={`toggle ${dryRun ? "on" : ""}`}>
-              <input
-                type="checkbox"
-                checked={dryRun}
-                onChange={(e) => setDryRun(e.target.checked)}
-              />
-              <span>Dry run</span>
-            </label>
+        <div className="topbar-actions">
+          <label className={`toggle ${dryRun ? "on" : ""}`}>
+            <input
+              type="checkbox"
+              checked={dryRun}
+              onChange={(e) => setDryRun(e.target.checked)}
+            />
+            <span>Dry run</span>
+          </label>
+          {view === "setup" ? (
             <button className="btn btn-primary" disabled={busy} onClick={() => start("all", "")}>
               Run full setup
             </button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </header>
 
       <main className="content">
         {error ? <div className="banner">{error}</div> : null}
 
-        {view === "keybinds" ? (
-          <Keybinds />
+        {view === "packages" ? (
+          <Packages
+            dryRun={dryRun}
+            running={running}
+            outcomes={outcomes}
+            onReport={report}
+            onError={reportError}
+          />
         ) : (
           <>
             <SystemPanel info={info} />
@@ -175,10 +276,17 @@ function App() {
                     key={cat.id}
                     cat={cat}
                     presence={presence}
+                    verdicts={verdicts}
+                    outcomes={outcomes}
+                    dryRun={dryRun}
+                    running={running}
                     busy={busy}
+                    verifyingId={verifyingId}
                     runningId={running?.id ?? null}
                     onInstallCategory={() => start("category", cat.id)}
                     onInstallItem={(item) => start("package", item.id)}
+                    onUninstallItem={(item) => void uninstall(item)}
+                    onVerifyItem={(item) => void verify(item)}
                   />
                 ))}
               </div>
@@ -244,17 +352,31 @@ function categoryButtonLabel(kind: string): string {
 function CategoryCard({
   cat,
   presence,
+  verdicts,
+  outcomes,
+  dryRun,
+  running,
   busy,
+  verifyingId,
   runningId,
   onInstallCategory,
   onInstallItem,
+  onUninstallItem,
+  onVerifyItem,
 }: {
   cat: CatalogCategory;
   presence: Record<string, boolean>;
+  verdicts: Record<string, Verdict>;
+  outcomes: Record<string, Outcome>;
+  dryRun: boolean;
+  running: Running;
   busy: boolean;
+  verifyingId: string | null;
   runningId: string | null;
   onInstallCategory: () => void;
   onInstallItem: (item: CatalogItem) => void;
+  onUninstallItem: (item: CatalogItem) => void;
+  onVerifyItem: (item: CatalogItem) => void;
 }) {
   const checkable = cat.items.filter((i) => i.check);
   const installedCount = checkable.filter((i) => presence[presenceKey(i)]).length;
@@ -297,6 +419,10 @@ function CategoryCard({
           {cat.items.map((item) => {
             const key = presenceKey(item);
             const present = item.check ? presence[key] : false;
+            const outcome = outcomes[item.id];
+            const runningHere = running?.id === item.id;
+            const installing = runningHere && running?.kind === "package";
+            const uninstalling = runningHere && running?.kind === "uninstall";
             return (
               <li className={`item ${!item.available ? "item-muted" : ""}`} key={item.id}>
                 <div className="item-main">
@@ -305,21 +431,50 @@ function CategoryCard({
                   <span className="item-id">{item.packageName || item.id}</span>
                   <span className="leader" />
                   {item.method ? <span className="tag">{item.method}</span> : null}
-                  {present ? <span className="tag tag-ok">installed</span> : null}
+                  {present ? <span className="tag tag-ok tag-installed">installed</span> : null}
                   {!item.available ? <span className="tag tag-warn">skipped</span> : null}
-                  {item.installable ? (
-                    <button
-                      className="btn btn-sm"
-                      disabled={busy || !item.available}
-                      data-active={runningId === item.id}
-                      title={item.availabilityReason || item.command}
-                      onClick={() => onInstallItem(item)}
-                    >
-                      {present ? "Reinstall" : "Install"}
-                    </button>
-                  ) : (
-                    <span className="tag">via category</span>
-                  )}
+                  <div className="item-actions">
+                    {item.installable ? (
+                      <MorphButton
+                        labels={installLabels(present, outcome?.dryRun ?? dryRun)}
+                        state={
+                          installing
+                            ? "running"
+                            : outcome?.action === "install"
+                              ? outcome.ok
+                                ? "ok"
+                                : "fail"
+                              : "idle"
+                        }
+                        disabled={busy || !item.available}
+                        active={installing}
+                        title={item.availabilityReason || item.command}
+                        onClick={() => onInstallItem(item)}
+                      />
+                    ) : (
+                      <span className="tag">via category</span>
+                    )}
+                    {item.installable ? (
+                      <MorphButton
+                        labels={VERIFY_LABELS}
+                        state={verifyingId === item.id ? "running" : verdicts[item.id] ?? "idle"}
+                        disabled={busy || verifyingId !== null}
+                        title="Check the binary resolves, runs, and is registered with its package manager"
+                        onClick={() => onVerifyItem(item)}
+                      />
+                    ) : null}
+                    {(present || outcome?.action === "uninstall" || uninstalling) &&
+                    item.uninstallCommand ? (
+                      <UninstallButton
+                        command={item.uninstallCommand}
+                        dryRun={dryRun}
+                        outcome={outcome}
+                        disabled={busy}
+                        running={uninstalling}
+                        onConfirm={() => onUninstallItem(item)}
+                      />
+                    ) : null}
+                  </div>
                 </div>
                 <div className="item-script">
                   <code>{item.command || `setup.sh --package ${item.id}`}</code>
@@ -366,6 +521,10 @@ function LogConsole({
     return "idle";
   }, [running, exit]);
 
+  useEffect(() => {
+    logRef.current?.toggleAttribute("inert", !open);
+  }, [open, logRef]);
+
   return (
     <div className={`console ${open ? "open" : ""}`}>
       <div className="console-bar" onClick={onToggle}>
@@ -385,10 +544,9 @@ function LogConsole({
             Cancel
           </button>
         ) : null}
-        <span className="chevron">{open ? "▾" : "▴"}</span>
+        <span className="chevron">▴</span>
       </div>
-      {open ? (
-        <div className="console-body" ref={logRef}>
+      <div className="console-body" ref={logRef} aria-hidden={!open}>
           {lines.length === 0 ? (
             <div className="muted">No output yet. Run an install to stream logs here.</div>
           ) : (
@@ -398,8 +556,7 @@ function LogConsole({
               </div>
             ))
           )}
-        </div>
-      ) : null}
+      </div>
     </div>
   );
 }

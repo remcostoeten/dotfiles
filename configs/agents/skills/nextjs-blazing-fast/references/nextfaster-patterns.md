@@ -1,14 +1,14 @@
 # NextFaster application-level patterns
 
-Patterns extracted from NextFaster (https://next-faster.vercel.app, github.com/ethanniser/NextFaster) — the well-known "instant navigation" e-commerce demo. These sit *on top of* the framework stack in SKILL.md: partial prefetching warms the RSC payload, but images, third-party scripts, and the image optimizer cache are not covered by it. That's the gap these patterns close.
+Patterns extracted from NextFaster (https://next-faster.vercel.app, github.com/ethanniser/NextFaster), the well-known "instant navigation" e-commerce demo. These sit *on top of* the framework stack in SKILL.md: partial prefetching warms the RSC payload, but images, third-party scripts, and the image optimizer cache are not covered by it. That's the gap these patterns close.
 
 Apply them only when the fit criteria in SKILL.md pass. Each section states its own prerequisite.
 
 ## 1. Image-prefetching Link
 
-**Fit:** the app has image-heavy navigation targets (product cards → detail pages, album art, thumbnails → full views). Skip for text-heavy sites — it adds a client component and an API route for no visible gain.
+**Fit:** the app has image-heavy navigation targets (product cards → detail pages, album art, thumbnails → full views). Skip for text-heavy sites, it adds a client component and an API route for no visible gain.
 
-**How it works:** a drop-in `Link` replacement that (a) prefetches the route when the link enters the viewport for 300ms, (b) fetches the *list of image URLs on the target page* from an API route and caches it, (c) on hover, warms those images into the browser cache with `fetchPriority: "low"`, and (d) on mousedown navigates immediately instead of waiting for mouseup — saving ~100ms of perceived latency per click.
+**How it works:** a drop-in `Link` replacement that (a) prefetches the route when the link enters the viewport for 300ms, (b) fetches the *list of image URLs on the target page* from an API route and caches it, (c) on hover, warms those images into the browser cache with `fetchPriority: "low"`, and (d) on mousedown navigates immediately instead of waiting for mouseup, saving ~100ms of perceived latency per click.
 
 The API route fetches the target page's own HTML server-side, parses it with `linkedom` (install it: `pnpm add linkedom`), and returns the `<main> img` attributes. It's cacheable, so repeated prefetches of the same route are free.
 
@@ -132,7 +132,7 @@ Notes when adapting:
 
 ### `app/api/prefetch-images/[...rest]/route.ts`
 
-NextFaster's original uses `export const dynamic = "force-static"` — that is the legacy segment config that `cacheComponents` rejects. Under Next 16 the route is left dynamic and the response relies on `Cache-Control` (and the client-side `manifestCache`) instead:
+NextFaster's original uses `export const dynamic = "force-static"`, that is the legacy segment config that `cacheComponents` rejects. Under Next 16 the route is left dynamic and the response relies on `Cache-Control` (and the client-side `manifestCache`) instead:
 
 ```ts
 import { NextRequest, NextResponse } from 'next/server';
@@ -178,9 +178,9 @@ export async function GET(
 ```
 
 Notes:
-- `params` is a Promise in Next 15+ — keep the `await`.
+- `params` is a Promise in Next 15+, keep the `await`.
 - The selector is `main img`: the target pages must wrap content in `<main>` (they should anyway, for accessibility). Widen the selector only if the app's images genuinely live elsewhere.
-- The route fetches the app's *own* pages. If pages require auth, this returns the logged-out variant — fine for public catalogs, useless for gated apps (see fit criteria).
+- The route fetches the app's *own* pages. If pages require auth, this returns the logged-out variant, fine for public catalogs, useless for gated apps (see fit criteria).
 
 ## 2. First-party analytics rewrites
 
@@ -211,7 +211,7 @@ Then point the components at the local paths:
 <SpeedInsights scriptSrc="/insights/vitals.js" />
 ```
 
-(The data-ingestion rewrites NextFaster also has — `vitals.vercel-insights.com` with a `dsn` query param — are account-specific; only replicate those if the user asks, using their own DSN values.)
+(The data-ingestion rewrites NextFaster also has, `vitals.vercel-insights.com` with a `dsn` query param, are account-specific; only replicate those if the user asks, using their own DSN values.)
 
 ## 3. Aggressive image-optimizer caching
 
@@ -220,7 +220,7 @@ Then point the components at the local paths:
 ```ts
 // next.config.ts
 images: {
-  minimumCacheTTL: 31536000, // 1 year — optimized variants are cached and never re-fetched
+  minimumCacheTTL: 31536000, // 1 year, optimized variants are cached and never re-fetched
 },
 ```
 

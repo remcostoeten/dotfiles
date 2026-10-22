@@ -5,6 +5,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$HERE/../../bin/ghostty-theme"
 
 cd "$HERE"
+cargo build --release
 rm -f "$OUT"
-go build -trimpath -ldflags "-s -w" -o "$OUT" .
+cp target/release/ghostty-theme "$OUT"
 echo "built $OUT"

@@ -151,6 +151,49 @@ export function moveTask(tasks: Task[], id: TaskId, parentId: TaskId | undefined
   return task;
 }
 
+export type ReorderPosition =
+  | { type: "before"; anchorId: TaskId }
+  | { type: "after"; anchorId: TaskId }
+  | { type: "top" }
+  | { type: "bottom" };
+
+/**
+ * Repositions a task among its siblings (same `parentId`, top level included); it never re-parents.
+ * Sibling order is the tasks array order, which is what `buildTaskTreeRows` falls back to once its
+ * `compare` option ties, so splicing the array is enough to change what the tree renders.
+ */
+export function reorderTask(tasks: Task[], id: TaskId, position: ReorderPosition, now = Date.now()): Task {
+  const task = findTask(tasks, id);
+
+  let anchorTask: Task | undefined;
+  if (position.type === "before" || position.type === "after") {
+    anchorTask = findTask(tasks, position.anchorId);
+    if (anchorTask.id === task.id) throw new UserInputError(`Cannot reorder #${id} relative to itself`);
+    if (anchorTask.parentId !== task.parentId) {
+      throw new UserInputError(`Cannot reorder #${id} next to #${position.anchorId}: they are not siblings`);
+    }
+  }
+
+  const fromIndex = tasks.indexOf(task);
+  tasks.splice(fromIndex, 1);
+
+  let insertIndex: number;
+  if (position.type === "top" || position.type === "bottom") {
+    const siblingIndexes = tasks.reduce<number[]>((indexes, candidate, index) => {
+      if (candidate.parentId === task.parentId) indexes.push(index);
+      return indexes;
+    }, []);
+    insertIndex = position.type === "top" ? (siblingIndexes[0] ?? 0) : (siblingIndexes.at(-1) ?? tasks.length - 1) + 1;
+  } else {
+    const anchorIndex = tasks.indexOf(anchorTask!);
+    insertIndex = position.type === "before" ? anchorIndex : anchorIndex + 1;
+  }
+
+  tasks.splice(insertIndex, 0, task);
+  task.updatedAt = now;
+  return task;
+}
+
 /** Marks the tasks and every descendant completed; returns how many actually changed. */
 export function completeSubtrees(tasks: Task[], rootIds: Iterable<TaskId>, now = Date.now()): number {
   const ids = collectSubtreeIds(tasks, rootIds);

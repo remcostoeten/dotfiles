@@ -2,8 +2,13 @@ use std::collections::BTreeMap;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use keybind_core::keyd::generate_all;
-use keybind_core::model::AppConfig;
+use keybind_core::devices::InputDevice;
+use keybind_core::keyd::{
+    compute_conflicts, generate_all, parse_ids_section, simulate_managed_configs, KeyboardConflict,
+    ScannedConfig,
+};
+use keybind_core::keyd::parse_profile;
+use keybind_core::model::{is_foreign_filename, retired_filenames, slug, AppConfig, Profile};
 use keybind_core::validation::validate;
 use keybind_core::StructuredError;
 use serde::{Deserialize, Serialize};
@@ -26,9 +31,15 @@ struct HelperReply {
     code: String,
     message: String,
     #[serde(default)]
+    detail: Option<String>,
+    #[serde(default)]
     hashes: Option<BTreeMap<String, String>>,
     #[serde(default)]
     rolled_back: bool,
+    #[serde(default)]
+    configs: Option<Vec<ScannedConfig>>,
+    #[serde(default)]
+    content: Option<String>,
 }
 
 pub fn apply(config: &AppConfig, force: bool) -> Result<ApplyResult, StructuredError> {
@@ -42,11 +53,13 @@ pub fn apply(config: &AppConfig, force: bool) -> Result<ApplyResult, StructuredE
     }
 
     let files = generate_all(config).map_err(StructuredError::from)?;
+
     let state = load_state();
     let payload = serde_json::json!({
         "files": files.iter().map(|f| serde_json::json!({ "name": f.name, "content": f.content })).collect::<Vec<_>>(),
         "prior": if state.applied_hashes.is_empty() { serde_json::Value::Null } else { serde_json::to_value(&state.applied_hashes).unwrap() },
         "force": force,
+        "retire": retired_filenames(config),
     });
 
     let reply = run_helper("apply", Some(&payload.to_string()))?;
@@ -72,15 +85,86 @@ pub fn apply(config: &AppConfig, force: bool) -> Result<ApplyResult, StructuredE
             })
         } else {
             let mut err = StructuredError::new(&reply.code, reply.message);
+            if let Some(detail) = reply.detail {
+                err = err.detail(detail);
+            }
             if reply.code == "RELOAD" || reply.code == "IO" {
                 err = err.retryable();
             }
             if reply.code == "EXTERNAL_CHANGE" {
                 err = err.action("review the on-disk changes, then apply with force to overwrite");
             }
+            if reply.code == "CONFLICT" {
+                err = err.action(
+                    "scope the profile to specific devices, remove the other keyd config, or apply with force",
+                );
+            }
             Err(err)
         }
     }
+}
+
+pub fn scan() -> Result<Vec<ScannedConfig>, StructuredError> {
+    let reply = run_helper("scan", None)?;
+    if reply.ok {
+        Ok(reply.configs.unwrap_or_default())
+    } else {
+        Err(StructuredError::new(&reply.code, reply.message))
+    }
+}
+
+/// Reads a foreign keyd config and converts it into a profile that replaces it.
+pub fn import_foreign(filename: &str) -> Result<Profile, StructuredError> {
+    if !is_foreign_filename(filename) {
+        return Err(StructuredError::new(
+            "BAD_NAME",
+            format!("'{filename}' is not a foreign keyd config"),
+        ));
+    }
+    let payload = serde_json::json!({ "name": filename }).to_string();
+    let reply = run_helper("read", Some(&payload))?;
+    if !reply.ok {
+        return Err(StructuredError::new(&reply.code, reply.message));
+    }
+    let stem = filename.trim_end_matches(".conf");
+    let content = reply.content.unwrap_or_default();
+    let mut profile = parse_profile(&format!("imported-{}", slug(stem)), stem, &content)
+        .map_err(StructuredError::from)?;
+    profile.replaces = vec![filename.to_string()];
+    Ok(profile)
+}
+
+/// Which config keyd would use for each connected keyboard once `config` is
+/// applied. Reads foreign configs directly (no authorization prompt); files it
+/// cannot read are skipped.
+pub fn keyboard_ownership(
+    config: &AppConfig,
+    devices: &[InputDevice],
+) -> Result<Vec<KeyboardConflict>, StructuredError> {
+    let mut foreign = Vec::new();
+    if let Ok(entries) = std::fs::read_dir("/etc/keyd") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !is_foreign_filename(&name) {
+                continue;
+            }
+            if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                foreign.push(ScannedConfig {
+                    filename: name,
+                    managed: false,
+                    ids: parse_ids_section(&content),
+                });
+            }
+        }
+    }
+    let files = generate_all(config).map_err(StructuredError::from)?;
+    let simulated = simulate_managed_configs(foreign, &files, &retired_filenames(config));
+    Ok(compute_conflicts(&simulated, devices))
+}
+
+pub fn keyboard_conflicts(devices: &[InputDevice]) -> Result<Vec<KeyboardConflict>, StructuredError> {
+    let configs = scan()?;
+    Ok(compute_conflicts(&configs, devices))
 }
 
 pub fn helper_action(action: &str) -> Result<String, StructuredError> {

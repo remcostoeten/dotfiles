@@ -8,24 +8,30 @@ export function Catalog():Promise<Array<main.CatalogCategory>>;
 
 export function CheckPresence(arg1:Array<string>):Promise<Record<string, boolean>>;
 
-export function KeydApplyProfile(arg1:string):Promise<main.KeydResult>;
+export function PackagesCheckSource(arg1:string):Promise<main.VerifyResult>;
 
-export function KeydDeleteProfile(arg1:string):Promise<main.KeydResult>;
+export function PackagesImport(arg1:string):Promise<main.ImportResult>;
 
-export function KeydListKeys():Promise<Array<string>>;
+export function PackagesInstall(arg1:string,arg2:boolean):Promise<string>;
 
-export function KeydListProfiles():Promise<Array<main.KeydProfile>>;
+export function PackagesInstallAURHelper(arg1:string,arg2:boolean):Promise<string>;
 
-export function KeydSaveProfile(arg1:string,arg2:Array<main.KeydBinding>):Promise<main.KeydResult>;
+export function PackagesLoad():Promise<main.PackagesState>;
 
-export function KeydStartCapture():Promise<main.KeydResult>;
+export function PackagesPickFile():Promise<string>;
 
-export function KeydStatus():Promise<main.KeydStatus>;
+export function PackagesRun(arg1:string,arg2:boolean):Promise<string>;
 
-export function KeydStopCapture():Promise<void>;
+export function PackagesSave(arg1:main.PackageManifest):Promise<main.PackagesState>;
 
-export function KeydValidate(arg1:Array<main.KeydBinding>):Promise<main.KeydResult>;
+export function PackagesUninstall(arg1:string,arg2:boolean):Promise<string>;
+
+export function PackagesVerify(arg1:string):Promise<main.VerifyResult>;
 
 export function RunInstall(arg1:string,arg2:string,arg3:boolean):Promise<string>;
 
+export function RunUninstall(arg1:string,arg2:boolean):Promise<string>;
+
 export function SystemInfo():Promise<main.SystemInfo>;
+
+export function VerifyInstall(arg1:string):Promise<main.VerifyResult>;

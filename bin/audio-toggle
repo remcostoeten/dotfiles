@@ -1,24 +1,72 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SINK1="alsa_output.usb-SteelSeries_SteelSeries_Arctis_7-00.stereo-game"
-SINK2="alsa_output.pci-0000_00_1f.3.analog-stereo"
+ARCTIS="alsa_output.usb-SteelSeries_SteelSeries_Arctis_7-00.stereo-game"
+REAR="rear_jack"
+FRONT="front_jack"
 
-current=$(pactl get-default-sink)
+usage() {
+  echo "Usage: audio-toggle [rear|front|arctis|status]"
+  echo "  no argument cycles rear -> front -> arctis"
+}
 
-if [[ "$current" == "$SINK1" ]]; then
-  new="$SINK2"
-  label="3.5mm Jack"
-else
-  new="$SINK1"
-  label="SteelSeries Arctis 7"
-fi
+current_target() {
+  case "$(pactl get-default-sink)" in
+    "$REAR") echo rear ;;
+    "$FRONT") echo front ;;
+    "$ARCTIS") echo arctis ;;
+    *) echo other ;;
+  esac
+}
 
-pactl set-default-sink "$new"
+move_streams() {
+  local managed id sink
+  managed=$(pactl list short sinks | awk -v r="$REAR" -v f="$FRONT" -v a="$ARCTIS" '$2==r || $2==f || $2==a {print $1}')
+  pactl list short sink-inputs | while read -r id sink _; do
+    if grep -qx "$sink" <<<"$managed"; then
+      pactl move-sink-input "$id" "$1" 2>/dev/null || true
+    fi
+  done
+}
 
-# Move all currently playing streams to the new sink
-pactl list short sink-inputs 2>/dev/null | awk '{print $1}' | while read -r id; do
-  pactl move-sink-input "$id" "$new" 2>/dev/null || true
-done
+switch_to() {
+  local sink label
+  case "$1" in
+    rear)
+      sink="$REAR"
+      label="Rear 3.5mm"
+      ;;
+    front)
+      sink="$FRONT"
+      label="Front 3.5mm"
+      ;;
+    arctis)
+      sink="$ARCTIS"
+      label="SteelSeries Arctis 7"
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
 
-notify-send -t 1500 "Audio: $label" 2>/dev/null || echo "Audio: $label"
+  pactl set-default-sink "$sink"
+  pactl set-sink-mute "$sink" 0
+  move_streams "$sink"
+
+  notify-send -t 1500 "Audio: $label" 2>/dev/null || true
+  echo "Audio: $label"
+}
+
+case "${1:-}" in
+  "")
+    case "$(current_target)" in
+      rear) switch_to front ;;
+      front) switch_to arctis ;;
+      *) switch_to rear ;;
+    esac
+    ;;
+  status) current_target ;;
+  -h|--help) usage ;;
+  *) switch_to "$1" ;;
+esac

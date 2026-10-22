@@ -12,7 +12,7 @@ function lc --description 'List with sizes, icons, and item count for directorie
     for item in (ls -1)
         if test -f $item
             set -l size (du -h $item 2>/dev/null | cut -f1)
-            set -l icon_output (exa --icons $item)
+            set -l icon_output (eza --icons=always $item)
             printf "%-6s %s\n" $size $icon_output
         end
     end

@@ -1,0 +1,42 @@
+# ghostty-opacity = 1.0
+"$schema" = 'https://starship.rs/config-schema.json'
+
+add_newline = true
+command_timeout = 800
+
+palette = "lunar"
+
+format = """
+$cmd_duration$directory$git_branch$git_status
+[●](fg:text) $character"""
+
+[palettes.lunar]
+ink   = "#19191b"
+pill  = "#c2c2c0"
+text  = "#c2c2c0"
+muted = "#69696a"
+red   = "#b86e6e"
+
+[cmd_duration]
+min_time = 0
+show_milliseconds = false
+format = "[](fg:pill)[◐ $duration](bg:pill fg:ink)[](fg:pill) "
+
+[directory]
+home_symbol = "⌂"
+truncation_length = 3
+truncation_symbol = "…/"
+read_only = " "
+format = "[](fg:pill)[ → $path$read_only](bg:pill fg:ink)[](fg:pill) "
+
+[git_branch]
+symbol = " "
+format = "[](fg:muted)[$symbol$branch](bg:muted fg:ink)[](fg:muted) "
+
+[git_status]
+format = "[$all_status$ahead_behind](fg:muted) "
+
+[character]
+success_symbol = "[▶](fg:text)"
+error_symbol = "[▶](fg:red)"
+vimcmd_symbol = "[◀](fg:text)"

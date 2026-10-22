@@ -25,9 +25,9 @@ export function ProfileSidebar() {
   }
 
   return (
-    <aside class="flex w-48 shrink-0 flex-col border-r border-line bg-surface-1">
+    <aside class="flex w-52 shrink-0 flex-col border-r border-line bg-surface-1">
       <div class="flex items-center justify-between px-2.5 py-2">
-        <h2 class="text-[11px] font-semibold tracking-wide text-ink-faint uppercase">Profiles</h2>
+        <h2 class="section-heading">Profiles</h2>
         <Button variant="ghost" aria-label="Create profile" onClick={() => appStore.addProfile("New profile")}>
           +
         </Button>
@@ -36,15 +36,15 @@ export function ProfileSidebar() {
         <For each={appStore.config.profiles}>
           {(profile, index) => (
             <div
-              class={`group flex items-center gap-1 border-l-2 px-2 py-1.5 ${
+              class={`group mx-2 flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors duration-150 ${
                 appStore.selectedProfile() === profile.id
-                  ? "border-accent bg-surface-2"
-                  : "border-transparent hover:bg-surface-2/50"
+                  ? "bg-surface-3 text-ink"
+                  : "text-ink-dim hover:bg-surface-2 hover:text-ink"
               }`}
             >
               <button
                 type="button"
-                class="min-w-0 flex-1 truncate text-left text-[12.5px]"
+                class="min-w-0 flex-1 truncate rounded text-left text-[12.5px]"
                 onClick={() => appStore.setSelectedProfile(profile.id)}
                 onDblClick={() => startRename(profile.id, profile.name)}
               >
@@ -52,12 +52,13 @@ export function ProfileSidebar() {
                   {profile.name}
                 </span>
                 <Show when={appStore.config.active === profile.id}>
-                  <span class="ml-1 text-[10px] text-accent">default</span>
+                  <span class="ml-1.5 font-mono text-[9.5px] text-accent">default</span>
                 </Show>
               </button>
-              <div class="hidden shrink-0 items-center group-hover:flex group-focus-within:flex">
+              <div class="flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
                 <Button
                   variant="ghost"
+                  class="h-5 px-1.5 py-0"
                   aria-label={`Move ${profile.name} up`}
                   disabled={index() === 0}
                   onClick={() => appStore.moveProfile(profile.id, -1)}
@@ -66,6 +67,7 @@ export function ProfileSidebar() {
                 </Button>
                 <Button
                   variant="ghost"
+                  class="h-5 px-1.5 py-0"
                   aria-label={`Move ${profile.name} down`}
                   disabled={index() === appStore.config.profiles.length - 1}
                   onClick={() => appStore.moveProfile(profile.id, 1)}
@@ -119,7 +121,7 @@ export function ProfileSidebar() {
         }
       >
         <input
-          class="w-full rounded border border-line bg-surface-2 px-2 py-1 text-[12.5px]"
+          class="w-full rounded border border-line bg-surface-2 px-2 py-1 text-[12.5px] transition-colors duration-100"
           value={draftName()}
           aria-label="Profile name"
           onInput={(event) => setDraftName(event.currentTarget.value)}

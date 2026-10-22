@@ -182,18 +182,18 @@
       "sourceType": "github",
       "sourceUrl": "https://github.com/emilkowalski/skills.git",
       "skillPath": "skills/prototype/SKILL.md",
-      "skillFolderHash": "564cf82ef5b17f5e018b439dc7fd1e392dcf6188",
+      "skillFolderHash": "34cd3a303aef0a975fcce3ac906d6b293e600399",
       "installedAt": "2026-08-16T00:50:14.317Z",
-      "updatedAt": "2026-08-16T00:50:14.317Z"
+      "updatedAt": "2026-09-29T20:18:08.295Z"
     },
     "find-animation-opportunities": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "sourceUrl": "https://github.com/emilkowalski/skills.git",
       "skillPath": "skills/find-animation-opportunities/SKILL.md",
-      "skillFolderHash": "502f891c05c9cade7e7bd815e3f228fdd20b61b6",
+      "skillFolderHash": "e6443880f38e33cf78e5d678471eed35e8566763",
       "installedAt": "2026-08-16T00:50:31.695Z",
-      "updatedAt": "2026-08-16T00:50:31.695Z"
+      "updatedAt": "2026-09-29T20:15:28.011Z"
     },
     "animate": {
       "source": "emilkowalski/skills",
@@ -221,6 +221,51 @@
       "skillFolderHash": "44a970ae13bc32ef7391b681208a384e1aae669b",
       "installedAt": "2026-09-03T23:30:53.509Z",
       "updatedAt": "2026-09-03T23:30:53.509Z"
+    },
+    "typesafe-ai": {
+      "source": "typesafe-ai/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/typesafe-ai/skills.git",
+      "skillPath": "skills/typesafe-ai/SKILL.md",
+      "skillFolderHash": "678c375b883794bf4292715a43acbba5c84681aa",
+      "installedAt": "2026-09-19T08:58:49.774Z",
+      "updatedAt": "2026-09-19T08:58:49.774Z"
+    },
+    "animate-expo": {
+      "source": "emilkowalski/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/emilkowalski/skills.git",
+      "skillPath": "skills/animate-expo/SKILL.md",
+      "skillFolderHash": "6874701c790c7e74926ccd0a8716647a81424c85",
+      "installedAt": "2026-09-21T10:33:39.442Z",
+      "updatedAt": "2026-09-21T10:33:39.442Z"
+    },
+    "improve": {
+      "source": "shadcn/improve",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/shadcn/improve.git",
+      "skillPath": "skills/improve/SKILL.md",
+      "skillFolderHash": "7d77d76815e6deb704427f17f6e393f55e3cb6da",
+      "installedAt": "2026-10-06T15:32:21.878Z",
+      "updatedAt": "2026-10-06T15:32:21.878Z"
+    },
+    "trees": {
+      "source": "pierrecomputer/pierre",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/pierrecomputer/pierre.git",
+      "skillPath": "skills/trees/SKILL.md",
+      "skillFolderHash": "061675b8e0cbb147008c486596075d18be0c77ea",
+      "installedAt": "2026-10-11T19:54:40.159Z",
+      "updatedAt": "2026-10-11T19:54:40.159Z"
+    },
+    "ai-sdk": {
+      "source": "vercel/ai",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/vercel/ai.git",
+      "skillPath": "skills/use-ai-sdk/SKILL.md",
+      "skillFolderHash": "f0a63823ca82c30c6af320e94cbed1d769503196",
+      "installedAt": "2026-10-14T22:47:29.643Z",
+      "updatedAt": "2026-10-14T22:47:29.643Z"
     }
   },
   "dismissed": {
@@ -228,16 +273,16 @@
   },
   "lastSelectedAgents": [
     "amp",
-    "antigravity",
-    "antigravity-cli",
     "cline",
     "codex",
     "cursor",
-    "deepagents",
+    "droid",
     "gemini-cli",
     "github-copilot",
+    "kilo",
     "kimi-code-cli",
     "opencode",
+    "pi",
     "warp",
     "zed",
     "claude-code"

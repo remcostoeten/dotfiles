@@ -3,8 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Task } from "@/src/domain/task";
-import { undoPlugin } from "@/src/plugins/undo";
-import { PluginRegistry } from "@/src/plugins/registry";
+import { runTodo } from "./support/run-todo";
 import { getTodoPaths, TodoStore } from "@/src/storage/todo-store";
 
 const temporaryDirectories: string[] = [];
@@ -51,12 +50,5 @@ async function createStore(tasks: Task[]): Promise<TodoStore> {
 }
 
 async function runCommand(name: string, args: string[], store: TodoStore): Promise<string> {
-  const registry = new PluginRegistry();
-  registry.use(undoPlugin);
-  const command = registry.getCommand(name);
-  if (!command) throw new Error(`Command not registered: ${name}`);
-  let output = "";
-  const stdout = { write(chunk: string | Uint8Array) { output += chunk.toString(); return true; } } as Pick<typeof process.stdout, "write">;
-  await command.handler({ args, store, stdout, stderr: stdout, commands: registry.listCommands() });
-  return output;
+  return await runTodo(store, [name, ...args]);
 }

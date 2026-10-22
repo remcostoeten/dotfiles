@@ -1,0 +1,18 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Remco Stoeten"
+            }
+        ],
+        "Description": "Alt+Shift+1..9 moves the active window to that virtual desktop and switches to it",
+        "Icon": "preferences-system-windows-script-test",
+        "Id": "movetodesktopfollow",
+        "License": "MIT",
+        "Name": "Move Window to Desktop and Follow",
+        "Version": "1.0.0"
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}

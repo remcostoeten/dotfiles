@@ -1,0 +1,15 @@
+[Unit]
+Description=phonedrop — wifi drop zone for your phone
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 -S %h/.config/dotfiles/scripts/phonedrop/phonedrop serve %h/phone-drop --port 8765
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+Environment=MALLOC_ARENA_MAX=2
+UnsetEnvironment=PYTHONDONTWRITEBYTECODE
+Environment=PYTHONPYCACHEPREFIX=%h/.cache/phonedrop
+
+[Install]
+WantedBy=default.target

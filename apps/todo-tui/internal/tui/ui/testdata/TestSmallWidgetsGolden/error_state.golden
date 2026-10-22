@@ -1,0 +1,72 @@
+--- dark 60x5 ---
+               [1;38;2;224;115;106m✗ Could not reach the cluster[m                
+                                                            
+         [38;2;154;147;176mdial tcp 10.0.0.1:6443: connection refused[m         
+                                                            
+                          [38;2;156;140;245mr[m [38;2;154;147;176mRetry[m                           
+--- dark 80x5 ---
+                         [1;38;2;224;115;106m✗ Could not reach the cluster[m                          
+                                                                                
+                   [38;2;154;147;176mdial tcp 10.0.0.1:6443: connection refused[m                   
+                                                                                
+                                    [38;2;156;140;245mr[m [38;2;154;147;176mRetry[m                                     
+--- dark 120x5 ---
+                                             [1;38;2;224;115;106m✗ Could not reach the cluster[m                                              
+                                                                                                                        
+                                       [38;2;154;147;176mdial tcp 10.0.0.1:6443: connection refused[m                                       
+                                                                                                                        
+                                                        [38;2;156;140;245mr[m [38;2;154;147;176mRetry[m                                                         
+--- dim 60x5 ---
+               [1;38;2;184;127;121m✗ Could not reach the cluster[m                
+                                                            
+         [38;2;138;136;148mdial tcp 10.0.0.1:6443: connection refused[m         
+                                                            
+                          [38;2;142;150;186mr[m [38;2;138;136;148mRetry[m                           
+--- dim 80x5 ---
+                         [1;38;2;184;127;121m✗ Could not reach the cluster[m                          
+                                                                                
+                   [38;2;138;136;148mdial tcp 10.0.0.1:6443: connection refused[m                   
+                                                                                
+                                    [38;2;142;150;186mr[m [38;2;138;136;148mRetry[m                                     
+--- dim 120x5 ---
+                                             [1;38;2;184;127;121m✗ Could not reach the cluster[m                                              
+                                                                                                                        
+                                       [38;2;138;136;148mdial tcp 10.0.0.1:6443: connection refused[m                                       
+                                                                                                                        
+                                                        [38;2;142;150;186mr[m [38;2;138;136;148mRetry[m                                                         
+--- high-contrast 60x5 ---
+               [1;38;2;255;107;107m✗ Could not reach the cluster[m                
+                                                            
+         [38;2;208;208;208mdial tcp 10.0.0.1:6443: connection refused[m         
+                                                            
+                          [38;2;255;212;0mr[m [38;2;208;208;208mRetry[m                           
+--- high-contrast 80x5 ---
+                         [1;38;2;255;107;107m✗ Could not reach the cluster[m                          
+                                                                                
+                   [38;2;208;208;208mdial tcp 10.0.0.1:6443: connection refused[m                   
+                                                                                
+                                    [38;2;255;212;0mr[m [38;2;208;208;208mRetry[m                                     
+--- high-contrast 120x5 ---
+                                             [1;38;2;255;107;107m✗ Could not reach the cluster[m                                              
+                                                                                                                        
+                                       [38;2;208;208;208mdial tcp 10.0.0.1:6443: connection refused[m                                       
+                                                                                                                        
+                                                        [38;2;255;212;0mr[m [38;2;208;208;208mRetry[m                                                         
+--- ascii 60x5 ---
+               [1mx Could not reach the cluster[m                
+                                                            
+         dial tcp 10.0.0.1:6443: connection refused         
+                                                            
+                          [1mr[m Retry                           
+--- ascii 80x5 ---
+                         [1mx Could not reach the cluster[m                          
+                                                                                
+                   dial tcp 10.0.0.1:6443: connection refused                   
+                                                                                
+                                    [1mr[m Retry                                     
+--- ascii 120x5 ---
+                                             [1mx Could not reach the cluster[m                                              
+                                                                                                                        
+                                       dial tcp 10.0.0.1:6443: connection refused                                       
+                                                                                                                        
+                                                        [1mr[m Retry                                                         

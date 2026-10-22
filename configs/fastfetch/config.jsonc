@@ -1,56 +1,168 @@
 {
     "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
     "logo": {
-        "type": "auto",
-        "source": "~/.config/dotfiles/configs/fastfetch/logos/asciify.png",
-        "position": "left",
-        "height": 10,
-        "preserveAspectRatio": true,
+        "type": "file",
+        "source": "~/.config/dotfiles/configs/fastfetch/logos/noir.txt",
+        "color": {
+            "1": "#ff6b2c"
+        },
         "padding": {
-            "top": 1,
-            "right": 3
+            "top": 2,
+            "left": 3,
+            "right": 6
         }
     },
     "display": {
-        "separator": " "
+        "separator": " ",
+        "color": {
+            "keys": "#3a3a3a",
+            "output": "#e6e1d6",
+            "separator": "#8f897f"
+        },
+        "percent": {
+            "type": 3,
+            "color": {
+                "green": "#9ccf8f",
+                "yellow": "#f5c065",
+                "red": "#ff6b2c"
+            }
+        }
     },
     "modules": [
-        "break",
         {
-            "type": "title",
-            "color": {
-                "user": "green",
-                "at": "white",
-                "host": "green"
-            }
+            "type": "custom",
+            "format": "{#38;2;58;58;58}┌─────────────────{#38;2;255;107;44}Hardware{#38;2;58;58;58}─────────────────┐"
         },
         {
-            "type": "os",
-            "keyColor": "cyan"
+            "type": "host",
+            "key": "│ 󰌢 :",
+            "format": "{name}",
+            "keyColor": "#ff6b2c"
         },
         {
-            "type": "uptime",
-            "keyColor": "cyan"
+            "type": "cpu",
+            "key": "│  :",
+            "format": "{name} ({cores-logical}) @ {freq-max}",
+            "keyColor": "#f5c065"
         },
         {
-            "type": "command",
-            "key": "Cooling",
-            "keyColor": "magenta",
-            "text": "sensors 2>/dev/null | awk -F: '/Pump speed/ {gsub(/^ +| +$/, \"\", $2); pump=$2} /pwm1/ {gsub(/^ +| +$/, \"\", $2); pwm=$2} END { if (pump != \"\") { printf \"%s\", pump; if (pwm != \"\") printf \" · %s\", pwm; printf \"\\n\"; exit 0 } if (pwm != \"\") { print pwm; exit 0 } exit 1 }'"
+            "type": "gpu",
+            "key": "│ 󰢮 :",
+            "format": "{name} [{type}]",
+            "keyColor": "#9ccf8f"
         },
         {
-            "type": "command",
-            "key": "Ports",
-            "keyColor": "cyan",
-            "text": "ss -lntuH 2>/dev/null | awk '{print $5}' | sed 's/.*://g' | awk '/^[0-9]+$/' | sort -n | uniq | awk 'BEGIN { limit = 6 } { ports[count++] = $1 } END { if (count == 0) { print \"none\"; exit 0 } shown = count < limit ? count : limit; for (i = 0; i < shown; i++) { printf \"%s%s\", ports[i], (i + 1 < shown ? \", \" : \"\") } if (count > limit) printf \" +%d more\", count - limit; printf \"\\n\" }'"
-        },
-        {
-            "type": "memory",
-            "keyColor": "magenta"
+            "type": "display",
+            "key": "│ 󰍹 :",
+            "format": "{width}x{height} @ {refresh-rate} Hz",
+            "keyColor": "#6fcfbf"
         },
         {
             "type": "disk",
-            "keyColor": "cyan"
+            "key": "│ 󰋊 :",
+            "folders": "/",
+            "format": "{size-used} / {size-total} ({size-percentage}) - {filesystem}",
+            "keyColor": "#7aaef0"
+        },
+        {
+            "type": "memory",
+            "key": "│  :",
+            "keyColor": "#c79af2"
+        },
+        {
+            "type": "swap",
+            "key": "│ 󰓡 :",
+            "keyColor": "#f08aa8"
+        },
+        {
+            "type": "custom",
+            "format": "{#38;2;58;58;58}└──────────────────────────────────────────┘"
+        },
+        "break",
+        {
+            "type": "custom",
+            "format": "{#38;2;58;58;58}┌─────────────────{#38;2;255;107;44}Software{#38;2;58;58;58}─────────────────┐"
+        },
+        {
+            "type": "os",
+            "key": "│ 󰣇 :",
+            "format": "{pretty-name}",
+            "keyColor": "#ff6b2c"
+        },
+        {
+            "type": "de",
+            "key": "│ 󰧨 :",
+            "keyColor": "#f5c065"
+        },
+        {
+            "type": "wm",
+            "key": "│  :",
+            "format": "{pretty-name} ({protocol-name})",
+            "keyColor": "#9ccf8f"
+        },
+        {
+            "type": "kernel",
+            "key": "│  :",
+            "format": "Linux {release}",
+            "keyColor": "#6fcfbf"
+        },
+        {
+            "type": "shell",
+            "key": "│  :",
+            "keyColor": "#7aaef0"
+        },
+        {
+            "type": "terminal",
+            "key": "│  :",
+            "keyColor": "#c79af2"
+        },
+        {
+            "type": "packages",
+            "key": "│ 󰏖 :",
+            "format": "{pacman} (pacman), {flatpak-system} (flatpak-system), {flatpak-user} (flatpak-user)",
+            "keyColor": "#f08aa8"
+        },
+        {
+            "type": "custom",
+            "key": "│ 󰏘 :",
+            "format": "Noir {#38;2;230;225;214}●{#38;2;255;107;44}●●{#38;2;245;192;101}●{#38;2;156;207;143}●{#38;2;143;137;127}●",
+            "keyColor": "#ff6b2c"
+        },
+        {
+            "type": "terminalfont",
+            "key": "│  :",
+            "keyColor": "#f5c065"
+        },
+        {
+            "type": "custom",
+            "format": "{#38;2;58;58;58}└──────────────────────────────────────────┘"
+        },
+        "break",
+        {
+            "type": "custom",
+            "format": "{#38;2;58;58;58}┌──────────{#38;2;255;107;44}Age / Uptime / Update{#38;2;58;58;58}───────────┐"
+        },
+        {
+            "type": "command",
+            "key": "│ 󱦟 :",
+            "text": "birth=$(stat -c %W /); echo \"OS Age: $(( ($(date +%s) - birth) / 86400 )) days\"",
+            "keyColor": "#9ccf8f"
+        },
+        {
+            "type": "uptime",
+            "key": "│ 󰔟 :",
+            "format": "Uptime: {?days}{days} days, {?}{hours} hours, {minutes} mins",
+            "keyColor": "#6fcfbf"
+        },
+        {
+            "type": "command",
+            "key": "│ 󰚰 :",
+            "text": "n=$(checkupdates 2>/dev/null | wc -l); echo \"Updates: $n pending\"",
+            "keyColor": "#7aaef0"
+        },
+        {
+            "type": "custom",
+            "format": "{#38;2;58;58;58}└──────────────────────────────────────────┘"
         }
     ]
 }

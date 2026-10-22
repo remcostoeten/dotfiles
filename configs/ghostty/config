@@ -3,35 +3,39 @@ command = /usr/bin/fish
 
 
 # Background
-background-opacity = 0.92
+background-opacity = 1
 background-opacity-cells = false
-background-blur = 100
+background-blur = 0
 
-background-image = /home/remcostoeten/.config/dotfiles/configs/ghostty/assets/rice-nord-polar.png
-background-image-opacity = 0.50
+background-image = 
+background-image-opacity = 0.80
 background-image-fit = cover
 
 
 # Theme
-theme = Highway
+theme = noir
+cursor-style = block
+cursor-style-blink = false
+bold-is-bright = false
+minimum-contrast = 1.1
+unfocused-split-opacity = 0.85
 
 
 # Window Appearance
-window-decoration = auto
+window-decoration = none
 gtk-titlebar = true
 window-show-tab-bar = auto
 gtk-toolbar-style = flat
 gtk-custom-css = gtk.css
-window-padding-x = 20
-window-padding-y = 14
+window-padding-x = 24
+window-padding-y = 24
 window-padding-balance = true
 
 
 # Font & Typography
-font-family = "Geist Mono ExtraBold"
-font-size = 32
-adjust-cell-height = 20%
-adjust-cell-width = 18%
+font-family = "Maple Mono Normal NF"
+font-size = 13
+adjust-cell-height = 50%
 
 
 # Terminal Behavior
@@ -68,6 +72,13 @@ keybind = ctrl+-=decrease_font_size:1
 keybind = ctrl+0=reset_font_size
 
 
+# Terminal Actions
+keybind = ctrl+shift+l=clear_screen
+keybind = ctrl+shift+r=reload_config
+keybind = ctrl+shift+b=toggle_background_opacity
+keybind = ctrl+shift+s=prompt_surface_title
+
+
 # Window Controls
 # Toggle between maximized and normal window size
 keybind = ctrl+enter=toggle_maximize
@@ -83,6 +94,11 @@ keybind = global:ctrl+shift+backquote=toggle_quick_terminal
 # Cycle through existing splits
 keybind = ctrl+backquote=goto_split:next
 
+# Ctrl + [ cycles clockwise, Ctrl + ] counterclockwise
+# performable: only consumes the key when splits exist, so Ctrl + [ still sends Escape otherwise
+keybind = performable:ctrl+bracket_left=goto_split:next
+keybind = performable:ctrl+bracket_right=goto_split:previous
+
 
 # Split Creation
 # Create a split to the right
@@ -94,8 +110,8 @@ keybind = ctrl+shift+h=new_split:down
 
 # Split Resizing
 # Resize the active split by 40 cells
-keybind = ctrl+shift+arrow_right=resize_split:right,40
-keybind = ctrl+shift+arrow_left=resize_split:left,40
+keybind = ctrl+shift+bracket_right=resize_split:right,40
+keybind = ctrl+shift+bracket_left=resize_split:left,40
 keybind = ctrl+shift+arrow_down=resize_split:down,40
 keybind = ctrl+shift+arrow_up=resize_split:up,40
 
@@ -108,3 +124,5 @@ keybind = ctrl+shift+e=equalize_splits
 # Mouse
 mouse-hide-while-typing = true
 copy-on-select = true
+
+config-file = ?/home/remcostoeten/.config/aether/theme/ghostty.conf

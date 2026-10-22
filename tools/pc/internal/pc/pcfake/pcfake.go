@@ -104,17 +104,30 @@ type audioFake struct{ *Recorder }
 func (audioFake) Read() audio.Snapshot {
 	return audio.Snapshot{
 		Sinks: []audio.Sink{
-			{Name: "usb", Description: "USB Headset", Default: true, Volume: 61},
-			{Name: "hdmi", Description: "HDMI Output", Muted: true, Volume: 100},
+			{Index: 1, Name: "usb", Description: "USB Headset", Default: true, Volume: 61},
+			{Index: 2, Name: "hdmi", Description: "HDMI Output", Muted: true, Volume: 100},
+		},
+		Streams: []audio.Stream{
+			{Index: 7, App: "Firefox", Media: "Playback", Sink: "usb", Volume: 80},
 		},
 		Bluetooth: []audio.Bluetooth{{MAC: "AA:BB", Name: "WH-1000XM4", Connected: true}},
 		Players:   []audio.Player{{Status: "Playing", Name: "spotify", Artist: "Radiohead", Title: "Reckoner"}},
 	}
 }
 
-func (f audioFake) SetDefault(s string) error       { return f.record("audio.default %s", s) }
-func (f audioFake) ChangeVolume(d int) error        { return f.record("audio.volume %+d", d) }
-func (f audioFake) ToggleMute() error               { return f.record("audio.mute") }
+func (f audioFake) SetDefault(s string) error { return f.record("audio.default %s", s) }
+func (f audioFake) ChangeVolume(s string, d int) error {
+	return f.record("audio.volume %s %+d", s, d)
+}
+func (f audioFake) ToggleMute(s string) error { return f.record("audio.mute %s", s) }
+func (f audioFake) ChangeStreamVolume(i, d int) error {
+	return f.record("audio.stream.volume %d %+d", i, d)
+}
+func (f audioFake) ToggleStreamMute(i int) error { return f.record("audio.stream.mute %d", i) }
+func (f audioFake) MoveStream(i int, s string) error {
+	return f.record("audio.move %d %s", i, s)
+}
+func (f audioFake) Test(s string) error             { return f.record("audio.test %s", s) }
 func (f audioFake) Media(a audio.MediaAction) error { return f.record("audio.media %s", a) }
 func (f audioFake) SetConnected(mac string, on bool) error {
 	return f.record("audio.bluetooth %s %t", mac, on)

@@ -221,6 +221,11 @@ func openPRInBrowser(number int) error {
 	return err
 }
 
+func closeIssue(number int) error {
+	_, err := runGH("issue", "close", fmt.Sprintf("%d", number))
+	return err
+}
+
 func openIssueInBrowser(number int) error {
 	_, err := runGH("issue", "view", fmt.Sprintf("%d", number), "--web")
 	return err
@@ -289,4 +294,38 @@ func getLocalAndRemoteBranches() ([]string, error) {
 		branches = append(branches, line)
 	}
 	return branches, nil
+}
+
+func commentOnIssue(number int, body string) error {
+	_, err := runGH("issue", "comment", fmt.Sprintf("%d", number), "--body", body)
+	return err
+}
+
+func addIssueLabels(number int, labels []string) error {
+	_, err := runGH("issue", "edit", fmt.Sprintf("%d", number), "--add-label", strings.Join(labels, ","))
+	return err
+}
+
+func assignIssueToSelf(number int) error {
+	_, err := runGH("issue", "edit", fmt.Sprintf("%d", number), "--add-assignee", "@me")
+	return err
+}
+
+// listRepoLabels returns the repository's label names, lowercased.
+func listRepoLabels() (map[string]bool, error) {
+	out, err := runGH("label", "list", "--limit", "500", "--json", "name")
+	if err != nil {
+		return nil, err
+	}
+	var labels []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(out, &labels); err != nil {
+		return nil, err
+	}
+	known := make(map[string]bool, len(labels))
+	for _, l := range labels {
+		known[strings.ToLower(l.Name)] = true
+	}
+	return known, nil
 }

@@ -112,6 +112,28 @@ function handle_file() {
     return 0
 }
 
+function handle_name() {
+    local file_path="${1:-}"
+
+    if [[ -z "$file_path" ]]; then
+        printf "%s Provide a file: copy name <file>\n" "$(error)"
+        return 1
+    fi
+
+    if [[ ! -e "$file_path" ]]; then
+        printf "%s %s\n" "$(error "File not found:")" "$file_path"
+        return 1
+    fi
+
+    local file_name
+    file_name=$(basename -- "$(realpath -- "$file_path")")
+
+    copy_to_clipboard "$file_name" "File Name"
+    printf "%s 🏷️  File name displayed above\n" "$(success)"
+
+    return 0
+}
+
 # Handle pwd/path display
 function handle_pwd() {
     local target_path="${1:-$(pwd)}"
@@ -388,6 +410,10 @@ function handle_output() {
 
     trap '[[ -n "${tmpfile:-}" && -f "${tmpfile:-}" ]] && rm -f "${tmpfile:-}"' RETURN
 
+    if [[ "$1" == "find" && $# -ge 2 && "$2" != -* && ! -e "$2" ]] && command -v fd >/dev/null 2>&1; then
+        set -- fd "${@:2}"
+    fi
+
     local exit_code=0
     if ! "$@" > >(tee "$tmpfile") 2> >(tee -a "$tmpfile" >&2); then
         exit_code=$?
@@ -418,6 +444,7 @@ function handle_help() {
     echo
     printf "%s\n" "$(bold "COMMANDS:")"
     printf "    %s             Display contents of file\n" "$(cyan "<filename>")"
+    printf "    %s <file>        Copy file name with extension only\n" "$(cyan "name, -n")"
     printf "    %s [path]             Display current directory or specified path\n" "$(cyan "pwd")"
     printf "    %s                 Display git remote URL\n" "$(cyan "remote")"
     printf "    %s                 Display current git branch name\n" "$(cyan "branch")"
@@ -427,6 +454,7 @@ function handle_help() {
     echo
     printf "%s\n" "$(bold "EXAMPLES:")"
     printf "    %s      # Display file contents\n" "$(green "copy package.json")"
+    printf "    %s   # Copy \"app.ts\" only\n" "$(green "copy name src/app.ts")"
     printf "    %s               # Display current directory path\n" "$(green "copy pwd")"
     printf "    %s    # Display specific directory path\n" "$(green "copy pwd ~/projects")"
     printf "    %s            # Display git remote URL\n" "$(green "copy remote")"
@@ -456,10 +484,11 @@ function interactive_mode() {
         printf "5) %s\n" "$(cyan "Git branch name")"
         printf "6) %s\n" "$(cyan "Directory tree")"
         printf "7) %s\n" "$(cyan "Command output")"
-        printf "8) %s\n" "$(cyan "Quit")"
+        printf "8) %s\n" "$(cyan "File name (with extension)")"
+        printf "9) %s\n" "$(cyan "Quit")"
         echo
 
-        printf "%s " "$(bold "Choice (1-8):")"
+        printf "%s " "$(bold "Choice (1-9):")"
         read -r choice
         echo
 
@@ -573,11 +602,20 @@ function interactive_mode() {
                 fi
                 ;;
             8)
+                printf "%s " "$(blue "Enter filename:")"
+                read -r filename
+                if [[ -n "$filename" ]]; then
+                    handle_name "$filename" && break
+                else
+                    printf "%s No filename provided\n" "$(warning)"
+                fi
+                ;;
+            9)
                 printf "%s Goodbye! 👋\n" "$(info)"
                 exit 0
                 ;;
             *)
-                printf "%s Invalid choice. Please select 1-8.\n" "$(warning)"
+                printf "%s Invalid choice. Please select 1-9.\n" "$(warning)"
                 ;;
         esac
         echo
@@ -598,6 +636,9 @@ main() {
     case "$command" in
         help|--help|-h)
             handle_help
+            ;;
+        name|-n|--name)
+            handle_name "$@"
             ;;
         pwd)
             handle_pwd "$@"

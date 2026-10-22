@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Claude Group Cleaner",
+  "version": "1.0.0",
+  "description": "Close or ungroup every tab group whose title contains \"Claude\".",
+  "permissions": ["tabGroups", "tabs"],
+  "action": { "default_title": "Claude Group Cleaner", "default_popup": "popup.html" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "commands": {
+    "close-claude-groups": {
+      "suggested_key": { "default": "Alt+Shift+X" },
+      "description": "Close all tabs in Claude groups"
+    }
+  }
+}

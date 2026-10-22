@@ -1,0 +1,1738 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<title>phonedrop camera</title>
+<style>
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --fg: #0a0a0a;
+  --muted: #6b6b6b;
+  --line: #d9d9d9;
+  --accent: #fe5101;
+  --ok: #1fae78;
+  --warn: #b7791f;
+  --err: #e5484d;
+  --sans: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dots: radial-gradient(var(--line) 1px, transparent 1px);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --fg: #ededed;
+    --muted: #8a8a8a;
+    --line: #262626;
+    --ok: #54f2b3;
+    --warn: #f5b544;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body { font: 15px/1.45 var(--sans); -webkit-font-smoothing: antialiased; min-height: 100vh; padding-top: env(safe-area-inset-top, 0px); }
+button { font: inherit; color: inherit; cursor: pointer; }
+input, textarea, select { font-size: max(16px, 1em); }
+a { color: inherit; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+
+.caps, .ctl, .btn, .pill, .stats, .label {
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase;
+}
+.frame {
+  width: min(640px, calc(100% - 32px)); margin: 0 auto; min-height: 100vh;
+  border-inline: 1px dashed var(--line); display: flex; flex-direction: column;
+}
+.frame.wide { width: min(1000px, calc(100% - 32px)); }
+.frame > * { padding: 20px 24px; border-bottom: 1px dashed var(--line); }
+@media (max-width: 620px) { .frame > * { padding: 16px; } }
+
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+  display: flex; align-items: center; gap: 10px; padding-block: 12px;
+  background: var(--bg) var(--dots); background-size: 16px 16px;
+}
+.brand { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; text-decoration: none; }
+.brand img { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line); }
+.brand span { font-weight: 500; font-size: 0.95rem; letter-spacing: -0.01em; }
+.brand small { color: var(--muted); font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.pill.live .dot { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+
+.ctl, .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 6px;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.ctl { height: 30px; padding: 0 10px; }
+.btn { height: 40px; padding: 0 14px; }
+.ctl:hover, .btn:hover { background: color-mix(in srgb, var(--fg) 7%, transparent); color: var(--fg); }
+.ctl[aria-pressed="true"] { background: color-mix(in srgb, var(--fg) 12%, transparent); color: var(--fg); border-color: color-mix(in srgb, var(--fg) 30%, transparent); }
+.btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.btn.primary:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:active { transform: scale(0.97); }
+.btn.stop { background: color-mix(in srgb, var(--err) 14%, transparent); color: var(--err); border-color: transparent; }
+
+.controls { display: grid; gap: 12px; }
+.row { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 10px; }
+.row .label { color: var(--muted); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.go { display: grid; grid-template-columns: 1fr; grid-auto-flow: column; gap: 8px; margin-top: 4px; }
+.blackout {
+  position: fixed; inset: 0; z-index: 100; display: flex; align-items: flex-end; justify-content: center;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); background: #000; color: #262626;
+  font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.02em; text-transform: uppercase;
+}
+
+.media {
+  position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--line);
+}
+.media.portrait { aspect-ratio: 3 / 4; }
+.media video, .media canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.media video.mirror, .media canvas.mirror { transform: scaleX(-1); }
+.media .drawing { cursor: crosshair; touch-action: none; }
+.media .panning { cursor: grab; touch-action: none; }
+.media .panning:active { cursor: grabbing; }
+.blur-draft.crop { background: transparent; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.45); }
+.blur-draft { position: absolute; z-index: 2; border: 1px dashed #fff; background: rgb(255 255 255 / 0.18); pointer-events: none; }
+.remote-head { display: flex; align-items: baseline; gap: 10px; }
+.remote-head small { color: var(--muted); font-size: 0.8rem; }
+.offline .controls > :not(.remote-head) { opacity: 0.45; pointer-events: none; }
+.picture { display: grid; gap: 12px; border-top: 1px dashed var(--line); padding-top: 12px; }
+.picture summary { cursor: pointer; list-style: none; color: var(--muted); }
+.picture summary::-webkit-details-marker { display: none; }
+.picture summary::before { content: '+ '; }
+.picture[open] summary::before { content: '− '; }
+.picture > :not(summary) { margin-top: 12px; }
+.slider { display: grid; grid-template-columns: 1fr 48px; align-items: center; gap: 10px; }
+.slider input { width: 100%; accent-color: var(--fg); margin: 0; }
+.slider output { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.media .empty {
+  position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px;
+  color: #8a8a8a; font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.02em;
+}
+.tag {
+  position: absolute; left: 10px; top: 10px; z-index: 1; padding: 3px 8px; border-radius: 999px;
+  background: rgb(0 0 0 / 0.6); color: #fff; font-family: var(--mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+.panes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 20px; }
+.pane { display: grid; gap: 12px; align-content: start; }
+.pane h2 { margin: 0; font-size: 0.95rem; font-weight: 500; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pane h2 small { color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+.stage { display: grid; gap: 12px; }
+.stage-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.caption { margin-right: auto; color: var(--muted); font-family: var(--mono); font-size: 0.72rem; }
+.switch {
+  display: inline-flex; padding: 3px; gap: 2px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.switch button {
+  display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px 0 12px; border: 0; border-radius: 5px;
+  background: transparent; color: var(--muted);
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase;
+  transition: background 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+.switch button:hover { color: var(--fg); }
+.switch button[aria-selected="true"] { background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
+.switch button.live .dot { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.switch kbd {
+  font: inherit; font-size: 0.62rem; min-width: 16px; height: 16px; display: inline-grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 4px; color: var(--muted);
+}
+@media (hover: none) { .switch kbd { display: none; } }
+.float { display: grid; padding: 8px; min-height: 100vh; align-content: center; }
+.float .media { border-radius: 6px; }
+.pip-source { position: fixed; width: 2px; height: 2px; opacity: 0; pointer-events: none; }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin: 0; }
+.stats:empty { display: none; }
+.stats div { padding: 8px 10px; display: grid; gap: 2px; box-shadow: 1px 0 0 var(--line), 0 1px 0 var(--line); }
+.stats dt { color: var(--muted); font-size: 0.62rem; }
+.stats dd { margin: 0; color: var(--fg); font-size: 0.8rem; text-transform: none; font-variant-numeric: tabular-nums; }
+.stats dd.hot { color: var(--accent); }
+.note { color: var(--muted); font-size: 0.8rem; margin: 0; }
+.note code, .cmd { font-family: var(--mono); font-size: 0.75rem; }
+.cmd {
+  display: block; margin-top: 6px; padding: 8px 10px; border-radius: 6px; border: 1px dashed var(--line);
+  background: var(--surface); color: var(--fg); overflow-x: auto; white-space: nowrap; user-select: all;
+}
+
+.clockbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.clock {
+  font-family: var(--mono); font-weight: 500; font-size: clamp(2.4rem, 7vw, 4.6rem); line-height: 1;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--fg);
+  padding: 10px 16px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
+}
+
+.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: step; }
+.steps li { counter-increment: step; display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; font-size: 0.88rem; }
+.steps li::before {
+  content: counter(step); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--line); font-family: var(--mono); font-size: 0.7rem; color: var(--muted);
+}
+.steps b { font-weight: 500; }
+.setup-actions { display: grid; gap: 8px; margin-top: 16px; }
+.foot { margin-top: auto; border-bottom: 0; font-family: var(--mono); font-size: 0.72rem; color: var(--muted); padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+.foot p { margin: 0; }
+</style>
+</head>
+<body>
+<main class="frame" id="frame">
+  <header class="top">
+    <a class="brand" href="/"><img src="/icon.png" alt=""><span>phonedrop</span><small>camera</small></a>
+    <span class="pill" id="pill" role="status"><span class="dot" aria-hidden="true"></span><span id="pillText">connecting</span></span>
+  </header>
+
+  <section id="setup" hidden>
+    <h2 style="margin:0 0 6px;font-size:1rem;font-weight:500">Camera needs a secure connection</h2>
+    <p class="note" style="margin-bottom:16px">iOS only lets a page use the camera over HTTPS. Trust phonedrop's local certificate once, then the camera page opens over HTTPS. The certificate is limited to phonedrop.local and LAN addresses.</p>
+    <ol class="steps">
+      <li><span>Tap <b>Get certificate</b> and allow the profile download. If nothing happens, open this page in Safari first.</span></li>
+      <li><span>Settings → General → <b>VPN &amp; Device Management</b> → phonedrop local CA → <b>Install</b>.</span></li>
+      <li><span>Settings → General → About → <b>Certificate Trust Settings</b> → turn on phonedrop local CA.</span></li>
+      <li><span>Tap <b>Open camera</b>. You can add that page to your home screen too.</span></li>
+    </ol>
+    <div class="setup-actions">
+      <a class="btn" href="/ca.crt" target="_blank" rel="noopener">Get certificate</a>
+      <a class="btn primary" id="secureLink" href="#">Open camera</a>
+    </div>
+    <p class="note" id="noTls" hidden style="margin-top:12px">HTTPS is off on the PC because <code>openssl</code> is missing.</p>
+  </section>
+
+  <section id="sender" hidden>
+    <div class="media portrait" id="previewBox">
+      <span class="tag" id="previewTag">preview</span>
+      <video id="preview" playsinline muted autoplay></video>
+      <canvas id="look"></canvas>
+      <div class="empty" id="previewEmpty">camera off</div>
+    </div>
+  </section>
+
+  <section id="senderControls" hidden>
+    <div class="controls">
+      <div class="remote-head" id="remoteHead" hidden><span class="label">Phone</span><small id="remoteState">not connected</small></div>
+      <div class="row"><span class="label">Send</span><div class="seg" data-setting="mode">
+        <button class="ctl" data-value="both">Both</button><button class="ctl" data-value="rtc">WebRTC</button><button class="ctl" data-value="jpeg">Webcam</button>
+      </div></div>
+      <div class="row"><span class="label">Camera</span><div class="seg" data-setting="facing">
+        <button class="ctl" data-value="environment">Back</button><button class="ctl" data-value="user">Front</button>
+      </div></div>
+      <div class="row"><span class="label">Size</span><div class="seg" data-setting="res">
+        <button class="ctl" data-value="480">480p</button><button class="ctl" data-value="720">720p</button><button class="ctl" data-value="1080">1080p</button>
+      </div></div>
+      <div class="row"><span class="label">FPS</span><div class="seg" data-setting="fps">
+        <button class="ctl" data-value="15">15</button><button class="ctl" data-value="30">30</button><button class="ctl" data-value="60">60</button>
+      </div></div>
+      <div class="row"><span class="label">JPEG</span><div class="seg" data-setting="quality">
+        <button class="ctl" data-value="0.6">60%</button><button class="ctl" data-value="0.75">75%</button><button class="ctl" data-value="0.9">90%</button>
+      </div></div>
+      <div class="row"><span class="label">WebRTC</span><div class="seg" data-setting="bitrate">
+        <button class="ctl" data-value="0">Auto</button><button class="ctl" data-value="2.5">2.5M</button><button class="ctl" data-value="6">6M</button><button class="ctl" data-value="12">12M</button>
+      </div></div>
+      <details class="picture" id="picture">
+        <summary class="label">Picture</summary>
+        <div class="row"><span class="label">Rotate</span><div class="seg" data-setting="rotate">
+          <button class="ctl" data-value="0">0°</button><button class="ctl" data-value="90">90°</button><button class="ctl" data-value="180">180°</button><button class="ctl" data-value="270">270°</button>
+        </div></div>
+        <div class="row"><span class="label">Tilt</span><div class="slider"><input type="range" data-slider="tilt" min="-45" max="45" step="0.5"><output></output></div></div>
+        <div class="row"><span class="label">Crop</span><div class="seg" data-setting="aspect">
+          <button class="ctl" data-value="full">Full</button><button class="ctl" data-value="16:9">16:9</button><button class="ctl" data-value="4:3">4:3</button><button class="ctl" data-value="1:1">1:1</button><button class="ctl" data-value="9:16">9:16</button>
+        </div></div>
+        <div class="row"><span class="label">Zoom</span><div class="slider"><input type="range" data-slider="zoom" min="1" max="4" step="0.05"><output></output></div></div>
+        <div class="row"><span class="label">Light</span><div class="slider"><input type="range" data-slider="brightness" min="40" max="180" step="1"><output></output></div></div>
+        <div class="row"><span class="label">Contrast</span><div class="slider"><input type="range" data-slider="contrast" min="40" max="180" step="1"><output></output></div></div>
+        <div class="row"><span class="label">Color</span><div class="slider"><input type="range" data-slider="saturate" min="0" max="200" step="1"><output></output></div></div>
+        <div class="row"><span class="label">Warmth</span><div class="slider"><input type="range" data-slider="warmth" min="-50" max="50" step="1"><output></output></div></div>
+        <div class="row"><span class="label">Drag</span><div class="seg" id="dragMode">
+          <button class="ctl" data-drag="pan" aria-pressed="true">Pan</button><button class="ctl" data-drag="crop" aria-pressed="false">Crop</button><button class="ctl" data-drag="blur" aria-pressed="false">Blur</button>
+        </div></div>
+        <div class="row"><span class="label">Clear</span><div class="seg">
+          <button class="ctl" id="viewReset">View</button><button class="ctl" id="cropClear">Crop</button><button class="ctl" id="blurClear">Blur</button>
+        </div></div>
+        <p class="note" id="lookNote">On the preview: drag to pan, pinch to zoom, double-tap to reset the view. Switch Drag to Crop or Blur to draw a box instead. Everything is applied on the phone, so the webcam and WebRTC both get it.</p>
+        <div class="go"><button class="btn" id="lookReset">Reset picture</button></div>
+      </details>
+      <div class="go"><button class="btn primary" id="startBtn">Start streaming</button><button class="btn" id="dimBtn" hidden>Dim</button></div>
+    </div>
+  </section>
+
+  <section id="senderStats" hidden>
+    <div class="panes">
+      <div class="pane" id="sendRtcPane"><h2>WebRTC <small id="sendRtcState">off</small></h2><dl class="stats" id="sendRtcStats"></dl></div>
+      <div class="pane" id="sendJpegPane"><h2>Webcam <small id="sendJpegState">off</small></h2><dl class="stats" id="sendJpegStats"></dl></div>
+    </div>
+    <p class="note" style="margin-top:14px">Keep this screen open. iOS pauses the camera when the app goes to the background or the phone locks.</p>
+  </section>
+
+  <section id="viewer" hidden>
+    <div class="stage">
+      <div class="stage-head">
+        <div class="switch" role="tablist" aria-label="Video source">
+          <button role="tab" data-source="rtc" aria-selected="true" aria-controls="rtcBox"><span class="dot" aria-hidden="true"></span>WebRTC<kbd>1</kbd></button>
+          <button role="tab" data-source="jpeg" aria-selected="false" aria-controls="jpegBox"><span class="dot" aria-hidden="true"></span>Webcam<kbd>2</kbd></button>
+        </div>
+        <small class="caption" id="caption"></small>
+        <button class="ctl" id="pipBtn" hidden aria-pressed="false">PiP</button>
+        <button class="ctl" id="floatBtn" hidden aria-pressed="false">Float</button>
+      </div>
+      <div class="media" id="rtcBox" role="tabpanel">
+        <span class="tag">webrtc</span>
+        <video id="rtcVideo" playsinline muted autoplay></video>
+        <div class="empty" id="rtcEmpty">waiting for phone</div>
+      </div>
+      <div class="media" id="jpegBox" role="tabpanel" hidden>
+        <span class="tag" id="jpegTag">jpeg</span>
+        <canvas id="jpegCanvas"></canvas>
+        <div class="empty" id="jpegEmpty">waiting for phone</div>
+      </div>
+      <dl class="stats" id="rtcStats"></dl>
+      <dl class="stats" id="jpegStats" hidden></dl>
+      <p class="note" id="rtcNote">Sharpest picture. Adapts to the wifi, so quality can dip when the network is busy.</p>
+      <p class="note" id="deviceNote" hidden></p>
+    </div>
+  </section>
+
+  <section id="clockSection" hidden>
+    <div class="clockbar">
+      <button class="ctl" id="clockBtn" aria-pressed="false">Latency clock</button>
+      <p class="note" style="flex:1;min-width:240px">Point the phone at this clock and take a screenshot. This clock minus the clock shown in each pane is the real glass-to-glass latency. The "est." figures leave out the camera and the display.</p>
+    </div>
+    <div class="clock" id="clock" hidden style="margin-top:14px">00.000</div>
+  </section>
+
+  <footer class="foot"><p id="footNote">Same wifi, no cloud</p></footer>
+</main>
+<script>
+const params = new URLSearchParams(location.search);
+const pairKey = params.get('k');
+const RESOLUTIONS = { 480: [854, 480], 720: [1280, 720], 1080: [1920, 1080] };
+const LOOK_DEFAULTS = {
+  rotate: '0', tilt: '0', aspect: 'full', crop: null, zoom: '1', panX: 0, panY: 0,
+  brightness: '100', contrast: '100', saturate: '100', warmth: '0', blurs: [],
+};
+const VIEW_DEFAULTS = { zoom: '1', panX: 0, panY: 0, tilt: '0' };
+const MAX_ZOOM = 4;
+const DEFAULTS = { mode: 'both', facing: 'environment', res: '720', fps: '30', quality: '0.75', bitrate: '0', ...LOOK_DEFAULTS };
+const LIVE_SETTINGS = new Set(['rotate', 'aspect', 'bitrate', 'quality']);
+const SETTINGS_KEY = 'phonedrop-cam';
+const SOURCE_KEY = 'phonedrop-cam-source';
+const RESUME_KEY = 'phonedrop-cam-resume';
+
+function byId(id) {
+  return document.getElementById(id);
+}
+
+function authed(path) {
+  if (!pairKey) return path;
+  return `${path}${path.includes('?') ? '&' : '?'}k=${encodeURIComponent(pairKey)}`;
+}
+
+function wsUrl(role) {
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${scheme}://${location.host}${authed(`/api/cam/ws?role=${role}`)}`;
+}
+
+function signal(message) {
+  return fetch(authed('/api/cam/signal'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(message),
+  }).catch((error) => console.warn('phonedrop: signal failed', error));
+}
+
+function newId() {
+  return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function iceComplete(pc) {
+  return new Promise((resolve) => {
+    if (pc.iceGatheringState === 'complete') return resolve();
+    const check = () => {
+      if (pc.iceGatheringState !== 'complete') return;
+      pc.removeEventListener('icegatheringstatechange', check);
+      resolve();
+    };
+    pc.addEventListener('icegatheringstatechange', check);
+    setTimeout(resolve, 2000);
+  });
+}
+
+/**
+ * Asks libwebrtc to start the video send at `startKbps` instead of ramping up from ~300 kb/s,
+ * by adding its x-google bitrate hints to every video codec in the remote answer.
+ */
+function withStartBitrate(sdp, startKbps) {
+  const hints = `x-google-start-bitrate=${startKbps};x-google-min-bitrate=${Math.min(1000, startKbps)}`;
+  const lines = sdp.split('\r\n');
+  const codecs = new Set();
+  let inVideo = false;
+  lines.forEach((line) => {
+    if (line.startsWith('m=')) inVideo = line.startsWith('m=video');
+    const match = inVideo && line.match(/^a=rtpmap:(\d+) (H264|VP8|VP9|AV1)\//i);
+    if (match) codecs.add(match[1]);
+  });
+  const withFmtp = new Set();
+  const patched = lines.map((line) => {
+    const match = line.match(/^a=fmtp:(\d+) /);
+    if (!match || !codecs.has(match[1])) return line;
+    withFmtp.add(match[1]);
+    return `${line};${hints}`;
+  });
+  return patched.flatMap((line) => {
+    const match = line.match(/^a=rtpmap:(\d+) /);
+    return match && codecs.has(match[1]) && !withFmtp.has(match[1]) ? [line, `a=fmtp:${match[1]} ${hints}`] : [line];
+  }).join('\r\n');
+}
+
+function setPill(text, live) {
+  byId('pillText').textContent = text;
+  byId('pill').classList.toggle('live', live);
+}
+
+function renderStats(el, rows) {
+  el.innerHTML = rows.map(([label, value, hot]) => `<div><dt>${label}</dt><dd${hot ? ' class="hot"' : ''}>${value ?? '–'}</dd></div>`).join('');
+}
+
+function fmt(value, digits = 0, unit = '') {
+  return Number.isFinite(value) ? `${value.toFixed(digits)}${unit}` : '–';
+}
+
+function kbps(bytes, seconds) {
+  const bits = (bytes * 8) / seconds;
+  return bits >= 1e6 ? `${(bits / 1e6).toFixed(1)} Mb/s` : `${(bits / 1e3).toFixed(0)} kb/s`;
+}
+
+function listenSignals(handler) {
+  const source = new EventSource(authed('/api/events'));
+  source.addEventListener('cam', (event) => {
+    try {
+      handler(JSON.parse(event.data));
+    } catch (error) {
+      console.warn('phonedrop: bad signal', error);
+    }
+  });
+  return source;
+}
+
+function reloadOnUpdate(events, build, beforeReload) {
+  events.addEventListener('open', async () => {
+    try {
+      const response = await fetch(authed('/api/cam'));
+      const info = response.ok ? await response.json() : null;
+      if (!info?.build || info.build === build) return;
+      beforeReload();
+      location.reload();
+    } catch (error) {
+      console.warn('phonedrop: update check failed', error);
+    }
+  });
+}
+
+function readSettings() {
+  try {
+    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
+  } catch (error) {
+    console.warn('phonedrop: settings unavailable', error);
+    return { ...DEFAULTS };
+  }
+}
+
+function saveSettings(settings) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (error) {
+    console.warn('phonedrop: settings not saved', error);
+  }
+}
+
+function sliderLabel(key, value) {
+  if (key === 'zoom') return `${Number(value).toFixed(1)}×`;
+  if (key === 'tilt') return `${Number(value) > 0 ? '+' : ''}${value}°`;
+  if (key === 'warmth') return Number(value) > 0 ? `+${value}` : String(value);
+  return `${value}%`;
+}
+
+function normalizeBox(box) {
+  return {
+    x: Math.min(box.x0, box.x1), y: Math.min(box.y0, box.y1),
+    w: Math.abs(box.x1 - box.x0), h: Math.abs(box.y1 - box.y0),
+  };
+}
+
+function contentRect(element, width, height) {
+  const rect = element.getBoundingClientRect();
+  const scale = Math.min(rect.width / width, rect.height / height);
+  return {
+    left: (rect.width - width * scale) / 2, top: (rect.height - height * scale) / 2,
+    width: width * scale, height: height * scale, rect,
+  };
+}
+
+function surfacePoint(element, size, event, mirrored) {
+  const content = contentRect(element, size.width, size.height);
+  const x = Math.min(1, Math.max(0, (event.clientX - content.rect.left - content.left) / content.width));
+  const y = Math.min(1, Math.max(0, (event.clientY - content.rect.top - content.top) / content.height));
+  return { x: mirrored ? 1 - x : x, y };
+}
+
+function bindBoxDrawing(surface, size, mirrored, handlers) {
+  let draft = null;
+  surface.addEventListener('pointerdown', (event) => {
+    const current = size();
+    if (!surface.classList.contains('drawing') || !current.width) return;
+    surface.setPointerCapture(event.pointerId);
+    const point = surfacePoint(surface, current, event, mirrored());
+    draft = { x0: point.x, y0: point.y, x1: point.x, y1: point.y };
+    handlers.draft(draft);
+  });
+  surface.addEventListener('pointermove', (event) => {
+    if (!draft) return;
+    const point = surfacePoint(surface, size(), event, mirrored());
+    draft.x1 = point.x;
+    draft.y1 = point.y;
+    handlers.draft(draft);
+  });
+  surface.addEventListener('pointerup', () => {
+    if (!draft) return;
+    const box = normalizeBox(draft);
+    draft = null;
+    handlers.draft(null);
+    if (box.w > 0.02 && box.h > 0.02) handlers.done(box);
+  });
+  surface.addEventListener('pointercancel', () => {
+    draft = null;
+    handlers.draft(null);
+  });
+}
+
+function sanitizePatch(patch) {
+  return Object.fromEntries(Object.entries(patch || {}).filter(([key]) => key in DEFAULTS));
+}
+
+function paintControls(settings) {
+  document.querySelectorAll('[data-setting]').forEach((seg) => {
+    seg.querySelectorAll('button').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.value === settings[seg.dataset.setting]));
+    });
+  });
+  document.querySelectorAll('[data-slider]').forEach((input) => {
+    if (document.activeElement !== input) input.value = settings[input.dataset.slider];
+    input.nextElementSibling.textContent = sliderLabel(input.dataset.slider, input.value);
+  });
+  byId('blurClear').disabled = !settings.blurs.length;
+  byId('cropClear').disabled = !settings.crop && settings.aspect === 'full';
+}
+
+function bindControls(apply) {
+  document.querySelectorAll('[data-setting]').forEach((seg) => {
+    seg.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-value]');
+      if (!button) return;
+      const key = seg.dataset.setting;
+      apply(key === 'aspect'
+        ? { aspect: button.dataset.value, crop: null, panX: 0, panY: 0, zoom: '1' }
+        : { [key]: button.dataset.value });
+    });
+  });
+  document.querySelectorAll('[data-slider]').forEach((input) => {
+    input.addEventListener('input', () => apply({ [input.dataset.slider]: input.value }));
+  });
+  byId('lookReset').addEventListener('click', () => apply({ ...LOOK_DEFAULTS, blurs: [] }));
+  byId('blurClear').addEventListener('click', () => apply({ blurs: [] }));
+  byId('cropClear').addEventListener('click', () => apply({ crop: null, aspect: 'full', panX: 0, panY: 0, zoom: '1' }));
+}
+
+function bindDragMode(surfaces) {
+  const state = { mode: 'pan' };
+  function paint() {
+    byId('dragMode').querySelectorAll('button').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.drag === state.mode));
+    });
+    surfaces.forEach((surface) => {
+      surface.classList.toggle('panning', state.mode === 'pan');
+      surface.classList.toggle('drawing', state.mode !== 'pan');
+    });
+  }
+  byId('dragMode').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-drag]');
+    if (!button) return;
+    state.mode = button.dataset.drag;
+    paint();
+  });
+  paint();
+  return state;
+}
+
+function bindGestures(surface, size, mirrored, handlers) {
+  const pointers = new Map();
+  let pinch = 0;
+  const point = (event) => surfacePoint(surface, size(), event, false);
+  const anchorU = (u) => (mirrored() ? 1 - u : u);
+  surface.addEventListener('pointerdown', (event) => {
+    if (!surface.classList.contains('panning') || !size().width) return;
+    surface.setPointerCapture(event.pointerId);
+    pointers.set(event.pointerId, point(event));
+    pinch = 0;
+  });
+  surface.addEventListener('pointermove', (event) => {
+    if (!pointers.has(event.pointerId)) return;
+    const previous = pointers.get(event.pointerId);
+    const current = point(event);
+    pointers.set(event.pointerId, current);
+    if (pointers.size === 1) {
+      handlers.pan((mirrored() ? -1 : 1) * (current.x - previous.x), current.y - previous.y);
+      return;
+    }
+    const [a, b] = [...pointers.values()];
+    const distance = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinch && distance) handlers.zoom(distance / pinch, anchorU((a.x + b.x) / 2), (a.y + b.y) / 2);
+    pinch = distance;
+  });
+  const release = (event) => {
+    pointers.delete(event.pointerId);
+    pinch = 0;
+  };
+  surface.addEventListener('pointerup', release);
+  surface.addEventListener('pointercancel', release);
+  surface.addEventListener('wheel', (event) => {
+    if (!surface.classList.contains('panning') || !size().width) return;
+    event.preventDefault();
+    const current = point(event);
+    handlers.zoom(Math.exp(-event.deltaY * 0.0015), anchorU(current.x), current.y);
+  }, { passive: false });
+  surface.addEventListener('dblclick', () => handlers.reset());
+}
+
+function draftOverlay(box, surface, size, draft) {
+  let overlay = box.querySelector('.blur-draft');
+  if (!draft) return overlay?.remove();
+  if (!overlay) {
+    overlay = document.createElement('div');
+    box.append(overlay);
+  }
+  overlay.className = `blur-draft${draft.kind === 'crop' ? ' crop' : ''}`;
+  const area = normalizeBox(draft);
+  const content = contentRect(surface, size.width, size.height);
+  const mirrored = surface.classList.contains('mirror');
+  const x = mirrored ? 1 - area.x - area.w : area.x;
+  overlay.style.left = `${content.left + x * content.width}px`;
+  overlay.style.top = `${content.top + area.y * content.height}px`;
+  overlay.style.width = `${area.w * content.width}px`;
+  overlay.style.height = `${area.h * content.height}px`;
+}
+
+function createLook() {
+  const canvas = byId('look');
+  const scratch = document.createElement('canvas');
+  return {
+    canvas, ctx: canvas.getContext('2d'), scratch, scratchCtx: scratch.getContext('2d'),
+    track: null, loop: 0, filters: 'filter' in canvas.getContext('2d'),
+  };
+}
+
+function clamp(value, low, high) {
+  return low > high ? (low + high) / 2 : Math.min(high, Math.max(low, value));
+}
+
+function cropRect(settings, rw, rh) {
+  if (settings.crop) return settings.crop;
+  if (settings.aspect === 'full' || settings.aspect === 'custom') return { x: 0, y: 0, w: 1, h: 1 };
+  const [aw, ah] = settings.aspect.split(':').map(Number);
+  const width = Math.min(rw, (rh * aw) / ah);
+  const height = (width * ah) / aw;
+  return { x: (1 - width / rw) / 2, y: (1 - height / rh) / 2, w: width / rw, h: height / rh };
+}
+
+function frameGeometry(videoWidth, videoHeight, settings) {
+  const quarter = Number(settings.rotate) % 180 !== 0;
+  const rw = quarter ? videoHeight : videoWidth;
+  const rh = quarter ? videoWidth : videoHeight;
+  const crop = cropRect(settings, rw, rh);
+  const fit = Math.min(1 / crop.w, 1 / crop.h);
+  const ow = Math.max(2, Math.floor((crop.w * rw * fit) / 2) * 2);
+  const oh = Math.max(2, Math.floor((crop.h * rh * fit) / 2) * 2);
+  const tilt = (Number(settings.tilt) * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(tilt));
+  const sin = Math.abs(Math.sin(tilt));
+  const zoom = Number(settings.zoom);
+  const cover = Math.max((ow * cos + oh * sin) / ow, (ow * sin + oh * cos) / oh);
+  const viewW = crop.w / zoom;
+  const viewH = crop.h / zoom;
+  return {
+    rw, rh, ow, oh, tilt, crop, k: zoom * cover * fit,
+    cx: clamp(crop.x + crop.w / 2 + Number(settings.panX), viewW / 2, 1 - viewW / 2),
+    cy: clamp(crop.y + crop.h / 2 + Number(settings.panY), viewH / 2, 1 - viewH / 2),
+  };
+}
+
+function toFrame(geo, u, v) {
+  const px = u * geo.ow - geo.ow / 2;
+  const py = v * geo.oh - geo.oh / 2;
+  const cos = Math.cos(-geo.tilt);
+  const sin = Math.sin(-geo.tilt);
+  return {
+    x: geo.cx + (px * cos - py * sin) / geo.k / geo.rw,
+    y: geo.cy + (px * sin + py * cos) / geo.k / geo.rh,
+  };
+}
+
+function panPatch(geo, du, dv) {
+  const origin = toFrame(geo, 0.5, 0.5);
+  const moved = toFrame(geo, 0.5 + du, 0.5 + dv);
+  const x = geo.cx - (moved.x - origin.x);
+  const y = geo.cy - (moved.y - origin.y);
+  return { panX: x - (geo.crop.x + geo.crop.w / 2), panY: y - (geo.crop.y + geo.crop.h / 2) };
+}
+
+function zoomPatch(geo, settings, factor, u, v) {
+  const zoom = clamp(Number(settings.zoom) * factor, 1, MAX_ZOOM);
+  const anchor = toFrame(geo, u, v);
+  const next = { ...geo, k: (geo.k / Number(settings.zoom)) * zoom };
+  const after = toFrame(next, u, v);
+  return {
+    zoom: zoom.toFixed(3),
+    panX: geo.cx + (anchor.x - after.x) - (geo.crop.x + geo.crop.w / 2),
+    panY: geo.cy + (anchor.y - after.y) - (geo.crop.y + geo.crop.h / 2),
+  };
+}
+
+function cropPatch(geo, box) {
+  const a = toFrame(geo, box.x, box.y);
+  const b = toFrame(geo, box.x + box.w, box.y + box.h);
+  const x = clamp(Math.min(a.x, b.x), 0, 1);
+  const y = clamp(Math.min(a.y, b.y), 0, 1);
+  const w = clamp(Math.max(a.x, b.x), 0, 1) - x;
+  const h = clamp(Math.max(a.y, b.y), 0, 1) - y;
+  if (w < 0.05 || h < 0.05) return null;
+  return { crop: { x, y, w, h }, aspect: 'custom', zoom: '1', panX: 0, panY: 0, blurs: [] };
+}
+
+function pixelate(look, box) {
+  const { canvas, ctx, scratch, scratchCtx } = look;
+  const x = Math.round(box.x * canvas.width);
+  const y = Math.round(box.y * canvas.height);
+  const w = Math.max(1, Math.round(box.w * canvas.width));
+  const h = Math.max(1, Math.round(box.h * canvas.height));
+  const block = Math.max(10, Math.round(Math.min(canvas.width, canvas.height) / 40));
+  scratch.width = Math.max(1, Math.ceil(w / block));
+  scratch.height = Math.max(1, Math.ceil(h / block));
+  scratchCtx.drawImage(canvas, x, y, w, h, 0, 0, scratch.width, scratch.height);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(scratch, 0, 0, scratch.width, scratch.height, x, y, w, h);
+  ctx.imageSmoothingEnabled = true;
+}
+
+function renderLook(look, video, settings, draft) {
+  const { videoWidth, videoHeight } = video;
+  if (!videoWidth || !videoHeight) return false;
+  const { canvas, ctx } = look;
+  const geo = frameGeometry(videoWidth, videoHeight, settings);
+  look.geo = geo;
+  const width = geo.ow;
+  const height = geo.oh;
+  const resized = canvas.width !== width || canvas.height !== height;
+  if (resized) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  if (look.filters) {
+    ctx.filter = `brightness(${settings.brightness}%) contrast(${settings.contrast}%) saturate(${settings.saturate}%)`;
+  }
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, width, height);
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  ctx.rotate(geo.tilt);
+  ctx.scale(geo.k, geo.k);
+  ctx.translate(geo.rw / 2 - geo.cx * geo.rw, geo.rh / 2 - geo.cy * geo.rh);
+  ctx.rotate((Number(settings.rotate) * Math.PI) / 180);
+  ctx.drawImage(video, -videoWidth / 2, -videoHeight / 2, videoWidth, videoHeight);
+  ctx.restore();
+  ctx.filter = 'none';
+  const warmth = Number(settings.warmth);
+  if (warmth) {
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.fillStyle = warmth > 0 ? `rgb(255 138 40 / ${warmth / 60})` : `rgb(60 130 255 / ${-warmth / 60})`;
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  settings.blurs.forEach((box) => pixelate(look, box));
+  if (draft?.kind === 'blur') pixelate(look, normalizeBox(draft));
+  return resized;
+}
+
+function runSender(build) {
+  const settings = readSettings();
+  const preview = byId('preview');
+  let stream = null;
+  let running = false;
+  let rtc = null;
+  let jpeg = null;
+  let wakeLock = null;
+  let lastRtcStats = null;
+  let problem = '';
+  const look = createLook();
+  let draft = null;
+  let stateTimer = 0;
+
+  function wantsRtc() {
+    return settings.mode !== 'jpeg';
+  }
+
+  function wantsJpeg() {
+    return settings.mode !== 'rtc';
+  }
+
+  function paintSettings() {
+    paintControls(settings);
+    preview.classList.toggle('mirror', settings.facing === 'user');
+    look.canvas.classList.toggle('mirror', settings.facing === 'user');
+    byId('sendRtcPane').hidden = !wantsRtc();
+    byId('sendJpegPane').hidden = !wantsJpeg();
+  }
+
+  function paintState() {
+    const button = byId('startBtn');
+    button.textContent = running ? 'Stop' : 'Start streaming';
+    button.className = running ? 'btn stop' : 'btn primary';
+    byId('dimBtn').hidden = !running;
+    if (!running) byId('blackout').hidden = true;
+    byId('previewEmpty').hidden = Boolean(stream);
+    byId('senderStats').hidden = !running;
+    setPill(running ? 'streaming' : problem || 'idle', running);
+    byId('sendRtcState').textContent = rtc ? rtc.pc.connectionState : 'off';
+    byId('sendJpegState').textContent = jpeg ? (jpeg.ws.readyState === WebSocket.OPEN ? 'connected' : 'connecting') : 'off';
+    reportState();
+  }
+
+  function reportState() {
+    clearTimeout(stateTimer);
+    stateTimer = setTimeout(() => signal({
+      to: 'viewer', type: 'state', settings, running, problem,
+      dimmed: !byId('blackout').hidden, filters: look.filters,
+    }), 120);
+  }
+
+  function setDimmed(dimmed) {
+    byId('blackout').hidden = !dimmed || !running;
+    reportState();
+  }
+
+  function applyPatch(patch) {
+    const clean = sanitizePatch(patch);
+    const keys = Object.keys(clean);
+    if (!keys.length) return;
+    Object.assign(settings, clean);
+    saveSettings(settings);
+    paintSettings();
+    syncRtcTrack();
+    reportState();
+    if (keys.includes('bitrate')) applyBitrate();
+    if (keys.includes('quality')) sendMeta();
+    if (keys.some((key) => !LIVE_SETTINGS.has(key) && !(key in LOOK_DEFAULTS))) restart();
+  }
+
+  function runControl(message) {
+    const { action } = message;
+    if (action === 'start' && !running) start();
+    if (action === 'stop' && running) stop();
+    if (action === 'dim') setDimmed(true);
+    if (action === 'wake') setDimmed(false);
+    if (action === 'reset-view') applyPatch(VIEW_DEFAULTS);
+    if (action === 'blur' && message.box) applyPatch({ blurs: [...settings.blurs, message.box] });
+    const geo = look.geo;
+    if (!geo || !running) return;
+    if (action === 'pan') applyPatch(panPatch(geo, Number(message.du) || 0, Number(message.dv) || 0));
+    if (action === 'zoom') applyPatch(zoomPatch(geo, settings, Number(message.factor) || 1, Number(message.u) || 0.5, Number(message.v) || 0.5));
+    if (action === 'crop' && message.box) {
+      const patch = cropPatch(geo, message.box);
+      if (patch) applyPatch(patch);
+    }
+  }
+
+  async function openCamera() {
+    const [width, height] = RESOLUTIONS[settings.res];
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: settings.facing },
+        width: { ideal: width },
+        height: { ideal: height },
+        frameRate: { ideal: Number(settings.fps) },
+      },
+    });
+    preview.srcObject = stream;
+    await preview.play();
+    look.track = look.canvas.captureStream?.(Number(settings.fps)).getVideoTracks()[0] || null;
+    startRender();
+  }
+
+  function closeCamera() {
+    stream?.getTracks().forEach((track) => track.stop());
+    look.track?.stop();
+    look.track = null;
+    look.loop += 1;
+    look.canvas.width = 0;
+    stream = null;
+    preview.srcObject = null;
+  }
+
+  function lookActive() {
+    if (draft || settings.blurs.length || settings.crop || settings.aspect !== 'full') return true;
+    return Object.keys(LOOK_DEFAULTS)
+      .filter((key) => !['blurs', 'crop', 'aspect'].includes(key))
+      .some((key) => Number(settings[key]) !== Number(LOOK_DEFAULTS[key]));
+  }
+
+  function outputTrack() {
+    return lookActive() && look.track ? look.track : stream.getVideoTracks()[0];
+  }
+
+  function syncRtcTrack() {
+    const sender = rtc?.pc.getSenders()[0];
+    const track = stream && outputTrack();
+    if (sender && track && sender.track !== track) {
+      sender.replaceTrack(track).catch((error) => console.warn('phonedrop: track swap failed', error));
+    }
+  }
+
+  function startRender() {
+    look.loop += 1;
+    const loop = look.loop;
+    const tick = () => {
+      if (look.loop !== loop) return;
+      const resized = renderLook(look, preview, settings, draft);
+      if (resized) {
+        const { width, height } = look.canvas;
+        byId('previewBox').classList.toggle('portrait', height > width);
+        byId('previewTag').textContent = `${width}×${height}`;
+        sendMeta();
+      }
+      sendFrame();
+      if (preview.requestVideoFrameCallback) preview.requestVideoFrameCallback(tick);
+      else setTimeout(tick, 1000 / Number(settings.fps));
+    };
+    tick();
+  }
+
+  function startKbps() {
+    return Number(settings.bitrate) * 1000 || 4000;
+  }
+
+  async function applyBitrate() {
+    const sender = rtc?.pc.getSenders()[0];
+    if (!sender) return;
+    const parameters = sender.getParameters();
+    if (!parameters.encodings?.length) parameters.encodings = [{}];
+    const mbps = Number(settings.bitrate);
+    if (mbps) parameters.encodings[0].maxBitrate = mbps * 1e6;
+    else delete parameters.encodings[0].maxBitrate;
+    await sender.setParameters(parameters).catch((error) => console.warn('phonedrop: bitrate not applied', error));
+  }
+
+  async function startRtc() {
+    stopRtc(false);
+    const sid = newId();
+    const pc = new RTCPeerConnection();
+    rtc = { pc, sid };
+    lastRtcStats = null;
+    pc.addTrack(outputTrack(), stream);
+    pc.addEventListener('connectionstatechange', paintState);
+    await pc.setLocalDescription(await pc.createOffer());
+    await iceComplete(pc);
+    if (rtc?.sid !== sid) return;
+    await signal({ to: 'viewer', type: 'offer', sid, sdp: pc.localDescription.sdp });
+    paintState();
+  }
+
+  function stopRtc(notify = true) {
+    if (!rtc) return;
+    if (notify) signal({ to: 'viewer', type: 'bye', sid: rtc.sid });
+    rtc.pc.close();
+    rtc = null;
+  }
+
+  async function onSignal(message) {
+    if (message.to !== 'phone') return;
+    if (message.type === 'settings') return applyPatch(message.patch);
+    if (message.type === 'control') return runControl(message);
+    if (message.type === 'hello') reportState();
+    if (!running) return;
+    try {
+      if (message.type === 'hello' && wantsRtc()) return await startRtc();
+      if (message.type === 'answer' && rtc?.sid === message.sid && rtc.pc.signalingState === 'have-local-offer') {
+        await rtc.pc.setRemoteDescription({ type: 'answer', sdp: withStartBitrate(message.sdp, startKbps()) });
+        await applyBitrate();
+      }
+    } catch (error) {
+      console.warn('phonedrop: webrtc negotiation failed', error);
+    }
+    paintState();
+  }
+
+  function syncClock() {
+    if (jpeg?.ws.readyState === WebSocket.OPEN) jpeg.ws.send(JSON.stringify({ type: 'ping', t: Date.now() }));
+  }
+
+  function sendMeta() {
+    if (jpeg?.ws.readyState !== WebSocket.OPEN) return;
+    jpeg.ws.send(JSON.stringify({
+      type: 'meta',
+      width: look.canvas.width,
+      height: look.canvas.height,
+      fps: Number(settings.fps),
+      quality: Number(settings.quality),
+      facing: settings.facing,
+    }));
+  }
+
+  function sendFrame() {
+    if (!jpeg || jpeg.busy || jpeg.ws.readyState !== WebSocket.OPEN || jpeg.ws.bufferedAmount > 0) return;
+    const now = performance.now();
+    if (now - jpeg.lastSent < 900 / Number(settings.fps)) return;
+    const { canvas } = look;
+    if (!canvas.width || !canvas.height) return;
+    const captured = Date.now() + jpeg.offset;
+    const current = jpeg;
+    current.busy = true;
+    current.lastSent = now;
+    canvas.toBlob((blob) => {
+      current.busy = false;
+      if (!blob || jpeg !== current || current.ws.readyState !== WebSocket.OPEN) return;
+      const header = new ArrayBuffer(8);
+      new DataView(header).setFloat64(0, captured);
+      current.ws.send(new Blob([header, blob]));
+      current.window.frames += 1;
+      current.window.bytes += blob.size;
+      current.window.encode += performance.now() - now;
+    }, 'image/jpeg', Number(settings.quality));
+  }
+
+  function startJpeg() {
+    stopJpeg();
+    const ws = new WebSocket(wsUrl('phone'));
+    const current = {
+      ws, offset: 0, bestRtt: Infinity, busy: false, lastSent: 0,
+      window: { frames: 0, bytes: 0, encode: 0, since: performance.now() },
+    };
+    jpeg = current;
+    ws.binaryType = 'arraybuffer';
+    ws.addEventListener('open', () => {
+      for (let i = 0; i < 5; i += 1) setTimeout(syncClock, i * 150);
+      current.clockTimer = setInterval(syncClock, 5000);
+      sendMeta();
+      paintState();
+    });
+    ws.addEventListener('message', (event) => {
+      if (typeof event.data !== 'string') return;
+      const message = JSON.parse(event.data);
+      if (message.type !== 'pong') return;
+      const rtt = Date.now() - message.t;
+      if (rtt > current.bestRtt) return;
+      current.bestRtt = rtt;
+      current.offset = message.server - (message.t + rtt / 2);
+    });
+    ws.addEventListener('close', () => {
+      if (jpeg !== current) return;
+      stopJpeg();
+      paintState();
+      if (running && wantsJpeg()) setTimeout(() => running && !jpeg && wantsJpeg() && startJpeg(), 1000);
+    });
+  }
+
+  function stopJpeg() {
+    if (!jpeg) return;
+    clearInterval(jpeg.clockTimer);
+    jpeg.ws.close();
+    jpeg = null;
+  }
+
+  async function holdScreen() {
+    try {
+      wakeLock = await navigator.wakeLock?.request('screen');
+    } catch (error) {
+      console.warn('phonedrop: wake lock unavailable', error);
+    }
+  }
+
+  async function start() {
+    byId('startBtn').disabled = true;
+    problem = '';
+    try {
+      await openCamera();
+      running = true;
+      if (wantsRtc()) await startRtc();
+      if (wantsJpeg()) startJpeg();
+      holdScreen();
+    } catch (error) {
+      console.error('phonedrop: camera failed', error);
+      closeCamera();
+      running = false;
+      problem = error.name === 'NotAllowedError' ? 'camera blocked' : 'camera error';
+    } finally {
+      byId('startBtn').disabled = false;
+      paintState();
+    }
+  }
+
+  function stop() {
+    running = false;
+    stopRtc();
+    stopJpeg();
+    closeCamera();
+    wakeLock?.release().catch((error) => console.warn('phonedrop: wake lock release failed', error));
+    wakeLock = null;
+    paintState();
+  }
+
+  async function restart() {
+    if (!running) return;
+    stop();
+    await start();
+  }
+
+  async function sampleRtc(seconds) {
+    if (!rtc) return renderStats(byId('sendRtcStats'), []);
+    const report = await rtc.pc.getStats();
+    let out = null;
+    let codec = '';
+    report.forEach((entry) => {
+      if (entry.type === 'outbound-rtp' && entry.kind === 'video') out = entry;
+    });
+    if (out?.codecId) codec = report.get(out.codecId)?.mimeType?.replace('video/', '') || '';
+    const bytes = out && lastRtcStats ? out.bytesSent - lastRtcStats.bytesSent : 0;
+    lastRtcStats = out;
+    renderStats(byId('sendRtcStats'), [
+      ['size', out?.frameWidth ? `${out.frameWidth}×${out.frameHeight}` : '–'],
+      ['fps', fmt(out?.framesPerSecond)],
+      ['bitrate', out ? kbps(bytes, seconds) : '–', true],
+      ['codec', codec || '–'],
+      ['limited by', out?.qualityLimitationReason || '–'],
+      ['encoder', out?.encoderImplementation || '–'],
+    ]);
+  }
+
+  function sampleJpeg() {
+    if (!jpeg) return renderStats(byId('sendJpegStats'), []);
+    const w = jpeg.window;
+    const seconds = (performance.now() - w.since) / 1000;
+    renderStats(byId('sendJpegStats'), [
+      ['size', look.canvas.width ? `${look.canvas.width}×${look.canvas.height}` : '–'],
+      ['fps', fmt(w.frames / seconds)],
+      ['bitrate', kbps(w.bytes, seconds), true],
+      ['per frame', w.frames ? `${(w.bytes / w.frames / 1024).toFixed(0)} KB` : '–'],
+      ['encode', w.frames ? fmt(w.encode / w.frames, 1, ' ms') : '–'],
+      ['clock rtt', fmt(jpeg.bestRtt, 0, ' ms')],
+    ]);
+    jpeg.window = { frames: 0, bytes: 0, encode: 0, since: performance.now() };
+  }
+
+  bindControls(applyPatch);
+  const drag = bindDragMode([look.canvas]);
+  bindBoxDrawing(look.canvas, () => look.canvas, () => settings.facing === 'user', {
+    draft: (next) => {
+      draft = next && { ...next, kind: drag.mode };
+      draftOverlay(byId('previewBox'), look.canvas, look.canvas, draft?.kind === 'crop' ? draft : null);
+      syncRtcTrack();
+    },
+    done: (box) => runControl({ action: drag.mode, box }),
+  });
+  bindGestures(look.canvas, () => look.canvas, () => settings.facing === 'user', {
+    pan: (du, dv) => runControl({ action: 'pan', du, dv }),
+    zoom: (factor, u, v) => runControl({ action: 'zoom', factor, u, v }),
+    reset: () => runControl({ action: 'reset-view' }),
+  });
+  byId('startBtn').addEventListener('click', () => (running ? stop() : start()));
+  byId('dimBtn').addEventListener('click', () => setDimmed(true));
+  byId('blackout').addEventListener('click', () => setDimmed(false));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !running) return;
+    const track = stream?.getVideoTracks()[0];
+    if (!track || track.readyState === 'ended' || track.muted) restart();
+    else holdScreen();
+  });
+  window.addEventListener('pagehide', () => running && stop());
+  setInterval(reportState, 5000);
+  setInterval(() => {
+    if (!running) return;
+    sampleRtc(1);
+    sampleJpeg();
+    paintState();
+  }, 1000);
+
+  reloadOnUpdate(listenSignals(onSignal), build, () => {
+    try {
+      if (running) sessionStorage.setItem(RESUME_KEY, '1');
+    } catch (error) {
+      console.warn('phonedrop: resume flag not saved', error);
+    }
+  });
+  byId('sender').hidden = false;
+  byId('senderControls').hidden = false;
+  byId('footNote').textContent = 'Watch on the PC: phonedrop cam';
+  if (!look.filters) {
+    byId('lookNote').textContent = 'This iOS version cannot adjust light, contrast or color in the browser. Rotate, crop, zoom, warmth and blur still work.';
+  }
+  paintSettings();
+  paintState();
+  try {
+    if (sessionStorage.getItem(RESUME_KEY)) {
+      sessionStorage.removeItem(RESUME_KEY);
+      start();
+    }
+  } catch (error) {
+    console.warn('phonedrop: resume flag unavailable', error);
+  }
+}
+
+function runViewer(build) {
+  const video = byId('rtcVideo');
+  const canvas = byId('jpegCanvas');
+  const ctx = canvas.getContext('2d');
+  const rtcEmpty = byId('rtcEmpty');
+  const jpegEmpty = byId('jpegEmpty');
+  const rtcBox = byId('rtcBox');
+  const jpegBox = byId('jpegBox');
+  const jpegTag = byId('jpegTag');
+  let rtc = null;
+  let lastIn = null;
+  let status = { phone: false, device: null, webcam: 'idle', meta: {} };
+  let source = readSource();
+  let lastJpegAt = 0;
+  const frames = { latest: null, decoding: false, window: newWindow() };
+
+  function readSource() {
+    try {
+      return localStorage.getItem(SOURCE_KEY) === 'jpeg' ? 'jpeg' : 'rtc';
+    } catch (error) {
+      console.warn('phonedrop: source preference unavailable', error);
+      return 'rtc';
+    }
+  }
+
+  function rtcLive() {
+    return rtc?.pc.connectionState === 'connected' && Boolean(video.srcObject);
+  }
+
+  function jpegLive() {
+    return status.phone && performance.now() - lastJpegAt < 2000;
+  }
+
+  function paintSource() {
+    const showRtc = source === 'rtc';
+    rtcBox.hidden = !showRtc;
+    byId('rtcStats').hidden = !showRtc;
+    byId('rtcNote').hidden = !showRtc;
+    jpegBox.hidden = showRtc;
+    byId('jpegStats').hidden = showRtc;
+    byId('deviceNote').hidden = showRtc;
+    document.querySelectorAll('[data-source]').forEach((button) => {
+      button.setAttribute('aria-selected', String(button.dataset.source === source));
+      button.tabIndex = button.dataset.source === source ? 0 : -1;
+    });
+    paintLive();
+  }
+
+  function paintLive() {
+    const live = { rtc: rtcLive(), jpeg: jpegLive() };
+    document.querySelectorAll('[data-source]').forEach((button) => button.classList.toggle('live', live[button.dataset.source]));
+    const other = source === 'rtc' ? 'jpeg' : 'rtc';
+    byId('caption').textContent = !live[source] && live[other] ? `phone is only sending ${other === 'rtc' ? 'WebRTC' : 'Webcam'}` : '';
+  }
+
+  function selectSource(next) {
+    if (next === source) return;
+    source = next;
+    try {
+      localStorage.setItem(SOURCE_KEY, source);
+    } catch (error) {
+      console.warn('phonedrop: source preference not saved', error);
+    }
+    if (document.pictureInPictureElement) document.exitPictureInPicture().catch((error) => console.warn('phonedrop: leave picture-in-picture failed', error));
+    paintSource();
+  }
+
+  function newWindow() {
+    return { frames: 0, bytes: 0, age: 0, network: 0, dropped: 0, since: performance.now() };
+  }
+
+  function paintPill() {
+    const live = status.phone || rtc?.pc.connectionState === 'connected';
+    setPill(live ? 'phone live' : 'waiting for phone', live);
+  }
+
+  function paintDevice() {
+    const webcam = status.webcam || 'idle';
+    jpegTag.textContent = status.device ? `jpeg → ${status.device.replace('/dev/', '')}` : 'jpeg';
+    const note = byId('deviceNote');
+    if (webcam === 'no-device' || (!status.device && webcam === 'idle')) {
+      note.innerHTML = 'No virtual webcam called <code>phonedrop</code>, so this pane is a preview only. Create one, then restart the stream:<span class="cmd">sudo v4l2loopback-ctl add -n phonedrop -x 1 /dev/video20</span>';
+    } else if (webcam === 'no-ffmpeg') {
+      note.textContent = 'ffmpeg is missing, so there is no virtual webcam output.';
+    } else if (webcam.startsWith('error')) {
+      note.textContent = `Virtual webcam stopped: ${webcam.slice(7)}`;
+    } else if (webcam.startsWith('live')) {
+      note.innerHTML = `Lowest delay. Also feeds the webcam <code>${status.device}</code> for OBS, Meet and Discord, whichever view you pick here.`;
+    } else {
+      note.innerHTML = status.device ? `Lowest delay. Frames go to the webcam <code>${status.device}</code> as soon as the phone streams.` : '';
+    }
+  }
+
+  function closeRtc() {
+    rtc?.pc.close();
+    rtc = null;
+    lastIn = null;
+    video.srcObject = null;
+    rtcEmpty.hidden = false;
+    rtcEmpty.textContent = 'waiting for phone';
+    paintPill();
+  }
+
+  async function acceptOffer(message) {
+    closeRtc();
+    const pc = new RTCPeerConnection();
+    rtc = { pc, sid: message.sid };
+    pc.addEventListener('track', (event) => {
+      if ('jitterBufferTarget' in event.receiver) event.receiver.jitterBufferTarget = 0;
+      video.srcObject = event.streams[0] || new MediaStream([event.track]);
+      rtcEmpty.hidden = true;
+      paintLive();
+    });
+    pc.addEventListener('connectionstatechange', () => {
+      if (pc.connectionState === 'failed') rtcEmpty.textContent = 'connection failed';
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') rtcEmpty.hidden = false;
+      paintPill();
+    });
+    await pc.setRemoteDescription({ type: 'offer', sdp: message.sdp });
+    await pc.setLocalDescription(await pc.createAnswer());
+    await iceComplete(pc);
+    if (rtc?.pc !== pc) return;
+    await signal({ to: 'phone', type: 'answer', sid: message.sid, sdp: pc.localDescription.sdp });
+  }
+
+  function onSignal(message) {
+    if (message.to !== 'viewer') return;
+    if (message.type === 'state') return remote.receive(message);
+    if (message.type === 'offer') acceptOffer(message).catch((error) => console.warn('phonedrop: webrtc answer failed', error));
+    if (message.type === 'bye' && rtc?.sid === message.sid) closeRtc();
+  }
+
+  async function decodeFrames() {
+    frames.decoding = true;
+    while (frames.latest && source === 'jpeg') {
+      const buffer = frames.latest;
+      frames.latest = null;
+      const view = new DataView(buffer);
+      const captured = view.getFloat64(0);
+      const received = view.getFloat64(8);
+      try {
+        const bitmap = await createImageBitmap(new Blob([new Uint8Array(buffer, 16)], { type: 'image/jpeg' }));
+        if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+        }
+        ctx.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        const w = frames.window;
+        w.frames += 1;
+        w.bytes += buffer.byteLength - 16;
+        w.age += Date.now() - captured;
+        w.network += received - captured;
+        jpegEmpty.hidden = true;
+      } catch (error) {
+        console.warn('phonedrop: bad frame', error);
+      }
+    }
+    frames.decoding = false;
+  }
+
+  function connectFrames() {
+    const ws = new WebSocket(wsUrl('viewer'));
+    ws.binaryType = 'arraybuffer';
+    ws.addEventListener('message', (event) => {
+      if (typeof event.data === 'string') {
+        status = JSON.parse(event.data);
+        if (!status.phone) jpegEmpty.hidden = false;
+        paintDevice();
+        paintPill();
+        return;
+      }
+      lastJpegAt = performance.now();
+      if (frames.latest) frames.window.dropped += 1;
+      frames.latest = event.data;
+      if (!frames.decoding && source === 'jpeg') decodeFrames();
+    });
+    ws.addEventListener('close', () => setTimeout(connectFrames, 1000));
+  }
+
+  async function sampleRtc(seconds) {
+    if (!rtc) return renderStats(byId('rtcStats'), []);
+    const report = await rtc.pc.getStats();
+    let inbound = null;
+    let pair = null;
+    report.forEach((entry) => {
+      if (entry.type === 'inbound-rtp' && entry.kind === 'video') inbound = entry;
+      if (entry.type === 'candidate-pair' && (entry.nominated || entry.selected) && entry.state === 'succeeded') pair = entry;
+    });
+    if (!inbound) return renderStats(byId('rtcStats'), []);
+    const previous = lastIn || inbound;
+    const emitted = inbound.jitterBufferEmittedCount - (previous.jitterBufferEmittedCount || 0);
+    const buffer = emitted ? ((inbound.jitterBufferDelay - previous.jitterBufferDelay) / emitted) * 1000 : NaN;
+    const decoded = inbound.framesDecoded - previous.framesDecoded;
+    const decode = decoded ? ((inbound.totalDecodeTime - previous.totalDecodeTime) / decoded) * 1000 : NaN;
+    const rtt = (pair?.currentRoundTripTime ?? NaN) * 1000;
+    const bytes = inbound.bytesReceived - (previous.bytesReceived || 0);
+    const codec = report.get(inbound.codecId)?.mimeType?.replace('video/', '') || '–';
+    lastIn = inbound;
+    renderStats(byId('rtcStats'), [
+      ['size', inbound.frameWidth ? `${inbound.frameWidth}×${inbound.frameHeight}` : '–'],
+      ['fps', fmt(inbound.framesPerSecond)],
+      ['bitrate', kbps(bytes, seconds)],
+      ['codec', codec],
+      ['latency est.', fmt(rtt / 2 + buffer + decode, 0, ' ms'), true],
+      ['jitter buffer', fmt(buffer, 0, ' ms')],
+      ['decode', fmt(decode, 1, ' ms')],
+      ['network rtt', fmt(rtt, 1, ' ms')],
+      ['lost / dropped', `${inbound.packetsLost ?? 0} / ${inbound.framesDropped ?? 0}`],
+      ['freezes', String(inbound.freezeCount ?? 0)],
+    ]);
+  }
+
+  function sampleJpeg() {
+    const w = frames.window;
+    const seconds = (performance.now() - w.since) / 1000;
+    if (!w.frames && !status.phone) {
+      frames.window = newWindow();
+      return renderStats(byId('jpegStats'), []);
+    }
+    renderStats(byId('jpegStats'), [
+      ['size', canvas.width ? `${canvas.width}×${canvas.height}` : '–'],
+      ['fps', fmt(w.frames / seconds)],
+      ['bitrate', kbps(w.bytes, seconds)],
+      ['per frame', w.frames ? `${(w.bytes / w.frames / 1024).toFixed(0)} KB` : '–'],
+      ['latency est.', w.frames ? fmt(w.age / w.frames, 0, ' ms') : '–', true],
+      ['network', w.frames ? fmt(w.network / w.frames, 0, ' ms') : '–'],
+      ['jpeg quality', status.meta?.quality ? `${Math.round(status.meta.quality * 100)}%` : '–'],
+      ['skipped', String(w.dropped)],
+    ]);
+    frames.window = newWindow();
+  }
+
+  function tickClock() {
+    if (byId('clock').hidden) return;
+    const now = new Date();
+    byId('clock').textContent = `${String(now.getSeconds()).padStart(2, '0')}.${String(now.getMilliseconds()).padStart(3, '0')}`;
+    requestAnimationFrame(tickClock);
+  }
+
+  let jpegPipVideo = null;
+  let floatWindow = null;
+
+  function pipTarget(kind) {
+    if (kind === 'rtc') return video;
+    if (!jpegPipVideo) {
+      jpegPipVideo = document.createElement('video');
+      jpegPipVideo.className = 'pip-source';
+      jpegPipVideo.muted = true;
+      jpegPipVideo.playsInline = true;
+      jpegPipVideo.srcObject = canvas.captureStream();
+      document.body.append(jpegPipVideo);
+    }
+    return jpegPipVideo;
+  }
+
+  function paintPip() {
+    byId('pipBtn').setAttribute('aria-pressed', String(Boolean(document.pictureInPictureElement)));
+    byId('floatBtn').setAttribute('aria-pressed', String(Boolean(floatWindow)));
+  }
+
+  async function togglePip(kind) {
+    const target = pipTarget(kind);
+    if (document.pictureInPictureElement === target) return document.exitPictureInPicture();
+    if (!target.srcObject) {
+      setPill(`no ${kind === 'rtc' ? 'webrtc' : 'webcam'} stream yet`, false);
+      return;
+    }
+    if (target.readyState < HTMLMediaElement.HAVE_METADATA) {
+      await new Promise((resolve) => {
+        target.addEventListener('loadedmetadata', resolve, { once: true });
+        setTimeout(resolve, 3000);
+      });
+    }
+    if (target.readyState < HTMLMediaElement.HAVE_METADATA) {
+      setPill('no frames yet', false);
+      return;
+    }
+    await target.play();
+    await target.requestPictureInPicture();
+  }
+
+  function copyStyles(win) {
+    [...document.styleSheets].forEach((sheet) => {
+      try {
+        const style = win.document.createElement('style');
+        style.textContent = [...sheet.cssRules].map((rule) => rule.cssText).join('\n');
+        win.document.head.append(style);
+      } catch (error) {
+        const link = win.document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = sheet.href;
+        win.document.head.append(link);
+      }
+    });
+  }
+
+  async function toggleFloat() {
+    if (floatWindow) return floatWindow.close();
+    if (document.pictureInPictureElement) await document.exitPictureInPicture();
+    const boxes = [rtcBox, jpegBox];
+    const homes = boxes.map((box) => box.parentElement);
+    const anchors = boxes.map((box) => box.nextElementSibling);
+    const win = await documentPictureInPicture.requestWindow({ width: 640, height: 376 });
+    floatWindow = win;
+    copyStyles(win);
+    win.document.title = 'phonedrop camera';
+    const grid = win.document.createElement('div');
+    grid.className = 'float';
+    grid.append(...boxes);
+    win.document.body.append(grid);
+    video.play().catch((error) => console.warn('phonedrop: resume after float failed', error));
+    win.addEventListener('pagehide', () => {
+      boxes.forEach((box, index) => homes[index].insertBefore(box, anchors[index]));
+      video.play().catch((error) => console.warn('phonedrop: resume after float failed', error));
+      floatWindow = null;
+      paintPip();
+    });
+    paintPip();
+  }
+
+  if (document.pictureInPictureEnabled) {
+    byId('pipBtn').hidden = false;
+    byId('pipBtn').addEventListener('click', () => {
+      togglePip(source).catch((error) => console.warn('phonedrop: picture-in-picture failed', error)).finally(paintPip);
+    });
+    document.addEventListener('enterpictureinpicture', paintPip, true);
+    document.addEventListener('leavepictureinpicture', paintPip, true);
+  }
+  if ('documentPictureInPicture' in window) {
+    byId('floatBtn').hidden = false;
+    byId('floatBtn').addEventListener('click', () => {
+      toggleFloat().catch((error) => console.warn('phonedrop: float window failed', error));
+    });
+  }
+
+  byId('clockBtn').addEventListener('click', () => {
+    const show = byId('clock').hidden;
+    byId('clock').hidden = !show;
+    byId('clockBtn').setAttribute('aria-pressed', String(show));
+    if (show) tickClock();
+  });
+
+  document.querySelectorAll('[data-source]').forEach((button) => {
+    button.addEventListener('click', () => selectSource(button.dataset.source));
+  });
+  byId('viewer').querySelector('.switch').addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    selectSource(source === 'rtc' ? 'jpeg' : 'rtc');
+    document.querySelector(`[data-source="${source}"]`).focus();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.target.closest('input, textarea')) return;
+    if (event.key === '1') selectSource('rtc');
+    if (event.key === '2') selectSource('jpeg');
+  });
+
+  const remote = runRemote(() => status.phone || rtcLive(), [
+    { surface: video, box: rtcBox, size: () => ({ width: video.videoWidth, height: video.videoHeight }) },
+    { surface: canvas, box: jpegBox, size: () => canvas },
+  ]);
+  const events = listenSignals(onSignal);
+  events.addEventListener('open', () => signal({ to: 'phone', type: 'hello' }));
+  reloadOnUpdate(events, build, () => {});
+  connectFrames();
+  setInterval(() => {
+    sampleRtc(1);
+    sampleJpeg();
+    paintLive();
+  }, 1000);
+
+  byId('frame').classList.add('wide');
+  byId('viewer').hidden = false;
+  byId('clockSection').hidden = false;
+  byId('footNote').textContent = 'Open phonedrop on the phone → Camera → Start streaming';
+  renderStats(byId('rtcStats'), []);
+  renderStats(byId('jpegStats'), []);
+  paintSource();
+  paintDevice();
+  paintPill();
+}
+
+function runRemote(streaming, surfaces) {
+  const settings = { ...DEFAULTS };
+  let phone = null;
+  let seenAt = 0;
+  let pending = null;
+  let flushTimer = 0;
+  let gesture = null;
+  let gestureTimer = 0;
+
+  function online() {
+    return phone !== null && performance.now() - seenAt < 12000;
+  }
+
+  function send(patch) {
+    pending = { ...pending, ...patch };
+    if (flushTimer) return;
+    flushTimer = setTimeout(() => {
+      signal({ to: 'phone', type: 'settings', patch: pending });
+      pending = null;
+      flushTimer = 0;
+    }, 80);
+  }
+
+  function apply(patch) {
+    Object.assign(settings, patch);
+    paintControls(settings);
+    send(patch);
+  }
+
+  function paint() {
+    const live = online();
+    const running = live && phone.running;
+    byId('senderControls').classList.toggle('offline', !live);
+    const offline = streaming()
+      ? 'the phone runs an older camera page. Reload it on the phone to control it from here.'
+      : 'not connected. Open the camera page on the phone.';
+    byId('remoteState').textContent = !live
+      ? offline
+      : phone.problem || (running ? (phone.dimmed ? 'streaming, screen dimmed' : 'streaming') : 'camera off');
+    const start = byId('startBtn');
+    start.textContent = running ? 'Stop phone camera' : 'Start phone camera';
+    start.className = running ? 'btn stop' : 'btn primary';
+    const dim = byId('dimBtn');
+    dim.hidden = !running;
+    dim.textContent = phone?.dimmed ? 'Wake phone screen' : 'Dim phone screen';
+    if (live && !phone.filters) {
+      byId('lookNote').textContent = 'The phone cannot adjust light, contrast or color in its browser. Rotate, crop, zoom, warmth and blur still work.';
+    }
+  }
+
+  function receive(message) {
+    phone = message;
+    seenAt = performance.now();
+    if (!pending) {
+      Object.assign(settings, message.settings);
+      paintControls(settings);
+    }
+    paint();
+  }
+
+  function control(message) {
+    signal({ to: 'phone', type: 'control', ...message });
+  }
+
+  function queueGesture(kind, values) {
+    if (gesture && gesture.kind !== kind) flushGesture();
+    if (!gesture) gesture = kind === 'pan' ? { kind, du: 0, dv: 0 } : { kind, factor: 1 };
+    if (kind === 'pan') {
+      gesture.du += values.du;
+      gesture.dv += values.dv;
+    } else {
+      gesture.factor *= values.factor;
+      gesture.u = values.u;
+      gesture.v = values.v;
+    }
+    if (!gestureTimer) gestureTimer = setTimeout(flushGesture, 60);
+  }
+
+  function flushGesture() {
+    clearTimeout(gestureTimer);
+    gestureTimer = 0;
+    if (!gesture) return;
+    const { kind, ...values } = gesture;
+    gesture = null;
+    control({ action: kind, ...values });
+  }
+
+  bindControls(apply);
+  const drag = bindDragMode(surfaces.map((target) => target.surface));
+  surfaces.forEach((target) => {
+    bindBoxDrawing(target.surface, target.size, () => false, {
+      draft: (draft) => draftOverlay(target.box, target.surface, target.size(), draft && { ...draft, kind: drag.mode }),
+      done: (box) => control({ action: drag.mode, box }),
+    });
+    bindGestures(target.surface, target.size, () => false, {
+      pan: (du, dv) => queueGesture('pan', { du, dv }),
+      zoom: (factor, u, v) => queueGesture('zoom', { factor, u, v }),
+      reset: () => control({ action: 'reset-view' }),
+    });
+  });
+  byId('startBtn').addEventListener('click', () => {
+    signal({ to: 'phone', type: 'control', action: phone?.running ? 'stop' : 'start' });
+  });
+  byId('dimBtn').addEventListener('click', () => {
+    signal({ to: 'phone', type: 'control', action: phone?.dimmed ? 'wake' : 'dim' });
+  });
+  setInterval(paint, 2000);
+
+  byId('remoteHead').hidden = false;
+  byId('lookNote').textContent = 'On the video above: drag to pan, scroll or pinch to zoom, double-click to reset the view. Switch Drag to Crop or Blur to draw a box instead. Changes apply on the phone.';
+  byId('viewer').after(byId('senderControls'));
+  byId('senderControls').hidden = false;
+  paintControls(settings);
+  paint();
+  return { receive };
+}
+
+function runSetup(info) {
+  byId('setup').hidden = false;
+  if (info.secure_url) byId('secureLink').href = info.secure_url;
+  else {
+    byId('secureLink').hidden = true;
+    byId('noTls').hidden = false;
+  }
+  setPill('needs https', false);
+}
+
+async function boot() {
+  const response = await fetch(authed('/api/cam'));
+  if (!response.ok) {
+    setPill('not paired', false);
+    return;
+  }
+  const info = await response.json();
+  const role = params.get('as') || (info.local ? 'viewer' : 'phone');
+  if (role === 'viewer') return runViewer(info.build);
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) return runSetup(info);
+  runSender(info.build);
+}
+
+boot().catch((error) => {
+  console.error('phonedrop: camera page failed', error);
+  setPill('error', false);
+});
+</script>
+<div class="blackout" id="blackout" hidden>Streaming, tap to wake</div>
+</body>
+</html>

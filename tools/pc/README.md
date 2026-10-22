@@ -38,6 +38,14 @@ bindings and keymap conflicts before the first frame is drawn.
 palette · `?` lists every command · `ctrl+t` cycles `dark`, `dim`, `high-contrast`
 and `ascii` · `q` quits.
 
+The sidebar is the last stop in the `tab` ring and sits left of every screen, so
+`alt+h` reaches it too. While it has focus `j`/`k` (or the arrows) move the
+highlight and `enter` or `l` opens that section and moves focus into it.
+
+On the audio screen the Apps pane lists what is playing and where it goes:
+`enter` picks an output for the selected app, `t` plays a test sound, `-`/`=`
+and `m` change its volume, and `R` sends every app to the selected output.
+
 ## Development
 
     make test     # go test ./...

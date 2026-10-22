@@ -1,0 +1,737 @@
+#!/usr/bin/env python3
+import argparse
+import fnmatch
+import heapq
+import json
+import multiprocessing
+import os
+import shutil
+import sys
+from array import array
+from stat import S_ISDIR, S_ISLNK
+
+VERSION = "1.1.0"
+
+HELP_EPILOG = """
+examples:
+  size                      breakdown of the current directory
+  size ~/Downloads -d 2     two levels deep
+  size . -n 5 -m 100M       top 5 entries that are at least 100M
+  size -l 15 ~              the 15 largest files under your home
+  size -s *.iso             one total line per argument
+  size -e node_modules -e '.git' .
+  size --disk --si /var     on-disk usage in powers of 1000
+  size -j 1 .               scan in a single process
+  size --json . | jq        machine-readable output
+"""
+
+UNITS_IEC = ["B", "K", "M", "G", "T", "P", "E"]
+UNITS_SI = ["B", "k", "M", "G", "T", "P", "E"]
+SIZE_SUFFIXES = {
+    "": 1,
+    "b": 1,
+    "k": 1024,
+    "kb": 1000,
+    "kib": 1024,
+    "m": 1024**2,
+    "mb": 1000**2,
+    "mib": 1024**2,
+    "g": 1024**3,
+    "gb": 1000**3,
+    "gib": 1024**3,
+    "t": 1024**4,
+    "tb": 1000**4,
+    "tib": 1024**4,
+}
+SPLIT_AFTER = 2000
+MIN_TASK_ENTRIES = 64
+MIN_TASK_SUBDIRS = 2
+
+
+class Node:
+    __slots__ = ("name", "path", "size", "files", "dirs", "is_dir", "is_link", "children")
+
+    def __init__(self, name, path, is_dir=False, is_link=False):
+        self.name = name
+        self.path = path
+        self.size = 0
+        self.files = 0
+        self.dirs = 0
+        self.is_dir = is_dir
+        self.is_link = is_link
+        self.children = []
+
+
+class TaskResult:
+    __slots__ = ("path", "parent_path", "node", "hardlinks", "largest", "errors")
+
+    def __init__(self, path, parent_path, node, scanner):
+        self.path = path
+        self.parent_path = parent_path
+        self.node = node
+        self.hardlinks = {key: (array("Q", inos), array("Q", sizes)) for key, (inos, sizes) in scanner.hardlinks.items()}
+        self.largest = scanner.largest
+        self.errors = scanner.errors
+
+
+class Summary:
+    __slots__ = ("node", "errors", "largest")
+
+    def __init__(self, node, errors, largest):
+        self.node = node
+        self.errors = errors
+        self.largest = largest
+
+
+def count_subdirs(entries, follow):
+    count = 0
+    for entry in entries:
+        try:
+            count += entry.is_dir(follow_symlinks=follow)
+        except OSError:
+            continue
+    return count
+
+
+def queue_low(task_queue, jobs):
+    try:
+        return task_queue.qsize() < jobs
+    except NotImplementedError:
+        return task_queue.empty()
+
+
+class WorkerLink:
+    def __init__(self, task_queue, pending, jobs):
+        self.task_queue = task_queue
+        self.pending = pending
+        self.jobs = jobs
+
+    def low(self):
+        return queue_low(self.task_queue, self.jobs)
+
+    def submit(self, task, root_dev):
+        with self.pending.get_lock():
+            self.pending.value += 1
+        self.task_queue.put(task)
+
+
+class Pool:
+    def __init__(self, args, jobs):
+        self.args = args
+        self.jobs = jobs
+        self.context = multiprocessing.get_context("fork")
+        self.task_queue = None
+        self.result_queue = None
+        self.pending = None
+        self.workers = []
+
+    @property
+    def started(self):
+        return self.task_queue is not None
+
+    def low(self):
+        return not self.started or queue_low(self.task_queue, self.jobs)
+
+    def submit(self, task, root_dev):
+        if not self.started:
+            self.start(root_dev)
+        with self.pending.get_lock():
+            self.pending.value += 1
+        self.task_queue.put(task)
+
+    def start(self, root_dev):
+        self.task_queue = self.context.Queue()
+        self.result_queue = self.context.Queue()
+        self.pending = self.context.Value("i", 0)
+        for _ in range(self.jobs):
+            worker = self.context.Process(
+                target=worker_loop,
+                args=(self.task_queue, self.result_queue, self.pending, self.args, self.jobs, root_dev),
+                daemon=True,
+            )
+            worker.start()
+            self.workers.append(worker)
+
+    def collect(self):
+        results = []
+        while True:
+            results.append(self.result_queue.get())
+            with self.pending.get_lock():
+                self.pending.value -= 1
+                if self.pending.value == 0:
+                    break
+        for _ in self.workers:
+            self.task_queue.put(None)
+        for worker in self.workers:
+            worker.join()
+        return results
+
+
+class Scanner:
+    def __init__(self, args, link=None):
+        self.args = args
+        self.link = link
+        self.seen_inodes = set()
+        self.hardlinks = {}
+        self.errors = []
+        self.largest = []
+        self.entries_seen = 0
+        self.task_path = None
+        self.trail = []
+        self.root_dev = None
+
+    def excluded(self, name, path):
+        return any(fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(path, pattern) for pattern in self.args.exclude)
+
+    def skipped(self, name, path):
+        if self.args.no_hidden and name.startswith("."):
+            return True
+        return bool(self.args.exclude) and self.excluded(name, path)
+
+    def entry_size(self, st):
+        if self.args.disk:
+            return getattr(st, "st_blocks", 0) * 512
+        return st.st_size
+
+    def file_size(self, st, path, name, depth):
+        key = (st.st_dev, st.st_ino)
+        if st.st_nlink > 1 and not self.args.count_links:
+            if key in self.seen_inodes:
+                return 0
+            self.seen_inodes.add(key)
+            size = self.entry_size(st)
+            prefix = tuple(self.trail) + ((name,) if depth <= self.args.depth else ())
+            inos, sizes = self.hardlinks.setdefault((st.st_dev, prefix), ([], []))
+            inos.append(st.st_ino)
+            sizes.append(size)
+        else:
+            size = self.entry_size(st)
+        if self.args.largest:
+            self.track_largest(size, path, key)
+        return size
+
+    def track_largest(self, size, path, key):
+        limit = self.args.largest
+        if len(self.largest) < limit:
+            heapq.heappush(self.largest, (size, path, key))
+        elif size > self.largest[0][0]:
+            heapq.heapreplace(self.largest, (size, path, key))
+
+    def should_split(self):
+        return self.link is not None and self.entries_seen >= SPLIT_AFTER and self.link.low()
+
+    def scan(self, path, depth):
+        self.task_path = path
+        name = os.path.basename(os.path.normpath(path)) or path
+        try:
+            st = os.stat(path) if self.args.follow else os.lstat(path)
+        except OSError as error:
+            self.errors.append((path, error.strerror))
+            return None
+
+        if self.root_dev is None:
+            self.root_dev = st.st_dev
+        if not S_ISDIR(st.st_mode):
+            node = Node(name, path, is_link=S_ISLNK(st.st_mode))
+            node.size = self.file_size(st, path, name, depth)
+            node.files = 1
+            return node
+        return self.scan_dir(name, path, st, depth)
+
+    def scan_child(self, name, path, st, depth, entries=None):
+        if depth > self.args.depth:
+            return self.scan_dir(name, path, st, depth, entries)
+        self.trail.append(name)
+        node = self.scan_dir(name, path, st, depth, entries)
+        self.trail.pop()
+        return node
+
+    def child_dir(self, entry, st, depth):
+        if not self.should_split() or (self.args.one_file_system and st.st_dev != self.root_dev):
+            return self.scan_child(entry.name, entry.path, st, depth)
+        try:
+            entries = list(os.scandir(entry.path))
+        except OSError as error:
+            self.errors.append((entry.path, error.strerror))
+            return Node(entry.name, entry.path, is_dir=True)
+        if len(entries) < MIN_TASK_ENTRIES and count_subdirs(entries, self.args.follow) < MIN_TASK_SUBDIRS:
+            return self.scan_child(entry.name, entry.path, st, depth, entries)
+        self.link.submit((entry.path, depth, self.task_path), self.root_dev)
+        return Node(entry.name, entry.path, is_dir=True)
+
+    def scan_dir(self, name, path, st, depth, entries=None):
+        node = Node(name, path, is_dir=True)
+        if self.args.one_file_system and st.st_dev != self.root_dev:
+            return node
+        if self.args.disk:
+            node.size = self.entry_size(st)
+
+        if entries is None:
+            try:
+                entries = list(os.scandir(path))
+            except OSError as error:
+                self.errors.append((path, error.strerror))
+                return node
+
+        keep_children = depth < self.args.depth
+        follow = self.args.follow
+        filtering = self.args.no_hidden or self.args.exclude
+        for entry in entries:
+            if filtering and self.skipped(entry.name, entry.path):
+                continue
+            try:
+                child_st = entry.stat(follow_symlinks=follow)
+            except OSError as error:
+                self.errors.append((entry.path, error.strerror))
+                continue
+            self.entries_seen += 1
+            mode = child_st.st_mode
+            if S_ISDIR(mode):
+                child = self.child_dir(entry, child_st, depth + 1)
+                node.size += child.size
+                node.files += child.files
+                node.dirs += child.dirs + 1
+                if keep_children:
+                    node.children.append(child)
+                continue
+            size = self.file_size(child_st, entry.path, entry.name, depth + 1)
+            node.size += size
+            node.files += 1
+            if keep_children:
+                child = Node(entry.name, entry.path, is_link=S_ISLNK(mode))
+                child.size = size
+                child.files = 1
+                node.children.append(child)
+        return node
+
+
+def run_task(task, args, link, root_dev):
+    path, depth, parent_path = task
+    scanner = Scanner(args, link)
+    scanner.root_dev = root_dev
+    node = scanner.scan(path, depth)
+    return TaskResult(path, parent_path, node, scanner)
+
+
+def worker_loop(task_queue, result_queue, pending, args, jobs, root_dev):
+    link = WorkerLink(task_queue, pending, jobs)
+    while True:
+        task = task_queue.get()
+        if task is None:
+            return
+        result_queue.put(run_task(task, args, link, root_dev))
+
+
+def relative_parts(path, base):
+    return path[len(base) :].lstrip(os.sep).split(os.sep)
+
+
+def find_child(node, name):
+    return next((child for child in node.children if child.name == name), None)
+
+
+def subtract_duplicates(node, size, prefix):
+    node.size -= size
+    current = node
+    for part in prefix:
+        current = find_child(current, part)
+        if current is None:
+            return
+        current.size -= size
+
+
+def add_totals(node, source):
+    node.size += source.size
+    node.files += source.files
+    node.dirs += source.dirs
+
+
+def attach(parent, child):
+    if child.node is None:
+        return
+    current = parent.node
+    add_totals(current, child.node)
+    parts = relative_parts(child.path, parent.path)
+    for index, part in enumerate(parts):
+        current = find_child(current, part)
+        if current is None:
+            return
+        add_totals(current, child.node)
+        if index == len(parts) - 1:
+            current.children = child.node.children
+
+
+def merge_largest(limit, results):
+    merged = []
+    seen = set()
+    for result in results:
+        for item in sorted(result.largest, reverse=True):
+            if item[2] in seen:
+                continue
+            seen.add(item[2])
+            if len(merged) < limit:
+                heapq.heappush(merged, item)
+            elif item > merged[0]:
+                heapq.heapreplace(merged, item)
+    return merged
+
+
+def assemble(results, args):
+    by_path = {result.path: result for result in results}
+    root = next(result for result in results if result.parent_path is None)
+    ordered = sorted(results, key=lambda result: result.path)
+    seen = {}
+    for result in ordered:
+        for (dev, prefix), (inos, sizes) in result.hardlinks.items():
+            known = seen.setdefault(dev, set())
+            duplicates = known.intersection(inos)
+            if duplicates:
+                subtract_duplicates(result.node, sum(size for ino, size in zip(inos, sizes) if ino in duplicates), prefix)
+            known.update(inos)
+    for result in sorted(results, key=lambda result: len(result.path), reverse=True):
+        if result.parent_path is not None:
+            attach(by_path[result.parent_path], result)
+    errors = [error for result in ordered for error in result.errors]
+    return Summary(root.node, errors, merge_largest(args.largest, ordered) if args.largest else [])
+
+
+def scan_path(path, args, jobs):
+    pool = Pool(args, jobs) if jobs > 1 else None
+    scanner = Scanner(args, pool)
+    node = scanner.scan(path, 0)
+    results = [TaskResult(path, None, node, scanner)]
+    if pool is not None and pool.started:
+        results.extend(pool.collect())
+    if node is None:
+        return Summary(None, scanner.errors, [])
+    return assemble(results, args)
+
+
+def default_jobs():
+    if "fork" not in multiprocessing.get_all_start_methods():
+        return 1
+    count = os.process_cpu_count() if hasattr(os, "process_cpu_count") else os.cpu_count()
+    return count or 1
+
+
+def parse_size(value):
+    text = value.strip().lower().replace(" ", "")
+    number = text.rstrip("abcdefghijklmnopqrstuvwxyz")
+    suffix = text[len(number) :]
+    if suffix not in SIZE_SUFFIXES or not number:
+        raise argparse.ArgumentTypeError(f"invalid size '{value}', try 500K, 10M, 1.5G or 2GB")
+    try:
+        return int(float(number) * SIZE_SUFFIXES[suffix])
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid size '{value}'")
+
+
+def non_negative(value):
+    number = int(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError("must be 0 or more")
+    return number
+
+
+def positive(value):
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be 1 or more")
+    return number
+
+
+def format_size(size, args):
+    if args.bytes:
+        return f"{size:,}"
+    base = 1000 if args.si else 1024
+    units = UNITS_SI if args.si else UNITS_IEC
+    value = float(size)
+    for unit in units:
+        if value < base or unit == units[-1]:
+            if unit == "B":
+                return f"{int(value)} B"
+            return f"{value:.1f} {unit}"
+        value /= base
+    return f"{size} B"
+
+
+class Painter:
+    def __init__(self, enabled):
+        self.enabled = enabled
+
+    def paint(self, text, code):
+        return f"\033[{code}m{text}\033[0m" if self.enabled else text
+
+    def dim(self, text):
+        return self.paint(text, "2")
+
+    def bold(self, text):
+        return self.paint(text, "1")
+
+    def dir(self, text):
+        return self.paint(text, "1;34")
+
+    def link(self, text):
+        return self.paint(text, "36")
+
+    def error(self, text):
+        return self.paint(text, "31")
+
+    def size(self, text, size, total):
+        share = size / total if total else 0
+        if share >= 0.5:
+            return self.paint(text, "1;31")
+        if share >= 0.2:
+            return self.paint(text, "33")
+        if share >= 0.05:
+            return self.paint(text, "32")
+        return text
+
+
+def sort_children(children, args):
+    keys = {
+        "size": lambda node: (node.size, node.name.lower()),
+        "name": lambda node: node.name.lower(),
+        "count": lambda node: (node.files, node.size),
+    }
+    descending = args.sort != "name"
+    if args.reverse:
+        descending = not descending
+    return sorted(children, key=keys[args.sort], reverse=descending)
+
+
+def visible_children(node, args):
+    children = node.children
+    if args.type == "f":
+        children = [child for child in children if not child.is_dir]
+    elif args.type == "d":
+        children = [child for child in children if child.is_dir]
+    if args.min:
+        children = [child for child in children if child.size >= args.min]
+    children = sort_children(children, args)
+    hidden = children[args.top :] if args.top else []
+    shown = children[: args.top] if args.top else children
+    return shown, hidden
+
+
+def counts_label(node):
+    if not node.is_dir:
+        return ""
+    parts = [f"{node.files:,} file{'' if node.files == 1 else 's'}"]
+    if node.dirs:
+        parts.append(f"{node.dirs:,} dir{'' if node.dirs == 1 else 's'}")
+    return ", ".join(parts)
+
+
+def bar(size, total, width):
+    if width <= 0 or not total:
+        return ""
+    filled = size / total * width
+    full = int(filled)
+    partial = " ▏▎▍▌▋▊▉"[int((filled - full) * 8)]
+    return ("█" * full + (partial if full < width else "")).ljust(width)
+
+
+def node_label(node, painter):
+    if node.is_dir:
+        return painter.dir(node.name + "/")
+    if node.is_link:
+        return painter.link(node.name)
+    return node.name
+
+
+def render_tree(node, args, painter, total, prefix="", lines=None):
+    lines = [] if lines is None else lines
+    shown, hidden = visible_children(node, args)
+    size_width = 14 if args.bytes else 7
+    bar_width = 0 if args.no_bar else 16
+
+    for index, child in enumerate(shown):
+        is_last = index == len(shown) - 1 and not hidden
+        branch = "└── " if is_last else "├── "
+        size_text = format_size(child.size, args).rjust(size_width)
+        share = f"{child.size / total * 100:5.1f}%" if total else "  0.0%"
+        parts = [painter.size(size_text, child.size, total), painter.dim(share)]
+        if bar_width:
+            parts.append(painter.dim(bar(child.size, total, bar_width)))
+        parts.append(painter.dim(prefix + branch) + node_label(child, painter))
+        if args.count and child.is_dir:
+            parts.append(painter.dim(f"({counts_label(child)})"))
+        lines.append("  ".join(parts))
+        if child.is_dir and child.children:
+            render_tree(child, args, painter, total, prefix + ("    " if is_last else "│   "), lines)
+
+    if hidden:
+        rest = sum(child.size for child in hidden)
+        size_text = format_size(rest, args).rjust(size_width)
+        share = f"{rest / total * 100:5.1f}%" if total else "  0.0%"
+        parts = [painter.dim(size_text), painter.dim(share)]
+        if bar_width:
+            parts.append(" " * bar_width)
+        parts.append(painter.dim(f"{prefix}└── … {len(hidden)} more"))
+        lines.append("  ".join(parts))
+    return lines
+
+
+def to_json(node, args):
+    data = {
+        "name": node.name,
+        "path": node.path,
+        "type": "dir" if node.is_dir else ("link" if node.is_link else "file"),
+        "size": node.size,
+        "human": format_size(node.size, args),
+    }
+    if node.is_dir:
+        data["files"] = node.files
+        data["dirs"] = node.dirs
+        shown, _ = visible_children(node, args)
+        if shown:
+            data["children"] = [to_json(child, args) for child in shown]
+    return data
+
+
+def header_line(node, args, painter):
+    size_text = painter.bold(format_size(node.size, args))
+    shown_path = os.getcwd() if node.path in (".", "./") else node.path.rstrip("/") or "/"
+    label = painter.dir(shown_path + "/") if node.is_dir else painter.link(shown_path) if node.is_link else shown_path
+    if node.is_dir:
+        return f"{size_text}  {label}  {painter.dim(counts_label(node))}"
+    exact = painter.dim(f"({node.size:,} bytes)") if not args.bytes and node.size >= 1024 else ""
+    return f"{size_text}  {label}  {exact}".rstrip()
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="size",
+        description="Show the size of files and folders, recursively, as a sorted tree.",
+        epilog=HELP_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("paths", nargs="*", default=["."], metavar="PATH", help="files or folders (default: .)")
+
+    view = parser.add_argument_group("view")
+    view.add_argument("-d", "--depth", type=non_negative, default=1, metavar="N", help="tree depth to show (default: 1, 0 = total only)")
+    view.add_argument("-n", "--top", type=non_negative, default=15, metavar="N", help="max entries per folder (default: 15, 0 = all)")
+    view.add_argument("-s", "--summary", action="store_true", help="only print the total per path, like depth 0")
+    view.add_argument("-l", "--largest", type=non_negative, default=0, metavar="N", help="list the N largest files found anywhere below")
+    view.add_argument("-m", "--min", type=parse_size, default=0, metavar="SIZE", help="hide entries smaller than SIZE, e.g. 500K, 10M, 1G")
+    view.add_argument("-t", "--type", choices=["f", "d"], help="only show files (f) or folders (d) in the tree")
+    view.add_argument("-S", "--sort", choices=["size", "name", "count"], default="size", help="sort entries (default: size)")
+    view.add_argument("-r", "--reverse", action="store_true", help="reverse the sort order")
+    view.add_argument("-c", "--count", action="store_true", help="show file and folder counts per folder")
+
+    scan = parser.add_argument_group("scanning")
+    scan.add_argument("-e", "--exclude", action="append", default=[], metavar="GLOB", help="skip names or paths matching GLOB (repeatable)")
+    scan.add_argument("-H", "--no-hidden", action="store_true", help="skip dotfiles and dot folders")
+    scan.add_argument("-L", "--follow", action="store_true", help="follow symbolic links")
+    scan.add_argument("-x", "--one-file-system", action="store_true", help="do not cross into other file systems")
+    scan.add_argument("-u", "--disk", action="store_true", help="report disk usage (allocated blocks) instead of apparent size")
+    scan.add_argument("-j", "--jobs", type=positive, default=default_jobs(), metavar="N", help="scanner processes (default: CPU count, 1 = single process)")
+    scan.add_argument("--count-links", action="store_true", help="count hard-linked files every time they appear")
+
+    output = parser.add_argument_group("output")
+    output.add_argument("-b", "--bytes", action="store_true", help="print exact byte counts")
+    output.add_argument("--si", action="store_true", help="use powers of 1000 (kB, MB) instead of 1024")
+    output.add_argument("--no-bar", action="store_true", help="hide the usage bars")
+    output.add_argument("--json", action="store_true", help="print JSON instead of a tree")
+    output.add_argument("--color", choices=["auto", "always", "never"], default="auto", help="colorize output (default: auto)")
+    output.add_argument("-q", "--quiet", action="store_true", help="do not report unreadable paths")
+    output.add_argument("-V", "--version", action="version", version=f"size {VERSION}")
+    return parser
+
+
+def use_color(mode):
+    if mode == "always":
+        return True
+    if mode == "never" or os.environ.get("NO_COLOR"):
+        return False
+    return sys.stdout.isatty()
+
+
+def print_largest(largest, args, painter):
+    files = sorted(largest, reverse=True)
+    if not files:
+        return
+    width = max(len(format_size(size, args)) for size, _, _ in files)
+    print(painter.bold(f"largest {len(files)} file{'' if len(files) == 1 else 's'}"))
+    for size, path, _ in files:
+        print(f"  {format_size(size, args).rjust(width)}  {path}")
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.summary:
+        args.depth = 0
+    if args.json and args.no_bar is False:
+        args.no_bar = True
+    sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
+
+    painter = Painter(use_color(args.color) and not args.json)
+    if not args.json:
+        terminal_width = shutil.get_terminal_size((100, 20)).columns
+        if terminal_width < 70:
+            args.no_bar = True
+
+    results = []
+    exit_code = 0
+    grand_total = 0
+    for path in args.paths:
+        summary = scan_path(path, args, args.jobs)
+        if summary.node is None:
+            exit_code = 1
+            for failed_path, error in summary.errors:
+                print(painter.error(f"size: {failed_path}: {error}"), file=sys.stderr)
+            continue
+        results.append(summary)
+        grand_total += summary.node.size
+        if summary.errors:
+            exit_code = exit_code or 2
+
+    if args.json:
+        payload = []
+        for summary in results:
+            item = to_json(summary.node, args)
+            if args.largest:
+                item["largest"] = [{"path": path, "size": size} for size, path, _ in sorted(summary.largest, reverse=True)]
+            if summary.errors:
+                item["errors"] = [{"path": path, "error": error} for path, error in summary.errors]
+            payload.append(item)
+        print(json.dumps(payload[0] if len(payload) == 1 else payload, indent=2))
+        return exit_code
+
+    for index, summary in enumerate(results):
+        node = summary.node
+        if index and not args.summary:
+            print()
+        print(header_line(node, args, painter))
+        if node.is_dir and args.depth:
+            for line in render_tree(node, args, painter, node.size):
+                print(line)
+        if args.largest:
+            print()
+            print_largest(summary.largest, args, painter)
+        if summary.errors and not args.quiet:
+            message = f"{len(summary.errors)} path{'' if len(summary.errors) == 1 else 's'} could not be read"
+            print(painter.error(message), file=sys.stderr)
+            for path, error in summary.errors[:5]:
+                print(painter.dim(f"  {path}: {error}"), file=sys.stderr)
+            if len(summary.errors) > 5:
+                print(painter.dim(f"  … and {len(summary.errors) - 5} more"), file=sys.stderr)
+
+    if len(results) > 1:
+        print()
+        print(f"{painter.bold(format_size(grand_total, args))}  {painter.dim(f'total of {len(results)} paths')}")
+    return exit_code
+
+
+if __name__ == "__main__":
+    try:
+        code = main()
+        sys.stdout.flush()
+        sys.exit(code)
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        sys.exit(0)

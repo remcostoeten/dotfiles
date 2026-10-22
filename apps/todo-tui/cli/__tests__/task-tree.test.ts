@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Task } from "@/src/domain/task";
-import { buildTaskTreeRows, collectSubtreeIds, completeSubtrees, getTaskProgress, moveTask } from "@/src/domain/task-tree";
+import { buildTaskTreeRows, collectSubtreeIds, completeSubtrees, getTaskProgress, moveTask, reorderTask } from "@/src/domain/task-tree";
 import { restoreTasks } from "@/src/plugins/undo";
 
 test("lays out nested tasks depth first with sibling guides", () => {
@@ -66,6 +66,32 @@ test("moveTask re-parents and rejects cycles", () => {
   expect(() => moveTask(tasks, "1", "2")).toThrow("nest inside itself");
   expect(() => moveTask(tasks, "1", "1")).toThrow("nest inside itself");
   expect(() => moveTask(tasks, "1", "42")).toThrow("Task not found: 42");
+});
+
+test("reorderTask repositions a task among its siblings", () => {
+  const tasks = [
+    createTask({ id: "1" }),
+    createTask({ id: "2" }),
+    createTask({ id: "3" }),
+    createTask({ id: "4", parentId: "1" }),
+    createTask({ id: "5", parentId: "1" }),
+  ];
+
+  reorderTask(tasks, "3", { type: "before", anchorId: "1" });
+  expect(tasks.map((task) => task.id)).toEqual(["3", "1", "2", "4", "5"]);
+
+  reorderTask(tasks, "3", { type: "after", anchorId: "2" });
+  expect(tasks.map((task) => task.id)).toEqual(["1", "2", "3", "4", "5"]);
+
+  reorderTask(tasks, "5", { type: "top" });
+  expect(tasks.map((task) => task.id)).toEqual(["1", "2", "3", "5", "4"]);
+
+  reorderTask(tasks, "5", { type: "bottom" });
+  expect(tasks.map((task) => task.id)).toEqual(["1", "2", "3", "4", "5"]);
+
+  expect(() => reorderTask(tasks, "3", { type: "before", anchorId: "4" })).toThrow("they are not siblings");
+  expect(() => reorderTask(tasks, "3", { type: "after", anchorId: "3" })).toThrow("relative to itself");
+  expect(() => reorderTask(tasks, "3", { type: "before", anchorId: "42" })).toThrow("Task not found: 42");
 });
 
 test("restoring a deleted subtree keeps its internal parent links", () => {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -153,7 +154,17 @@ type operationCompleteMsg struct {
 	message string
 }
 type errorMsg error
-type aiResponseMsg string
+type statusMsg string
+type editorClosedMsg struct {
+	path string
+	err  error
+}
+type aiEventMsg struct {
+	run    int
+	ev     aiEvent
+	closed bool
+}
+type aiTickMsg struct{ run int }
 type checksLoadedMsg struct {
 	prNumber int
 	checks   []GHCheck
@@ -187,6 +198,10 @@ type model struct {
 	descInput  textarea.Model
 	formFocus  int // 0 for Title, 1 for Description, 2 for Save/Submit, 3 for Cancel
 
+	refPicking bool
+	refInput   textinput.Model
+	refCursor  int
+
 	// Vim mode for the description textarea
 	vimMode   bool // whether vim-style modal editing is enabled
 	vimInsert bool // true = insert mode, false = normal mode (only meaningful when vimMode is on)
@@ -213,14 +228,30 @@ type model struct {
 	// Send-to-AI
 	aiBackend   string // one of aiBackends
 	aiLoading   bool
-	aiResponse  string
 	aiPrevState appState // state to return to on esc from stateAIResponse
 	aiVP        viewport.Model
+	aiRun       *aiRun
+	aiRunID     int
+	aiThreads   map[string]*aiThread
+	aiThread    *aiThread
+	aiAsking    bool
+	aiInput     textinput.Model
+	aiAnswerY   int
+	aiStarted   time.Time
+	aiElapsed   time.Duration
+	aiFrame     int
+	aiFollow    bool
+	aiConfirm   triageAction
+
+	confirmCloseIssue bool
+	editorWaiting     string
 
 	// AI backend picker (shown before sending)
 	aiPickerIndex   int
 	aiPickerTyped   string
 	aiPendingPrompt string
+	aiPendingKey    string
+	aiPendingLabel  string
 
 	// Viewport dimension
 	width  int
@@ -253,7 +284,16 @@ func initialModel() model {
 		sortNewestFirst: true,
 		selectedIssues:  make(map[int]bool),
 		aiBackend:       aiBackends[0],
+		aiThreads:       make(map[string]*aiThread),
 	}
+
+	m.aiInput = textinput.New()
+	m.aiInput.Placeholder = "Ask a follow-up…"
+	m.aiInput.Prompt = "› "
+	m.refInput = textinput.New()
+	m.refInput.Placeholder = "Search issues by title or number..."
+	m.refInput.Prompt = "› "
+	loadCache(aiThreadsCache, &m.aiThreads)
 
 	// Try loading cached open PRs
 	var cachedPRs []GHPR
@@ -389,15 +429,137 @@ func (m model) closePRCmd(number int) tea.Cmd {
 	}
 }
 
-func (m model) sendToAICmd(prompt string) tea.Cmd {
-	backend := m.aiBackend
+func (m model) closeIssueCmd(number int) tea.Cmd {
 	return func() tea.Msg {
-		out, err := runAI(backend, prompt)
+		err := closeIssue(number)
 		if err != nil {
 			return errorMsg(err)
 		}
-		return aiResponseMsg(out)
+		return operationCompleteMsg{success: true, message: fmt.Sprintf("Issue #%d closed", number)}
 	}
+}
+
+func (m *model) openEditorCmd() tea.Cmd {
+	path, err := writeDraft(m.titleInput.Value(), m.descInput.Value())
+	if err != nil {
+		return func() tea.Msg { return errorMsg(err) }
+	}
+	setting := configuredEditor()
+	c, gui, err := editorCommand(setting, path)
+	if err != nil {
+		os.Remove(path)
+		return func() tea.Msg { return errorMsg(err) }
+	}
+	if !gui {
+		return tea.ExecProcess(c, func(err error) tea.Msg { return editorClosedMsg{path: path, err: err} })
+	}
+	m.editorWaiting = strings.Fields(setting)[0]
+	return func() tea.Msg { return editorClosedMsg{path: path, err: c.Run()} }
+}
+
+const aiThreadsCache = "ai_threads.json"
+
+func (m *model) startAIThread(prompt, key, label string) tea.Cmd {
+	m.aiThread = &aiThread{
+		Key:     key,
+		Label:   label,
+		Backend: m.aiBackend,
+		Prompt:  prompt,
+		Turns:   []aiTurn{{Question: "Initial analysis"}},
+	}
+	m.aiThreads[key] = m.aiThread
+	return m.runAITurn(prompt)
+}
+
+func (m *model) sendFollowUp(question string) tea.Cmd {
+	m.aiThread.Turns = append(m.aiThread.Turns, aiTurn{Question: question})
+	return m.runAITurn(question)
+}
+
+func (m *model) runAITurn(prompt string) tea.Cmd {
+	m.aiRunID++
+	m.aiRun = startAI(m.aiThread.Backend, prompt, m.aiThread.SessionID)
+	m.aiLoading = true
+	m.aiStarted = time.Now()
+	m.aiElapsed = 0
+	m.aiFollow = true
+	m.state = stateAIResponse
+	m.setAIContent()
+	return tea.Batch(waitAIEvent(m.aiRunID, m.aiRun), aiTick(m.aiRunID))
+}
+
+func waitAIEvent(id int, run *aiRun) tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-run.events
+		return aiEventMsg{run: id, ev: ev, closed: !ok}
+	}
+}
+
+func aiTick(id int) tea.Cmd {
+	return tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg {
+		return aiTickMsg{run: id}
+	})
+}
+
+func (m *model) finishAI() {
+	m.aiLoading = false
+	m.aiElapsed = time.Since(m.aiStarted).Round(time.Second)
+	m.statusTime = time.Now()
+	turn := m.aiThread.current()
+	if turn.Err != "" {
+		m.statusMsg = fmt.Sprintf("Error: %s: %s", m.aiThread.Backend, oneLine(turn.Err, 120))
+	} else {
+		m.statusMsg = fmt.Sprintf("%s finished in %s — press a to view", m.aiThread.Backend, m.aiElapsed)
+	}
+	writeCache(aiThreadsCache, m.aiThreads)
+	m.setAIContent()
+	if m.state == stateAIResponse && turn.Err == "" {
+		m.aiVP.SetYOffset(m.aiAnswerY)
+	}
+}
+
+func (m *model) openAIThread(thread *aiThread, prev appState) {
+	m.aiThread = thread
+	m.aiPrevState = prev
+	m.aiElapsed = 0
+	m.state = stateAIResponse
+	m.setAIContent()
+	m.aiVP.GotoBottom()
+}
+
+// askAI reopens the running conversation, the ticket's existing thread, or
+// the backend picker for a new one.
+func (m *model) askAI(prompt, key, label string, prev appState) {
+	if m.aiLoading {
+		m.openAIThread(m.aiThread, prev)
+		return
+	}
+	if thread, ok := m.aiThreads[key]; ok {
+		m.openAIThread(thread, prev)
+		return
+	}
+	m.openAIPicker(prompt, key, label, prev)
+}
+
+func (m *model) setAIAsking(asking bool) {
+	m.aiAsking = asking
+	m.aiInput.SetValue("")
+	if asking {
+		m.aiInput.Focus()
+	} else {
+		m.aiInput.Blur()
+	}
+	m.resizeAIViewport()
+}
+
+func (m *model) resizeAIViewport() {
+	height := m.height - aiChromeLines
+	if m.aiAsking {
+		height -= 2
+	}
+	m.aiVP.Width = m.width - 2
+	m.aiVP.Height = max(height, 5)
+	m.aiInput.Width = max(m.width-8, 10)
 }
 
 func (m model) closeAndRemovePRCmd(number int) tea.Cmd {
@@ -442,8 +604,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detailVP.Width = msg.Width - 2
 		m.detailVP.Height = max(msg.Height-detailChromeLines, 5)
 		m.setDetailContent()
-		m.aiVP.Width = msg.Width - 2
-		m.aiVP.Height = max(msg.Height-aiChromeLines, 5)
+		m.resizeAIViewport()
 		m.setAIContent()
 
 	case errorMsg:
@@ -455,12 +616,52 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = fmt.Sprintf("Error: %s", msg.Error())
 		m.statusTime = time.Now()
 
-	case aiResponseMsg:
-		m.aiLoading = false
-		m.aiResponse = string(msg)
-		m.state = stateAIResponse
+	case aiEventMsg:
+		if msg.run != m.aiRunID {
+			break
+		}
+		if msg.closed {
+			m.finishAI()
+			break
+		}
+		turn := m.aiThread.current()
+		switch msg.ev.kind {
+		case aiStep:
+			turn.Steps = append(turn.Steps, msg.ev.text)
+		case aiMessage:
+			turn.Answer = msg.ev.text
+		case aiFailed:
+			turn.Err = msg.ev.text
+		case aiSession:
+			m.aiThread.SessionID = msg.ev.text
+		}
 		m.setAIContent()
-		m.aiVP.GotoTop()
+		cmds = append(cmds, waitAIEvent(m.aiRunID, m.aiRun))
+
+	case triageAppliedMsg:
+		m.statusTime = time.Now()
+		if thread, ok := m.aiThreads[msg.key]; ok && msg.turn < len(thread.Turns) {
+			turn := &thread.Turns[msg.turn]
+			if turn.Done == nil {
+				turn.Done = make(map[string]bool)
+			}
+			for _, k := range msg.done {
+				turn.Done[k] = true
+			}
+			writeCache(aiThreadsCache, m.aiThreads)
+		}
+		if len(msg.errs) > 0 {
+			m.statusMsg = fmt.Sprintf("Error: %d ok, %d failed — %s", len(msg.done), len(msg.errs), strings.Join(msg.errs, "; "))
+		} else {
+			m.statusMsg = "Applied: " + strings.Join(msg.done, ", ")
+		}
+		m.setAIContent()
+
+	case aiTickMsg:
+		if msg.run == m.aiRunID && m.aiLoading {
+			m.aiFrame++
+			cmds = append(cmds, aiTick(m.aiRunID))
+		}
 
 	case checksLoadedMsg:
 		if msg.prNumber == m.checksPR {
@@ -514,6 +715,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setDetailContent()
 		m.detailVP.GotoTop()
 
+	case editorClosedMsg:
+		m.editorWaiting = ""
+		title, body, err := readDraft(msg.path)
+		os.Remove(msg.path)
+		if msg.err != nil {
+			err = msg.err
+		}
+		if err != nil {
+			m.statusMsg = fmt.Sprintf("Error: editor: %s", err.Error())
+		} else {
+			m.titleInput.SetValue(title)
+			m.descInput.SetValue(body)
+			m.formFocus = 2
+			m.updateFormFocus()
+			m.statusMsg = "Draft loaded from editor, press enter to submit"
+		}
+		m.statusTime = time.Now()
+
+	case statusMsg:
+		m.statusMsg = string(msg)
+		m.statusTime = time.Now()
+
 	case operationCompleteMsg:
 		m.statusMsg = msg.message
 		m.statusTime = time.Now()
@@ -525,6 +748,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// Global quit key
 		if msg.String() == "ctrl+c" {
+			if m.aiLoading {
+				m.aiRun.stop()
+			}
 			return m, tea.Quit
 		}
 
@@ -656,27 +882,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusTime = time.Now()
 				}
 			case "a": // Send issue(s) straight to AI
-				if m.currentTab == tabIssues && !m.aiLoading {
-					var prompt string
+				if m.aiLoading {
+					m.openAIThread(m.aiThread, stateList)
+				} else if m.currentTab == tabIssues {
+					var prompt, key, label string
 					if len(m.selectedIssues) > 0 {
-						var blocks []string
+						var blocks, numbers []string
 						for _, issue := range m.issues {
 							if m.selectedIssues[issue.Number] {
 								blocks = append(blocks, formatIssueForCopy(issue))
+								numbers = append(numbers, fmt.Sprintf("#%d", issue.Number))
 							}
 						}
-						prompt = "Review the following GitHub issues and help address them:\n\n" +
+						key = "issues:" + strings.Join(numbers, ",")
+						label = strings.Join(numbers, ", ")
+						prompt = aiIssuesPrompt +
 							strings.Join(blocks, "\n"+strings.Repeat("=", 40)+"\n\n")
 						m.selectedIssues = make(map[int]bool)
 					} else {
 						filtered := m.getFilteredIssues()
 						if len(filtered) > 0 && m.issueCursor < len(filtered) {
-							prompt = "Review the following GitHub issue and help address it:\n\n" +
-								formatIssueForCopy(filtered[m.issueCursor])
+							issue := filtered[m.issueCursor]
+							prompt = aiIssuePrompt + formatIssueForCopy(issue)
+							key = fmt.Sprintf("issue:%d", issue.Number)
+							label = fmt.Sprintf("#%d %s", issue.Number, issue.Title)
 						}
 					}
 					if prompt != "" {
-						m.openAIPicker(prompt, stateList)
+						m.askAI(prompt, key, label, stateList)
 					}
 				}
 			case "i": // CI insights for selected PR
@@ -729,13 +962,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case stateDetail:
+			if m.confirmCloseIssue {
+				m.confirmCloseIssue = false
+				if msg.String() == "y" && m.issueDetails != nil {
+					m.detailsLoading = true
+					cmds = append(cmds, m.closeIssueCmd(m.issueDetails.Number))
+				}
+				break
+			}
 			switch msg.String() {
 			case "esc", "backspace":
 				m.state = stateList
-			case "c": // Close PR
+			case "c": // Close PR or issue
 				if m.currentTab == tabPRs && m.prDetails != nil {
 					m.detailsLoading = true
 					cmds = append(cmds, m.closePRCmd(m.prDetails.Number))
+				} else if m.currentTab == tabIssues && m.issueDetails != nil && m.issueDetails.State != "CLOSED" {
+					m.confirmCloseIssue = true
 				}
 			case "d": // Delete PR & branch
 				if m.currentTab == tabPRs && m.prDetails != nil {
@@ -792,11 +1035,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				}
+			case "p":
+				if m.currentTab == tabIssues && m.issueDetails != nil {
+					issue := m.issueDetails
+					m.askAI(buildAgentPromptRequest(issue),
+						fmt.Sprintf("%s%d", agentPromptKeyPrefix, issue.Number),
+						fmt.Sprintf("Agent prompt · #%d %s", issue.Number, issue.Title),
+						stateDetail)
+				}
 			case "a": // Send full issue (with comments) to AI via backend picker
-				if m.currentTab == tabIssues && m.issueDetails != nil && !m.aiLoading {
-					prompt := "Review the following GitHub issue and help address it:\n\n" +
-						formatIssueDetailsForCopy(m.issueDetails)
-					m.openAIPicker(prompt, stateDetail)
+				if m.currentTab == tabIssues && m.issueDetails != nil {
+					issue := m.issueDetails
+					m.askAI(aiIssuePrompt+formatIssueDetailsForCopy(issue),
+						fmt.Sprintf("issue:%d", issue.Number),
+						fmt.Sprintf("#%d %s", issue.Number, issue.Title),
+						stateDetail)
 				}
 			default:
 				m.detailVP, cmd = m.detailVP.Update(msg)
@@ -804,11 +1057,87 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case stateAIResponse:
+			if m.aiAsking {
+				switch msg.String() {
+				case "esc":
+					m.setAIAsking(false)
+				case "enter":
+					question := strings.TrimSpace(m.aiInput.Value())
+					m.setAIAsking(false)
+					if question != "" {
+						cmds = append(cmds, m.sendFollowUp(question))
+					}
+				default:
+					m.aiInput, cmd = m.aiInput.Update(msg)
+					cmds = append(cmds, cmd)
+				}
+				break
+			}
+			if m.aiConfirm != "" {
+				action := m.aiConfirm
+				m.aiConfirm = ""
+				if msg.String() == "y" {
+					turnIdx, tickets := latestTriage(m.aiThread)
+					if pending := pendingTriage(m.aiThread.Turns[max(turnIdx, 0)], tickets, action); turnIdx >= 0 && len(pending) > 0 {
+						m.statusMsg = fmt.Sprintf("Applying %s to %d ticket(s)…", action, len(pending))
+						m.statusTime = time.Now()
+						cmds = append(cmds, applyTriageCmd(m.aiThread.Key, turnIdx, action, pending))
+					}
+				}
+				break
+			}
 			switch msg.String() {
+			case "1", "2":
+				if m.aiLoading || !isAgentPromptThread(m.aiThread) {
+					break
+				}
+				plain, withContext := latestAgentPrompts(m.aiThread)
+				text, label := plain, "prompt without context"
+				if msg.String() == "2" {
+					text, label = withContext, "prompt with repo context"
+				}
+				m.statusTime = time.Now()
+				switch {
+				case text == "":
+					m.statusMsg = fmt.Sprintf("Error: no %s in the answer, press n to regenerate", label)
+				case clipboard.WriteAll(text) != nil:
+					m.statusMsg = "Error: could not write to the clipboard"
+				default:
+					m.statusMsg = "Copied " + label
+				}
+			case "c", "l", "s":
+				if m.aiLoading {
+					break
+				}
+				action := map[string]triageAction{"c": triageComment, "l": triageLabel, "s": triageAssign}[msg.String()]
+				turnIdx, tickets := latestTriage(m.aiThread)
+				m.statusTime = time.Now()
+				switch {
+				case turnIdx < 0:
+					m.statusMsg = "Error: no ticket output in this thread — ask a follow-up for the gpr-triage block"
+				case len(pendingTriage(m.aiThread.Turns[turnIdx], tickets, action)) == 0:
+					m.statusMsg = fmt.Sprintf("Nothing left to %s", action)
+				default:
+					m.aiConfirm = action
+				}
 			case "esc", "backspace", "q":
 				m.state = m.aiPrevState
+			case "x":
+				if m.aiLoading {
+					m.aiRun.cancel()
+				}
+			case "f", "enter":
+				if !m.aiLoading && m.aiThread.canFollowUp() {
+					m.setAIAsking(true)
+					cmds = append(cmds, textinput.Blink)
+				}
+			case "n":
+				if !m.aiLoading {
+					m.openAIPicker(m.aiThread.Prompt, m.aiThread.Key, m.aiThread.Label, m.aiPrevState)
+				}
 			default:
 				m.aiVP, cmd = m.aiVP.Update(msg)
+				m.aiFollow = m.aiVP.AtBottom()
 				cmds = append(cmds, cmd)
 			}
 
@@ -828,11 +1157,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case "enter":
 				m.aiBackend = aiBackends[m.aiPickerIndex]
-				m.aiLoading = true
-				m.statusMsg = fmt.Sprintf("Asking %s...", m.aiBackend)
-				m.statusTime = time.Now()
-				m.state = m.aiPrevState
-				cmds = append(cmds, m.sendToAICmd(m.aiPendingPrompt))
+				cmds = append(cmds, m.startAIThread(m.aiPendingPrompt, m.aiPendingKey, m.aiPendingLabel))
 			default:
 				if len(msg.Runes) > 0 {
 					typed := m.aiPickerTyped + strings.ToLower(string(msg.Runes))
@@ -875,6 +1200,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case stateFormNewPR, stateFormNewIssue, stateFormEditPR:
+			if m.editorWaiting != "" {
+				return m, nil
+			}
+			if m.refPicking {
+				return m.updateRefPicker(msg)
+			}
+			if msg.String() == "ctrl+r" {
+				m.refPicking = true
+				m.refCursor = 0
+				m.refInput.SetValue("")
+				m.refInput.Focus()
+				if len(m.issues) == 0 {
+					m.issuesLoading = true
+					return m, m.fetchIssuesCmd()
+				}
+				return m, nil
+			}
+			if msg.String() == "ctrl+e" {
+				cmd = m.openEditorCmd()
+				return m, cmd
+			}
+
 			// Toggle vim mode for the description field
 			if msg.String() == "ctrl+g" {
 				m.vimMode = !m.vimMode
@@ -999,6 +1346,104 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func openIssueRefCmd(number int) tea.Cmd {
+	return func() tea.Msg {
+		if err := openIssueInBrowser(number); err != nil {
+			return statusMsg(fmt.Sprintf("Error: %s", err.Error()))
+		}
+		return statusMsg(fmt.Sprintf("Opened issue #%d in browser", number))
+	}
+}
+
+func (m model) refMatches() []GHIssue {
+	q := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(m.refInput.Value()), "#"))
+	matches := []GHIssue{}
+	for _, issue := range m.getFilteredIssues() {
+		if q == "" ||
+			strings.Contains(strings.ToLower(issue.Title), q) ||
+			strings.Contains(fmt.Sprintf("%d", issue.Number), q) {
+			matches = append(matches, issue)
+		}
+	}
+	sort.SliceStable(matches, func(i, j int) bool {
+		return matches[i].UpdatedAt > matches[j].UpdatedAt
+	})
+	return matches
+}
+
+func (m model) updateRefPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	matches := m.refMatches()
+	switch msg.String() {
+	case "esc":
+		m.refPicking = false
+		return m, nil
+	case "up", "ctrl+p":
+		if m.refCursor > 0 {
+			m.refCursor--
+		}
+		return m, nil
+	case "down", "ctrl+n":
+		if m.refCursor < len(matches)-1 {
+			m.refCursor++
+		}
+		return m, nil
+	case "ctrl+o":
+		if m.refCursor < len(matches) {
+			return m, openIssueRefCmd(matches[m.refCursor].Number)
+		}
+		return m, nil
+	case "enter":
+		if m.refCursor < len(matches) {
+			m.insertIssueRef(matches[m.refCursor].Number)
+		}
+		m.refPicking = false
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.refInput, cmd = m.refInput.Update(msg)
+	m.refCursor = 0
+	return m, cmd
+}
+
+func (m *model) insertIssueRef(number int) {
+	ref := fmt.Sprintf("#%d", number)
+	if m.descInput.Value() != "" && !strings.HasSuffix(m.descInput.Value(), "\n") {
+		ref = " " + ref
+	}
+	m.descInput.InsertString(ref)
+	m.formFocus = 1
+	m.updateFormFocus()
+}
+
+func (m model) refPickerView() string {
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("  %s\n\n", cBold.Render(cCyan.Render("Reference an existing issue"))))
+	s.WriteString("  " + m.refInput.View() + "\n\n")
+	matches := m.refMatches()
+	if len(matches) == 0 {
+		if m.issuesLoading {
+			s.WriteString(cDim.Render("  Loading issues...") + "\n")
+		} else {
+			s.WriteString(cDim.Render("  No matching issues") + "\n")
+		}
+		return s.String()
+	}
+	visible := max(m.height-12, 5)
+	start := 0
+	if m.refCursor >= visible {
+		start = m.refCursor - visible + 1
+	}
+	for i := start; i < len(matches) && i < start+visible; i++ {
+		issue := matches[i]
+		row := fmt.Sprintf(" #%-5d %s ", issue.Number, oneLine(issue.Title, max(m.width-16, 20)))
+		if i == m.refCursor {
+			row = selectedRowStyle.Render(row)
+		}
+		s.WriteString("  " + row + "\n")
+	}
+	return s.String()
 }
 
 func (m *model) updateFormFocus() {
@@ -1254,7 +1699,7 @@ func (m model) listView() string {
 const detailChromeLines = 11
 
 // aiChromeLines is the same for the AI response viewport.
-const aiChromeLines = 10
+const aiChromeLines = 11
 
 // formChromeLines is the same for the create/edit form: app header, form title,
 // the title input box, the description box's own border and label, the button
@@ -1400,8 +1845,10 @@ func (m model) detailView() string {
 
 // openAIPicker stashes the prompt and opens the backend chooser, preselecting
 // the currently active backend.
-func (m *model) openAIPicker(prompt string, prev appState) {
+func (m *model) openAIPicker(prompt, key, label string, prev appState) {
 	m.aiPendingPrompt = prompt
+	m.aiPendingKey = key
+	m.aiPendingLabel = label
 	m.aiPrevState = prev
 	m.aiPickerTyped = ""
 	m.aiPickerIndex = 0
@@ -1432,27 +1879,115 @@ func (m model) aiPickerView() string {
 	if m.aiPickerTyped != "" {
 		s.WriteString(cCyan.Render(fmt.Sprintf("  › %s▋", m.aiPickerTyped)) + "\n")
 	} else {
-		s.WriteString(cDim.Render("  Type a prefix (cl, co, oc) or tab through, enter to send.") + "\n")
+		s.WriteString(cDim.Render("  Type a prefix (cl, co, op, ge) or tab through, enter to send.") + "\n")
 	}
 
 	return s.String()
 }
 
+const aiIssuePrompt = "Analyse the following GitHub issue in the context of this repository and propose how to address it. " +
+	"Do not modify any files; reply with your findings and a concrete plan." + triageContract
+
+const aiIssuesPrompt = "Analyse the following GitHub issues in the context of this repository and propose how to address them. " +
+	"Do not modify any files; reply with your findings and a concrete plan." + triageContract
+
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+func renderAISteps(steps []string) string {
+	var s strings.Builder
+	for _, step := range steps {
+		s.WriteString(cDim.Render("  › "+step) + "\n")
+	}
+	if len(steps) > 0 {
+		s.WriteString("\n")
+	}
+	return s.String()
+}
+
 func (m *model) setAIContent() {
-	if m.width == 0 || m.aiResponse == "" {
+	if m.width == 0 || m.aiThread == nil {
 		return
 	}
-	m.aiVP.SetContent(renderMarkdown(m.aiResponse, max(m.aiVP.Width-2, 20)))
+	width := max(m.aiVP.Width-2, 20)
+	var s strings.Builder
+	last := len(m.aiThread.Turns) - 1
+	for i, turn := range m.aiThread.Turns {
+		if i > 0 {
+			s.WriteString("\n" + cDim.Render(strings.Repeat("┄", max(m.width-6, 10))) + "\n")
+			s.WriteString(cBold.Render(cCyan.Render("  You: ")) + turn.Question + "\n\n")
+		}
+		s.WriteString(renderAISteps(turn.Steps))
+		if i == last {
+			m.aiAnswerY = strings.Count(s.String(), "\n")
+		}
+		switch {
+		case turn.Answer != "" && isAgentPromptThread(m.aiThread):
+			if plain, withContext := parseAgentPrompts(turn.Answer); plain != "" || withContext != "" {
+				s.WriteString(renderMarkdown(renderAgentPromptsMarkdown(plain, withContext), width))
+			} else {
+				s.WriteString(renderMarkdown(turn.Answer, width))
+			}
+		case turn.Answer != "":
+			s.WriteString(renderMarkdown(stripTriage(turn.Answer), width))
+		case i == last && m.aiLoading:
+			s.WriteString(cDim.Render("  Waiting for output…") + "\n")
+		case turn.Err == "":
+			s.WriteString(cDim.Render("  No response.") + "\n")
+		}
+		if turn.Err != "" {
+			s.WriteString(errorStyle.Render("  "+turn.Err) + "\n")
+		}
+	}
+	if !m.aiLoading {
+		if turnIdx, tickets := latestTriage(m.aiThread); turnIdx >= 0 {
+			s.WriteString("\n" + cDim.Render(strings.Repeat("━", max(m.width-6, 10))) + "\n")
+			s.WriteString(renderMarkdown(renderTriageMarkdown(tickets, m.aiThread.Turns[turnIdx].Done), width))
+		}
+	}
+	m.aiVP.SetContent(s.String())
+	if m.aiLoading && m.aiFollow {
+		m.aiVP.GotoBottom()
+	}
+}
+
+func (m model) aiStatusLine() string {
+	thread := m.aiThread
+	turn := thread.current()
+	steps := ""
+	if n := len(turn.Steps); n > 0 {
+		steps = fmt.Sprintf(" · %d steps", n)
+	}
+	switch {
+	case m.aiLoading:
+		elapsed := time.Since(m.aiStarted).Round(time.Second)
+		return fmt.Sprintf("%s %s working · %s%s", spinnerFrames[m.aiFrame%len(spinnerFrames)], thread.Backend, elapsed, steps)
+	case turn.Err != "":
+		return fmt.Sprintf("✗ %s failed%s", thread.Backend, steps)
+	case m.aiElapsed > 0:
+		return fmt.Sprintf("✓ %s done in %s%s", thread.Backend, m.aiElapsed, steps)
+	default:
+		return fmt.Sprintf("✓ %s · %d turns", thread.Backend, len(thread.Turns))
+	}
 }
 
 func (m model) aiResponseView() string {
 	var s strings.Builder
-	s.WriteString(fmt.Sprintf("  %s\n\n", cBold.Render(cCyan.Render(fmt.Sprintf("AI Response (%s)", m.aiBackend)))))
+	title := fmt.Sprintf("AI · %s (%s)", m.aiThread.Label, m.aiThread.Backend)
+	s.WriteString(fmt.Sprintf("  %s\n", cBold.Render(cCyan.Render(oneLine(title, max(m.width-6, 20))))))
+	status := m.aiStatusLine()
+	switch {
+	case m.aiLoading:
+		s.WriteString(cYellow.Render("  "+status) + "\n\n")
+	case m.aiThread.current().Err != "":
+		s.WriteString(cRed.Render("  "+status) + "\n\n")
+	default:
+		s.WriteString(cGreen.Render("  "+status) + "\n\n")
+	}
 	s.WriteString(cDim.Render(strings.Repeat("─", m.width-4)) + "\n")
-	if m.aiResponse == "" {
-		s.WriteString(cDim.Render("  No response.") + "\n")
-	} else {
-		s.WriteString(m.aiVP.View() + "\n")
+	s.WriteString(m.aiVP.View() + "\n")
+	if m.aiAsking {
+		s.WriteString(cDim.Render(strings.Repeat("─", m.width-4)) + "\n")
+		s.WriteString("  " + m.aiInput.View() + "\n")
 	}
 	return s.String()
 }
@@ -1554,6 +2089,9 @@ func (m model) checksView() string {
 }
 
 func (m model) formView(title string) string {
+	if m.refPicking {
+		return m.refPickerView()
+	}
 	var s strings.Builder
 
 	s.WriteString(fmt.Sprintf("  %s\n\n", cBold.Render(cCyan.Render(title))))
@@ -1587,6 +2125,9 @@ func (m model) formView(title string) string {
 	}
 
 	s.WriteString(fmt.Sprintf("  %s  %s\n", submitBtn, cancelBtn))
+	if m.editorWaiting != "" {
+		s.WriteString(cYellow.Render(fmt.Sprintf("\n  Editing in %s. Save and close the file to come back here.", m.editorWaiting)) + "\n")
+	}
 
 	return s.String()
 }
@@ -1608,7 +2149,9 @@ func (m model) footerView() string {
 	s.WriteString(cDim.Render(strings.Repeat("━", m.width)) + "\n")
 
 	// Status messages
-	if (m.aiLoading || time.Since(m.statusTime) < 5*time.Second) && m.statusMsg != "" {
+	if m.aiLoading && m.state != stateAIResponse {
+		s.WriteString(cYellow.Render("  "+m.aiStatusLine()+" — press a to view") + "\n")
+	} else if time.Since(m.statusTime) < 5*time.Second && m.statusMsg != "" {
 		if strings.HasPrefix(m.statusMsg, "Error") {
 			s.WriteString(errorStyle.Render("  "+m.statusMsg) + "\n")
 		} else {
@@ -1667,11 +2210,18 @@ func (m model) footerView() string {
 				[2]string{"o", "Open in browser"},
 				[2]string{"r", "Refresh"},
 			))
+		} else if m.confirmCloseIssue && m.issueDetails != nil {
+			s.WriteString(renderHints(
+				[2]string{"y", fmt.Sprintf("Confirm close #%d", m.issueDetails.Number)},
+				[2]string{"any", "Cancel"},
+			))
 		} else {
 			s.WriteString(renderHints(
 				[2]string{"esc", "Back"},
 				[2]string{"↑/↓", scroll},
+				[2]string{"c", "Close issue"},
 				[2]string{"y", "Copy"},
+				[2]string{"p", "Agent prompt"},
 				[2]string{"a", "Ask AI"},
 				[2]string{"b", "Backend: " + m.aiBackend},
 				[2]string{"o", "Open in browser"},
@@ -1679,10 +2229,41 @@ func (m model) footerView() string {
 			))
 		}
 	case stateAIResponse:
-		s.WriteString(renderHints(
-			[2]string{"esc/q", "Back"},
-			[2]string{"↑/↓", fmt.Sprintf("Scroll (%d%%)", int(m.aiVP.ScrollPercent()*100))},
-		))
+		hints := [][2]string{
+			{"esc/q", "Back"},
+			{"↑/↓", fmt.Sprintf("Scroll (%d%%)", int(m.aiVP.ScrollPercent()*100))},
+		}
+		switch {
+		case m.aiConfirm != "":
+			turnIdx, tickets := latestTriage(m.aiThread)
+			var numbers []string
+			for _, t := range pendingTriage(m.aiThread.Turns[max(turnIdx, 0)], tickets, m.aiConfirm) {
+				numbers = append(numbers, fmt.Sprintf("#%d", t.Number))
+			}
+			hints = [][2]string{{"y", fmt.Sprintf("Confirm %s on %s", m.aiConfirm, strings.Join(numbers, ", "))}, {"any", "Cancel"}}
+		case m.aiAsking:
+			hints = [][2]string{{"enter", "Send follow-up"}, {"esc", "Cancel"}}
+		case m.aiLoading:
+			hints = append(hints, [2]string{"esc", "Keep running in background"}, [2]string{"x", "Cancel"})
+		default:
+			if m.aiThread.canFollowUp() {
+				hints = append(hints, [2]string{"f", "Follow-up"})
+			}
+			hints = append(hints, [2]string{"n", "New thread"})
+			if isAgentPromptThread(m.aiThread) {
+				plain, withContext := latestAgentPrompts(m.aiThread)
+				if plain != "" {
+					hints = append(hints, [2]string{"1", "Copy prompt"})
+				}
+				if withContext != "" {
+					hints = append(hints, [2]string{"2", "Copy prompt + context"})
+				}
+			}
+			if turnIdx, _ := latestTriage(m.aiThread); turnIdx >= 0 {
+				hints = append(hints, [2]string{"c", "Comment"}, [2]string{"l", "Labels"}, [2]string{"s", "Assign me"})
+			}
+		}
+		s.WriteString(renderHints(hints...))
 	case stateChecks:
 		s.WriteString(renderHints(
 			[2]string{"esc/q", "Back"},
@@ -1694,11 +2275,21 @@ func (m model) footerView() string {
 	case stateAIPicker:
 		s.WriteString(renderHints(
 			[2]string{"tab/←/→", "Cycle backend"},
-			[2]string{"cl/co/oc", "Type to pick"},
+			[2]string{"cl/co/op/ge", "Type to pick"},
 			[2]string{"enter", "Send"},
 			[2]string{"esc", "Cancel"},
 		))
 	case stateFormNewPR, stateFormNewIssue, stateFormEditPR:
+		if m.refPicking {
+			s.WriteString(renderHints(
+				[2]string{"type", "Filter by title or number"},
+				[2]string{"↑/↓", "Move"},
+				[2]string{"enter", "Insert #N"},
+				[2]string{"ctrl+o", "Open on GitHub"},
+				[2]string{"esc", "Back"},
+			))
+			break
+		}
 		vimStatus := "off"
 		if m.vimMode {
 			if m.vimInsert {
@@ -1712,6 +2303,8 @@ func (m model) footerView() string {
 			[2]string{"enter", "Select / submit"},
 			[2]string{"esc", "Cancel"},
 			[2]string{"ctrl+g", "Vim mode: " + vimStatus},
+			[2]string{"ctrl+r", "Reference issue"},
+			[2]string{"ctrl+e", "Write in " + editorLabel() + " (save + close to return)"},
 		))
 	}
 

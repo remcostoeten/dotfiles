@@ -1,7 +1,8 @@
+import { commandLine, formatArg, formatFlag, formatUsage, visibleFlags } from "../command-spec/tree";
+import type { CommandGroup, CommandSpec, HelpSection } from "../command-spec/types";
 import { VISIBILITY_ALIASES } from "../domain/visibility-alias";
-import type { CommandGroup, CommandHelp, CommandSummary } from "../plugins/types";
 
-const GROUP_ORDER: CommandGroup[] = ["Create", "View", "Change", "Epic visibility", "Remove", "Settings"];
+const GROUP_ORDER: CommandGroup[] = ["Create", "Boards", "View", "Change", "Epic visibility", "Remove", "Settings"];
 const INDENT = "  ";
 
 interface Palette {
@@ -44,13 +45,14 @@ export function supportsColor(): boolean {
 }
 
 /** Renders the `todo help` overview: banner, generic usage, and commands grouped by purpose. */
-export function formatHelpOverview(commands: ReadonlyArray<CommandSummary>, useColor = supportsColor()): string {
+export function formatHelpOverview(root: CommandSpec, useColor = supportsColor()): string {
   const p = useColor ? COLOR_PALETTE : PLAIN_PALETTE;
+  const commands = visibleChildren(root);
   const lines: string[] = [""];
-  lines.push(`${INDENT}${p.accent}${p.bold}✓ todo${p.reset}  ${p.dim}·${p.reset}  tasks, epics and subtasks from the shell`);
+  lines.push(`${INDENT}${p.accent}${p.bold}✓ todo${p.reset}  ${p.dim}·${p.reset}  tasks, epics and boards from the shell`);
   lines.push("");
   lines.push(heading("Usage", p));
-  lines.push(`${INDENT}${INDENT}${highlightUsage("todo <description>[, <description>] [--due <time>] [--priority <level>]", p)}`);
+  lines.push(`${INDENT}${INDENT}${highlightUsage("todo <description>[, <description>] [--due <time>] [--priority <level>] [--later] [--off-board]", p)}`);
   lines.push(`${INDENT}${INDENT}${highlightUsage("todo <command> [arguments]", p)}`);
   lines.push(`${INDENT}${INDENT}${highlightUsage("todo <command> --help", p)}`);
 
@@ -61,7 +63,7 @@ export function formatHelpOverview(commands: ReadonlyArray<CommandSummary>, useC
     for (const command of group.commands) {
       const label = formatCommandLabel(command);
       const padding = " ".repeat(width - label.length + 3);
-      lines.push(`${INDENT}${INDENT}${colorCommandLabel(command, p)}${padding}${command.description}`);
+      lines.push(`${INDENT}${INDENT}${colorCommandLabel(command, p)}${padding}${command.summary}`);
     }
   }
 
@@ -79,49 +81,48 @@ export function formatHelpOverview(commands: ReadonlyArray<CommandSummary>, useC
   return `${lines.join("\n")}\n`;
 }
 
-/** Renders `todo <command> --help`. */
-export function formatCommandHelp(command: CommandSummary, useColor = supportsColor()): string {
+/** Renders the help page of one node, e.g. `todo board add --help`. */
+export function formatCommandHelp(path: ReadonlyArray<CommandSpec>, useColor = supportsColor()): string {
+  const node = path[path.length - 1];
+  if (node === undefined) throw new Error("formatCommandHelp needs a command path");
   const p = useColor ? COLOR_PALETTE : PLAIN_PALETTE;
-  const help = command.help;
   const lines: string[] = [""];
-  lines.push(`${INDENT}${p.accent}${p.bold}todo ${command.name}${p.reset}  ${p.dim}·${p.reset}  ${command.description}`);
-  if (help.aliases !== undefined && help.aliases.length > 0) {
-    lines.push(`${INDENT}${p.dim}aliases:${p.reset} ${help.aliases.map((alias) => `${p.command}${alias}${p.reset}`).join(`${p.dim},${p.reset} `)}`);
+  lines.push(`${INDENT}${p.accent}${p.bold}${commandLine(path)}${p.reset}  ${p.dim}·${p.reset}  ${node.summary}`);
+  if (node.aliases !== undefined && node.aliases.length > 0) {
+    lines.push(`${INDENT}${p.dim}aliases:${p.reset} ${node.aliases.map((alias) => `${p.command}${alias}${p.reset}`).join(`${p.dim},${p.reset} `)}`);
   }
 
   lines.push("");
   lines.push(heading("Usage", p));
-  for (const usage of help.usage ?? [`todo ${command.name}`]) {
-    lines.push(`${INDENT}${INDENT}${highlightUsage(usage, p)}`);
-  }
+  for (const usage of formatUsage(path)) lines.push(`${INDENT}${INDENT}${highlightUsage(usage, p)}`);
 
-  if (help.aliasNotes !== undefined && help.aliasNotes.length > 0) {
-    lines.push("");
-    lines.push(heading("Aliases", p));
-    for (const alias of help.aliasNotes) lines.push(`${INDENT}${INDENT}${highlightInline(alias, p)}`);
-  }
+  const args = node.args ?? [];
+  pushTable(lines, "Arguments", args.map((arg) => ({ left: formatArg(arg), right: arg.description })), p);
 
-  if (help.details !== undefined && help.details.length > 0) {
+  const children = visibleChildren(node);
+  pushTable(lines, "Commands", children.map((child) => ({
+    left: formatCommandLabel(child),
+    right: `${child.summary}${child.name === node.defaultSubcommand ? " (default)" : ""}`,
+  })), p);
+
+  pushTable(lines, "Options", visibleFlags(node).map((flag) => ({
+    left: [formatFlag(flag), ...(flag.aliases ?? []).map((alias) => `--${alias}`), ...(flag.short === undefined ? [] : [`-${flag.short}`])].join(", "),
+    right: flag.description,
+  })), p);
+
+  if (node.details !== undefined && node.details.length > 0) {
     lines.push("");
     lines.push(heading("Details", p));
-    for (const detail of help.details) lines.push(`${INDENT}${INDENT}${highlightInline(detail, p)}`);
+    for (const detail of node.details) lines.push(`${INDENT}${INDENT}${highlightInline(detail, p)}`);
   }
 
-  if (help.options !== undefined && help.options.length > 0) {
-    lines.push("");
-    lines.push(heading("Options", p));
-    const width = Math.max(...help.options.map((option) => option.flag.length));
-    for (const option of help.options) {
-      const padding = " ".repeat(width - option.flag.length + 3);
-      lines.push(`${INDENT}${INDENT}${highlightInline(option.flag, p)}${padding}${highlightInline(option.description, p)}`);
-    }
-  }
+  for (const section of node.sections ?? []) pushSection(lines, section, p);
 
-  if (help.examples !== undefined && help.examples.length > 0) {
+  if (node.examples !== undefined && node.examples.length > 0) {
     lines.push("");
     lines.push(heading("Examples", p));
-    const width = Math.max(...help.examples.map((example) => example.command.length));
-    for (const example of help.examples) {
+    const width = Math.max(...node.examples.map((example) => example.command.length));
+    for (const example of node.examples) {
       const note = example.note === undefined ? "" : `${" ".repeat(width - example.command.length + 3)}${p.dim}# ${example.note}${p.reset}`;
       lines.push(`${INDENT}${INDENT}${p.dim}$${p.reset} ${highlightUsage(example.command, p)}${note}`);
     }
@@ -131,65 +132,55 @@ export function formatCommandHelp(command: CommandSummary, useColor = supportsCo
   return `${lines.join("\n")}\n`;
 }
 
-export interface HelpRow {
-  left: string;
-  right?: string;
-}
-
-export interface HelpSection {
-  heading: string;
-  rows: HelpRow[];
-}
-
-/**
- * Renders an ad-hoc help page in the same visual language as `todo <command> --help`, for
- * commands whose subcommands each need their own contextual page.
- */
-export function formatHelpSections(title: string, subtitle: string, sections: HelpSection[], useColor = supportsColor()): string {
-  const p = useColor ? COLOR_PALETTE : PLAIN_PALETTE;
-  const lines: string[] = [""];
-  lines.push(`${INDENT}${p.accent}${p.bold}${title}${p.reset}  ${p.dim}·${p.reset}  ${subtitle}`);
-
-  for (const section of sections) {
-    if (section.rows.length === 0) continue;
-    lines.push("");
-    lines.push(heading(section.heading, p));
-    const width = Math.max(...section.rows.map((row) => (row.right === undefined ? 0 : row.left.length)));
-    for (const row of section.rows) {
-      if (row.right === undefined) {
-        lines.push(`${INDENT}${INDENT}${highlightUsage(row.left, p)}`);
-        continue;
-      }
-      const padding = " ".repeat(width - row.left.length + 3);
-      lines.push(`${INDENT}${INDENT}${highlightInline(row.left, p)}${padding}${p.dim}${row.right}${p.reset}`);
-    }
-  }
-
+function pushTable(lines: string[], title: string, rows: Array<{ left: string; right: string }>, p: Palette): void {
+  if (rows.length === 0) return;
   lines.push("");
-  return `${lines.join("\n")}\n`;
+  lines.push(heading(title, p));
+  const width = Math.max(...rows.map((row) => row.left.length));
+  for (const row of rows) {
+    const padding = " ".repeat(width - row.left.length + 3);
+    lines.push(`${INDENT}${INDENT}${highlightInline(row.left, p)}${padding}${highlightInline(row.right, p)}`);
+  }
 }
 
-export function formatCommandLabel(command: CommandSummary): string {
-  const aliases = command.help.aliases ?? [];
+function pushSection(lines: string[], section: HelpSection, p: Palette): void {
+  if (section.rows.length === 0) return;
+  lines.push("");
+  lines.push(heading(section.heading, p));
+  const width = Math.max(...section.rows.map((row) => (row.right === undefined ? 0 : row.left.length)));
+  for (const row of section.rows) {
+    if (row.right === undefined) {
+      lines.push(`${INDENT}${INDENT}${highlightUsage(row.left, p)}`);
+      continue;
+    }
+    const padding = " ".repeat(width - row.left.length + 3);
+    lines.push(`${INDENT}${INDENT}${highlightInline(row.left, p)}${padding}${p.dim}${row.right}${p.reset}`);
+  }
+}
+
+export function visibleChildren(node: CommandSpec): CommandSpec[] {
+  return (node.subcommands ?? []).filter((child) => child.hidden !== true);
+}
+
+export function formatCommandLabel(command: CommandSpec): string {
+  const aliases = command.aliases ?? [];
   return aliases.length === 0 ? command.name : `${command.name}, ${aliases.join(", ")}`;
 }
 
-function colorCommandLabel(command: CommandSummary, p: Palette): string {
-  const aliases = command.help.aliases ?? [];
+function colorCommandLabel(command: CommandSpec, p: Palette): string {
+  const aliases = command.aliases ?? [];
   const name = `${p.command}${p.bold}${command.name}${p.reset}`;
   return aliases.length === 0 ? name : `${name}${p.dim}, ${aliases.join(", ")}${p.reset}`;
 }
 
-function heading(text: string, p: Palette): string {
-  return `${INDENT}${p.heading}${p.bold}${text.toUpperCase()}${p.reset}`;
+function groupCommands(commands: ReadonlyArray<CommandSpec>): Array<{ name: string; commands: CommandSpec[] }> {
+  const groups = new Map<CommandGroup, CommandSpec[]>(GROUP_ORDER.map((group) => [group, []]));
+  for (const command of commands) groups.get(command.group ?? "Settings")?.push(command);
+  return [...groups.entries()].filter(([, members]) => members.length > 0).map(([name, members]) => ({ name, commands: members }));
 }
 
-function groupCommands(commands: ReadonlyArray<CommandSummary>): Array<{ name: string; commands: CommandSummary[] }> {
-  const groups = new Map<CommandGroup, CommandSummary[]>(GROUP_ORDER.map((group) => [group, []]));
-  for (const command of commands) {
-    groups.get(command.help.group ?? "Settings")?.push(command);
-  }
-  return [...groups.entries()].filter(([, members]) => members.length > 0).map(([name, members]) => ({ name, commands: members }));
+function heading(text: string, p: Palette): string {
+  return `${INDENT}${p.heading}${p.bold}${text.toUpperCase()}${p.reset}`;
 }
 
 function highlightUsage(usage: string, p: Palette): string {

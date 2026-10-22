@@ -1,7 +1,3 @@
-# Open Brave
-alt + b
-    /usr/bin/brave
-
 # Open Ghostty
 alt + t
     /usr/bin/ghostty

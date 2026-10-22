@@ -132,12 +132,12 @@ class LicenseGenerator:
             table.add_column("Description", style="white")
             table.add_column("Default", style="green")
 
-            table.add_row("--license", "License type", "mit")
-            table.add_row("--date", "Date in DD/MM/YYYY format", "today")
-            table.add_row("--author", "Author name", "Remco Stoeten")
-            table.add_row("--project", "Project name", "Required in CLI mode")
-            table.add_row("--path", "Output file path", "Clipboard only")
-            table.add_row("--help, -h", "Show this help", "")
+            table.add_row("--license, -l", "License type", "mit")
+            table.add_row("--date, -d", "Date in DD/MM/YYYY format", "today")
+            table.add_row("--author, -a", "Author name", "Remco Stoeten")
+            table.add_row("--project, -p", "Project name", "Required in CLI mode")
+            table.add_row("--path, -pwd", "Output file path", "Clipboard only")
+            table.add_row("--help, help, -h", "Show this help", "")
 
             self.console.print(table)
             print()
@@ -149,8 +149,8 @@ class LicenseGenerator:
             examples = [
                 ("Interactive mode", "license"),
                 ("Quick MIT license", "license --project 'My App'"),
-                ("Custom author and date", "license --project 'My App' --author 'John Doe' --date '01/01/2024'"),
-                ("Save to file", "license --project 'My App' --path /path/to/LICENSE.md"),
+                ("Custom author and date", "license -p 'My App' -a 'John Doe' -d '01/01/2024'"),
+                ("Save to file", "license -p 'My App' -pwd /path/to/LICENSE.md"),
             ]
 
             for desc, cmd in examples:
@@ -163,12 +163,12 @@ class LicenseGenerator:
             print("  Simply run 'license' and answer the prompts interactively.")
             print()
             colored_print("CLI Mode:", Colors.BOLD + Colors.YELLOW)
-            print("  --license    License type (default: mit)")
-            print("  --date       Date in DD/MM/YYYY format (default: today)")
-            print("  --author     Author name (default: Remco Stoeten)")
-            print("  --project    Project name (required in CLI mode)")
-            print("  --path       Output file path (default: clipboard only)")
-            print("  --help, -h   Show this help")
+            print("  --license, -l    License type (default: mit)")
+            print("  --date, -d       Date in DD/MM/YYYY format (default: today)")
+            print("  --author, -a     Author name (default: Remco Stoeten)")
+            print("  --project, -p    Project name (required in CLI mode)")
+            print("  --path, -pwd     Output file path (default: clipboard only)")
+            print("  --help, help, -h Show this help")
             print()
             colored_print("Examples:", Colors.BOLD + Colors.GREEN)
             print("  license")
@@ -396,11 +396,11 @@ def main():
         add_help=False  # We handle help ourselves
     )
 
-    parser.add_argument('--license', help='License type (default: mit)')
-    parser.add_argument('--date', help='Date in DD/MM/YYYY format (default: today)')
-    parser.add_argument('--author', help=f'Author name (default: {DEFAULT_AUTHOR})')
-    parser.add_argument('--project', help='Project name (required in CLI mode)')
-    parser.add_argument('--path', help='Output file path (default: clipboard only)')
+    parser.add_argument('--license', '-l', help='License type (default: mit)')
+    parser.add_argument('--date', '-d', help='Date in DD/MM/YYYY format (default: today)')
+    parser.add_argument('--author', '-a', help=f'Author name (default: {DEFAULT_AUTHOR})')
+    parser.add_argument('--project', '-p', help='Project name (required in CLI mode)')
+    parser.add_argument('--path', '-pwd', help='Output file path (default: clipboard only)')
 
     # If no arguments provided, run interactive mode
     if len(sys.argv) == 1:

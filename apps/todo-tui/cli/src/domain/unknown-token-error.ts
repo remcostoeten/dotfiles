@@ -9,6 +9,8 @@ export class UnknownTokenError extends UserInputError {
     readonly token: string,
     readonly candidates: ReadonlyArray<string>,
     readonly kind: UnknownTokenKind,
+    /** The token started an implicit `add`; declining the suggestion should add it as a task. */
+    readonly implicitAddFallback = false,
   ) {
     super(message);
     this.name = "UnknownTokenError";

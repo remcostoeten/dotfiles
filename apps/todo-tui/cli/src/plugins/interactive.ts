@@ -7,7 +7,7 @@ import { createTasks, type CreateTaskDefaults } from "./add";
 import { resetNotificationState } from "../notifications";
 import { tryParseDueDate } from "../domain/due-date";
 import { restoreTasks } from "./undo";
-import type { TodoPlugin } from "./types";
+import type { CommandSpec } from "../command-spec/types";
 
 const DIM = "\u001B[2m";
 const RESET = "\u001B[0m";
@@ -44,19 +44,18 @@ interface Key {
   sequence?: string;
 }
 
-export const interactivePlugin: TodoPlugin = {
+export const interactiveCommand: CommandSpec = {
   name: "interactive",
-  description: "Open the keyboard-controlled taskboard.",
-  register(app) {
-    app.command("interactive", "Open the keyboard-driven taskboard.", async ({ store }) => {
-      const taskboard = new Taskboard(store);
-      await taskboard.start();
-    }, {
-      group: "View",
-      aliases: ["i", "-i", "--interactive"],
-      usage: ["todo interactive", "todo i", "todo -i", "todo --interactive", "todo"],
-      details: ["Opens automatically when todo runs with no arguments in a terminal. Press ? inside for the key map."],
-    });
+  aliases: ["i", "-i", "--interactive"],
+  summary: "Open the keyboard-driven taskboard.",
+  group: "View",
+  details: [
+    "Opens automatically when todo runs with no arguments in a terminal; the `todo` wrapper starts the Go TUI when it is installed.",
+    "This built-in taskboard is the fallback. Press ? inside for the key map.",
+  ],
+  async run(_input, { store }) {
+    const taskboard = new Taskboard(store);
+    await taskboard.start();
   },
 };
 
@@ -452,6 +451,7 @@ class Taskboard {
     const tasks = await this.store.loadTasks();
     const restoredTasks = restoreTasks(tasks, undo.tasks);
     await this.store.saveTasks([...tasks, ...restoredTasks]);
+    await this.store.forgetRemovedBatch(undo.timestamp);
     await this.store.clearUndo();
     this.message = `Restored ${restoredTasks.length} task${restoredTasks.length === 1 ? "" : "s"}`;
     await this.refresh(restoredTasks[0]?.id);

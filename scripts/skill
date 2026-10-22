@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SKILLS_DIR="$DOTFILES_DIR/configs/agents/skills"
+AGENTS_HOME="$HOME/.agents"
+TARGETS=("$HOME/.claude/skills" "$HOME/.codex/skills")
+BACKUP_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/skill-backups/$(date +%Y%m%d-%H%M%S)"
+
+function info() { printf '\033[34m::\033[0m %s\n' "$*"; }
+function warn() { printf '\033[33m!!\033[0m %s\n' "$*" >&2; }
+function die() { printf '\033[31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+
+function usage() {
+    cat <<EOF
+skill — single source of truth for agent skills ($SKILLS_DIR)
+
+  skill add <source> [skills-cli flags]   install into the dotfiles, then sync
+      skill add vercel-labs/before-and-after#main
+      skill add npx skills add vercel-labs/agent-skills -s react-best-practices
+  skill rm <name>...                      remove from the dotfiles and all targets
+  skill sync                              link every skill into: ${TARGETS[*]}
+  skill ls                                list skills and link status
+EOF
+}
+
+function backup() {
+    local path="$1" dest="$BACKUP_ROOT${1%/*}"
+    mkdir -p "$dest"
+    mv "$path" "$dest/"
+    warn "backed up $path → $dest/"
+}
+
+function ensure_agents_home() {
+    mkdir -p "$SKILLS_DIR"
+    if [[ -L "$AGENTS_HOME" && "$(readlink -f "$AGENTS_HOME")" == "$(readlink -f "$DOTFILES_DIR/configs/agents")" ]]; then
+        return
+    fi
+    [[ -e "$AGENTS_HOME" ]] && backup "$AGENTS_HOME"
+    ln -s "$DOTFILES_DIR/configs/agents" "$AGENTS_HOME"
+    info "linked $AGENTS_HOME → configs/agents"
+}
+
+function adopt_or_backup() {
+    local path="$1" name
+    name="$(basename "$path")"
+    if [[ ! -e "$SKILLS_DIR/$name" ]]; then
+        mv "$path" "$SKILLS_DIR/$name"
+        info "adopted $path into dotfiles"
+    elif diff -rq "$path" "$SKILLS_DIR/$name" >/dev/null 2>&1; then
+        rm -rf "$path"
+    else
+        backup "$path"
+    fi
+}
+
+function collect_target() {
+    local target="$1" entry
+    mkdir -p "$target"
+
+    for entry in "$target"/*; do
+        [[ -e "$entry" || -L "$entry" ]] || continue
+        if [[ -L "$entry" ]]; then
+            [[ -e "$entry" ]] || { rm "$entry"; info "pruned dangling $entry"; }
+        elif [[ -d "$entry" && -f "$entry/SKILL.md" ]]; then
+            adopt_or_backup "$entry"
+        fi
+    done
+}
+
+function link_target() {
+    local target="$1" skill name
+
+    for skill in "$SKILLS_DIR"/*/; do
+        skill="${skill%/}"
+        [[ -f "$skill/SKILL.md" ]] || continue
+        name="$(basename "$skill")"
+        [[ -L "$target/$name" && "$(readlink -f "$target/$name")" == "$(readlink -f "$skill")" ]] && continue
+        [[ -L "$target/$name" ]] && rm "$target/$name"
+        ln -s "$skill" "$target/$name"
+    done
+}
+
+function cmd_sync() {
+    ensure_agents_home
+    local target
+    for target in "${TARGETS[@]}"; do
+        collect_target "$target"
+    done
+    for target in "${TARGETS[@]}"; do
+        link_target "$target"
+    done
+    info "synced $(find "$SKILLS_DIR" -mindepth 2 -maxdepth 2 -name SKILL.md | wc -l) skills → ${TARGETS[*]}"
+}
+
+function cmd_add() {
+    local args=("$@")
+    [[ "${args[0]:-}" == "npx" ]] && args=("${args[@]:1}")
+    [[ "${args[0]:-}" == "skills" ]] && args=("${args[@]:1}")
+    [[ "${args[0]:-}" == "add" || "${args[0]:-}" == "a" ]] && args=("${args[@]:1}")
+    [[ ${#args[@]} -gt 0 ]] || die "usage: skill add <owner/repo[#ref]> [flags]"
+
+    ensure_agents_home
+    (cd "$HOME" && npx --yes skills add "${args[@]}" --global --agent universal --yes)
+    cmd_sync
+}
+
+function cmd_rm() {
+    [[ $# -gt 0 ]] || die "usage: skill rm <name>..."
+    local name target
+    for name in "$@"; do
+        [[ -d "$SKILLS_DIR/$name" ]] || { warn "no skill named $name"; continue; }
+        for target in "${TARGETS[@]}"; do
+            [[ -L "$target/$name" ]] && rm "$target/$name"
+        done
+        rm -rf "${SKILLS_DIR:?}/$name"
+        info "removed $name"
+    done
+}
+
+function cmd_ls() {
+    local skill name target status
+    for skill in "$SKILLS_DIR"/*/; do
+        skill="${skill%/}"
+        [[ -f "$skill/SKILL.md" ]] || continue
+        name="$(basename "$skill")"
+        status=""
+        for target in "${TARGETS[@]}"; do
+            if [[ -L "$target/$name" && "$(readlink -f "$target/$name")" == "$(readlink -f "$skill")" ]]; then
+                status+=" ✓$(basename "$(dirname "$target")")"
+            else
+                status+=" ✗$(basename "$(dirname "$target")")"
+            fi
+        done
+        printf '%-36s%s\n' "$name" "$status"
+    done
+}
+
+case "${1:-}" in
+    add|a|install|i) shift; cmd_add "$@" ;;
+    npx) cmd_add "$@" ;;
+    rm|remove|uninstall) shift; cmd_rm "$@" ;;
+    sync) cmd_sync ;;
+    ls|list) cmd_ls ;;
+    -h|--help|help|"") usage ;;
+    */*) cmd_add "$@" ;;
+    *) die "unknown command: $1 (see skill --help)" ;;
+esac

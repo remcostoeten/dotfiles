@@ -7,6 +7,8 @@ import { helperAction } from "@/shared/utilities/native"
 import { toNativeError } from "@/shared/utilities/guards"
 import { backendStatus, capabilities, refetchBackend } from "@/modules/status/api/queries/status"
 import { useApply } from "@/modules/status/hooks/use-apply"
+import { WindowControls } from "@/app/components/window-controls"
+import { ConfigFilePreview } from "@/modules/status/components/config-file-preview"
 
 const phaseLabels: Record<string, string> = {
   validating: "Validating…",
@@ -42,9 +44,12 @@ export function StatusHeader() {
   const dangerous = () => (apply.check()?.warnings ?? []).some((w) => w.code === "DANGEROUS")
 
   return (
-    <header class="flex items-center gap-3 border-b border-line bg-surface-1 px-3 py-2">
-      <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-        <span class="font-semibold">Keybind Manager</span>
+    <header data-tauri-drag-region class="flex items-center gap-3 border-b border-line px-4 py-2.5">
+      <div data-tauri-drag-region class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <span class="flex items-center gap-2 font-pixel text-[15px] tracking-tight">
+          <span class="h-2.5 w-2.5 rounded-[3px] bg-accent" aria-hidden="true" />
+          keybind manager
+        </span>
         <Show when={capabilities()} fallback={<Badge tone="muted" text="detecting…" />}>
           {(caps) => (
             <>
@@ -79,25 +84,30 @@ export function StatusHeader() {
         </Show>
       </div>
       <Show when={serviceError()}>
-        <span class="max-w-56 truncate text-[11px] text-bad" title={serviceError()}>
+        <span
+          class="max-w-56 truncate rounded-sm border border-bad/40 bg-bad/10 px-1.5 py-px text-[11px] text-bad"
+          title={serviceError()}
+        >
           {serviceError()}
         </span>
       </Show>
-      <Button onClick={() => void toggleService()} disabled={serviceBusy() || !backendStatus()?.installed}>
+      <Button onClick={() => void toggleService()} loading={serviceBusy()} disabled={!backendStatus()?.installed}>
         {backendStatus()?.service_active ? "Suspend" : "Enable"}
       </Button>
       <Button
         variant="primary"
         onClick={() => void apply.start()}
-        disabled={apply.phase() === "validating" || apply.phase() === "writing"}
+        loading={apply.phase() === "validating" || apply.phase() === "writing"}
       >
         Apply
       </Button>
+      <WindowControls />
 
       <Dialog
         open={apply.phase() === "preview"}
         onClose={apply.reset}
-        title="Preview generated configuration"
+        title="Review configuration"
+        description={`${apply.files().length} ${apply.files().length === 1 ? "file" : "files"} will be written to /etc/keyd`}
         wide
         footer={
           <>
@@ -110,22 +120,17 @@ export function StatusHeader() {
           </>
         }
       >
-        <Show when={dangerous()}>
-          <p class="mb-2 rounded border border-warn/40 bg-warn/10 px-2 py-1.5 text-[12px] text-warn">
-            This profile remaps or disables essential keys. Make sure you can still type your
-            password before rebooting.
-          </p>
-        </Show>
-        <For each={apply.files()}>
-          {(file) => (
-            <div class="mb-3">
-              <p class="mb-1 text-[11px] text-ink-faint">/etc/keyd/{file.name}</p>
-              <pre class="overflow-auto rounded border border-line bg-surface-0 p-2 text-[11px] leading-4 text-ink-dim select-text">
-                {file.content}
-              </pre>
-            </div>
-          )}
-        </For>
+        <div class="flex flex-col gap-3">
+          <Show when={dangerous()}>
+            <p class="rounded-lg border border-warn/30 bg-warn/[0.06] px-3 py-2 text-[12px] leading-5 text-warn">
+              This profile remaps or disables essential keys. Make sure you can still type your
+              password before rebooting.
+            </p>
+          </Show>
+          <For each={apply.files()}>
+            {(file) => <ConfigFilePreview name={file.name} content={file.content} />}
+          </For>
+        </div>
       </Dialog>
 
       <Dialog

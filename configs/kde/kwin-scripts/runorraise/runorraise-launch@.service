@@ -1,0 +1,6 @@
+[Unit]
+Description=Launch %i from the run-or-raise KWin script
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/kstart --application %i

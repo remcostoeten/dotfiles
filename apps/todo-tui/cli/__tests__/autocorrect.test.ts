@@ -2,13 +2,13 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { correctCommandName, correctRejectedToken, type AutocorrectIo } from "@/src/autocorrect";
-import { argumentsFitShape, decideCorrection, recordDecision, replaceToken, type TypoMemory } from "@/src/domain/autocorrect";
+import { resolveTypo, type AutocorrectIo } from "@/src/autocorrect";
+import { parse, type ParseResult } from "@/src/command-spec/parse";
+import { decideCorrection, recordDecision, replaceToken, type TypoMemory } from "@/src/domain/autocorrect";
 import { editDistance, findClosest } from "@/src/domain/fuzzy-match";
 import type { Task } from "@/src/domain/task";
 import { UnknownTokenError } from "@/src/domain/unknown-token-error";
-import { builtInPlugins } from "@/src/plugins/builtins";
-import { PluginRegistry } from "@/src/plugins/registry";
+import { createCommandTree } from "@/src/plugins/builtins";
 import { getTodoPaths, TodoStore } from "@/src/storage/todo-store";
 
 const temporaryDirectories: string[] = [];
@@ -66,23 +66,6 @@ test("decideCorrection prefers a learned correction over the fuzzy closest match
   expect(decideCorrection(memory, "ls", COMMANDS)).toEqual({ correction: "list", mode: "prompt" });
 });
 
-test("argumentsFitShape guards command-name corrections", () => {
-  const ids = new Set(["3", "7"]);
-  expect(argumentsFitShape("none", [], ids)).toBe(true);
-  expect(argumentsFitShape("none", ["--all"], ids)).toBe(true);
-  expect(argumentsFitShape("none", ["milk"], ids)).toBe(false);
-  expect(argumentsFitShape("task-id", ["3"], ids)).toBe(true);
-  expect(argumentsFitShape("task-id", ["#7", "text"], ids)).toBe(true);
-  expect(argumentsFitShape("task-id", ["9"], ids)).toBe(false);
-  expect(argumentsFitShape("task-id", [], ids)).toBe(false);
-  expect(argumentsFitShape("task-ids", ["1", "2,3", "4-6"], ids)).toBe(true);
-  expect(argumentsFitShape("task-ids", ["all"], ids)).toBe(true);
-  expect(argumentsFitShape("task-ids", ["milk"], ids)).toBe(false);
-  expect(argumentsFitShape("text", ["buy", "milk"], ids)).toBe(true);
-  expect(argumentsFitShape("text", [], ids)).toBe(false);
-  expect(argumentsFitShape("any", ["a", "b", "c", "d"], ids)).toBe(false);
-});
-
 test("replaceToken swaps standalone tokens and inline option parts", () => {
   expect(replaceToken(["--prioirty", "high"], "--prioirty", "--priority")).toEqual(["--priority", "high"]);
   expect(replaceToken(["--prioirty=high"], "--prioirty", "--priority")).toEqual(["--priority=high"]);
@@ -94,38 +77,38 @@ test("a mistyped command whose arguments fit prompts, and acceptance rewrites ar
   const store = await createStore([createTask(3)]);
   const io = createIo(true);
 
-  expect(await correctCommandName(["donw", "3"], createRegistry(), store, io)).toEqual(["done", "3"]);
+  const error = await rejectedToken(["donw", "3"], store);
+  expect(error.implicitAddFallback).toBe(true);
+  expect(await resolveTypo(error, ["donw", "3"], store, io)).toEqual({ kind: "corrected", argv: ["done", "3"] });
   expect(io.questions[0]).toContain("todo done 3");
   expect((await store.loadTypoMemory()).donw?.done).toEqual({ accepted: 1, rejected: 0 });
 });
 
-test("a typo equally close to two commands is left alone rather than guessed", async () => {
+test("a typo equally close to two commands is added as a task rather than guessed", async () => {
   const store = await createStore([createTask(3)]);
-  const io = createIo(true);
 
   expect(editDistance("dne", "done")).toBe(editDistance("dne", "due"));
-  expect(await correctCommandName(["dne", "3"], createRegistry(), store, io)).toBeUndefined();
-  expect(io.questions).toHaveLength(0);
+  expect(pathOf(await parseWithTypos(["dne", "3"], store))).toBe("add");
 });
 
-test("a mistyped command whose arguments do not fit is left alone so it becomes a task", async () => {
+test("a mistyped command whose arguments do not fit becomes a task", async () => {
   const store = await createStore([createTask(3)]);
-  const io = createIo(true);
 
-  expect(await correctCommandName(["dne", "buy", "milk"], createRegistry(), store, io)).toBeUndefined();
-  expect(await correctCommandName(["dome"], createRegistry(), store, io)).toBeUndefined();
-  expect(await correctCommandName(["buy", "milk"], createRegistry(), store, io)).toBeUndefined();
-  expect(io.questions).toHaveLength(0);
+  expect(pathOf(await parseWithTypos(["dne", "buy", "milk"], store))).toBe("add");
+  expect(pathOf(await parseWithTypos(["dome"], store))).toBe("add");
+  expect(pathOf(await parseWithTypos(["buy", "milk"], store))).toBe("add");
+  expect(pathOf(await parseWithTypos(["loose", "task"], store))).toBe("add");
 });
 
-test("declining a suggestion is remembered and no prompt is shown without a terminal", async () => {
+test("declining a suggestion is remembered and no prompt is answered without a terminal", async () => {
   const store = await createStore([createTask(3)]);
 
-  expect(await correctCommandName(["donw", "3"], createRegistry(), store, createIo(false))).toBeUndefined();
+  const donw = await rejectedToken(["donw", "3"], store);
+  expect(await resolveTypo(donw, ["donw", "3"], store, createIo(false))).toEqual({ kind: "declined" });
   expect((await store.loadTypoMemory()).donw?.done).toEqual({ accepted: 0, rejected: 1 });
 
-  const silent = createIo(undefined);
-  expect(await correctCommandName(["lsit"], createRegistry(), store, silent)).toBeUndefined();
+  const lsit = await rejectedToken(["lsit"], store);
+  expect(await resolveTypo(lsit, ["lsit"], store, createIo(undefined))).toEqual({ kind: "unanswered", suggestion: "list" });
   expect((await store.loadTypoMemory()).lsit).toBeUndefined();
 });
 
@@ -134,24 +117,43 @@ test("a learned typo autocorrects without a prompt and prints a notice", async (
   await store.saveTypoMemory({ dne: { done: { accepted: 3, rejected: 0 } } });
   const io = createIo(false);
 
-  expect(await correctCommandName(["dne", "3"], createRegistry(), store, io)).toEqual(["done", "3"]);
+  const error = await rejectedToken(["dne", "3"], store);
+  expect(await resolveTypo(error, ["dne", "3"], store, io)).toEqual({ kind: "corrected", argv: ["done", "3"] });
   expect(io.questions).toHaveLength(0);
   expect(io.notices.join("")).toContain("autocorrected dne → done");
 });
 
-test("a rejected option is corrected from the error's candidates", async () => {
+test("a rejected option is corrected from the parser's candidates", async () => {
   const store = await createStore([]);
   const io = createIo(true);
-  const error = new UnknownTokenError("Unknown option: --prioirty", "--prioirty", ["--due", "--priority", "--under"], "option");
+  const error = await rejectedToken(["add", "milk", "--prioirty", "high"], store);
 
-  expect(await correctRejectedToken(error, "add", ["milk", "--prioirty", "high"], store, io)).toEqual(["milk", "--priority", "high"]);
+  expect(error.candidates).toContain("--priority");
+  expect(await resolveTypo(error, ["add", "milk", "--prioirty", "high"], store, io)).toEqual({ kind: "corrected", argv: ["add", "milk", "--priority", "high"] });
   expect(io.questions[0]).toContain("todo add milk --priority high");
 });
 
-function createRegistry(): PluginRegistry {
-  const registry = new PluginRegistry();
-  for (const plugin of builtInPlugins) registry.use(plugin);
-  return registry;
+async function parseWithTypos(argv: string[], store: TodoStore): Promise<ParseResult> {
+  const memory = await store.loadTypoMemory();
+  return parse(createCommandTree(), argv, {
+    tasks: await store.loadTasks(),
+    boardNames: [],
+    isNearMiss: (token, candidates) => decideCorrection(memory, token, candidates) !== undefined,
+  });
+}
+
+async function rejectedToken(argv: string[], store: TodoStore): Promise<UnknownTokenError> {
+  try {
+    await parseWithTypos(argv, store);
+  } catch (error: unknown) {
+    if (error instanceof UnknownTokenError) return error;
+    throw error;
+  }
+  throw new Error(`${argv.join(" ")} parsed without a typo`);
+}
+
+function pathOf(result: ParseResult): string {
+  return result.path.map((node) => node.name).join(" ");
 }
 
 function createIo(answer: boolean | undefined): AutocorrectIo & { questions: string[]; notices: string[] } {

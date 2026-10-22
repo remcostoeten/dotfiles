@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
@@ -5,11 +7,20 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
+use keybind_core::devices::{parse_proc_devices, InputDevice};
+use keybind_core::model::is_foreign_filename;
+use keybind_core::keyd::{
+    conflicts_blocking_apply, describe_conflicts, parse_ids_section, simulate_managed_configs,
+    ManagedFile, ScannedConfig,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+const PROC_INPUT_DEVICES: &str = "/proc/bus/input/devices";
+
 const KEYD_DIR: &str = "/etc/keyd";
 const BACKUP_DIR: &str = "/etc/keyd/.keybind-manager-backup";
+const RETIRED_DIR: &str = "/etc/keyd/.keybind-manager-retired";
 const MANAGED_PREFIX: &str = "keybind-manager";
 const MAX_PAYLOAD: usize = 1024 * 1024;
 const MAX_FILES: usize = 32;
@@ -21,6 +32,13 @@ struct ApplyPayload {
     prior: Option<BTreeMap<String, String>>,
     #[serde(default)]
     force: bool,
+    #[serde(default)]
+    retire: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct ReadPayload {
+    name: String,
 }
 
 #[derive(Deserialize)]
@@ -35,8 +53,21 @@ struct Reply {
     code: String,
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     hashes: Option<BTreeMap<String, String>>,
     rolled_back: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    configs: Option<Vec<ScannedConfig>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+}
+
+impl Reply {
+    fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
 }
 
 fn main() -> ExitCode {
@@ -48,7 +79,9 @@ fn main() -> ExitCode {
         Some("enable-service") => service_toggle(true),
         Some("disable-service") => service_toggle(false),
         Some("hashes") => current_hashes(),
-        _ => fail("USAGE", "usage: keybind-manager-helper <apply|restore|reload|enable-service|disable-service|hashes>"),
+        Some("scan") => scan(),
+        Some("read") => read_foreign(),
+        _ => fail("USAGE", "usage: keybind-manager-helper <apply|restore|reload|enable-service|disable-service|hashes|scan|read>"),
     };
     let ok = reply.ok;
     println!("{}", serde_json::to_string(&reply).unwrap());
@@ -64,8 +97,11 @@ fn fail(code: &str, message: impl Into<String>) -> Reply {
         ok: false,
         code: code.into(),
         message: message.into(),
+        detail: None,
         hashes: None,
         rolled_back: false,
+        configs: None,
+        content: None,
     }
 }
 
@@ -74,8 +110,11 @@ fn success(message: impl Into<String>) -> Reply {
         ok: true,
         code: "OK".into(),
         message: message.into(),
+        detail: None,
         hashes: None,
         rolled_back: false,
+        configs: None,
+        content: None,
     }
 }
 
@@ -129,7 +168,55 @@ fn current_hashes() -> Reply {
     }
 }
 
-fn read_payload() -> Result<ApplyPayload, Reply> {
+fn read_scanned_configs() -> Result<Vec<ScannedConfig>, Reply> {
+    let entries = fs::read_dir(KEYD_DIR)
+        .map_err(|e| fail("IO", format!("cannot list {KEYD_DIR}: {e}")))?;
+
+    let mut names = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| fail("IO", format!("cannot read {KEYD_DIR} entry: {e}")))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.ends_with(".conf") && fs::metadata(entry.path()).map(|m| m.is_file()).unwrap_or(false) {
+            names.push(name);
+        }
+    }
+    names.sort();
+
+    let mut configs = Vec::new();
+    for name in names {
+        let path = Path::new(KEYD_DIR).join(&name);
+        let content =
+            fs::read_to_string(&path).map_err(|e| fail("IO", format!("cannot read {name}: {e}")))?;
+        configs.push(ScannedConfig {
+            managed: name.starts_with(MANAGED_PREFIX),
+            ids: parse_ids_section(&content),
+            filename: name,
+        });
+    }
+
+    Ok(configs)
+}
+
+fn read_keyboards() -> Vec<InputDevice> {
+    let content = fs::read_to_string(PROC_INPUT_DEVICES).unwrap_or_default();
+    parse_proc_devices(&content)
+        .into_iter()
+        .filter(|d| d.keyboard)
+        .collect()
+}
+
+fn scan() -> Reply {
+    match read_scanned_configs() {
+        Ok(configs) => {
+            let mut reply = success("scanned keyd configs");
+            reply.configs = Some(configs);
+            reply
+        }
+        Err(reply) => reply,
+    }
+}
+
+fn read_stdin() -> Result<String, Reply> {
     let mut raw = String::new();
     std::io::stdin()
         .take(MAX_PAYLOAD as u64 + 1)
@@ -138,10 +225,42 @@ fn read_payload() -> Result<ApplyPayload, Reply> {
     if raw.len() > MAX_PAYLOAD {
         return Err(fail("PAYLOAD", "payload exceeds size limit"));
     }
+    Ok(raw)
+}
+
+fn read_foreign() -> Reply {
+    let raw = match read_stdin() {
+        Ok(raw) => raw,
+        Err(reply) => return reply,
+    };
+    let payload: ReadPayload = match serde_json::from_str(&raw) {
+        Ok(p) => p,
+        Err(e) => return fail("PAYLOAD", format!("invalid payload: {e}")),
+    };
+    if !is_foreign_filename(&payload.name) {
+        return fail("PAYLOAD", format!("invalid file name '{}'", payload.name));
+    }
+    let path = Path::new(KEYD_DIR).join(&payload.name);
+    match fs::read_to_string(&path) {
+        Ok(content) if content.len() <= MAX_PAYLOAD => {
+            let mut reply = success(format!("read {}", payload.name));
+            reply.content = Some(content);
+            reply
+        }
+        Ok(_) => fail("PAYLOAD", "file exceeds size limit"),
+        Err(e) => fail("IO", format!("cannot read {}: {e}", payload.name)),
+    }
+}
+
+fn read_payload() -> Result<ApplyPayload, Reply> {
+    let raw = read_stdin()?;
     let payload: ApplyPayload =
         serde_json::from_str(&raw).map_err(|e| fail("PAYLOAD", format!("invalid payload: {e}")))?;
     if payload.files.len() > MAX_FILES {
         return Err(fail("PAYLOAD", "too many files"));
+    }
+    if let Some(name) = payload.retire.iter().find(|n| !is_foreign_filename(n)) {
+        return Err(fail("PAYLOAD", format!("invalid retire name '{name}'")));
     }
     for file in &payload.files {
         if !valid_name(&file.name) {
@@ -198,12 +317,25 @@ fn apply() -> Reply {
         }
     }
 
+    if !payload.force {
+        if let Some(reply) = conflict_check(&payload.files, &payload.retire) {
+            return reply;
+        }
+    }
+
     if let Err(e) = backup(&existing) {
         return fail("BACKUP", format!("backup failed, nothing was changed: {e}"));
     }
 
+    let retired = match retire_foreign(&payload.retire) {
+        Ok(moved) => moved,
+        Err(e) => {
+            return fail("RETIRE", format!("cannot move replaced configs aside, nothing was changed: {e}"))
+        }
+    };
+
     if let Err(reply) = write_files(&payload, &existing) {
-        let rolled_back = restore_backup().is_ok();
+        let rolled_back = restore_backup().is_ok() && unretire(&retired).is_ok();
         let mut reply = reply;
         reply.rolled_back = rolled_back;
         return reply;
@@ -216,7 +348,9 @@ fn apply() -> Reply {
             reply
         }
         Err(message) => {
-            let rolled_back = restore_backup().is_ok() && reload_and_verify().is_ok();
+            let rolled_back = restore_backup().is_ok()
+                && unretire(&retired).is_ok()
+                && reload_and_verify().is_ok();
             let mut reply = fail("RELOAD", message);
             reply.rolled_back = rolled_back;
             if rolled_back {
@@ -232,6 +366,61 @@ fn apply() -> Reply {
             reply
         }
     }
+}
+
+fn conflict_check(files: &[PayloadFile], retire: &[String]) -> Option<Reply> {
+    let scanned = match read_scanned_configs() {
+        Ok(configs) => configs,
+        Err(reply) => return Some(reply),
+    };
+    let managed: Vec<ManagedFile> = files
+        .iter()
+        .map(|f| ManagedFile {
+            name: f.name.clone(),
+            content: f.content.clone(),
+        })
+        .collect();
+    let simulated = simulate_managed_configs(scanned, &managed, retire);
+    let devices = read_keyboards();
+    let conflicts = conflicts_blocking_apply(&simulated, &devices);
+    if conflicts.is_empty() {
+        return None;
+    }
+    let detail = describe_conflicts(&conflicts);
+    Some(
+        fail(
+            "CONFLICT",
+            format!("another keyd config matches the same keyboard(s) at equal priority: {detail}"),
+        )
+        .with_detail(detail),
+    )
+}
+
+/// Moves replaced foreign configs (symlinks included, as links) into
+/// RETIRED_DIR. Returns the names actually moved so a failed apply can put them back.
+fn retire_foreign(names: &[String]) -> std::io::Result<Vec<String>> {
+    let mut moved = Vec::new();
+    for name in names {
+        let source = Path::new(KEYD_DIR).join(name);
+        if fs::symlink_metadata(&source).is_err() {
+            continue;
+        }
+        fs::create_dir_all(RETIRED_DIR)?;
+        fs::set_permissions(RETIRED_DIR, fs::Permissions::from_mode(0o700))?;
+        if let Err(e) = fs::rename(&source, Path::new(RETIRED_DIR).join(name)) {
+            let _ = unretire(&moved);
+            return Err(e);
+        }
+        moved.push(name.clone());
+    }
+    Ok(moved)
+}
+
+fn unretire(names: &[String]) -> std::io::Result<()> {
+    for name in names {
+        fs::rename(Path::new(RETIRED_DIR).join(name), Path::new(KEYD_DIR).join(name))?;
+    }
+    Ok(())
 }
 
 fn hash_map(payload: &ApplyPayload) -> Option<BTreeMap<String, String>> {

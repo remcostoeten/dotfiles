@@ -12,6 +12,7 @@ fn fixture_config() -> AppConfig {
         mods: Vec::new(),
         layer: None,
         macro_text: None,
+        ..Default::default()
     };
     let press = |id: &str, source: &str, target: KeyAction| Mapping {
         id: id.into(),
@@ -60,6 +61,7 @@ fn fixture_config() -> AppConfig {
                     mods: Vec::new(),
                     layer: Some("nav".into()),
                     macro_text: None,
+                    ..Default::default()
                 },
             ),
             press(
@@ -71,6 +73,7 @@ fn fixture_config() -> AppConfig {
                     mods: vec!["control".into(), "shift".into()],
                     layer: None,
                     macro_text: None,
+                    ..Default::default()
                 },
             ),
             press(
@@ -82,6 +85,7 @@ fn fixture_config() -> AppConfig {
                     mods: Vec::new(),
                     layer: None,
                     macro_text: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -96,6 +100,7 @@ fn fixture_config() -> AppConfig {
             ],
         }],
         preserved: Vec::new(),
+        replaces: Vec::new(),
     };
 
     let external = Profile {
@@ -110,6 +115,7 @@ fn fixture_config() -> AppConfig {
         mappings: vec![press("swap-caps", "capslock", key("leftmeta"))],
         layers: Vec::new(),
         preserved: Vec::new(),
+        replaces: Vec::new(),
     };
 
     AppConfig {

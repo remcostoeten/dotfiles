@@ -12,13 +12,12 @@ import (
 	"github.com/remcostoeten/bpr/internal/jira"
 )
 
+var stdin = bufio.NewReader(os.Stdin)
+
 func prompt(label string) string {
 	fmt.Print(label)
-	sc := bufio.NewScanner(os.Stdin)
-	if sc.Scan() {
-		return strings.TrimSpace(sc.Text())
-	}
-	return ""
+	line, _ := stdin.ReadString('\n')
+	return strings.TrimSpace(line)
 }
 
 func cmdAuth() error {
@@ -114,7 +113,7 @@ func cmdStatus(ctx context.Context, a *app) error {
 	ci := summarizeCI(statuses)
 	fmt.Printf("\n%s  %s\n", cBold.Render(cBlue.Render(fmt.Sprintf("PR #%d", pr.ID))), cBold.Render(pr.Title))
 	fmt.Printf("  %s %s\n", cDim.Render("state →"), cGreen.Render(pr.State))
-	fmt.Printf("  %s %s%d%s\n", cDim.Render("branch →"), cBranch.Render(pr.Source.Branch.Name), cDim.Render(" → "), cBranch.Render(pr.Destination.Branch.Name))
+	fmt.Printf("  %s %s%s%s\n", cDim.Render("branch →"), cBranch.Render(pr.Source.Branch.Name), cDim.Render(" → "), cBranch.Render(pr.Destination.Branch.Name))
 	fmt.Printf("  %s %s%d%s\n", cDim.Render("approvals →"), cGreen.Render("✓"), pr.Approvals(), cDim.Render(""))
 	fmt.Printf("  %s %s\n", cDim.Render("ci →"), ci.short())
 	fmt.Printf("  %s %s\n\n", cDim.Render("url →"), cDim.Render(pr.Links.HTML.Href))
@@ -212,7 +211,7 @@ func cmdCreate(ctx context.Context, a *app, args []string) error {
 		}
 	}
 	if title == "" {
-		title = defaultTitle(a.dir, branch)
+		title = smartPRTitle(ctx, a, branch, false)
 	}
 
 	pr, err := a.bb.Create(ctx, a.slug, bitbucket.CreateOptions{

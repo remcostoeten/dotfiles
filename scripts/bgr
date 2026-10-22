@@ -18,8 +18,14 @@ fi
 
 BG_PIDS_FILE="${BG_DIR}/processes"
 
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  BG_COLOR=1
+else
+  BG_COLOR=0
+fi
+
 _supports_color() {
-  [ -t 1 ] && [ -z "${NO_COLOR:-}" ]
+  [ "$BG_COLOR" = 1 ]
 }
 
 _init() {
@@ -91,36 +97,22 @@ _color_urls() {
 }
 
 _print_meta() {
-  local cwd=$1 ports=$2 uptime=$3 pid=$4
-  local first=1
+  local cwd=$1 ports=$2 uptime=$3 pid=$4 line=""
 
-  if [ -n "$cwd" ]; then
-    printf '      %s\n' "$(_color blue "$cwd")"
-  fi
-
-  if [ -z "$ports" ] && [ -z "$uptime" ] && [ -z "$pid" ]; then
-    return
-  fi
-
-  printf '      '
+  [ -n "$cwd" ] && printf '      %s %s\n' "$(_dim "dir ")" "$(_color blue "$cwd")"
 
   if [ -n "$ports" ]; then
-    _color_ports "$ports"
-    first=0
+    printf '      %s %s\n' "$(_dim "url ")" "$(_color_urls "$ports")"
+  else
+    printf '      %s %s\n' "$(_dim "url ")" "$(_color yellow "no port listening")"
   fi
 
-  if [ -n "$uptime" ]; then
-    [ "$first" -eq 0 ] && _sep
-    printf '%s' "$(_color green "$uptime")"
-    first=0
-  fi
-
+  [ -n "$uptime" ] && line="$(_color green "running for $uptime")"
   if [ -n "$pid" ]; then
-    [ "$first" -eq 0 ] && _sep
-    printf '%s' "$(_dim "pid $pid")"
+    [ -n "$line" ] && line+="$(_sep)"
+    line+="$(_dim "pid $pid")"
   fi
-
-  echo
+  [ -n "$line" ] && printf '      %s %s\n' "$(_dim "info")" "$line"
 }
 
 _color_ports() {
@@ -285,11 +277,23 @@ _start() {
 
   printf '%s %s %s %s|||%s\n' "$id" "$pid" "$started_at" "$cwd" "$cmd" >> "$BG_PIDS_FILE"
 
+  sleep 0.4
   echo
-  _colorln green "Started #$id"
+  if ! kill -0 "$pid" 2>/dev/null; then
+    _colorln red "#$id exited right after starting"
+    printf '  %s\n' "$(_color_cmd "$cmd")"
+    printf '  %s\n' "$(_dim "last output:")"
+    tail -n 10 "$log_file" | sed 's/^/    /'
+    echo
+    return 1
+  fi
+  _colorln green "Started #$id in the background"
   printf '  %s\n' "$(_color_cmd "$cmd")"
-  printf '  %s\n' "$(_color blue "$(_shorten_path "$cwd")")"
-  printf '  %s  %s\n' "$(_dim "pid $pid")" "$(_dim "$log_file")"
+  printf '  %s %s\n' "$(_dim "dir ")" "$(_color blue "$(_shorten_path "$cwd")")"
+  printf '  %s %s\n' "$(_dim "pid ")" "$pid"
+  echo
+  printf '  %s\n' "$(_dim "bgr log $id   watch output")"
+  printf '  %s\n' "$(_dim "bgr $id       stop it")"
   echo
 }
 
@@ -318,9 +322,9 @@ _list() {
   fi
 
   if [ "$active" -eq 1 ]; then
-    _title "Background processes · 1 running"
+    printf '%s %s\n' "$(_color bold "Background processes")" "$(_color green "· 1 running")"
   else
-    _title "Background processes · $active running"
+    printf '%s %s\n' "$(_color bold "Background processes")" "$(_color green "· $active running")"
   fi
   echo
 
@@ -333,7 +337,7 @@ _list() {
       [ "$first" -eq 0 ] && echo
       first=0
 
-      printf '  %s  %s\n' "$(_color magenta "#$PARSED_ID")" "$(_color_cmd "$PARSED_CMD")"
+      printf '  %s %s  %s\n' "$(_color green "●")" "$(_color magenta "#$PARSED_ID")" "$(_color_cmd "$PARSED_CMD")"
 
       if [ -n "$PARSED_CWD" ]; then
         cwd_display=$(_shorten_path "$PARSED_CWD")
@@ -348,6 +352,10 @@ _list() {
       _print_meta "$cwd_display" "$ports" "$uptime" "$PARSED_PID"
     fi
   done < "$BG_PIDS_FILE"
+
+  echo
+  printf '  %s %s %s %s %s %s %s %s %s\n' "$(_color cyan "bgr log")" "$(_dim "<id>")" "$(_dim "·")" "$(_color cyan "bgr open")" "$(_dim "<id>")" "$(_dim "·")" "$(_color cyan "bgr restart")" "$(_dim "<id>")" "$(_dim "· bgr <id> stops · bgr help")"
+  echo
 }
 
 _kill() {
@@ -373,9 +381,10 @@ _kill() {
     fi
   fi
 
+  _parse_record "$LOOKUP_ID" "$LOOKUP_PID" "$LOOKUP_REST"
   echo
   _colorln green "Stopped #$id"
-  printf '  %s\n' "$(_dim "pid $pid")"
+  printf '  %s\n' "$(_color_cmd "$PARSED_CMD")"
   _remove_record "$id"
   echo
 }
@@ -531,7 +540,8 @@ _kill_all() {
   while read -r id pid rest; do
     if kill -0 "$pid" 2>/dev/null; then
       _kill_tree "$pid"
-      printf '  stopped %s\n' "$(_color magenta "#$id")"
+      _parse_record "$id" "$pid" "$rest"
+      printf '  stopped %s  %s\n' "$(_color magenta "#$id")" "$(_color_cmd "$PARSED_CMD")"
       ((count++))
     fi
   done < "$BG_PIDS_FILE"
@@ -600,13 +610,16 @@ _shell_display() {
       if [ -n "$PARSED_STARTED" ]; then
         uptime=$(_format_duration "$(($(date +%s) - PARSED_STARTED))")
       fi
-      lines+="  $(_color magenta "#$PARSED_ID") $PARSED_CMD [$uptime]\n"
+      local ports urls=""
+      ports=$(_get_listen_ports "$PARSED_PID")
+      [ -n "$ports" ] && urls="  $(_color_urls "$ports")"
+      lines+="  $(_color green "●") $(_color magenta "#$PARSED_ID") $(_color_cmd "$PARSED_CMD")  $(_dim "$uptime")${urls}\n"
     fi
   done < "$BG_PIDS_FILE"
 
   [ "$count" -eq 0 ] && return
 
-  _colorln bold "⚙️  Background Processes ($count)"
+  printf '%s %s\n' "$(_color bold "Background processes")" "$(_color green "running ($count)")"
   printf '%b' "$lines"
   echo
 }

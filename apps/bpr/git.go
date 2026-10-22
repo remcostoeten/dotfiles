@@ -51,7 +51,7 @@ func remoteBranches(dir string) []string {
 	seen := map[string]bool{}
 	for _, l := range strings.Split(out, "\n") {
 		name := strings.TrimPrefix(strings.TrimSpace(l), "origin/")
-		if name == "" || name == "HEAD" || seen[name] {
+		if name == "" || name == "HEAD" || name == "origin" || seen[name] {
 			continue
 		}
 		seen[name] = true
@@ -108,4 +108,9 @@ func slugify(s string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
+}
+
+func isGitRepo(dir string) bool {
+	_, err := git(dir, "rev-parse", "--git-dir")
+	return err == nil
 }

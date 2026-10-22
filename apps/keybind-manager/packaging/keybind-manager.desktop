@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Keybind Manager
-Comment=System-wide keyboard remapping for KDE Plasma via keyd
+Comment=System-wide keyboard remapping via keyd
 Exec=keybind-manager
 Icon=keybind-manager
 Terminal=false

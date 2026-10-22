@@ -1,0 +1,72 @@
+--- dark 60x5 ---
+[38;2;156;140;245mTheme  → high-contrast                                      [m
+[38;2;154;147;176m    dark                                                    [m
+[38;2;154;147;176m    dim                                                     [m
+[1;38;2;16;13;26;48;2;156;140;245m  ▸ high-contrast                                           [m
+[38;2;154;147;176m    ascii                                                   [m
+--- dark 80x5 ---
+[38;2;156;140;245mTheme  → high-contrast                                                          [m
+[38;2;154;147;176m    dark                                                                        [m
+[38;2;154;147;176m    dim                                                                         [m
+[1;38;2;16;13;26;48;2;156;140;245m  ▸ high-contrast                                                               [m
+[38;2;154;147;176m    ascii                                                                       [m
+--- dark 120x5 ---
+[38;2;156;140;245mTheme  → high-contrast                                                                                                  [m
+[38;2;154;147;176m    dark                                                                                                                [m
+[38;2;154;147;176m    dim                                                                                                                 [m
+[1;38;2;16;13;26;48;2;156;140;245m  ▸ high-contrast                                                                                                       [m
+[38;2;154;147;176m    ascii                                                                                                               [m
+--- dim 60x5 ---
+[38;2;142;150;186mTheme  → high-contrast                                      [m
+[38;2;138;136;148m    dark                                                    [m
+[38;2;138;136;148m    dim                                                     [m
+[1;38;2;214;212;222;48;2;58;62;82m  ▸ high-contrast                                           [m
+[38;2;138;136;148m    ascii                                                   [m
+--- dim 80x5 ---
+[38;2;142;150;186mTheme  → high-contrast                                                          [m
+[38;2;138;136;148m    dark                                                                        [m
+[38;2;138;136;148m    dim                                                                         [m
+[1;38;2;214;212;222;48;2;58;62;82m  ▸ high-contrast                                                               [m
+[38;2;138;136;148m    ascii                                                                       [m
+--- dim 120x5 ---
+[38;2;142;150;186mTheme  → high-contrast                                                                                                  [m
+[38;2;138;136;148m    dark                                                                                                                [m
+[38;2;138;136;148m    dim                                                                                                                 [m
+[1;38;2;214;212;222;48;2;58;62;82m  ▸ high-contrast                                                                                                       [m
+[38;2;138;136;148m    ascii                                                                                                               [m
+--- high-contrast 60x5 ---
+[38;2;255;212;0mTheme  → high-contrast                                      [m
+[38;2;208;208;208m    dark                                                    [m
+[38;2;208;208;208m    dim                                                     [m
+[1;38;2;0;0;0;48;2;255;212;0m  ▸ high-contrast                                           [m
+[38;2;208;208;208m    ascii                                                   [m
+--- high-contrast 80x5 ---
+[38;2;255;212;0mTheme  → high-contrast                                                          [m
+[38;2;208;208;208m    dark                                                                        [m
+[38;2;208;208;208m    dim                                                                         [m
+[1;38;2;0;0;0;48;2;255;212;0m  ▸ high-contrast                                                               [m
+[38;2;208;208;208m    ascii                                                                       [m
+--- high-contrast 120x5 ---
+[38;2;255;212;0mTheme  → high-contrast                                                                                                  [m
+[38;2;208;208;208m    dark                                                                                                                [m
+[38;2;208;208;208m    dim                                                                                                                 [m
+[1;38;2;0;0;0;48;2;255;212;0m  ▸ high-contrast                                                                                                       [m
+[38;2;208;208;208m    ascii                                                                                                               [m
+--- ascii 60x5 ---
+[1mTheme  > high-contrast                                      [m
+    dark                                                    
+    dim                                                     
+[1;7m  > high-contrast                                           [m
+    ascii                                                   
+--- ascii 80x5 ---
+[1mTheme  > high-contrast                                                          [m
+    dark                                                                        
+    dim                                                                         
+[1;7m  > high-contrast                                                               [m
+    ascii                                                                       
+--- ascii 120x5 ---
+[1mTheme  > high-contrast                                                                                                  [m
+    dark                                                                                                                
+    dim                                                                                                                 
+[1;7m  > high-contrast                                                                                                       [m
+    ascii                                                                                                               

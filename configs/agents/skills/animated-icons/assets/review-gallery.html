@@ -1,0 +1,590 @@
+<title>__GALLERY_TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #eceef2;
+    --line: #d9dce3;
+    --fg: #14171f;
+    --muted: #5a6172;
+    --accent: #2a5bd7;
+    --accent-fg: #ffffff;
+    --accent-soft: #e3eaff;
+    --keep: #1c7c4b;
+    --keep-soft: #dcf3e6;
+    --rework: #9a5b00;
+    --rework-soft: #fdebcb;
+    --redo: #b3261e;
+    --redo-soft: #fbdcd9;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1218;
+      --surface: #171b24;
+      --surface-2: #202533;
+      --line: #2c3243;
+      --fg: #e8eaf0;
+      --muted: #9aa2b5;
+      --accent: #7aa2ff;
+      --accent-fg: #0c1020;
+      --accent-soft: #1d2a4d;
+      --keep: #5fd394;
+      --keep-soft: #14301f;
+      --rework: #f2b556;
+      --rework-soft: #3a2a0a;
+      --redo: #ff8d85;
+      --redo-soft: #3d1613;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1218;
+    --surface: #171b24;
+    --surface-2: #202533;
+    --line: #2c3243;
+    --fg: #e8eaf0;
+    --muted: #9aa2b5;
+    --accent: #7aa2ff;
+    --accent-fg: #0c1020;
+    --accent-soft: #1d2a4d;
+    --keep: #5fd394;
+    --keep-soft: #14301f;
+    --rework: #f2b556;
+    --rework-soft: #3a2a0a;
+    --redo: #ff8d85;
+    --redo-soft: #3d1613;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    padding-block: 28px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .page { max-width: 1120px; margin-inline: auto; display: flex; flex-direction: column; gap: 24px; }
+  header.top { display: flex; flex-direction: column; gap: 12px; }
+  h1 { font-size: 22px; line-height: 1.2; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+  .lede { margin: 0; color: var(--muted); max-width: 68ch; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .summary { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; min-width: 0; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .btn {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 6px 12px;
+    min-height: 32px;
+  }
+  .btn:hover { background: var(--surface-2); }
+  .btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .banner {
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  #list { display: flex; flex-direction: column; gap: 16px; }
+  section.icon {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+  .icon-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .icon-head h2 { font-family: var(--mono); font-size: 14px; margin: 0; font-weight: 600; }
+  .pill {
+    font-size: 12px;
+    border-radius: 999px;
+    padding: 2px 10px;
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+  .pill[data-tone="keep"] { background: var(--keep-soft); color: var(--keep); }
+  .pill[data-tone="rework"] { background: var(--rework-soft); color: var(--rework); }
+  .pill[data-tone="redo"] { background: var(--redo-soft); color: var(--redo); }
+  .options { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 12px; }
+  .tile {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+  .tile[data-picked="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .stage {
+    height: 96px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px dashed var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fg);
+  }
+  .rowmock {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 36px;
+    padding-inline: 10px;
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .rowmock:hover { color: var(--fg); background: var(--surface-2); }
+  .rowmock svg { flex-shrink: 0; }
+  .tile h3 { margin: 0; font-size: 14px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .tile h3 small { font-family: var(--mono); font-size: 11px; color: var(--muted); font-weight: 400; }
+  .tile p { margin: 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .tile-actions { display: flex; gap: 8px; margin-top: auto; }
+  .tile-actions .btn { flex: 1; }
+  .decide { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+  .seg button { border: 0; background: var(--surface); padding: 6px 12px; min-height: 32px; border-right: 1px solid var(--line); }
+  .seg button:last-child { border-right: 0; }
+  .seg button:hover { background: var(--surface-2); }
+  .seg button[aria-checked="true"][data-action="keep"] { background: var(--keep-soft); color: var(--keep); }
+  .seg button[aria-checked="true"][data-action="rework"] { background: var(--rework-soft); color: var(--rework); }
+  .seg button[aria-checked="true"][data-action="redo"] { background: var(--redo-soft); color: var(--redo); }
+  .decide label { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  textarea {
+    font: inherit;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    min-height: 34px;
+    resize: vertical;
+    width: 100%;
+  }
+  #fallback { display: none; flex-direction: column; gap: 6px; }
+  #fallback[data-open="true"] { display: flex; }
+  #fallback textarea { font-family: var(--mono); font-size: 12px; min-height: 120px; }
+  .foot { color: var(--muted); font-size: 12px; max-width: 72ch; }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1 id="title"></h1>
+    <p class="lede">Hover a tile or press Replay to play an option. Pick one option per icon, choose what Claude should do with it, then tell Claude you are done. Picks save to this page.</p>
+    <div class="toolbar">
+      <button class="btn" id="play-all" type="button">Play all</button>
+      <button class="btn" id="loop" type="button" aria-pressed="false">Loop</button>
+      <button class="btn" id="copy" type="button">Copy picks</button>
+      <span class="summary" id="summary" aria-live="polite"></span>
+    </div>
+    <div class="banner" id="save-note" hidden></div>
+  </header>
+  <main id="list"></main>
+  <div id="fallback">
+    <label for="fallback-text" class="foot">Copy this text and paste it to Claude.</label>
+    <textarea id="fallback-text" readonly></textarea>
+  </div>
+  <p class="foot">Keep uses the picked option as it is. Rework changes the picked option as the note says. Redo throws every option away and designs new ones from the note. Motion plays here even when your system asks for reduced motion, because you asked to preview it.</p>
+</div>
+
+<script>
+  const DATA = __GALLERY_DATA__;
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const ACTIONS = [
+    ["keep", "Keep pick"],
+    ["rework", "Rework pick"],
+    ["redo", "Redo all"],
+  ];
+  const state = new Map();
+  const queue = new Map();
+  const timers = new Map();
+  let picksDb = null;
+  let looping = false;
+  let loopToken = 0;
+  let clipCounter = 0;
+
+  function el(tag, props, children) {
+    const node = document.createElement(tag);
+    Object.assign(node, props || {});
+    (children || []).forEach((child) => node.append(child));
+    return node;
+  }
+
+  function poseCss(pose) {
+    const sx = pose.scaleX ?? pose.scale ?? 1;
+    const sy = pose.scaleY ?? pose.scale ?? 1;
+    return `translate(${pose.x ?? 0}px, ${pose.y ?? 0}px) rotate(${pose.rotate ?? 0}deg) scale(${sx}, ${sy})`;
+  }
+
+  function trackFor(option, partId) {
+    return option.tracks.find((track) => track.parts.includes(partId));
+  }
+
+  function svgEl(tag, attrs) {
+    const node = document.createElementNS(SVG_NS, tag);
+    Object.entries(attrs || {}).forEach(([key, value]) => node.setAttribute(key, value));
+    return node;
+  }
+
+  function clipDef(svgDefs, d) {
+    clipCounter += 1;
+    const id = `gallery-clip-${clipCounter}`;
+    const clip = svgEl("clipPath", { id, clipPathUnits: "userSpaceOnUse" });
+    clip.append(svgEl("path", { d }));
+    svgDefs.append(clip);
+    return id;
+  }
+
+  function buildSvg(icon, option, px) {
+    const filled = icon.paint === "fill";
+    const svg = svgEl("svg", {
+      xmlns: SVG_NS,
+      viewBox: icon.viewBox,
+      width: px,
+      height: px,
+      fill: filled ? "currentColor" : "none",
+      stroke: filled ? "none" : "currentColor",
+      focusable: "false",
+      overflow: "visible",
+      "aria-hidden": "true",
+    });
+    if (!filled) {
+      svg.setAttribute("stroke-width", icon.strokeWidth ?? 2);
+      svg.setAttribute("stroke-linecap", "round");
+      svg.setAttribute("stroke-linejoin", "round");
+    }
+    const defs = svgEl("defs");
+    svg.append(defs);
+    function node(part) {
+      const group = svgEl("g", { "data-part": part.id });
+      const track = trackFor(option, part.id);
+      if (track) {
+        group.style.transformBox = "view-box";
+        group.style.transformOrigin = `${track.origin[0]}px ${track.origin[1]}px`;
+      }
+      const path = svgEl("path", { d: part.d });
+      if (part.strokeWidth) path.setAttribute("stroke-width", part.strokeWidth);
+      if (part.clip) path.setAttribute("clip-path", `url(#${clipDef(defs, part.clip)})`);
+      group.append(path);
+      icon.parts.filter((child) => child.within === part.id).forEach((child) => group.append(node(child)));
+      let outer = group;
+      if (part.window) {
+        outer = svgEl("g", { "clip-path": `url(#${clipDef(defs, part.window)})` });
+        outer.append(group);
+      }
+      if (part.hiddenAtRest) {
+        const extra = svgEl("g", { "data-extra": "", visibility: "hidden" });
+        extra.append(outer);
+        outer = extra;
+      }
+      return outer;
+    }
+    icon.parts.filter((part) => part.within === undefined).forEach((part) => svg.append(node(part)));
+    return svg;
+  }
+
+  function play(svg, option) {
+    if (svg.dataset.playing === "true") return Promise.resolve();
+    const animations = option.tracks.flatMap((track) => {
+      const keyframes = track.keyframes.map((frame) => ({
+        offset: frame.at,
+        transform: poseCss(frame),
+        opacity: frame.opacity ?? 1,
+        easing: DATA.easings[frame.ease ?? track.ease],
+      }));
+      return track.parts.flatMap((part) =>
+        [...svg.querySelectorAll(`[data-part="${part}"]`)].map((node) =>
+          node.animate(keyframes, { duration: track.duration, delay: track.delay ?? 0, fill: "both" }),
+        ),
+      );
+    });
+    if (animations.length === 0) return Promise.resolve();
+    const animatedParts = new Set(option.tracks.flatMap((track) => track.parts));
+    const extras = [...svg.querySelectorAll("[data-extra]")].filter((node) => {
+      const part = node.querySelector("[data-part]");
+      return part !== null && animatedParts.has(part.dataset.part);
+    });
+    svg.dataset.playing = "true";
+    extras.forEach((node) => node.setAttribute("visibility", "visible"));
+    return Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+      extras.forEach((node) => node.setAttribute("visibility", "hidden"));
+      animations.forEach((animation) => animation.cancel());
+      delete svg.dataset.playing;
+    });
+  }
+
+  function playTile(tile) {
+    return Promise.all(tile.svgs.map((svg) => play(svg, tile.option)));
+  }
+
+  function totalMs(option) {
+    return Math.max(...option.tracks.map((track) => (track.delay ?? 0) + track.duration));
+  }
+
+  const tiles = [];
+
+  function render() {
+    document.getElementById("title").textContent = DATA.title;
+    const list = document.getElementById("list");
+    DATA.icons.forEach((icon) => {
+      const section = el("section", { className: "icon" });
+      section.dataset.icon = icon.name;
+      const pill = el("span", { className: "pill", textContent: "No pick" });
+      section.append(el("div", { className: "icon-head" }, [el("h2", { textContent: icon.label }), pill]));
+      const options = el("div", { className: "options" });
+      icon.options.forEach((option) => {
+        const big = buildSvg(icon, option, 56);
+        const small = buildSvg(icon, option, 16);
+        const tile = { icon, option, svgs: [big, small], node: null };
+        const stage = el("div", { className: "stage" }, [big]);
+        const row = el("div", { className: "rowmock" }, [small, el("span", { textContent: icon.label })]);
+        const heading = el("h3", {}, [
+          el("span", { textContent: option.label }),
+          el("small", { textContent: `${totalMs(option)} ms` }),
+        ]);
+        const replay = el("button", { className: "btn", type: "button", textContent: "Replay" });
+        const pick = el("button", { className: "btn", type: "button", textContent: "Pick" });
+        pick.setAttribute("aria-pressed", "false");
+        const node = el("article", { className: "tile" }, [
+          stage,
+          row,
+          heading,
+          el("p", { textContent: option.note || "" }),
+          el("div", { className: "tile-actions" }, [replay, pick]),
+        ]);
+        tile.node = node;
+        tile.pick = pick;
+        node.addEventListener("pointerenter", () => playTile(tile));
+        replay.addEventListener("click", () => playTile(tile));
+        pick.addEventListener("click", () => choose(icon.name, option.id));
+        options.append(node);
+        tiles.push(tile);
+      });
+      section.append(options);
+
+      const seg = el("div", { className: "seg" });
+      seg.setAttribute("role", "radiogroup");
+      seg.setAttribute("aria-label", `What to do with ${icon.label}`);
+      ACTIONS.forEach(([action, text]) => {
+        const button = el("button", { type: "button", textContent: text });
+        button.dataset.action = action;
+        button.setAttribute("role", "radio");
+        button.setAttribute("aria-checked", "false");
+        button.addEventListener("click", () => setAction(icon.name, action));
+        seg.append(button);
+      });
+      const area = el("textarea", { id: `note-${icon.name}`, rows: 2, placeholder: "Note for Claude, for example: slower settle, less bounce" });
+      area.addEventListener("input", () => setNote(icon.name, area.value));
+      const label = el("label", { htmlFor: area.id }, ["Note for Claude", area]);
+      section.append(el("div", { className: "decide" }, [seg, label]));
+      list.append(section);
+      icon.section = section;
+      icon.pill = pill;
+      icon.area = area;
+      icon.seg = seg;
+    });
+  }
+
+  function current(name) {
+    return state.get(name) || { option: null, action: null, note: "" };
+  }
+
+  function optionLabel(icon, id) {
+    const option = icon.options.find((candidate) => candidate.id === id);
+    return option ? option.label : null;
+  }
+
+  function paint() {
+    let picked = 0;
+    let rework = 0;
+    let redo = 0;
+    DATA.icons.forEach((icon) => {
+      const value = current(icon.name);
+      const label = optionLabel(icon, value.option);
+      let text = "No pick";
+      let tone = "";
+      if (value.action === "redo") {
+        text = "Redo all";
+        tone = "redo";
+        redo += 1;
+      } else if (value.action === "rework") {
+        text = label ? `Rework ${label}` : "Rework";
+        tone = "rework";
+        rework += 1;
+      } else if (value.option) {
+        text = `Keep ${label}`;
+        tone = "keep";
+      }
+      if (value.option || value.action) picked += 1;
+      icon.pill.textContent = text;
+      icon.pill.dataset.tone = tone;
+      icon.seg.querySelectorAll("button").forEach((button) => {
+        const effective = value.action || (value.option ? "keep" : null);
+        button.setAttribute("aria-checked", String(button.dataset.action === effective));
+      });
+      if (document.activeElement !== icon.area && icon.area.value !== value.note) icon.area.value = value.note;
+    });
+    tiles.forEach((tile) => {
+      const isPicked = current(tile.icon.name).option === tile.option.id;
+      tile.node.dataset.picked = String(isPicked);
+      tile.pick.setAttribute("aria-pressed", String(isPicked));
+      tile.pick.textContent = isPicked ? "Picked" : "Pick";
+    });
+    document.getElementById("summary").textContent =
+      `${picked} of ${DATA.icons.length} decided, ${rework} rework, ${redo} redo`;
+  }
+
+  function choose(name, optionId) {
+    const value = current(name);
+    const next = { ...value, option: value.option === optionId ? null : optionId };
+    if (next.option && !next.action) next.action = "keep";
+    if (!next.option && next.action === "keep") next.action = null;
+    commit(name, next);
+  }
+
+  function setAction(name, action) {
+    const value = current(name);
+    commit(name, { ...value, action: value.action === action ? null : action });
+  }
+
+  function setNote(name, note) {
+    const value = current(name);
+    commit(name, { ...value, note }, 500);
+  }
+
+  function commit(name, next, delay) {
+    const empty = !next.option && !next.action && !next.note;
+    if (empty) state.delete(name);
+    else state.set(name, next);
+    paint();
+    clearTimeout(timers.get(name));
+    timers.set(name, setTimeout(() => save(name), delay ?? 0));
+  }
+
+  function save(name) {
+    if (!picksDb) return;
+    const icon = DATA.icons.find((candidate) => candidate.name === name);
+    const value = state.get(name);
+    const ref = picksDb.doc(name);
+    const previous = queue.get(name) || Promise.resolve();
+    const job = previous
+      .then(() =>
+        value
+          ? ref.set({
+              icon: name,
+              option: value.option,
+              optionLabel: optionLabel(icon, value.option),
+              action: value.action,
+              note: value.note,
+              updatedAt: new Date().toISOString(),
+            })
+          : ref.delete(),
+      )
+      .then(() => showSaved(true))
+      .catch(() => showSaved(false));
+    queue.set(name, job);
+  }
+
+  function showSaved(ok) {
+    const note = document.getElementById("save-note");
+    note.hidden = ok;
+    if (!ok) note.textContent = "A pick could not be saved to this page. Use Copy picks and paste the text to Claude instead.";
+  }
+
+  function picksText() {
+    const lines = [`Icon picks for ${DATA.title}`];
+    DATA.icons.forEach((icon) => {
+      const value = current(icon.name);
+      if (!value.option && !value.action && !value.note) return;
+      const label = optionLabel(icon, value.option);
+      const action = value.action || "keep";
+      const what = action === "redo" ? "redo all options" : `${action} ${label || "current"}`;
+      lines.push(`- ${icon.name}: ${what}${value.note ? `. Note: ${value.note}` : ""}`);
+    });
+    if (lines.length === 1) lines.push("- nothing picked yet");
+    return lines.join("\n");
+  }
+
+  function copyPicks() {
+    const text = picksText();
+    const box = document.getElementById("fallback");
+    const area = document.getElementById("fallback-text");
+    function fallback() {
+      area.value = text;
+      box.dataset.open = "true";
+      area.focus();
+      area.select();
+    }
+    if (!navigator.clipboard) return fallback();
+    navigator.clipboard.writeText(text).then(() => {
+      box.dataset.open = "false";
+      const button = document.getElementById("copy");
+      button.textContent = "Copied";
+      setTimeout(() => (button.textContent = "Copy picks"), 1500);
+    }, fallback);
+  }
+
+  async function loopTile(tile, token) {
+    while (looping && token === loopToken) {
+      await playTile(tile);
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    }
+  }
+
+  function setLoop(on) {
+    looping = on;
+    loopToken += 1;
+    document.getElementById("loop").setAttribute("aria-pressed", String(on));
+    if (on) tiles.forEach((tile, i) => setTimeout(() => loopTile(tile, loopToken), i * 60));
+  }
+
+  function applySnapshot(snapshot) {
+    snapshot.docChanges().forEach((change) => {
+      const name = change.doc.id;
+      if (!DATA.icons.some((icon) => icon.name === name)) return;
+      if (change.type === "removed") {
+        state.delete(name);
+        return;
+      }
+      if (change.doc.metadata.hasPendingWrites) return;
+      const data = change.doc.data() || {};
+      state.set(name, { option: data.option ?? null, action: data.action ?? null, note: data.note ?? "" });
+    });
+    paint();
+  }
+
+  render();
+  paint();
+  document.getElementById("play-all").addEventListener("click", () => {
+    tiles.forEach((tile, i) => setTimeout(() => playTile(tile), i * 50));
+  });
+  document.getElementById("loop").addEventListener("click", () => setLoop(!looping));
+  document.getElementById("copy").addEventListener("click", copyPicks);
+
+  (window.claude ? window.claude.use("db") : Promise.resolve(null)).catch(() => null).then((db) => {
+    const note = document.getElementById("save-note");
+    if (!db) {
+      note.hidden = false;
+      note.textContent = "Picks cannot be saved from this view. Use Copy picks and paste the text to Claude.";
+      return;
+    }
+    picksDb = db.collection("picks");
+    picksDb.onSnapshot(applySnapshot, () => showSaved(false));
+  });
+</script>

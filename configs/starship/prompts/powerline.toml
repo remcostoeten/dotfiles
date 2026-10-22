@@ -1,3 +1,4 @@
+# ghostty-opacity = 0.1
 "$schema" = 'https://starship.rs/config-schema.json'
 
 add_newline = true
@@ -6,7 +7,7 @@ command_timeout = 800
 palette = "neon"
 
 format = """
-[](sky)$os$username[](fg:sky bg:lilac)$directory[](fg:lilac bg:surface)$git_branch$git_status$git_state[](fg:surface bg:deep)$nodejs$bun$deno$rust$golang$python$php[](fg:deep)
+[](sky)$os$username[](fg:sky bg:lilac)$directory[](fg:lilac bg:surface)$git_branch$git_status$git_state[](fg:surface bg:deep)$nodejs$bun$deno$rust$golang$python$php[](fg:deep)
 $character"""
 
 right_format = "$cmd_duration$jobs$status$time"
@@ -57,7 +58,7 @@ home_symbol = "~"
 "~/.config" = " config"
 
 [git_branch]
-symbol = " "
+symbol = " "
 style = "bg:surface fg:lilac"
 format = "[ $symbol$branch ]($style)"
 
@@ -81,7 +82,7 @@ style = "bg:surface fg:peach"
 format = "[$state( $progress_current/$progress_total) ]($style)"
 
 [nodejs]
-symbol = " "
+symbol = " "
 style = "bg:deep fg:mint"
 format = "[ $symbol$version ]($style)"
 version_format = "${major}.${minor}"
@@ -101,25 +102,25 @@ format = "[ $symbol$version ]($style)"
 version_format = "${major}.${minor}"
 
 [rust]
-symbol = " "
+symbol = " "
 style = "bg:deep fg:rose"
 format = "[ $symbol$version ]($style)"
 version_format = "${major}.${minor}"
 
 [golang]
-symbol = " "
+symbol = " "
 style = "bg:deep fg:sky"
 format = "[ $symbol$version ]($style)"
 version_format = "${major}.${minor}"
 
 [python]
-symbol = " "
+symbol = " "
 style = "bg:deep fg:sun"
 format = "[ $symbol($version)( \\($virtualenv\\)) ]($style)"
 version_format = "${major}.${minor}"
 
 [php]
-symbol = " "
+symbol = " "
 style = "bg:deep fg:lilac"
 format = "[ $symbol$version ]($style)"
 version_format = "${major}.${minor}"
@@ -130,13 +131,13 @@ style = "fg:muted"
 format = "[󱎫 $duration]($style) "
 
 [jobs]
-symbol = " "
+symbol = " "
 style = "fg:peach"
 format = "[$symbol$number]($style) "
 
 [status]
 disabled = false
-symbol = " "
+symbol = " "
 style = "fg:red"
 format = "[$symbol$status]($style) "
 

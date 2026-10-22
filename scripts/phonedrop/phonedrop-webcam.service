@@ -1,0 +1,13 @@
+[Unit]
+Description=phonedrop virtual webcam (v4l2loopback device "phonedrop")
+After=systemd-modules-load.service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=modprobe v4l2loopback
+ExecStart=/bin/sh -c 'grep -qsx phonedrop /sys/class/video4linux/*/name || v4l2loopback-ctl add -n phonedrop -x 1 /dev/video20'
+
+[Install]
+WantedBy=multi-user.target

@@ -48,7 +48,7 @@ export function DiagnosticsPanel() {
 
   function row(label: string, value: string | undefined, tone?: "ok" | "bad" | "warn") {
     return (
-      <div class="flex items-center justify-between border-b border-line py-1.5">
+      <div class="flex items-center justify-between border-b border-line py-1.5 transition-colors duration-100 hover:bg-surface-1/40">
         <span class="text-[12px] text-ink-dim">{label}</span>
         <Show when={tone} fallback={<span class="text-[12px]">{value ?? "…"}</span>}>
           <Badge tone={tone ?? "muted"} text={value ?? "…"} />
@@ -90,10 +90,10 @@ export function DiagnosticsPanel() {
 
           <Show when={backendStatus() && !backendStatus()?.installed}>
             <div class="mt-4">
-              <h3 class="mb-1 text-[12px] font-semibold">Install keyd</h3>
+              <h3 class="section-heading mb-1.5">Install keyd</h3>
               <For each={installGuidance() ?? []}>
                 {(pkg) => (
-                  <div class="mb-2 rounded border border-line bg-surface-1 p-2">
+                  <div class="mb-2 rounded border border-line bg-surface-1 p-2 transition-colors duration-100">
                     <p class="text-[11.5px] text-ink-dim">{pkg.source}</p>
                     <code class="text-[12px] select-text">{pkg.command}</code>
                   </div>

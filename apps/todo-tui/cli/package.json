@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build todo.ts --target=bun --outfile=../todo.mjs",
+    "build": "bun build todo.ts --target=bun --outfile=dist/todo.mjs",
     "dev": "bun todo.ts",
     "start": "bun todo.ts",
     "typecheck": "bunx tsc --noEmit",

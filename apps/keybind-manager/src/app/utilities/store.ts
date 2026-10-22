@@ -1,6 +1,6 @@
 import { createMemo, createResource, createSignal } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
-import type { AppConfig, Mapping, Profile } from "@/shared/types/config"
+import type { AppConfig, DeviceRef, Mapping, Profile } from "@/shared/types/config"
 import { getConfig, putConfig } from "@/shared/utilities/native"
 import { makeId } from "@/shared/utilities/id"
 
@@ -16,6 +16,9 @@ const emptyConfig: AppConfig = {
 const [config, setConfig] = createStore<AppConfig>(structuredClone(emptyConfig))
 const [dirty, setDirty] = createSignal(false)
 const [selectedProfile, setSelectedProfile] = createSignal("default")
+
+export type Tab = "keyboard" | "advanced" | "devices" | "media" | "board" | "diagnostics" | "dotfiles"
+const [tab, setTab] = createSignal<Tab>("keyboard")
 
 const [loaded] = createResource(async function loadInitial() {
   const stored = await getConfig()
@@ -52,6 +55,45 @@ function addProfile(name: string): string {
     draft.profiles.push({ id, name, enabled: true, devices: [], mappings: [], layers: [] })
   })
   setSelectedProfile(id)
+  return id
+}
+
+function adoptProfile(profile: Profile): string {
+  const existing = config.profiles.find((p) => p.replaces?.some((name) => profile.replaces?.includes(name)))
+  if (existing) {
+    setSelectedProfile(existing.id)
+    return existing.id
+  }
+  const adopted: Profile = {
+    ...profile,
+    id: makeId("profile"),
+    mappings: profile.mappings.map((m) => ({ ...m, id: makeId("map") }))
+  }
+  mutate((draft) => {
+    draft.profiles.push(adopted)
+  })
+  setSelectedProfile(adopted.id)
+  return adopted.id
+}
+
+function ensureDeviceProfile(device: DeviceRef): string {
+  const existing = config.profiles.find((p) =>
+    p.devices.some((d) => d.vendor === device.vendor && d.product === device.product)
+  )
+  if (existing) {
+    return existing.id
+  }
+  const id = makeId("profile")
+  mutate((draft) => {
+    draft.profiles.push({
+      id,
+      name: device.name ?? `${device.vendor}:${device.product}`,
+      enabled: true,
+      devices: [device],
+      mappings: [],
+      layers: []
+    })
+  })
   return id
 }
 
@@ -127,7 +169,11 @@ export const appStore = {
   snapshot,
   mutate,
   persist,
+  tab,
+  setTab,
   addProfile,
+  adoptProfile,
+  ensureDeviceProfile,
   removeProfile,
   updateProfile,
   duplicateProfile,

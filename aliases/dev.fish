@@ -2,39 +2,6 @@
 
 # Development aliases
 
-# DOCSTRING: Run pnpm
-alias p pnpm
-
-# DOCSTRING: Install dependencies with pnpm
-alias pi "pnpm install"
-
-# DOCSTRING: Run development server with pnpm (alternative)
-alias rr "pnpm run dev"
-
-# DOCSTRING: Build with pnpm
-alias bb "pnpm run build"
-
-# DOCSTRING: Start the app with Bun
-alias rs "bun run start"
-
-# DOCSTRING: Run development server with Bun
-alias r "bun run dev"
-
-# DOCSTRING: Install dependencies with Bun
-alias i "bun install"
-
-# DOCSTRING: Build the app with Bun
-alias b "bun run build"
-
-# NO DOCSTRING: Run tauri dev via bun 
-alias tauri="bun tauri dev"
-
-# DOCSTRING: Run tauri dev via bun 
-alias t="ports 1420 && bun tauri dev"
-
-# DOCSTRING: Run tauri dev via pnpm
-alias rt='pnpm tauri dev'
-
 # DOCSTRING: Open files with Neovim
 function v
     nvim $argv
@@ -49,9 +16,6 @@ end
 function vim
     command vim $argv
 end
-
-# DOCSTRING: Run `bun dev:all
-alias da "bun dev:all"
 
 # DOCSTRING: Deploy to Vercel production
 alias prod "vercel deploy --prod"

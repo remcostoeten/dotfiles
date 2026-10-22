@@ -284,8 +284,14 @@ func TestScreenVerbsReachTheMachine(t *testing.T) {
 		{name: "rgb colours the selected device", keys: []string{"3", "j", "p"}, want: []string{"rgb 1 AA00FF"}},
 		{name: "rgb all off", keys: []string{"3", "X"}, want: []string{"rgb all 000000"}},
 		{name: "audio default output", keys: []string{"4", "j", "enter"}, want: []string{"audio.default hdmi"}},
-		{name: "audio bluetooth toggles", keys: []string{"4", "tab", "enter"}, want: []string{"audio.bluetooth AA:BB false"}},
-		{name: "audio volume and media", keys: []string{"4", "-", "=", "m", "space", ">"}, want: []string{"audio.volume -5", "audio.volume +5", "audio.mute", "audio.media play-pause", "audio.media next"}},
+		{name: "audio bluetooth toggles", keys: []string{"4", "tab", "tab", "enter"}, want: []string{"audio.bluetooth AA:BB false"}},
+		{name: "audio volume and media", keys: []string{"4", "-", "=", "m", "space", ">"}, want: []string{"audio.volume usb -5", "audio.volume usb +5", "audio.mute usb", "audio.media play-pause", "audio.media next"}},
+		{name: "audio app volume and mute", keys: []string{"4", "tab", "-", "m"}, want: []string{"audio.stream.volume 7 -5", "audio.stream.mute 7"}},
+		{name: "audio tests the selected output", keys: []string{"4", "j", "t"}, want: []string{"audio.test hdmi"}},
+		{name: "audio tests the output an app plays to", keys: []string{"4", "tab", "t"}, want: []string{"audio.test usb"}},
+		{name: "audio routes an app through the picker", keys: []string{"4", "tab", "enter", "j", "enter"}, want: []string{"audio.move 7 hdmi"}},
+		{name: "audio picker tests before routing", keys: []string{"4", "tab", "enter", "j", "t", "esc"}, want: []string{"audio.test hdmi"}},
+		{name: "audio sends every app to the selected output", keys: []string{"4", "j", "R"}, want: []string{"audio.move 7 hdmi"}},
 		{name: "sys brightness", keys: []string{"5", "="}, want: []string{"sys.brightness 1 80"}},
 		{name: "sys next session", keys: []string{"5", "tab", "j", "enter"}, want: []string{"sys.session /s/hyprland.desktop"}},
 		{name: "sys logout confirms", keys: []string{"5", "L", "y"}, want: []string{"sys.logout"}},
@@ -299,6 +305,68 @@ func TestScreenVerbsReachTheMachine(t *testing.T) {
 				t.Errorf("calls = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSidebarTakesFocusAndNavigates(t *testing.T) {
+	tests := []struct {
+		name      string
+		screen    []string
+		keys      []string
+		route     string
+		onSidebar bool
+	}{
+		{name: "tab ends on the sidebar", screen: []string{"4"}, keys: []string{"tab", "tab", "tab"}, route: "audio", onSidebar: true},
+		{name: "alt+h reaches it from the first region", screen: []string{"4"}, keys: []string{"alt+h"}, route: "audio", onSidebar: true},
+		{name: "alt+l leaves it again", screen: []string{"4"}, keys: []string{"alt+h", "alt+l"}, route: "audio"},
+		{name: "moving does not switch screens", screen: []string{"4"}, keys: []string{"alt+h", "j", "j"}, route: "audio", onSidebar: true},
+		{name: "enter opens the next section", screen: []string{"4"}, keys: []string{"alt+h", "j", "enter"}, route: "sys"},
+		{name: "enter opens an earlier section", screen: []string{"4"}, keys: []string{"alt+h", "k", "k", "enter"}, route: "procs"},
+		{name: "the cursor stops at the top", keys: []string{"alt+h", "k", "k", "enter"}, route: "gpu"},
+		{name: "arrow keys and l work too", screen: []string{"4"}, keys: []string{"alt+h", "up", "l"}, route: "rgb"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := resize(t, build(t, "dark"), 120, 40, tt.screen...)
+			m.Render()
+			m = resize(t, m, 120, 40, tt.keys...)
+			if got := string(m.Route().Route); got != tt.route {
+				t.Errorf("route = %q, want %q", got, tt.route)
+			}
+			if got := m.Focus().Current() == "shell.sidebar"; got != tt.onSidebar {
+				t.Errorf("sidebar focused = %t, want %t (focus %q)", got, tt.onSidebar, m.Focus().Current())
+			}
+		})
+	}
+}
+
+func TestSidebarKeysDoNotReachTheScreen(t *testing.T) {
+	m, rec := buildRecorded(t, "dark")
+	m = resize(t, m, 120, 40, "4")
+	m.Render()
+	m = resize(t, m, 120, 40, "alt+h", "enter")
+	if got := m.Focus().Current(); got != "audio.outputs" {
+		t.Errorf("focus = %q, want the screen's first region", got)
+	}
+	if len(rec.Calls()) != 0 {
+		t.Errorf("calls = %v, want none", rec.Calls())
+	}
+}
+
+func TestAudioPickerClosesOnEscape(t *testing.T) {
+	m, rec := buildRecorded(t, "dark")
+	m = resize(t, m, 120, 40, "4", "tab", "enter")
+	if got := m.Overlay(); got != "audio.picker" {
+		t.Fatalf("overlay = %q, want \"audio.picker\"", got)
+	}
+
+	m = resize(t, m, 120, 40, "esc")
+	if got := m.Overlay(); got != "" {
+		t.Errorf("overlay = %q after esc, want none", got)
+	}
+	if len(rec.Calls()) != 0 {
+		t.Errorf("calls = %v, want none", rec.Calls())
 	}
 }
 

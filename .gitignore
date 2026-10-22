@@ -64,3 +64,5 @@ opentui-setup/WHY_OPENTUI.md
 dotfiles-manager-app/node_modules/.vite/deps_temp_c3e43766/azcli-A5V7GNPI.js
 setup/lazygit/
 setup/lazydocker/
+configs/nvim/.rice-colorscheme
+aliases/.kuizer/

@@ -17,7 +17,7 @@ export function KeyCap(props: Props) {
         )
       })}
       <kbd
-        class={`rounded border border-line-strong bg-surface-3 px-1.5 py-0.5 text-[11px] shadow-[0_1.5px_0_0_var(--color-line-strong)] ${props.dim ? "text-ink-faint" : "text-ink"}`}
+        class={`rounded border border-line-strong bg-surface-3 px-1.5 py-0.5 text-[11px] shadow-[0_1.5px_0_0_var(--color-line-strong)] transition-colors duration-100 ${props.dim ? "text-ink-faint" : "text-ink"}`}
       >
         {keyLabel(props.name)}
       </kbd>

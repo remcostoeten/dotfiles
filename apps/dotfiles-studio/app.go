@@ -26,9 +26,6 @@ type App struct {
 	installMu     sync.Mutex
 	installing    bool
 	installCancel context.CancelFunc
-
-	keydMu     sync.Mutex
-	keydCancel context.CancelFunc
 }
 
 // SystemInfo is the read-only machine summary shown on first launch.
@@ -47,6 +44,10 @@ type SystemInfo struct {
 	Uptime           string `json:"uptime"`
 	CPU              string `json:"cpu"`
 	Memory           string `json:"memory"`
+	Machine          string `json:"machine"`
+	GPU              string `json:"gpu"`
+	Storage          string `json:"storage"`
+	Disks            string `json:"disks"`
 	HasSudo          bool   `json:"hasSudo"`
 	WorkspaceRoot    string `json:"workspaceRoot"`
 	SetupScriptFound bool   `json:"setupScriptFound"`
@@ -69,6 +70,8 @@ type CatalogItem struct {
 	PackageName        string `json:"packageName"`
 	Command            string `json:"command"`
 	RequiresSudo       bool   `json:"requiresSudo"`
+	// UninstallCommand is empty when the app has no safe way to remove the item.
+	UninstallCommand string `json:"uninstallCommand"`
 }
 
 // CatalogCategory mirrors a `setup.sh --category <id>` group.
@@ -117,6 +120,10 @@ func (a *App) SystemInfo() SystemInfo {
 	info.Uptime = readUptime()
 	info.CPU = readCPU()
 	info.Memory = readMemory()
+	info.Machine = readMachine()
+	info.GPU = readGPU()
+	info.Storage = readStorage()
+	info.Disks = readDisks()
 	info.HasSudo = hasPasswordlessSudo()
 
 	root := a.workspaceRootPath()
@@ -149,16 +156,9 @@ func (a *App) CheckPresence(names []string) map[string]bool {
 //	install:line  string
 //	install:exit  {code, ok}
 func (a *App) RunInstall(kind, id string, dryRun bool) string {
-	a.installMu.Lock()
-	if a.installing {
-		a.installMu.Unlock()
-		return "an install is already running"
-	}
-
 	root := a.workspaceRootPath()
 	script := setupScriptPath(root)
 	if !fileExists(script) {
-		a.installMu.Unlock()
 		return "setup.sh not found at " + script
 	}
 
@@ -171,27 +171,38 @@ func (a *App) RunInstall(kind, id string, dryRun bool) string {
 	case "package":
 		args = append(args, "--package", id)
 	default:
-		a.installMu.Unlock()
 		return "unknown install kind: " + kind
 	}
 	if dryRun {
 		args = append(args, "--dry-run")
 	}
 
+	return a.runStreamed(kind, id, "setup.sh "+strings.Join(args[1:], " "), root, "bash", args...)
+}
+
+// runStreamed runs one command at a time, streaming combined output as
+// install:start / install:line / install:exit events. It returns "" on success.
+func (a *App) runStreamed(kind, id, display, dir, name string, args ...string) string {
+	a.installMu.Lock()
+	if a.installing {
+		a.installMu.Unlock()
+		return "an install is already running"
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.installCancel = cancel
 	a.installing = true
 	a.installMu.Unlock()
 
 	defer func() {
+		forgetPackageOwners()
 		a.installMu.Lock()
 		a.installing = false
 		a.installCancel = nil
 		a.installMu.Unlock()
 	}()
 
-	cmd := exec.CommandContext(ctx, "bash", args...)
-	cmd.Dir = root
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "TERM=dumb", "NO_COLOR=1")
 
 	pr, pw := io.Pipe()
@@ -201,7 +212,7 @@ func (a *App) RunInstall(kind, id string, dryRun bool) string {
 	wruntime.EventsEmit(a.ctx, "install:start", map[string]interface{}{
 		"kind":    kind,
 		"id":      id,
-		"command": "setup.sh " + strings.Join(args[1:], " "),
+		"command": display,
 	})
 
 	if err := cmd.Start(); err != nil {
@@ -259,6 +270,7 @@ func (a *App) CancelInstall() {
 
 func catalogForSystem(info SystemInfo) []CatalogCategory {
 	cats := baseCatalog()
+	warmCatalogOwners(cats, info)
 	for ci := range cats {
 		cat := &cats[ci]
 		cat.Command = "setup.sh --category " + cat.ID
@@ -423,6 +435,7 @@ func resolveCatalogItem(item *CatalogItem, info SystemInfo) {
 	if item.Command == "" {
 		item.Command = commandForPackage(*item, info)
 	}
+	item.UninstallCommand = uninstallPlanFor(*item, info).display
 }
 
 func methodForPackage(id, osFamily string) string {
@@ -739,6 +752,8 @@ func detectPackageManager() string {
 		return "pacman"
 	case commandExists("apt"):
 		return "apt"
+	case commandExists("dnf"):
+		return "dnf"
 	default:
 		return "unknown"
 	}
@@ -805,26 +820,6 @@ func readCPU() string {
 		return model + " (" + strconv.Itoa(cores) + " cores)"
 	}
 	return model
-}
-
-func readMemory() string {
-	data, err := os.ReadFile("/proc/meminfo")
-	if err != nil {
-		return "unknown"
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "MemTotal:") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 {
-				kb, err := strconv.ParseFloat(fields[1], 64)
-				if err == nil {
-					gb := kb / 1024 / 1024
-					return strconv.FormatFloat(gb, 'f', 1, 64) + " GB"
-				}
-			}
-		}
-	}
-	return "unknown"
 }
 
 func hasPasswordlessSudo() bool {

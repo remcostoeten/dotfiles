@@ -14,6 +14,7 @@
     "@kobalte/core": "^0.13.10",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-dialog": "^2.2.0",
+    "geist": "^1.7.2",
     "solid-js": "^1.9.5"
   },
   "devDependencies": {

@@ -34,6 +34,15 @@ function dotfiles
     end
 end
 
+# DOCSTRING: Cycle starship prompts (each sets its own Ghostty opacity); prompt help for more
+function prompt
+    if test (count $argv) -eq 0
+        dotfiles prompt next
+    else
+        dotfiles prompt $argv
+    end
+end
+
 # DOCSTRING: Reload fish configuration
 function reload
     if test "$argv[1]" = "--help" -o "$argv[1]" = "-h"

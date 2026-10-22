@@ -1,3 +1,8 @@
 #!/usr/bin/env bash
-ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-exec bun "$ROOT/apps/todo-tui/cli/todo.ts" "$@"
+tui="$HOME/.config/dotfiles/bin/todo-tui"
+if [[ -x "$tui" && -t 0 && -t 1 ]]; then
+  case "${1-}" in
+    ""|i|-i|--interactive|interactive) exec "$tui" ;;
+  esac
+fi
+exec bun "$HOME/.config/dotfiles/apps/todo-tui/cli/dist/todo.mjs" "$@"

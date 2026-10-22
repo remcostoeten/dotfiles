@@ -25,6 +25,8 @@ export type BackendStatus = {
   config_dir: string
 }
 
+export type DeviceKind = "keyboard" | "mouse" | "other"
+
 export type InputDevice = {
   name: string
   vendor: string
@@ -32,6 +34,7 @@ export type InputDevice = {
   phys?: string
   keyboard: boolean
   virtual_keyd: boolean
+  kind: DeviceKind
 }
 
 export type PackageInfo = {
@@ -78,4 +81,44 @@ export type NativeError = {
   detail?: string
   retryable: boolean
   action?: string
+}
+
+export type IdPattern = "wildcard" | "explicit" | "unknown"
+
+export type IdEntry = {
+  raw: string
+  excluded: boolean
+  device_class?: string
+  pattern: IdPattern
+  vendor?: string
+  product?: string
+}
+
+export type ScannedConfig = {
+  filename: string
+  managed: boolean
+  ids: IdEntry[]
+}
+
+export type MatchRank = "wildcard" | "explicit"
+
+export type ConfigMatch = {
+  filename: string
+  managed: boolean
+  rank: MatchRank
+}
+
+export type KeyboardConflict = {
+  device_name: string
+  vendor: string
+  product: string
+  matches: ConfigMatch[]
+  conflict: boolean
+  shadowed: boolean
+}
+
+export type ViaKeyboard = {
+  path: string
+  protocol: number
+  layers: number
 }

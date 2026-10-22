@@ -232,7 +232,7 @@ do_record() {
   GIF_TMP=""
 
   if [[ "${XDG_SESSION_TYPE-}" == "wayland" ]]; then
-    echo "Wayland session detected. X11 window targeting is unavailable; install wf-recorder or wl-screenrec for native Wayland capture." >&2
+    echo "Wayland session detected. X11 window targeting is unavailable; using gpu-screen-recorder (KDE/GNOME) or wf-recorder (wlroots)." >&2
   fi
 
   if [[ "${REC_DRY_RUN-}" == "1" ]]; then
@@ -249,6 +249,16 @@ do_record() {
       echo "Wayland fallback currently records video only; use X11 for gif preset." >&2
       exit 1
     }
+    if [[ "${XDG_CURRENT_DESKTOP-}" =~ KDE|GNOME ]] && command -v gpu-screen-recorder >/dev/null 2>&1; then
+      GSR_CMD=(gpu-screen-recorder -w portal -f "$FPS" -k h264 -q very_high -cursor yes -o "$OUT")
+      [[ "$AUDIO" -eq 1 ]] && GSR_CMD+=( -a default_output )
+      echo "Recording via desktop portal @${FPS}fps -> $OUT (pick the screen or window in the dialog)"
+      run_countdown "$COUNTDOWN"
+      send_notification "Recording started: $OUT"
+      run_recorder "$OUT" "${GSR_CMD[@]}"
+      exit $?
+    fi
+
     command -v wf-recorder >/dev/null 2>&1 || {
       echo "Wayland fallback requires wf-recorder. Install wf-recorder, or run an X11 session for x11grab." >&2
       exit 1

@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
 const NVIBRANT = join(homedir(), ".local/bin/nvibrant")
 const CONFIG_DIR = join(homedir(), ".config/nvibrant-tui")
 const CONFIG_PATH = join(CONFIG_DIR, "config.json")
+const BACKUP_PATH = join(CONFIG_DIR, "config.bak.json")
 const SERVICE_PATH = join(homedir(), ".config/systemd/user/nvibrant.service")
 const HEAD_COUNT = 6
 
@@ -122,15 +123,21 @@ function clamp(value: number, min: number, max: number): number {
 	return Math.min(max, Math.max(min, value))
 }
 
-function loadConfig(): TConfig {
-	const base: TConfig = {
+function noop() {}
+
+function baseConfig(): TConfig {
+	return {
 		head: 4,
 		heads: Array.from({ length: HEAD_COUNT }, () => defaultHead()),
 		presets: {},
 		activePreset: null,
 	}
+}
+
+function parseConfig(path: string): TConfig | null {
 	try {
-		const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8"))
+		const base = baseConfig()
+		const raw = JSON.parse(readFileSync(path, "utf8"))
 		const presets: Record<string, TPreset> = {}
 		for (const [name, value] of Object.entries(raw.presets ?? {})) {
 			if (Array.isArray(value)) presets[name] = { heads: value as THeadState[], head: raw.head ?? 4 }
@@ -143,13 +150,36 @@ function loadConfig(): TConfig {
 			activePreset: raw.activePreset ?? null,
 		}
 	} catch {
-		return base
+		return null
 	}
+}
+
+function loadConfig(): TConfig {
+	const config = parseConfig(CONFIG_PATH)
+	if (config) return config
+	if (existsSync(CONFIG_PATH)) {
+		try {
+			renameSync(CONFIG_PATH, `${CONFIG_PATH}.broken-${Date.now()}`)
+		} catch {
+			noop()
+		}
+	}
+	return parseConfig(BACKUP_PATH) ?? baseConfig()
 }
 
 function saveConfig(config: TConfig) {
 	mkdirSync(CONFIG_DIR, { recursive: true })
-	writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
+	const previous = parseConfig(CONFIG_PATH)
+	if (previous && Object.keys(previous.presets).length) {
+		try {
+			copyFileSync(CONFIG_PATH, BACKUP_PATH)
+		} catch {
+			noop()
+		}
+	}
+	const tmp = `${CONFIG_PATH}.tmp`
+	writeFileSync(tmp, JSON.stringify(config, null, 2))
+	renameSync(tmp, CONFIG_PATH)
 }
 
 function runNvibrant(attribute: string, values: number[]): string {

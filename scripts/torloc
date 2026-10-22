@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly STATE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/torloc"
+readonly PORT="${TORLOC_PORT:-9055}"
+readonly ONIONOO="https://onionoo.torproject.org/details?flag=Exit&running=true&fields=fingerprint,country,country_name"
+
+die() {
+  printf 'torloc: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<EOF
+Usage: torloc [country-code]   pick an exit country (fzf if omitted), start Tor, open Brave
+       torloc stop             stop Tor and the proxied Brave window
+       torloc ip               show the current exit IP info
+EOF
+}
+
+find_tor_binary() {
+  local bin
+  bin=$(command -v tor 2>/dev/null || true)
+  if [[ -z "$bin" ]]; then
+    bin=$(find "$HOME/.config/BraveSoftware" -maxdepth 4 -type f -name 'tor-*-linux-brave-*' 2>/dev/null | sort -V | tail -1)
+  fi
+  [[ -x "$bin" ]] || die "no tor binary found (install tor or open a Brave Tor window once)"
+  printf '%s' "$bin"
+}
+
+fetch_relays() {
+  curl -fsS --max-time 30 "$ONIONOO" -o "$STATE_DIR/relays.json" || die "could not reach onionoo.torproject.org"
+}
+
+pick_country() {
+  command -v fzf >/dev/null || die "fzf is required when no country code is given"
+  jq -r '.relays | map(select(.country and .country != "??" and .country_name)) | group_by(.country)
+    | map("\(.[0].country)\t\(.[0].country_name)\t\(length) exits")
+    | sort_by(ascii_downcase) | .[]' "$STATE_DIR/relays.json" \
+    | column -t -s $'\t' \
+    | fzf --prompt='exit country> ' --height=40% --reverse \
+    | awk '{print $1}'
+}
+
+stop_all() {
+  pkill -f "$STATE_DIR/torrc" 2>/dev/null || true
+  pkill -f "user-data-dir=$STATE_DIR/brave-profile" 2>/dev/null || true
+}
+
+tor_curl() {
+  curl -fsS --max-time 30 --socks5-hostname "127.0.0.1:$PORT" "$@" 2>/dev/null
+}
+
+# ipinfo.io and others 403 many Tor exits, so fall through several lookup services.
+show_ip() {
+  local attempt json
+  for attempt in 1 2 3; do
+    if json=$(tor_curl https://ipinfo.io/json); then
+      jq -r '"\(.ip)  \(.city), \(.region), \(.country)  (\(.org))"' <<<"$json"
+      return
+    fi
+    if json=$(tor_curl https://ipwho.is/) && [[ $(jq -r '.success' <<<"$json") == true ]]; then
+      jq -r '"\(.ip)  \(.city), \(.region), \(.country_code)  (AS\(.connection.asn) \(.connection.org))"' <<<"$json"
+      return
+    fi
+    if json=$(tor_curl https://ifconfig.co/json); then
+      jq -r '"\(.ip)  \(.city // "?"), \(.region_name // "?"), \(.country_iso)  (\(.asn) \(.asn_org))"' <<<"$json"
+      return
+    fi
+    if json=$(tor_curl https://check.torproject.org/api/ip); then
+      jq -r '"\(.IP)  (geo lookup blocked for this exit)"' <<<"$json"
+      return
+    fi
+    sleep 3
+  done
+  return 1
+}
+
+start() {
+  local country="${1:-}"
+  mkdir -p "$STATE_DIR/data"
+  chmod 700 "$STATE_DIR/data"
+  fetch_relays
+
+  [[ -n "$country" ]] || country=$(pick_country)
+  [[ -n "$country" ]] || die "no country selected"
+  country=${country,,}
+
+  local fingerprints
+  fingerprints=$(jq -r --arg c "$country" '[.relays[] | select(.country == $c) | "$" + .fingerprint] | join(",")' "$STATE_DIR/relays.json")
+  [[ -n "$fingerprints" ]] || die "no running exit relays in '$country'"
+  printf 'using %s exit relay(s) in %s\n' "$(tr ',' '\n' <<<"$fingerprints" | wc -l)" "${country^^}"
+
+  stop_all
+  sleep 1
+
+  printf 'SocksPort %s\nDataDirectory %s/data\nExitNodes %s\nStrictNodes 1\n' \
+    "$PORT" "$STATE_DIR" "$fingerprints" >"$STATE_DIR/torrc"
+
+  local tor_bin
+  tor_bin=$(find_tor_binary)
+  nohup "$tor_bin" -f "$STATE_DIR/torrc" >"$STATE_DIR/tor.log" 2>&1 &
+
+  printf 'bootstrapping tor'
+  local i
+  for i in $(seq 1 90); do
+    grep -q 'Bootstrapped 100' "$STATE_DIR/tor.log" && break
+    printf '.'
+    sleep 2
+  done
+  printf '\n'
+  grep -q 'Bootstrapped 100' "$STATE_DIR/tor.log" || die "tor did not bootstrap, see $STATE_DIR/tor.log"
+
+  show_ip || die "exit check failed (relays may be down); try again or pick another country"
+
+  local brave
+  brave=$(command -v brave || command -v brave-browser || true)
+  if [[ -z "$brave" ]]; then
+    printf 'SOCKS5 proxy ready on 127.0.0.1:%s\n' "$PORT"
+    return
+  fi
+  nohup "$brave" \
+    --user-data-dir="$STATE_DIR/brave-profile" \
+    --proxy-server="socks5://127.0.0.1:$PORT" \
+    --host-resolver-rules="MAP * ~NOTFOUND , EXCLUDE 127.0.0.1" \
+    --force-webrtc-ip-handling-policy=disable_non_proxied_udp \
+    https://check.torproject.org/ >/dev/null 2>&1 &
+  printf 'brave launched; stop with: torloc stop\n'
+}
+
+case "${1:-}" in
+  -h | --help) usage ;;
+  stop) stop_all && echo stopped ;;
+  ip) show_ip ;;
+  *) start "${1:-}" ;;
+esac

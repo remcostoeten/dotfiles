@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "KWin/WindowSwitcher",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Remco Stoeten"
+            }
+        ],
+        "Description": "Thumbnail grid of the windows on the current and the last visited virtual desktop",
+        "Icon": "preferences-system-windows-switcher-big-icons",
+        "Id": "recent_desktops",
+        "License": "GPL",
+        "Name": "Recent Desktops",
+        "Version": "1.0.0"
+    }
+}

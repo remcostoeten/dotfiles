@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -18,15 +19,15 @@ type paletteCmd struct {
 }
 
 type paletteModel struct {
-	cmds       []paletteCmd
-	filtered   []int
-	cursor     int
-	width      int
-	height     int
-	chosen     bool
-	quitting   bool
-	filtering  bool
-	filter     string
+	cmds      []paletteCmd
+	filtered  []int
+	cursor    int
+	width     int
+	height    int
+	chosen    bool
+	quitting  bool
+	filtering bool
+	filter    string
 }
 
 func (m paletteModel) Init() tea.Cmd { return nil }
@@ -78,23 +79,59 @@ func (m paletteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filtered = nil
 			return m, nil
 		case "1":
-			if len(m.filtered) > 0 { m.cursor = 0; m.chosen = true; return m, tea.Quit }
+			if len(m.filtered) > 0 {
+				m.cursor = 0
+				m.chosen = true
+				return m, tea.Quit
+			}
 		case "2":
-			if len(m.filtered) > 1 { m.cursor = 1; m.chosen = true; return m, tea.Quit }
+			if len(m.filtered) > 1 {
+				m.cursor = 1
+				m.chosen = true
+				return m, tea.Quit
+			}
 		case "3":
-			if len(m.filtered) > 2 { m.cursor = 2; m.chosen = true; return m, tea.Quit }
+			if len(m.filtered) > 2 {
+				m.cursor = 2
+				m.chosen = true
+				return m, tea.Quit
+			}
 		case "4":
-			if len(m.filtered) > 3 { m.cursor = 3; m.chosen = true; return m, tea.Quit }
+			if len(m.filtered) > 3 {
+				m.cursor = 3
+				m.chosen = true
+				return m, tea.Quit
+			}
 		case "5":
-			if len(m.filtered) > 4 { m.cursor = 4; m.chosen = true; return m, tea.Quit }
+			if len(m.filtered) > 4 {
+				m.cursor = 4
+				m.chosen = true
+				return m, tea.Quit
+			}
 		case "6":
-			if len(m.filtered) > 5 { m.cursor = 5; m.chosen = true; return m, tea.Quit }
+			if len(m.filtered) > 5 {
+				m.cursor = 5
+				m.chosen = true
+				return m, tea.Quit
+			}
 		case "7":
-			if len(m.filtered) > 6 { m.cursor = 6; m.chosen = true; return m, tea.Quit }
+			if len(m.filtered) > 6 {
+				m.cursor = 6
+				m.chosen = true
+				return m, tea.Quit
+			}
 		case "8":
-			if len(m.filtered) > 7 { m.cursor = 7; m.chosen = true; return m, tea.Quit }
+			if len(m.filtered) > 7 {
+				m.cursor = 7
+				m.chosen = true
+				return m, tea.Quit
+			}
 		case "9":
-			if len(m.filtered) > 8 { m.cursor = 8; m.chosen = true; return m, tea.Quit }
+			if len(m.filtered) > 8 {
+				m.cursor = 8
+				m.chosen = true
+				return m, tea.Quit
+			}
 		}
 	}
 	return m, nil
@@ -157,34 +194,60 @@ func (m paletteModel) View() string {
 func runPalette(a *app) {
 	ctx := context.Background()
 
+	inRepo := func(run func()) func() {
+		return func() {
+			if a.slug == "" {
+				fmt.Fprintln(os.Stderr, cRed.Render("error: not in a Bitbucket repo"))
+				pause()
+				return
+			}
+			run()
+		}
+	}
+	report := func(err error) {
+		if err != nil && !errors.Is(err, errCancelled) {
+			fmt.Fprintln(os.Stderr, cRed.Render("error: "+err.Error()))
+		}
+	}
+
 	cmds := []paletteCmd{
-		{label: "Dashboard", desc: "Browse PRs and tickets", run: func() {
+		{label: "Board", desc: "Marketing board: active sprint by lane, filter on assignee, edit tickets", run: func() {
+			report(cmdBoardView(viewBoard)(ctx, a, nil))
+		}},
+		{label: "Backlog", desc: "Marketing backlog: move tickets onto the board", run: func() {
+			report(cmdBoardView(viewBacklog)(ctx, a, nil))
+		}},
+		{label: "New epic", desc: "Epic in the active sprint", run: func() {
+			report(cmdNew(kindEpic)(ctx, a, nil))
+			pause()
+		}},
+		{label: "Dashboard", desc: "Browse PRs and tickets", run: inRepo(func() {
 			if err := cmdDashboard(ctx, a); err != nil {
 				die(err)
 			}
-		}},
-		{label: "Status", desc: "PR status for current branch", run: func() {
+		})},
+		{label: "Status", desc: "PR status for current branch", run: inRepo(func() {
 			if err := cmdStatus(ctx, a); err != nil {
 				die(err)
 			}
 			pause()
-		}},
-		{label: "Create", desc: "Create a PR from current branch", run: func() {
+		})},
+		{label: "Create", desc: "Create a PR from current branch", run: inRepo(func() {
 			interactiveCreate(ctx, a)
 			pause()
-		}},
-		{label: "List", desc: "List open PRs", run: func() {
+		})},
+		{label: "List", desc: "List open PRs", run: inRepo(func() {
 			if err := cmdList(ctx, a); err != nil {
 				die(err)
 			}
 			pause()
-		}},
-		{label: "Web", desc: "Open current branch in browser", run: func() {
+		})},
+		{label: "Web", desc: "Open current branch in browser", run: inRepo(func() {
 			if err := cmdWeb(ctx, a); err != nil {
 				die(err)
 			}
 			pause()
-		}},
+		})},
 		{label: "Issues", desc: "My Jira issues", run: func() {
 			if err := cmdTodo(ctx, a); err != nil {
 				die(err)
@@ -193,6 +256,12 @@ func runPalette(a *app) {
 		}},
 		{label: "New ticket", desc: "File a ticket in the backlog", run: func() {
 			if err := cmdTicketNew(ctx, a, nil); err != nil {
+				fmt.Fprintln(os.Stderr, cRed.Render("error: "+err.Error()))
+			}
+			pause()
+		}},
+		{label: "MAR ticket", desc: "Marketing ticket from the current branch, straight to In Progress", run: func() {
+			if err := cmdMarketing(ctx, a, nil); err != nil {
 				fmt.Fprintln(os.Stderr, cRed.Render("error: "+err.Error()))
 			}
 			pause()
@@ -233,7 +302,7 @@ func runPalette(a *app) {
 func pause() {
 	fmt.Println()
 	fmt.Print(cDim.Render("  Press Enter to return to menu..."))
-	fmt.Scanln()
+	stdin.ReadString('\n')
 }
 
 // interactiveSubtasks lists a ticket's subtasks and loops on add/remove.
@@ -292,7 +361,7 @@ func interactiveCreate(ctx context.Context, a *app) {
 	if dest == "" {
 		dest = "main"
 	}
-	title := defaultTitle(a.dir, branch)
+	title := smartPRTitle(ctx, a, branch, true)
 
 	fmt.Println()
 	fmt.Println(cBold.Render("Create pull request"))

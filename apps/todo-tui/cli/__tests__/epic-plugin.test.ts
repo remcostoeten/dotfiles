@@ -2,12 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addPlugin } from "@/src/plugins/add";
-import { epicPlugin } from "@/src/plugins/epic";
-import { lifecyclePlugin } from "@/src/plugins/lifecycle";
-import { PluginRegistry } from "@/src/plugins/registry";
-import { removePlugin } from "@/src/plugins/remove";
-import { tasksPlugin } from "@/src/plugins/tasks";
+import { runTodo } from "./support/run-todo";
 import { getTodoPaths, TodoStore } from "@/src/storage/todo-store";
 
 const temporaryDirectories: string[] = [];
@@ -87,6 +82,21 @@ test("move re-parents and refuses cycles", async () => {
   await expect(run(store, "move", ["1", "2"])).rejects.toThrow("nest inside itself");
 });
 
+test("reorder repositions siblings without re-parenting", async () => {
+  const store = await createStore();
+  await run(store, "epic", ["Epic"]);
+  await run(store, "sub", ["1", "a,", "b,", "c"]);
+
+  expect(await run(store, "reorder", ["4", "--top"])).toContain("Reordered #4");
+  expect((await store.loadTasks()).map((task) => task.id)).toEqual(["1", "4", "2", "3"]);
+
+  expect(await run(store, "reorder", ["2", "--after", "3"])).toContain("Reordered #2");
+  expect((await store.loadTasks()).map((task) => task.id)).toEqual(["1", "4", "3", "2"]);
+
+  await expect(run(store, "reorder", ["2", "--before", "1"])).rejects.toThrow("they are not siblings");
+  await expect(run(store, "reorder", ["2"])).rejects.toThrow("Usage: todo reorder");
+});
+
 test("rm and done cascade to subtasks", async () => {
   const store = await createStore();
   await run(store, "epic", ["Epic"]);
@@ -102,12 +112,12 @@ test("rm and done cascade to subtasks", async () => {
   expect((await store.loadUndo())?.tasks.map((task) => task.id)).toEqual(["1", "2", "3", "4"]);
 });
 
-test("shell-display counts hidden rows across the whole tree", async () => {
+test("panel counts hidden rows across the whole tree", async () => {
   const store = await createStore();
   await run(store, "epic", ["Epic"]);
   await run(store, "sub", ["1", "a,", "b,", "c"]);
 
-  const output = stripAnsi(await run(store, "shell-display", ["--limit", "2"]));
+  const output = stripAnsi(await run(store, "panel", ["--limit", "2"]));
   expect(output).toContain("#01  Epic [0/3]");
   expect(output).toContain("#02  ├─ a");
   expect(output).toContain("↳ 2 more tasks");
@@ -120,20 +130,7 @@ async function createStore(): Promise<TodoStore> {
 }
 
 async function run(store: TodoStore, name: string, args: string[]): Promise<string> {
-  const registry = new PluginRegistry();
-  for (const plugin of [addPlugin, epicPlugin, lifecyclePlugin, removePlugin, tasksPlugin]) registry.use(plugin);
-  const command = registry.getCommand(name);
-  if (command === undefined) throw new Error(`Command not registered: ${name}`);
-
-  let output = "";
-  const stdout = {
-    write(chunk: string | Uint8Array) {
-      output += chunk.toString();
-      return true;
-    },
-  } as Pick<typeof process.stdout, "write">;
-  await command.handler({ args, store, stdout, stderr: stdout, commands: registry.listCommands() });
-  return output;
+  return await runTodo(store, [name, ...args]);
 }
 
 function stripAnsi(value: string): string {

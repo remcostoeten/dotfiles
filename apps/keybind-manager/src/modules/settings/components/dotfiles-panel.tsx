@@ -14,10 +14,13 @@ export function DotfilesPanel() {
   const [includeHardware, setIncludeHardware] = createSignal(false)
   const [onlyActive, setOnlyActive] = createSignal(true)
   const [pending, setPending] = createSignal<Profile[] | null>(null)
+  const [exporting, setExporting] = createSignal(false)
+  const [importing, setImporting] = createSignal(false)
 
   async function doExport() {
     setStatus("")
     setFailure("")
+    setExporting(true)
     try {
       const dir = await open({ directory: true, title: "Choose export directory" })
       if (typeof dir !== "string") {
@@ -32,12 +35,15 @@ export function DotfilesPanel() {
       setStatus(`Exported to ${path} (with install.sh)`)
     } catch (raw) {
       setFailure(toNativeError(raw).message)
+    } finally {
+      setExporting(false)
     }
   }
 
   async function doImport() {
     setStatus("")
     setFailure("")
+    setImporting(true)
     try {
       const file = await open({
         title: "Choose config.toml",
@@ -50,6 +56,8 @@ export function DotfilesPanel() {
       setPending(bundle.profiles)
     } catch (raw) {
       setFailure(toNativeError(raw).message)
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -75,9 +83,7 @@ export function DotfilesPanel() {
   return (
     <div class="flex min-h-0 flex-1 flex-col overflow-auto p-3">
       <div class="max-w-xl">
-        <h2 class="mb-1 text-[11px] font-semibold tracking-wide text-ink-faint uppercase">
-          Dotfiles
-        </h2>
+        <h2 class="section-heading mb-1">Dotfiles</h2>
         <p class="mb-3 text-[12px] text-ink-dim">
           Exports a deterministic <code>config.toml</code> plus an idempotent{" "}
           <code>install.sh</code> suitable for source control. Root-owned generated keyd files
@@ -100,17 +106,23 @@ export function DotfilesPanel() {
         </div>
 
         <div class="flex gap-2">
-          <Button variant="primary" onClick={() => void doExport()}>
+          <Button variant="primary" loading={exporting()} onClick={() => void doExport()}>
             Export…
           </Button>
-          <Button onClick={() => void doImport()}>Import…</Button>
+          <Button loading={importing()} onClick={() => void doImport()}>
+            Import…
+          </Button>
         </div>
 
         <Show when={status()}>
-          <p class="mt-3 text-[12px] text-ok select-text">{status()}</p>
+          <p class="mt-3 rounded border border-ok/40 bg-ok/10 px-2 py-1.5 text-[12px] text-ok select-text">
+            {status()}
+          </p>
         </Show>
         <Show when={failure()}>
-          <p class="mt-3 text-[12px] text-bad select-text">{failure()}</p>
+          <p class="mt-3 rounded border border-bad/40 bg-bad/10 px-2 py-1.5 text-[12px] text-bad select-text">
+            {failure()}
+          </p>
         </Show>
 
         <Show when={pending()}>
@@ -138,7 +150,7 @@ export function DotfilesPanel() {
         </Show>
 
         <div class="mt-5">
-          <h3 class="mb-1 text-[12px] font-semibold">Apply from dotfiles later</h3>
+          <h3 class="section-heading mb-1.5">Apply from dotfiles later</h3>
           <pre class="rounded border border-line bg-surface-0 p-2 text-[11.5px] text-ink-dim select-text">
 {`keybind-manager validate ./keyboard/config.toml
 keybind-manager apply ./keyboard/config.toml`}
