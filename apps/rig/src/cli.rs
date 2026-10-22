@@ -1,5 +1,6 @@
 use crate::ui;
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Command {
@@ -32,6 +33,8 @@ pub struct Opts {
     pub port: Option<u16>,
     pub skip_build: bool,
     pub auto_restart: bool,
+    pub tunnel: bool,
+    pub tunnel_for: Option<Duration>,
     pub dry_run: bool,
     pub extra: Vec<String>,
 }
@@ -55,6 +58,8 @@ pub fn parse(args: Vec<String>) -> Result<Parsed, String> {
     let mut port = None;
     let mut skip_build = false;
     let mut auto_restart = false;
+    let mut tunnel = false;
+    let mut tunnel_for = Some(Duration::from_secs(3600));
     let mut dry_run = false;
     let mut no_color = false;
     let mut help = false;
@@ -83,6 +88,8 @@ pub fn parse(args: Vec<String>) -> Result<Parsed, String> {
             "--no-color" => no_color = true,
             "--skip-build" => skip_build = true,
             "--auto-restart" => auto_restart = true,
+            "--tunnel" => tunnel = true,
+            "--tunnel-for" => tunnel_for = parse_duration(&value_of("--tunnel-for")?)?,
             "-n" | "--dry-run" => dry_run = true,
             "-C" | "--cwd" => cwd = Some(PathBuf::from(value_of("--cwd")?)),
             "-w" | "--workspace" => workspace = Some(value_of("--workspace")?),
@@ -138,10 +145,25 @@ pub fn parse(args: Vec<String>) -> Result<Parsed, String> {
             port,
             skip_build,
             auto_restart,
+            tunnel,
+            tunnel_for,
             dry_run,
             extra,
         },
     )))
+}
+
+fn parse_duration(raw: &str) -> Result<Option<Duration>, String> {
+    let bad = || format!("`{raw}` is not a duration, use 30s, 45m, 2h or 0 for no limit");
+    let digits = raw.trim_end_matches(['s', 'm', 'h']);
+    let amount: u64 = digits.parse().map_err(|_| bad())?;
+    let seconds = match &raw[digits.len()..] {
+        "s" => amount,
+        "m" | "" => amount * 60,
+        "h" => amount * 3600,
+        _ => return Err(bad()),
+    };
+    Ok((seconds > 0).then(|| Duration::from_secs(seconds)))
 }
 
 fn heading(title: &str) {
@@ -223,6 +245,14 @@ pub fn print_overview() {
             "--auto-restart",
             "restart after a crash, up to 5 times (dev, start)",
         ),
+        (
+            "--tunnel",
+            "share the app through a Cloudflare tunnel once it is ready",
+        ),
+        (
+            "--tunnel-for <time>",
+            "tunnel time limit: 30s, 45m, 2h, 0 for none (default 60m)",
+        ),
         ("-n, --dry-run", "show what would stop (stop)"),
         COMMON_OPTIONS[0],
         COMMON_OPTIONS[1],
@@ -233,10 +263,16 @@ pub fn print_overview() {
     heading("KEYS WHILE RUNNING");
     key_entry(&["o"], "open the app in the browser");
     key_entry(&["."], "open the folder in the file manager");
+    key_entry(&["t"], "menu, then pick with the next key:");
     key_entry(
-        &["t"],
-        "open the folder in your terminal ($TERMINAL, then common ones)",
+        &["1", "e"],
+        "  terminal in the folder ($TERMINAL, then common ones)",
     );
+    key_entry(
+        &["2", "u"],
+        "  public Cloudflare tunnel, press again to stop it",
+    );
+    key_entry(&["+"], "add 30 minutes to the tunnel");
     key_entry(&["c"], "copy the URL to the clipboard");
     key_entry(&["h"], "show these keys again, also ? and enter");
     key_entry(&["r"], "restart the command");
@@ -276,6 +312,11 @@ pub fn print_command(command: Command) {
             options_block(&[
                 ("-p, --port <n>", "start from this port"),
                 ("--auto-restart", "restart after a crash, up to 5 times"),
+                ("--tunnel", "share the app through a Cloudflare tunnel"),
+                (
+                    "--tunnel-for <time>",
+                    "tunnel time limit, default 60m, 0 for none",
+                ),
                 COMMON_OPTIONS[0],
                 COMMON_OPTIONS[1],
                 COMMON_OPTIONS[2],
@@ -284,7 +325,8 @@ pub fn print_command(command: Command) {
             heading("KEYS");
             key_entry(&["o"], "open in the browser");
             key_entry(&["."], "open the folder in the file manager");
-            key_entry(&["t"], "open the folder in your terminal");
+            key_entry(&["t"], "menu: 1 or e for a terminal, 2 or u for a tunnel");
+            key_entry(&["+"], "add 30 minutes to the tunnel");
             key_entry(&["c"], "copy the URL");
             key_entry(&["h"], "show the keys again, also ? and enter");
             key_entry(&["r"], "restart");
@@ -307,6 +349,11 @@ pub fn print_command(command: Command) {
                 ("-p, --port <n>", "start from this port"),
                 ("--skip-build", "reuse the existing build"),
                 ("--auto-restart", "restart after a crash, up to 5 times"),
+                ("--tunnel", "share the app through a Cloudflare tunnel"),
+                (
+                    "--tunnel-for <time>",
+                    "tunnel time limit, default 60m, 0 for none",
+                ),
                 COMMON_OPTIONS[0],
                 COMMON_OPTIONS[1],
                 COMMON_OPTIONS[2],
@@ -315,7 +362,8 @@ pub fn print_command(command: Command) {
             heading("KEYS");
             key_entry(&["o"], "open in the browser");
             key_entry(&["."], "open the folder in the file manager");
-            key_entry(&["t"], "open the folder in your terminal");
+            key_entry(&["t"], "menu: 1 or e for a terminal, 2 or u for a tunnel");
+            key_entry(&["+"], "add 30 minutes to the tunnel");
             key_entry(&["c"], "copy the URL");
             key_entry(&["h"], "show the keys again, also ? and enter");
             key_entry(&["r"], "restart");

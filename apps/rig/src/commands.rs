@@ -377,6 +377,8 @@ fn serve_flow(opts: &Opts, need: Need) -> i32 {
         }),
         base_port: ports.base,
         auto_restart: opts.auto_restart,
+        tunnel_auto: opts.tunnel,
+        tunnel_for: opts.tunnel_for,
     };
     serve(&spec)
 }

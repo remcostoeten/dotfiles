@@ -1,5 +1,6 @@
 use crate::sys;
 use crate::term::{self, Keys};
+use crate::tunnel::{Tunnel, TunnelEvent};
 use crate::ui;
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read};
@@ -43,6 +44,10 @@ enum Event {
         stderr: bool,
     },
     Key(u8),
+    Tunnel {
+        id: u32,
+        event: TunnelEvent,
+    },
 }
 
 struct Tail {
@@ -242,6 +247,8 @@ pub struct Serve<'a> {
     pub make_plan: Box<dyn Fn(Option<u16>) -> Plan + 'a>,
     pub base_port: Option<u16>,
     pub auto_restart: bool,
+    pub tunnel_auto: bool,
+    pub tunnel_for: Option<Duration>,
 }
 
 #[derive(Clone)]
@@ -610,10 +617,8 @@ fn handle_key(byte: u8, run: &mut Option<Running>, folder: &Path) -> KeyAction {
             open_folder(folder);
             KeyAction::None
         }
-        b't' => {
-            open_terminal(folder);
-            KeyAction::None
-        }
+        b't' => KeyAction::Menu,
+        b'+' | b'=' => KeyAction::ExtendTunnel,
         b'o' => {
             if let Some(running) = run.as_ref() {
                 match running.primary {
@@ -630,6 +635,9 @@ fn handle_key(byte: u8, run: &mut Option<Running>, folder: &Path) -> KeyAction {
 enum KeyAction {
     Quit,
     Restart,
+    Menu,
+    ToggleTunnel,
+    ExtendTunnel,
     Kill(Blocked),
     None,
 }
@@ -641,6 +649,86 @@ fn shut_down(run: Option<Running>) -> Option<Duration> {
         sys::terminate(&mut run.child, true);
     }
     Some(uptime)
+}
+
+fn begin_tunnel(
+    spec: &Serve,
+    run: &Option<Running>,
+    tx: &Sender<Event>,
+    next_id: &mut u32,
+) -> Option<Tunnel> {
+    let Some(port) = run.as_ref().and_then(|running| running.primary) else {
+        ui::warning("wait until the app is ready before sharing it");
+        return None;
+    };
+    *next_id += 1;
+    let id = *next_id;
+    let events = tx.clone();
+    ui::step(&format!("starting a tunnel to http://localhost:{port}"));
+    let started = Tunnel::start(port, spec.tunnel_for, move |event| {
+        events.send(Event::Tunnel { id, event }).ok();
+    });
+    match started {
+        Ok(tunnel) => Some(tunnel),
+        Err(message) => {
+            ui::warning(&message);
+            None
+        }
+    }
+}
+
+fn tunnel_ready(tunnel: &mut Tunnel, url: String) {
+    println!();
+    ui::success(&format!("public  {}", ui::accent(&url)));
+    ui::note("anyone with this URL can open the app");
+    if copy_text(&url) {
+        ui::note("copied to clipboard");
+    }
+    if let Some(left) = tunnel.remaining() {
+        ui::note(&format!("stops in {}", ui::format_duration(left)));
+    }
+    ui::tunnel_hint(tunnel.remaining().is_some());
+    println!();
+    tunnel.url = Some(url);
+}
+
+fn check_tunnel(tunnel: &mut Option<Tunnel>, run: &Option<Running>) {
+    let Some(active) = tunnel.as_mut() else {
+        return;
+    };
+    if let Ok(Some(status)) = active.child.try_wait() {
+        let tail = active.last_lines(12);
+        let rows = [("exit", format!("code {}", exit_code(&status)))];
+        ui::error_panel("the tunnel stopped", &rows, &tail, None);
+        *tunnel = None;
+        return;
+    }
+    let moved_to = run
+        .as_ref()
+        .and_then(|running| running.primary)
+        .filter(|port| *port != active.port);
+    if let Some(port) = moved_to {
+        ui::warning(&format!(
+            "the app now runs on :{port}, tunnel stopped. Press t then u to share it again"
+        ));
+        active.stop();
+        *tunnel = None;
+        return;
+    }
+    let Some(left) = active.remaining() else {
+        return;
+    };
+    if left.is_zero() {
+        ui::note("tunnel time limit reached, stopped");
+        active.stop();
+        *tunnel = None;
+    } else if left <= Duration::from_secs(120) && !active.warned {
+        active.warned = true;
+        ui::warning(&format!(
+            "the tunnel stops in {}, press + to add 30 minutes",
+            ui::format_duration(left)
+        ));
+    }
 }
 
 pub fn serve(spec: &Serve) -> i32 {
@@ -659,9 +747,13 @@ pub fn serve(spec: &Serve) -> i32 {
     let mut last_code = 0;
     let mut attempts = 0u32;
     let mut restart_at: Option<Instant> = None;
+    let mut tunnel: Option<Tunnel> = None;
+    let mut tunnel_id = 0u32;
+    let mut menu = false;
+    let mut auto_tunnel = spec.tunnel_auto;
     loop {
         if STOP.load(Ordering::SeqCst) {
-            return finish(run, last_code, true);
+            return finish(run, last_code, true, &mut tunnel);
         }
         let action = match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(Event::Line {
@@ -679,11 +771,63 @@ pub fn serve(spec: &Serve) -> i32 {
                 }
                 KeyAction::None
             }
+            Ok(Event::Key(byte)) if menu => {
+                menu = false;
+                match byte {
+                    b'1' | b'e' | b'E' => {
+                        open_terminal(&folder);
+                        KeyAction::None
+                    }
+                    b'2' | b'u' | b'U' => KeyAction::ToggleTunnel,
+                    _ => KeyAction::None,
+                }
+            }
             Ok(Event::Key(byte)) => handle_key(byte, &mut run, &folder),
+            Ok(Event::Tunnel { id, event }) => {
+                if id == tunnel_id
+                    && let Some(active) = tunnel.as_mut()
+                {
+                    match event {
+                        TunnelEvent::Url(url) => tunnel_ready(active, url),
+                        TunnelEvent::Routed => ui::note("the tunnel is accepting requests"),
+                        TunnelEvent::RouteTimeout => ui::warning(
+                            "routing was not ready after 90 seconds, the tunnel keeps running",
+                        ),
+                    }
+                }
+                KeyAction::None
+            }
             Err(_) => KeyAction::None,
         };
         match action {
-            KeyAction::Quit => return finish(run, last_code, false),
+            KeyAction::Quit => return finish(run, last_code, false, &mut tunnel),
+            KeyAction::Menu => {
+                menu = true;
+                ui::terminal_menu(tunnel.is_some());
+                continue;
+            }
+            KeyAction::ToggleTunnel => {
+                match tunnel.take() {
+                    Some(mut active) => {
+                        active.stop();
+                        ui::note("tunnel stopped");
+                    }
+                    None => tunnel = begin_tunnel(spec, &run, &tx, &mut tunnel_id),
+                }
+                continue;
+            }
+            KeyAction::ExtendTunnel => {
+                if let Some(active) = tunnel.as_mut() {
+                    match active.extend() {
+                        Some(left) => ui::note(&format!(
+                            "the tunnel now stops in {}",
+                            ui::format_duration(left)
+                        )),
+                        None => ui::note("the tunnel has no time limit"),
+                    }
+                }
+                continue;
+            }
             KeyAction::Restart | KeyAction::Kill(_) => {
                 println!();
                 ui::step("restarting");
@@ -711,6 +855,11 @@ pub fn serve(spec: &Serve) -> i32 {
                 return 1;
             }
             continue;
+        }
+        check_tunnel(&mut tunnel, &run);
+        if auto_tunnel && tunnel.is_none() && run.as_ref().is_some_and(|r| r.primary.is_some()) {
+            auto_tunnel = false;
+            tunnel = begin_tunnel(spec, &run, &tx, &mut tunnel_id);
         }
         let Some(running) = run.as_mut() else {
             continue;
@@ -771,7 +920,15 @@ pub fn serve(spec: &Serve) -> i32 {
     }
 }
 
-fn finish(run: Option<Running>, last_code: i32, from_signal: bool) -> i32 {
+fn finish(
+    run: Option<Running>,
+    last_code: i32,
+    from_signal: bool,
+    tunnel: &mut Option<Tunnel>,
+) -> i32 {
+    if let Some(active) = tunnel.as_mut() {
+        active.stop();
+    }
     match shut_down(run) {
         Some(uptime) => ui::stopped(&format!(
             "stopped  {}",

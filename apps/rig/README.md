@@ -39,12 +39,17 @@ The start port comes from `--port`, the script, `PORT`, then the framework defau
 | ----------------- | ------------------------------------------------------------- |
 | `o`               | open the app in the browser                                   |
 | `.`               | open the folder in the file manager                           |
-| `t`               | open the folder in your terminal (`$TERMINAL`, then common ones) |
+| `t`               | menu: `1` or `e` opens a terminal in the folder (`$TERMINAL`, then common ones), `2` or `u` starts or stops a tunnel |
+| `+`               | add 30 minutes to the tunnel                                  |
 | `c`               | copy the URL                                                  |
 | `k`               | stop the process holding the wanted port and run on it        |
 | `h`, `?`, enter   | show the keys again                                           |
 | `r`               | restart                                                       |
 | `q`, ctrl+c       | stop                                                          |
+
+## Tunnel
+
+`t` then `u` shares the running app through a Cloudflare quick tunnel: a temporary public HTTPS address, no account or config. It uses `cloudflared`, or Docker when that is missing. The address is printed once found, copied to the clipboard, and checked until Cloudflare routes it. The tunnel stops after 60 minutes (`--tunnel-for 2h`, `--tunnel-for 0` for no limit), warns 2 minutes before, and `+` adds 30 minutes. `rig dev --tunnel` starts one as soon as the app is ready. If the app moves to another port after a restart, the tunnel stops. Anyone with the address can open the app.
 
 ## Warnings
 

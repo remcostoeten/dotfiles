@@ -4,6 +4,7 @@ mod project;
 mod run;
 mod sys;
 mod term;
+mod tunnel;
 mod ui;
 
 use cli::{Action, Command};

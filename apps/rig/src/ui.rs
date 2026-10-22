@@ -124,7 +124,7 @@ pub fn keys_hint() {
     hint_line(&[
         ("o", "browser"),
         (".", "folder"),
-        ("t", "terminal"),
+        ("t", "terminal / tunnel"),
         ("c", "copy"),
         ("r", "restart"),
         ("q", "quit"),
@@ -139,6 +139,33 @@ pub fn kill_hint(port: u16, name: &str, pid: u32) {
             "stop {name} (pid {pid}) and run on :{port} instead"
         ))
     );
+}
+
+pub fn terminal_menu(tunnel_active: bool) {
+    let tunnel = if tunnel_active {
+        "stop tunnel"
+    } else {
+        "tunnel"
+    };
+    println!(
+        "  {} {}/{} {}  {}/{} {}  {}",
+        kbd("t"),
+        kbd("1"),
+        kbd("e"),
+        dim("terminal"),
+        kbd("2"),
+        kbd("u"),
+        dim(tunnel),
+        dim("any other key cancels")
+    );
+}
+
+pub fn tunnel_hint(has_limit: bool) {
+    let mut items = vec![("t u", "stop tunnel")];
+    if has_limit {
+        items.push(("+", "30 more minutes"));
+    }
+    hint_line(&items);
 }
 
 pub fn keys_hint_stopped() {
