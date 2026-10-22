@@ -7,6 +7,7 @@ pub enum Command {
     Start,
     Install,
     Build,
+    Stop,
     Info,
 }
 
@@ -17,6 +18,7 @@ impl Command {
             "start" | "rs" => Some(Command::Start),
             "install" | "i" => Some(Command::Install),
             "build" | "b" => Some(Command::Build),
+            "stop" => Some(Command::Stop),
             "info" => Some(Command::Info),
             _ => None,
         }
@@ -29,6 +31,8 @@ pub struct Opts {
     pub workspace: Option<String>,
     pub port: Option<u16>,
     pub skip_build: bool,
+    pub auto_restart: bool,
+    pub dry_run: bool,
     pub extra: Vec<String>,
 }
 
@@ -50,6 +54,8 @@ pub fn parse(args: Vec<String>) -> Result<Parsed, String> {
     let mut workspace = None;
     let mut port = None;
     let mut skip_build = false;
+    let mut auto_restart = false;
+    let mut dry_run = false;
     let mut no_color = false;
     let mut help = false;
     let mut version = false;
@@ -76,6 +82,8 @@ pub fn parse(args: Vec<String>) -> Result<Parsed, String> {
             "-V" | "--version" => version = true,
             "--no-color" => no_color = true,
             "--skip-build" => skip_build = true,
+            "--auto-restart" => auto_restart = true,
+            "-n" | "--dry-run" => dry_run = true,
             "-C" | "--cwd" => cwd = Some(PathBuf::from(value_of("--cwd")?)),
             "-w" | "--workspace" => workspace = Some(value_of("--workspace")?),
             "-p" | "--port" => {
@@ -129,6 +137,8 @@ pub fn parse(args: Vec<String>) -> Result<Parsed, String> {
             workspace,
             port,
             skip_build,
+            auto_restart,
+            dry_run,
             extra,
         },
     )))
@@ -141,6 +151,14 @@ fn heading(title: &str) {
 
 fn entry(left: &str, right: &str) {
     println!("    {:<26}{}", left, ui::dim(right));
+}
+
+fn key_entry(keys: &[&str], right: &str) {
+    let chips: Vec<String> = keys.iter().map(|key| ui::kbd(key)).collect();
+    let visible: usize =
+        keys.iter().map(|key| ui::kbd_width(key)).sum::<usize>() + 6 * (keys.len() - 1);
+    let pad = " ".repeat(26usize.saturating_sub(visible));
+    println!("    {}{}{}", chips.join("  or  "), pad, ui::dim(right));
 }
 
 fn usage(text: &str) {
@@ -189,6 +207,10 @@ pub fn print_overview() {
         "build  (b)",
         "install if needed, then run the production build",
     );
+    entry(
+        "stop",
+        "stop the servers running from this project, frees their ports",
+    );
     entry("info", "show what was detected without running anything");
     entry(
         "help [command]",
@@ -197,6 +219,11 @@ pub fn print_overview() {
     options_block(&[
         ("-p, --port <n>", "start from this port (dev, start)"),
         ("--skip-build", "start without building first (start)"),
+        (
+            "--auto-restart",
+            "restart after a crash, up to 5 times (dev, start)",
+        ),
+        ("-n, --dry-run", "show what would stop (stop)"),
         COMMON_OPTIONS[0],
         COMMON_OPTIONS[1],
         COMMON_OPTIONS[2],
@@ -204,9 +231,17 @@ pub fn print_overview() {
         COMMON_OPTIONS[3],
     ]);
     heading("KEYS WHILE RUNNING");
-    entry("o", "open the app in the browser");
-    entry("r", "restart the command");
-    entry("q  or  ctrl+c", "stop and exit");
+    key_entry(&["o"], "open the app in the browser");
+    key_entry(&["."], "open the folder in the file manager");
+    key_entry(
+        &["t"],
+        "open the folder in your terminal ($TERMINAL, then common ones)",
+    );
+    key_entry(&["c"], "copy the URL to the clipboard");
+    key_entry(&["h"], "show these keys again, also ? and enter");
+    key_entry(&["r"], "restart the command");
+    key_entry(&["k"], "stop whatever holds the wanted port and run on it");
+    key_entry(&["q", "ctrl+c"], "stop and exit");
     heading("FISH ALIASES");
     entry("r", "rig dev");
     entry("rs", "rig start");
@@ -240,15 +275,21 @@ pub fn print_command(command: Command) {
             );
             options_block(&[
                 ("-p, --port <n>", "start from this port"),
+                ("--auto-restart", "restart after a crash, up to 5 times"),
                 COMMON_OPTIONS[0],
                 COMMON_OPTIONS[1],
                 COMMON_OPTIONS[2],
                 COMMON_OPTIONS[3],
             ]);
             heading("KEYS");
-            entry("o", "open in the browser");
-            entry("r", "restart");
-            entry("q  or  ctrl+c", "stop");
+            key_entry(&["o"], "open in the browser");
+            key_entry(&["."], "open the folder in the file manager");
+            key_entry(&["t"], "open the folder in your terminal");
+            key_entry(&["c"], "copy the URL");
+            key_entry(&["h"], "show the keys again, also ? and enter");
+            key_entry(&["r"], "restart");
+            key_entry(&["k"], "stop whatever holds the wanted port, run on it");
+            key_entry(&["q", "ctrl+c"], "stop");
         }
         Command::Start => {
             ui::banner("help start");
@@ -265,15 +306,21 @@ pub fn print_command(command: Command) {
             options_block(&[
                 ("-p, --port <n>", "start from this port"),
                 ("--skip-build", "reuse the existing build"),
+                ("--auto-restart", "restart after a crash, up to 5 times"),
                 COMMON_OPTIONS[0],
                 COMMON_OPTIONS[1],
                 COMMON_OPTIONS[2],
                 COMMON_OPTIONS[3],
             ]);
             heading("KEYS");
-            entry("o", "open in the browser");
-            entry("r", "restart");
-            entry("q  or  ctrl+c", "stop");
+            key_entry(&["o"], "open in the browser");
+            key_entry(&["."], "open the folder in the file manager");
+            key_entry(&["t"], "open the folder in your terminal");
+            key_entry(&["c"], "copy the URL");
+            key_entry(&["h"], "show the keys again, also ? and enter");
+            key_entry(&["r"], "restart");
+            key_entry(&["k"], "stop whatever holds the wanted port, run on it");
+            key_entry(&["q", "ctrl+c"], "stop");
         }
         Command::Install => {
             ui::banner("help install");
@@ -295,6 +342,32 @@ pub fn print_command(command: Command) {
             usage("rig build [options]");
             usage("rig b");
             options_block(&[
+                COMMON_OPTIONS[0],
+                COMMON_OPTIONS[1],
+                COMMON_OPTIONS[2],
+                COMMON_OPTIONS[3],
+            ]);
+        }
+        Command::Stop => {
+            ui::banner("help stop");
+            println!("  Stops servers that listen on a port and run from this project's folder.");
+            heading("USAGE");
+            usage("rig stop [options]");
+            heading("DETECTION");
+            entry(
+                "scope",
+                "the monorepo root, or the package folder, or -w <name>",
+            );
+            entry(
+                "match",
+                "processes with a listening port whose folder is inside the scope",
+            );
+            entry(
+                "safe",
+                "never touches rig itself, your shell or your terminal",
+            );
+            options_block(&[
+                ("-n, --dry-run", "show what would stop"),
                 COMMON_OPTIONS[0],
                 COMMON_OPTIONS[1],
                 COMMON_OPTIONS[2],

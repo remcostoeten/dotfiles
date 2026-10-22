@@ -101,15 +101,54 @@ pub fn stopped(message: &str) {
     println!();
 }
 
+pub fn kbd(key: &str) -> String {
+    if !color_on() {
+        return format!("[{key}]");
+    }
+    format!("\x1b[48;5;238m\x1b[38;5;252m {key} \x1b[0m")
+}
+
+pub fn kbd_width(key: &str) -> usize {
+    key.chars().count() + 2
+}
+
+fn hint_line(items: &[(&str, &str)]) {
+    let parts: Vec<String> = items
+        .iter()
+        .map(|(key, label)| format!("{} {}", kbd(key), dim(label)))
+        .collect();
+    println!("  {}", parts.join("  "));
+}
+
 pub fn keys_hint() {
+    hint_line(&[
+        ("o", "browser"),
+        (".", "folder"),
+        ("t", "terminal"),
+        ("c", "copy"),
+        ("r", "restart"),
+        ("q", "quit"),
+    ]);
+}
+
+pub fn kill_hint(port: u16, name: &str, pid: u32) {
     println!(
-        "  {} open in browser  {}  {} restart  {}  {} quit",
-        accent("o"),
-        dim("·"),
-        accent("r"),
-        dim("·"),
-        accent("q")
+        "  {} {}",
+        kbd("k"),
+        dim(&format!(
+            "stop {name} (pid {pid}) and run on :{port} instead"
+        ))
     );
+}
+
+pub fn keys_hint_stopped() {
+    hint_line(&[
+        (".", "folder"),
+        ("t", "terminal"),
+        ("r", "restart"),
+        ("q", "quit"),
+    ]);
+    println!();
 }
 
 pub fn gutter(line: &str, from_stderr: bool) {

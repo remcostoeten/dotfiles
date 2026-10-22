@@ -56,6 +56,7 @@ pub struct Manifest {
     pub name: Option<String>,
     pub scripts: BTreeMap<String, String>,
     pub deps: BTreeMap<String, String>,
+    pub required: Vec<String>,
     pub package_manager: Option<String>,
     pub workspaces: Vec<String>,
 }
@@ -84,6 +85,7 @@ impl Manifest {
         };
         let mut deps = table("dependencies");
         deps.extend(table("devDependencies"));
+        let required: Vec<String> = deps.keys().cloned().collect();
         deps.extend(table("optionalDependencies"));
         let list = |entry: Option<&Value>| -> Vec<String> {
             entry
@@ -105,6 +107,7 @@ impl Manifest {
             name: value.get("name").and_then(Value::as_str).map(String::from),
             scripts: table("scripts"),
             deps,
+            required,
             package_manager: value
                 .get("packageManager")
                 .and_then(Value::as_str)
@@ -960,6 +963,66 @@ pub fn locate(cwd: &Path, need: Need, filter: Option<&str>) -> Result<Located, S
     }
 }
 
+const LOCKFILES: &[&str] = &[
+    "bun.lock",
+    "bun.lockb",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "package-lock.json",
+];
+
+pub fn drift_warnings(project: &Project) -> Vec<String> {
+    let mut warnings = Vec::new();
+    let present: Vec<&str> = LOCKFILES
+        .iter()
+        .copied()
+        .filter(|file| project.root.join(file).is_file())
+        .collect();
+    let families: std::collections::BTreeSet<&str> = present
+        .iter()
+        .map(|file| file.split(['.', '-']).next().unwrap_or(file))
+        .collect();
+    if families.len() > 1 {
+        warnings.push(format!(
+            "several lockfiles in {}: {}, using {}",
+            crate::ui::home_relative(&project.root),
+            present.join(", "),
+            project.manager.name()
+        ));
+    }
+    if !has_node_modules(&project.dir, &project.root) || project.root.join(".pnp.cjs").is_file() {
+        return warnings;
+    }
+    let mut missing: Vec<&str> = Vec::new();
+    for manifest in [&project.manifest, &project.root_manifest] {
+        for name in &manifest.required {
+            let installed = [&project.dir, &project.root]
+                .iter()
+                .any(|base| base.join("node_modules").join(name).exists());
+            if !installed && !missing.contains(&name.as_str()) {
+                missing.push(name);
+            }
+        }
+    }
+    if !missing.is_empty() {
+        let shown: Vec<&str> = missing.iter().take(4).copied().collect();
+        let more = missing.len().saturating_sub(shown.len());
+        let tail = if more > 0 {
+            format!(" and {more} more")
+        } else {
+            String::new()
+        };
+        warnings.push(format!(
+            "{} declared package{} not installed: {}{}. Run `rig install`",
+            missing.len(),
+            if missing.len() == 1 { " is" } else { "s are" },
+            shown.join(", "),
+            tail
+        ));
+    }
+    warnings
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1102,6 +1165,24 @@ mod tests {
         assert!(!flag_applies("turbo dev", &fw));
         assert!(!flag_applies("next dev && echo hi", &fw));
         assert!(is_orchestrated("turbo run dev --parallel"));
+    }
+
+    #[test]
+    fn drift_reports_missing_packages_and_mixed_lockfiles() {
+        let dir = sandbox("drift");
+        write(
+            &dir.join("package.json"),
+            "{\"dependencies\":{\"left-pad\":\"1.0.0\"},\"devDependencies\":{\"tsx\":\"4.0.0\"}}",
+        );
+        write(&dir.join("bun.lock"), "");
+        write(&dir.join("pnpm-lock.yaml"), "");
+        write(&dir.join("node_modules/tsx/package.json"), "{}");
+        let project = load(&dir).unwrap();
+        let warnings = drift_warnings(&project);
+        assert_eq!(warnings.len(), 2);
+        assert!(warnings[0].contains("several lockfiles"));
+        assert!(warnings[1].contains("left-pad"));
+        assert!(!warnings[1].contains("tsx"));
     }
 
     #[test]

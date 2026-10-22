@@ -50,6 +50,7 @@ fn real_main() -> i32 {
                 Command::Start => commands::start(&opts),
                 Command::Install => commands::install(&opts),
                 Command::Build => commands::build(&opts),
+                Command::Stop => commands::stop(&opts),
                 Command::Info => commands::info(&opts),
             }
         }

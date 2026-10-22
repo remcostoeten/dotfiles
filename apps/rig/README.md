@@ -7,6 +7,7 @@ rig                dev server of the project you are in
 rig start          install if needed, build, then run the production server
 rig install        install dependencies
 rig build          production build
+rig stop           stop the servers running from this project, frees their ports
 rig info           show what was detected
 rig help <command> help for one command, also rig <command> -h
 ```
@@ -30,9 +31,24 @@ The lockfile search stops at the first folder with a `.git` entry. In a monorepo
 
 The start port comes from `--port`, the script, `PORT`, then the framework default. A busy port is reported with the process and folder that hold it, and the next port is tried. Listening ports are read from the process tree after launch, so the printed URL is the one the app really bound.
 
+`rig dev --auto-restart` restarts after a crash with a growing delay, up to 5 times in a row.
+
 ## Keys
 
-`o` opens the browser, `r` restarts, `q` or ctrl+c stops. Linux only (reads `/proc`).
+| Key               | Action                                                        |
+| ----------------- | ------------------------------------------------------------- |
+| `o`               | open the app in the browser                                   |
+| `.`               | open the folder in the file manager                           |
+| `t`               | open the folder in your terminal (`$TERMINAL`, then common ones) |
+| `c`               | copy the URL                                                  |
+| `k`               | stop the process holding the wanted port and run on it        |
+| `h`, `?`, enter   | show the keys again                                           |
+| `r`               | restart                                                       |
+| `q`, ctrl+c       | stop                                                          |
+
+## Warnings
+
+`rig` warns when several lockfiles sit in the same folder and when packages declared in `package.json` are missing from `node_modules`. Linux only (reads `/proc`).
 
 ## Build
 

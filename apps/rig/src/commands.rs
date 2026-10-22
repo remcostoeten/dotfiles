@@ -4,6 +4,7 @@ use crate::project::{
     resolve_task, script_candidates, workspace_packages,
 };
 use crate::run::{Plan, Serve, StepOutcome, hint_for, run_step, serve};
+use crate::sys;
 use crate::ui;
 use std::path::Path;
 
@@ -123,6 +124,12 @@ fn describe(project: &Project, task: Option<&Task>) {
     };
     ui::row("modules", &modules);
     println!();
+}
+
+fn warn_drift(project: &Project) {
+    for message in project::drift_warnings(project) {
+        ui::warning(&message);
+    }
 }
 
 fn command_line(project: &Project, task: &Task) -> String {
@@ -268,6 +275,7 @@ fn report_step(title: &str, plan: &Plan, outcome: StepOutcome, done: &str) -> Re
 fn install_step(project: &Project, extra: &[String]) -> Result<(), i32> {
     let plan = install_plan(project, extra);
     ui::rule(&plan.shown());
+    ui::note(&format!("installing in {}", ui::home_relative(&plan.cwd)));
     let outcome = run_step(&plan);
     report_step("install", &plan, outcome, "dependencies installed")
 }
@@ -275,6 +283,7 @@ fn install_step(project: &Project, extra: &[String]) -> Result<(), i32> {
 fn build_step(project: &Project, task: &Task) -> Result<(), i32> {
     let plan = plan_for(project, task, Vec::new(), child_env(None));
     ui::rule(&plan.shown());
+    ui::note(&format!("building in {}", ui::home_relative(&plan.cwd)));
     let outcome = run_step(&plan);
     report_step("build", &plan, outcome, "build finished")
 }
@@ -341,6 +350,7 @@ fn serve_flow(opts: &Opts, need: Need) -> i32 {
         return 1;
     };
     describe(&project, Some(&task));
+    warn_drift(&project);
     if let Err(code) = ensure_modules(&project) {
         return code;
     }
@@ -366,6 +376,7 @@ fn serve_flow(opts: &Opts, need: Need) -> i32 {
             plan_for(&project, &task, extra, child_env(port))
         }),
         base_port: ports.base,
+        auto_restart: opts.auto_restart,
     };
     serve(&spec)
 }
@@ -385,6 +396,12 @@ pub fn install(opts: &Opts) -> i32 {
         Err(code) => return code,
     };
     describe(&project, None);
+    for message in project::drift_warnings(&project)
+        .into_iter()
+        .filter(|message| message.starts_with("several lockfiles"))
+    {
+        ui::warning(&message);
+    }
     match install_step(&project, &opts.extra) {
         Ok(()) => 0,
         Err(code) => code,
@@ -403,6 +420,7 @@ pub fn build(opts: &Opts) -> i32 {
         return 1;
     };
     describe(&project, Some(&task));
+    warn_drift(&project);
     if let Err(code) = ensure_modules(&project) {
         return code;
     }
@@ -452,4 +470,88 @@ pub fn info(opts: &Opts) -> i32 {
     }
     println!();
     0
+}
+
+pub fn stop(opts: &Opts) -> i32 {
+    ui::banner("stop");
+    let scope = match opts.workspace.as_deref() {
+        Some(name) => match project::locate(&opts.cwd, Need::Install, Some(name)) {
+            Ok(project::Located::One(dir)) => dir,
+            Ok(project::Located::Many(_)) => opts.cwd.clone(),
+            Err(message) => {
+                ui::fatal(&message);
+                return 1;
+            }
+        },
+        None => match project::nearest_package(&opts.cwd) {
+            Some(dir) => project::find_root(&dir)
+                .map(|(root, _)| root)
+                .unwrap_or(dir),
+            None => opts.cwd.clone(),
+        },
+    };
+    ui::row("scope", &ui::home_relative(&scope));
+    println!();
+    let found = sys::listeners_in(&scope);
+    if found.is_empty() {
+        ui::note("nothing is listening from this folder");
+        println!();
+        return 0;
+    }
+    for listener in &found {
+        let ports: Vec<String> = listener
+            .ports
+            .iter()
+            .map(|port| format!(":{port}"))
+            .collect();
+        ui::row(
+            &ports.join(" "),
+            &format!(
+                "{}  {}  {}",
+                listener.name,
+                ui::dim(&format!("pid {}", listener.pid)),
+                ui::dim(&ui::home_relative(&listener.cwd))
+            ),
+        );
+    }
+    println!();
+    if opts.dry_run {
+        ui::note("dry run, nothing was stopped");
+        println!();
+        return 0;
+    }
+    for listener in &found {
+        sys::kill_tree(listener.pid);
+    }
+    let mut freed: Vec<u16> = Vec::new();
+    let mut stuck: Vec<u16> = Vec::new();
+    for port in found
+        .iter()
+        .flat_map(|listener| listener.ports.iter().copied())
+    {
+        if sys::port_is_free(port) {
+            freed.push(port);
+        } else {
+            stuck.push(port);
+        }
+    }
+    let count = found.len();
+    let noun = if count == 1 { "process" } else { "processes" };
+    let list = |ports: &[u16]| {
+        ports
+            .iter()
+            .map(|p| format!(":{p}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    if stuck.is_empty() {
+        ui::success(&format!("stopped {count} {noun}, freed {}", list(&freed)));
+    } else {
+        ui::warning(&format!(
+            "stopped {count} {noun}, still in use: {}",
+            list(&stuck)
+        ));
+    }
+    println!();
+    if stuck.is_empty() { 0 } else { 1 }
 }

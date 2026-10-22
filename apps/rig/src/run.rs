@@ -4,7 +4,7 @@ use crate::ui;
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
@@ -16,6 +16,9 @@ pub static STOP: AtomicBool = AtomicBool::new(false);
 const MAX_PORT_TRIES: u16 = 100;
 const EXIT_DRAIN: Duration = Duration::from_millis(250);
 const SCAN_EVERY: Duration = Duration::from_millis(400);
+const HINT_QUIET: Duration = Duration::from_millis(1200);
+const MAX_RESTARTS: u32 = 5;
+const HEALTHY_AFTER: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug)]
 pub struct Plan {
@@ -238,6 +241,13 @@ pub fn hint_for(tail: &[String]) -> Option<&'static str> {
 pub struct Serve<'a> {
     pub make_plan: Box<dyn Fn(Option<u16>) -> Plan + 'a>,
     pub base_port: Option<u16>,
+    pub auto_restart: bool,
+}
+
+#[derive(Clone)]
+struct Blocked {
+    port: u16,
+    owner: sys::Owner,
 }
 
 struct Running {
@@ -248,15 +258,20 @@ struct Running {
     printed: Vec<u16>,
     primary: Option<u16>,
     predicted: Option<u16>,
+    blocked: Option<Blocked>,
     last_scan: Instant,
+    last_line: Instant,
+    lines_since_hint: bool,
+    hint_repeated: bool,
     exited: Option<(ExitStatus, Instant)>,
 }
 
-fn pick_port(base: u16) -> Option<u16> {
+fn pick_port(base: u16) -> Option<(u16, Option<Blocked>)> {
     let mut port = base;
+    let mut blocked = None;
     for _ in 0..MAX_PORT_TRIES {
         if sys::port_is_free(port) {
-            return Some(port);
+            return Some((port, blocked));
         }
         let next = port.checked_add(1)?;
         match sys::owner_of(port) {
@@ -270,6 +285,9 @@ fn pick_port(base: u16) -> Option<u16> {
                     "port {port} is in use by {} (pid {}){place}, trying {next}",
                     owner.name, owner.pid
                 ));
+                if port == base {
+                    blocked = Some(Blocked { port, owner });
+                }
             }
             None => ui::warning(&format!("port {port} is in use, trying {next}")),
         }
@@ -278,16 +296,32 @@ fn pick_port(base: u16) -> Option<u16> {
     None
 }
 
+fn free_port(blocked: &Blocked) {
+    let Some(owner) = sys::owner_of(blocked.port) else {
+        ui::note(&format!("port {} is already free", blocked.port));
+        return;
+    };
+    ui::warning(&format!(
+        "stopping {} (pid {}) to free port {}",
+        owner.name, owner.pid, blocked.port
+    ));
+    sys::kill_tree(owner.pid);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !sys::port_is_free(blocked.port) && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
 fn launch(spec: &Serve, tx: &Sender<Event>, generation: u32) -> Option<Running> {
-    let predicted = match spec.base_port {
+    let (predicted, blocked) = match spec.base_port {
         Some(base) => match pick_port(base) {
-            Some(port) => Some(port),
+            Some((port, blocked)) => (Some(port), blocked),
             None => {
                 ui::fatal(&format!("no free port found from {base} upwards"));
                 return None;
             }
         },
-        None => None,
+        None => (None, None),
     };
     let plan = (spec.make_plan)(predicted);
     if let Some(message) = missing_program(&plan) {
@@ -298,6 +332,7 @@ fn launch(spec: &Serve, tx: &Sender<Event>, generation: u32) -> Option<Running> 
         .map(|port| format!("  on port {port}"))
         .unwrap_or_default();
     ui::step(&format!("starting  {}{}", ui::dim(&plan.shown()), on_port));
+    ui::note(&format!("running in {}", ui::home_relative(&plan.cwd)));
     let mut child = match spawn(&plan, true) {
         Ok(child) => child,
         Err(error) => {
@@ -348,39 +383,88 @@ fn launch(spec: &Serve, tx: &Sender<Event>, generation: u32) -> Option<Running> 
         printed: Vec::new(),
         primary: None,
         predicted,
+        blocked,
         last_scan: Instant::now(),
+        last_line: Instant::now(),
+        lines_since_hint: false,
+        hint_repeated: false,
         exited: None,
     })
+}
+
+fn print_hints(run: &Running) {
+    ui::keys_hint();
+    if let Some(blocked) = &run.blocked {
+        ui::kill_hint(blocked.port, &blocked.owner.name, blocked.owner.pid);
+    }
 }
 
 fn scan(run: &mut Running) {
     run.last_scan = Instant::now();
     let tree = sys::descendants(run.child.id());
-    let mut ports = sys::ports_of(&tree);
-    ports.sort_by_key(|port| Some(*port) != run.predicted);
-    for port in ports {
+    let mut listens = sys::ports_of(&tree);
+    listens.sort_by_key(|listen| Some(listen.port) != run.predicted);
+    for listen in listens {
+        let port = listen.port;
         if run.printed.contains(&port) {
             continue;
         }
         run.printed.push(port);
         let url = format!("http://localhost:{port}");
-        if run.primary.is_none() {
-            run.primary = Some(port);
-            ui::success(&format!(
-                "ready  {}  {}",
-                ui::accent(&url),
-                ui::dim(&format!(
-                    "in {}",
-                    ui::format_duration(run.started.elapsed())
-                ))
-            ));
-            println!();
-            ui::keys_hint();
-            println!();
-        } else {
+        if run.primary.is_some() {
             ui::note(&format!("also listening on {url}"));
+            continue;
         }
+        run.primary = Some(port);
+        ui::success(&format!(
+            "ready  {}  {}",
+            ui::accent(&url),
+            ui::dim(&format!(
+                "in {}",
+                ui::format_duration(run.started.elapsed())
+            ))
+        ));
+        if listen.exposed
+            && let Some(ip) = sys::lan_ip()
+        {
+            ui::note(&format!("network  http://{ip}:{port}"));
+        }
+        println!();
+        print_hints(run);
+        println!();
     }
+}
+
+fn copy_text(text: &str) -> bool {
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
+    let tools: [(&str, &[&str]); 3] = [
+        ("wl-copy", &[]),
+        ("xclip", &["-selection", "clipboard"]),
+        ("xsel", &["--clipboard", "--input"]),
+    ];
+    for (program, args) in tools {
+        if (program == "wl-copy" && !wayland) || !sys::on_path(program) {
+            continue;
+        }
+        let spawned = Command::new(program)
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        let Ok(mut child) = spawned else {
+            continue;
+        };
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            if stdin.write_all(text.as_bytes()).is_err() {
+                continue;
+            }
+        }
+        thread::spawn(move || child.wait().ok());
+        return true;
+    }
+    false
 }
 
 fn open_url(url: &str) {
@@ -397,6 +481,81 @@ fn open_url(url: &str) {
         }
         Err(_) => ui::warning("xdg-open is not available"),
     }
+}
+
+fn detach(command: &mut Command) -> std::io::Result<()> {
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()?;
+    thread::spawn(move || child.wait().ok());
+    Ok(())
+}
+
+fn open_folder(folder: &Path) {
+    let mut command = Command::new("xdg-open");
+    command.arg(folder);
+    match detach(&mut command) {
+        Ok(()) => ui::note(&format!("opening {}", ui::home_relative(folder))),
+        Err(_) => ui::warning("xdg-open is not available"),
+    }
+}
+
+fn terminal_candidates(folder: &Path) -> Vec<(String, Vec<String>)> {
+    let path = folder.display().to_string();
+    let mut found = Vec::new();
+    if let Ok(custom) = std::env::var("TERMINAL")
+        && !custom.trim().is_empty()
+    {
+        found.push((custom, Vec::new()));
+    }
+    let known: [(&str, Vec<String>); 10] = [
+        ("xdg-terminal-exec", Vec::new()),
+        ("ghostty", vec![format!("--working-directory={path}")]),
+        ("kitty", vec!["--directory".to_string(), path.clone()]),
+        (
+            "alacritty",
+            vec!["--working-directory".to_string(), path.clone()],
+        ),
+        (
+            "wezterm",
+            vec!["start".to_string(), "--cwd".to_string(), path.clone()],
+        ),
+        ("foot", vec!["-D".to_string(), path.clone()]),
+        ("konsole", vec!["--workdir".to_string(), path.clone()]),
+        (
+            "gnome-terminal",
+            vec![format!("--working-directory={path}")],
+        ),
+        ("x-terminal-emulator", Vec::new()),
+        ("xterm", Vec::new()),
+    ];
+    found.extend(
+        known
+            .into_iter()
+            .map(|(name, args)| (name.to_string(), args)),
+    );
+    found
+}
+
+fn open_terminal(folder: &Path) {
+    for (program, args) in terminal_candidates(folder) {
+        if !sys::on_path(&program) {
+            continue;
+        }
+        let mut command = Command::new(&program);
+        command.args(&args).current_dir(folder);
+        if detach(&mut command).is_ok() {
+            ui::note(&format!(
+                "opened {program} in {}",
+                ui::home_relative(folder)
+            ));
+            return;
+        }
+    }
+    ui::warning("no terminal emulator found, set TERMINAL");
 }
 
 fn report_exit(run: &Running, status: &ExitStatus) -> i32 {
@@ -417,10 +576,44 @@ fn report_exit(run: &Running, status: &ExitStatus) -> i32 {
     code
 }
 
-fn handle_key(byte: u8, run: &mut Option<Running>) -> KeyAction {
+fn handle_key(byte: u8, run: &mut Option<Running>, folder: &Path) -> KeyAction {
     match byte.to_ascii_lowercase() {
         b'q' => KeyAction::Quit,
         b'r' => KeyAction::Restart,
+        b'c' => {
+            match run.as_ref().and_then(|running| running.primary) {
+                Some(port) => {
+                    let url = format!("http://localhost:{port}");
+                    if copy_text(&url) {
+                        ui::note(&format!("copied {url}"));
+                    } else {
+                        ui::warning("no clipboard tool found, install wl-clipboard or xclip");
+                    }
+                }
+                None => ui::warning("no listening port detected yet"),
+            }
+            KeyAction::None
+        }
+        b'h' | b'?' | b'\n' | b'\r' => {
+            if let Some(running) = run.as_ref() {
+                println!();
+                print_hints(running);
+                println!();
+            }
+            KeyAction::None
+        }
+        b'k' => match run.as_ref().and_then(|running| running.blocked.clone()) {
+            Some(blocked) => KeyAction::Kill(blocked),
+            None => KeyAction::None,
+        },
+        b'.' => {
+            open_folder(folder);
+            KeyAction::None
+        }
+        b't' => {
+            open_terminal(folder);
+            KeyAction::None
+        }
         b'o' => {
             if let Some(running) = run.as_ref() {
                 match running.primary {
@@ -437,6 +630,7 @@ fn handle_key(byte: u8, run: &mut Option<Running>) -> KeyAction {
 enum KeyAction {
     Quit,
     Restart,
+    Kill(Blocked),
     None,
 }
 
@@ -459,10 +653,12 @@ pub fn serve(spec: &Serve) -> i32 {
     }
     let mut generation = 0u32;
     let mut run = launch(spec, &tx, generation);
-    if run.is_none() {
+    let Some(folder) = run.as_ref().map(|running| running.plan.cwd.clone()) else {
         return 1;
-    }
+    };
     let mut last_code = 0;
+    let mut attempts = 0u32;
+    let mut restart_at: Option<Instant> = None;
     loop {
         if STOP.load(Ordering::SeqCst) {
             return finish(run, last_code, true);
@@ -477,19 +673,26 @@ pub fn serve(spec: &Serve) -> i32 {
                     ui::gutter(&text, stderr);
                     if let Some(running) = run.as_mut() {
                         running.tail.push(&text);
+                        running.last_line = Instant::now();
+                        running.lines_since_hint = running.primary.is_some();
                     }
                 }
                 KeyAction::None
             }
-            Ok(Event::Key(byte)) => handle_key(byte, &mut run),
+            Ok(Event::Key(byte)) => handle_key(byte, &mut run, &folder),
             Err(_) => KeyAction::None,
         };
         match action {
             KeyAction::Quit => return finish(run, last_code, false),
-            KeyAction::Restart => {
+            KeyAction::Restart | KeyAction::Kill(_) => {
                 println!();
                 ui::step("restarting");
+                restart_at = None;
+                attempts = 0;
                 shut_down(run.take());
+                if let KeyAction::Kill(blocked) = &action {
+                    free_port(blocked);
+                }
                 generation += 1;
                 run = launch(spec, &tx, generation);
                 if run.is_none() && !interactive {
@@ -499,9 +702,31 @@ pub fn serve(spec: &Serve) -> i32 {
             }
             KeyAction::None => {}
         }
+        if run.is_none() && restart_at.is_some_and(|at| Instant::now() >= at) {
+            restart_at = None;
+            generation += 1;
+            println!();
+            run = launch(spec, &tx, generation);
+            if run.is_none() && !interactive {
+                return 1;
+            }
+            continue;
+        }
         let Some(running) = run.as_mut() else {
             continue;
         };
+        if interactive
+            && running.primary.is_some()
+            && running.lines_since_hint
+            && !running.hint_repeated
+            && running.last_line.elapsed() > HINT_QUIET
+        {
+            running.hint_repeated = true;
+            running.lines_since_hint = false;
+            println!();
+            print_hints(running);
+            println!();
+        }
         if running.exited.is_none() {
             if let Ok(Some(status)) = running.child.try_wait() {
                 running.exited = Some((status, Instant::now()));
@@ -518,17 +743,30 @@ pub fn serve(spec: &Serve) -> i32 {
             if let Some(status) = status {
                 last_code = report_exit(running, &status);
             }
-            run = None;
-            if !interactive {
-                return last_code;
+            if running.started.elapsed() > HEALTHY_AFTER {
+                attempts = 0;
             }
-            println!(
-                "  {} restart  {}  {} quit",
-                ui::accent("r"),
-                ui::dim("·"),
-                ui::accent("q")
-            );
-            println!();
+            run = None;
+            if spec.auto_restart && last_code != 0 {
+                attempts += 1;
+                if attempts <= MAX_RESTARTS {
+                    let wait = Duration::from_secs(2u64.pow(attempts - 1).min(10));
+                    ui::warning(&format!(
+                        "restarting in {} (attempt {attempts}/{MAX_RESTARTS})",
+                        ui::format_duration(wait)
+                    ));
+                    restart_at = Some(Instant::now() + wait);
+                } else {
+                    ui::warning(&format!("giving up after {MAX_RESTARTS} crashes in a row"));
+                }
+            }
+            if restart_at.is_none() {
+                if !interactive {
+                    return last_code;
+                }
+                ui::keys_hint_stopped();
+                println!();
+            }
         }
     }
 }
