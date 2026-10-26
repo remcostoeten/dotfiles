@@ -1,4 +1,4 @@
 interface:
   display_name: "use-shortcut"
-  short_description: "Build React keyboard shortcut flows"
-  default_prompt: "Use $use-shortcut to add accessible keyboard shortcuts to a React app."
+  short_description: "Typed keyboard shortcuts with use-shortcut 3.x"
+  default_prompt: "Use $use-shortcut to add typed keyboard shortcuts with @remcostoeten/use-shortcut 3.x."
