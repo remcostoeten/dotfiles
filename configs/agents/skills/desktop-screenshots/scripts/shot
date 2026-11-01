@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+kiekje="${KIEKJE_AGENT:-$HOME/.local/lib/kiekje-agent/kiekje}"
+out_dir="${KIEKJE_AGENT_DIR:-/tmp/kiekje-agent}"
+
+usage() {
+	cat >&2 <<'USAGE'
+usage: shot <pattern> [out.png] [--crop x,y,w,h]
+       shot --id '{uuid}' [out.png] [--crop x,y,w,h]
+       shot --screen [out.png] [--crop x,y,w,h]
+       shot --list
+
+<pattern> is matched case-insensitively against window titles first, then applications.
+The topmost match wins. Without out.png the file goes to /tmp/kiekje-agent.
+USAGE
+	exit 2
+}
+
+if [ ! -x "$kiekje" ]; then
+	echo "shot: $kiekje is missing; run install-agent-kiekje" >&2
+	exit 1
+fi
+[ $# -ge 1 ] || usage
+
+target=window
+id=""
+pattern=""
+name=""
+out=""
+crop=()
+case "$1" in
+--list) exec "$kiekje" windows ;;
+--screen) target=screen ;;
+--id)
+	[ $# -ge 2 ] || usage
+	id="$2"
+	shift
+	;;
+-h | --help) usage ;;
+*) pattern="$1" ;;
+esac
+shift
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--crop)
+		[ $# -ge 2 ] || usage
+		crop=(--crop "$2")
+		shift 2
+		;;
+	*)
+		[ -z "$out" ] || usage
+		out="$1"
+		shift
+		;;
+	esac
+done
+
+if [ -n "$pattern" ]; then
+	listing=$("$kiekje" windows)
+	needle=$(printf '%s' "$pattern" | tr '[:upper:]' '[:lower:]')
+	match=$(awk -F'\t' -v needle="$needle" 'index(tolower($4), needle) { print; exit }' <<<"$listing")
+	if [ -z "$match" ]; then
+		match=$(awk -F'\t' -v needle="$needle" 'index(tolower($3), needle) { print; exit }' <<<"$listing")
+	fi
+	if [ -z "$match" ]; then
+		echo "shot: no window title or application contains '$pattern'; shot --list shows them" >&2
+		exit 1
+	fi
+	id=$(cut -f1 <<<"$match")
+	name=$(cut -f4 <<<"$match")
+	[ -n "$name" ] || name=$(cut -f3 <<<"$match")
+fi
+
+if [ -z "$out" ]; then
+	mkdir -p "$out_dir"
+	slug=$(printf '%s' "${name:-$target}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-40)
+	out="$out_dir/${slug:-window}-$(date +%H%M%S-%3N).png"
+fi
+
+if [ "$target" = screen ]; then
+	exec "$kiekje" capture fullscreen --output "$out" "${crop[@]}"
+fi
+exec "$kiekje" capture window --id "$id" --output "$out" "${crop[@]}"

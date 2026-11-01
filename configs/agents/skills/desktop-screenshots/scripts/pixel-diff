@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -ne 3 ]; then
+	echo "usage: pixel-diff before.png after.png out.png" >&2
+	exit 2
+fi
+before=$1
+after=$2
+out=$3
+
+before_size=$(magick identify -format '%wx%h' "$before")
+after_size=$(magick identify -format '%wx%h' "$after")
+if [ "$before_size" != "$after_size" ]; then
+	echo "pixel-diff: sizes differ ($before_size and $after_size); capture or --crop both to the same size" >&2
+	exit 1
+fi
+
+# compare exits 1 when the images differ, which is the normal case here.
+status=0
+changed=$(magick compare -metric AE -fuzz 1% "$before" "$after" "$out" 2>&1) || status=$?
+if [ "$status" -gt 1 ]; then
+	echo "pixel-diff: $changed" >&2
+	exit 1
+fi
+echo "$out"
+echo "changed pixels: ${changed%% *}"

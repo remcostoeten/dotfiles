@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 3 ]; then
+	echo "usage: side-by-side left.png right.png out.png [left label] [right label]" >&2
+	exit 2
+fi
+left=$1
+right=$2
+out=$3
+left_label=${4:-Before}
+right_label=${5:-After}
+
+font=$(fc-match -f '%{file}' 'Geist:style=Regular' 2>/dev/null || true)
+font_args=()
+[ -z "$font" ] || font_args=(-font "$font")
+
+magick montage \
+	"${font_args[@]}" \
+	-label "$left_label" "$left" \
+	-label "$right_label" "$right" \
+	-tile 2x1 -geometry +24+24 \
+	-background "#111111" -fill "#e6e6e6" -pointsize 26 -depth 8 \
+	"$out"
+echo "$out"

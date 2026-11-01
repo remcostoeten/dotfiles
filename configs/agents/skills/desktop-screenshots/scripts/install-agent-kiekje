@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo="${KIEKJE_REPO:-$HOME/dev/kiekje-next}"
+dest="$HOME/.local/lib/kiekje-agent"
+desktop="$HOME/.local/share/applications/dev.remcostoeten.Kiekje.agent.desktop"
+target_dir="$HOME/.cache/kiekje-agent/target"
+checkout=$(mktemp -d /tmp/kiekje-agent-build.XXXXXX)
+
+git -C "$repo" fetch -q origin master
+git -C "$repo" worktree add -q --detach "$checkout" origin/master
+trap 'git -C "$repo" worktree remove --force "$checkout"' EXIT
+
+CARGO_TARGET_DIR="$target_dir" cargo build --release --quiet --manifest-path "$checkout/Cargo.toml"
+mkdir -p "$dest"
+install -m 755 "$target_dir/release/kiekje" "$dest/kiekje.new"
+mv -f "$dest/kiekje.new" "$dest/kiekje"
+
+mkdir -p "$(dirname "$desktop")"
+# KWin's own sycoca only rebuilds when a directory mtime changes, so the file is renamed into place.
+cat >"$desktop.new" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Kiekje (agent build)
+Exec=$dest/kiekje
+NoDisplay=true
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
+DESKTOP
+mv -f "$desktop.new" "$desktop"
+kbuildsycoca6 >/dev/null 2>&1
+
+if ! "$dest/kiekje" capture --help | grep -q -- '--output'; then
+	echo "install-agent-kiekje: the master build has no --output; is the headless capture merged?" >&2
+	exit 1
+fi
+echo "$dest/kiekje"
