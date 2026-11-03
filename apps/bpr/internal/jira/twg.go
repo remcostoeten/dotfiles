@@ -30,7 +30,7 @@ func siteHost(site string) string {
 }
 
 func (c *Client) twgDo(ctx context.Context, method, path string, body any, out any) error {
-	args := []string{"api", "jira:" + path, "-X", method, "--site", c.twgSite}
+	args := []string{"--output", "json", "--output-summary", "none", "api", "jira:" + path, "-X", method, "--site", c.twgSite}
 	cmd := exec.CommandContext(ctx, "twg", args...)
 	if body != nil {
 		b, err := json.Marshal(body)

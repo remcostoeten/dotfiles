@@ -32,11 +32,11 @@ func newJiraApp() (*app, error) { return buildApp(false) }
 
 func buildApp(needSlug bool) (*app, error) {
 	dir, _ := os.Getwd()
+	settings := config.LoadSettings()
 	creds, ok := config.LoadCreds()
-	if !ok {
+	if !ok && (needSlug || settings.JiraSite == "" || !jira.HasTWG()) {
 		return nil, fmt.Errorf("no credentials — run `bpr auth`")
 	}
-	settings := config.LoadSettings()
 	slug, err := config.RepoSlug(dir, settings)
 	if err != nil && needSlug {
 		return nil, err
@@ -78,6 +78,10 @@ func main() {
 	args = args[1:]
 
 	switch cmd {
+	case "mcp":
+		if err := runMCP(context.Background()); err != nil {
+			die(err)
+		}
 	case "auth", "login":
 		if err := cmdAuth(); err != nil {
 			die(err)
@@ -125,7 +129,7 @@ func main() {
 	}
 
 	switch cmd {
-	case "auth", "login", "help", "-h", "--help", "dash", "dashboard", "menu", "ui", "i", "interactive", "board", "b", "backlog", "bl":
+	case "auth", "login", "help", "-h", "--help", "dash", "dashboard", "menu", "ui", "i", "interactive", "board", "b", "backlog", "bl", "mcp":
 	default:
 		if isTerminal() {
 			pause()
@@ -219,6 +223,7 @@ Tickets:
                       add a subtask to a ticket
   bpr sub rm <KEY>... delete subtasks (asks first; -f to skip)
   bpr auth            store your Atlassian email + API token(s)
+  bpr mcp             run the stdio MCP server for AI clients
   bpr help            this help
 
 Jira goes through the twg CLI when it is installed (BPR_JIRA_BACKEND=token forces the API token).
