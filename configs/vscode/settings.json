@@ -92,7 +92,7 @@
   "theme": {
     "mode": "dark",
     "light": "One Light",
-    "dark": "Ayu Dark"
+    "dark": "Pocket"
   },
   "window.commandCenter": true,
   "workbench.settings.openDefaultKeybindings": true,

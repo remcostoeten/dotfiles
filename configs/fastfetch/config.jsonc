@@ -4,7 +4,7 @@
         "type": "file",
         "source": "~/.config/dotfiles/configs/fastfetch/logos/noir.txt",
         "color": {
-            "1": "#ff6b2c"
+            "1": "#e1c46d"
         },
         "padding": {
             "top": 2,
@@ -15,154 +15,154 @@
     "display": {
         "separator": " ",
         "color": {
-            "keys": "#3a3a3a",
-            "output": "#e6e1d6",
-            "separator": "#8f897f"
+            "keys": "#4c4639",
+            "output": "#e9e2d4",
+            "separator": "#979080"
         },
         "percent": {
             "type": 3,
             "color": {
-                "green": "#9ccf8f",
-                "yellow": "#f5c065",
-                "red": "#ff6b2c"
+                "green": "#aed18d",
+                "yellow": "#e8c26c",
+                "red": "#e1c46d"
             }
         }
     },
     "modules": [
         {
             "type": "custom",
-            "format": "{#38;2;58;58;58}┌─────────────────{#38;2;255;107;44}Hardware{#38;2;58;58;58}─────────────────┐"
+            "format": "{#38;2;76;70;57}┌─────────────────{#38;2;225;196;109}Hardware{#38;2;76;70;57}─────────────────┐"
         },
         {
             "type": "host",
             "key": "│ 󰌢 :",
             "format": "{name}",
-            "keyColor": "#ff6b2c"
+            "keyColor": "#e1c46d"
         },
         {
             "type": "cpu",
             "key": "│  :",
             "format": "{name} ({cores-logical}) @ {freq-max}",
-            "keyColor": "#f5c065"
+            "keyColor": "#e8c26c"
         },
         {
             "type": "gpu",
             "key": "│ 󰢮 :",
             "format": "{name} [{type}]",
-            "keyColor": "#9ccf8f"
+            "keyColor": "#aed18d"
         },
         {
             "type": "display",
             "key": "│ 󰍹 :",
             "format": "{width}x{height} @ {refresh-rate} Hz",
-            "keyColor": "#6fcfbf"
+            "keyColor": "#8bd6b5"
         },
         {
             "type": "disk",
             "key": "│ 󰋊 :",
             "folders": "/",
             "format": "{size-used} / {size-total} ({size-percentage}) - {filesystem}",
-            "keyColor": "#7aaef0"
+            "keyColor": "#c5c0ff"
         },
         {
             "type": "memory",
             "key": "│  :",
-            "keyColor": "#c79af2"
+            "keyColor": "#eab5ed"
         },
         {
             "type": "swap",
             "key": "│ 󰓡 :",
-            "keyColor": "#f08aa8"
+            "keyColor": "#ffb1c3"
         },
         {
             "type": "custom",
-            "format": "{#38;2;58;58;58}└──────────────────────────────────────────┘"
+            "format": "{#38;2;76;70;57}└──────────────────────────────────────────┘"
         },
         "break",
         {
             "type": "custom",
-            "format": "{#38;2;58;58;58}┌─────────────────{#38;2;255;107;44}Software{#38;2;58;58;58}─────────────────┐"
+            "format": "{#38;2;76;70;57}┌─────────────────{#38;2;225;196;109}Software{#38;2;76;70;57}─────────────────┐"
         },
         {
             "type": "os",
             "key": "│ 󰣇 :",
             "format": "{pretty-name}",
-            "keyColor": "#ff6b2c"
+            "keyColor": "#e1c46d"
         },
         {
             "type": "de",
             "key": "│ 󰧨 :",
-            "keyColor": "#f5c065"
+            "keyColor": "#e8c26c"
         },
         {
             "type": "wm",
             "key": "│  :",
             "format": "{pretty-name} ({protocol-name})",
-            "keyColor": "#9ccf8f"
+            "keyColor": "#aed18d"
         },
         {
             "type": "kernel",
             "key": "│  :",
             "format": "Linux {release}",
-            "keyColor": "#6fcfbf"
+            "keyColor": "#8bd6b5"
         },
         {
             "type": "shell",
             "key": "│  :",
-            "keyColor": "#7aaef0"
+            "keyColor": "#c5c0ff"
         },
         {
             "type": "terminal",
             "key": "│  :",
-            "keyColor": "#c79af2"
+            "keyColor": "#eab5ed"
         },
         {
             "type": "packages",
             "key": "│ 󰏖 :",
             "format": "{pacman} (pacman), {flatpak-system} (flatpak-system), {flatpak-user} (flatpak-user)",
-            "keyColor": "#f08aa8"
+            "keyColor": "#ffb1c3"
         },
         {
             "type": "custom",
             "key": "│ 󰏘 :",
-            "format": "Noir {#38;2;230;225;214}●{#38;2;255;107;44}●●{#38;2;245;192;101}●{#38;2;156;207;143}●{#38;2;143;137;127}●",
-            "keyColor": "#ff6b2c"
+            "format": "Pocket {#38;2;233;226;212}●{#38;2;225;196;109}●●{#38;2;232;194;108}●{#38;2;174;209;141}●{#38;2;151;144;128}●",
+            "keyColor": "#e1c46d"
         },
         {
             "type": "terminalfont",
             "key": "│  :",
-            "keyColor": "#f5c065"
+            "keyColor": "#e8c26c"
         },
         {
             "type": "custom",
-            "format": "{#38;2;58;58;58}└──────────────────────────────────────────┘"
+            "format": "{#38;2;76;70;57}└──────────────────────────────────────────┘"
         },
         "break",
         {
             "type": "custom",
-            "format": "{#38;2;58;58;58}┌──────────{#38;2;255;107;44}Age / Uptime / Update{#38;2;58;58;58}───────────┐"
+            "format": "{#38;2;76;70;57}┌──────────{#38;2;225;196;109}Age / Uptime / Update{#38;2;76;70;57}───────────┐"
         },
         {
             "type": "command",
             "key": "│ 󱦟 :",
             "text": "birth=$(stat -c %W /); echo \"OS Age: $(( ($(date +%s) - birth) / 86400 )) days\"",
-            "keyColor": "#9ccf8f"
+            "keyColor": "#aed18d"
         },
         {
             "type": "uptime",
             "key": "│ 󰔟 :",
             "format": "Uptime: {?days}{days} days, {?}{hours} hours, {minutes} mins",
-            "keyColor": "#6fcfbf"
+            "keyColor": "#8bd6b5"
         },
         {
             "type": "command",
             "key": "│ 󰚰 :",
             "text": "n=$(checkupdates 2>/dev/null | wc -l); echo \"Updates: $n pending\"",
-            "keyColor": "#7aaef0"
+            "keyColor": "#c5c0ff"
         },
         {
             "type": "custom",
-            "format": "{#38;2;58;58;58}└──────────────────────────────────────────┘"
+            "format": "{#38;2;76;70;57}└──────────────────────────────────────────┘"
         }
     ]
 }
