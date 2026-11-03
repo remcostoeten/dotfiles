@@ -3,17 +3,17 @@ command = /usr/bin/fish
 
 
 # Background
-background-opacity = 1
+background-opacity = 0.9
 background-opacity-cells = false
-background-blur = 0
+background-blur = true
 
 background-image = 
-background-image-opacity = 0.80
+background-image-opacity = 1.00
 background-image-fit = cover
 
 
 # Theme
-theme = noir
+theme = pocket
 cursor-style = block
 cursor-style-blink = false
 bold-is-bright = false
@@ -27,15 +27,16 @@ gtk-titlebar = true
 window-show-tab-bar = auto
 gtk-toolbar-style = flat
 gtk-custom-css = gtk.css
-window-padding-x = 24
+gtk-custom-css = themes/pocket-gtk.css
+window-padding-x = 28
 window-padding-y = 24
 window-padding-balance = true
 
 
 # Font & Typography
-font-family = "Maple Mono Normal NF"
-font-size = 13
-adjust-cell-height = 50%
+font-family = "CommitMono Nerd Font"
+font-size = 14
+adjust-cell-height = 20%
 
 
 # Terminal Behavior
@@ -126,3 +127,4 @@ mouse-hide-while-typing = true
 copy-on-select = true
 
 config-file = ?/home/remcostoeten/.config/aether/theme/ghostty.conf
+adjust-cell-width = 0%

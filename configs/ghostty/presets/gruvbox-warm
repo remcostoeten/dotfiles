@@ -1,0 +1,12 @@
+# Earthy Gruvbox with low-poly hills and ligatures
+theme = Gruvbox Material Dark
+font-family = "FiraCode Nerd Font"
+font-size = 13
+adjust-cell-height = 25%
+adjust-cell-width = 0%
+background-opacity = 0.93
+background-blur = 50
+window-padding-x = 20
+window-decoration = none
+background-image = rice-gruvbox-lowpoly.png
+background-image-opacity = 0.10

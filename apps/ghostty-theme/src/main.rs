@@ -2,6 +2,7 @@ mod app;
 mod config;
 mod data;
 mod ghostty;
+mod preset;
 mod preview;
 mod theme;
 mod ui;
@@ -11,6 +12,7 @@ use std::process::ExitCode;
 
 use config::{load_settings, parse_percent, render_config, theme_image, write_atomic};
 use data::{Paths, discover_backgrounds, find_background, record_recent};
+use preset::{Preset, discover_presets, find_preset, save_preset};
 use theme::discover_themes;
 
 const USAGE: &str = "ghostty-theme: a live Ghostty appearance studio
@@ -18,7 +20,11 @@ const USAGE: &str = "ghostty-theme: a live Ghostty appearance studio
   ghostty-theme                   open the interactive studio
   ghostty-theme pick              open the interactive studio
   ghostty-theme list              list installed themes
-  ghostty-theme toggle            cycle curated themes
+  ghostty-theme preset            list presets (* = active)
+  ghostty-theme preset <name>     apply a preset
+  ghostty-theme preset next       cycle presets
+  ghostty-theme preset save <n>   save the current look as a preset
+  ghostty-theme toggle            cycle presets
   ghostty-theme <theme>           apply a theme
   ghostty-theme font <name>       set font family
   ghostty-theme opacity <0..1>    set terminal background opacity (0 = fully transparent)
@@ -64,6 +70,52 @@ fn apply_one(paths: &Paths, key: &str, value: &str) -> Result<(), String> {
     }
     ghostty::reload();
     Ok(())
+}
+
+fn apply_preset(paths: &Paths, preset: &Preset) -> Result<(), String> {
+    let (cfg, raw) = load_settings(&paths.config).map_err(|err| err.to_string())?;
+    let next = preset.apply(&cfg);
+    write_atomic(&paths.config, render_config(&raw, &next).as_bytes())
+        .map_err(|err| err.to_string())?;
+    record_recent(&paths.recents(), &next.theme);
+    ghostty::reload();
+    Ok(())
+}
+
+fn run_preset(paths: &Paths, args: &[String]) -> Result<(), String> {
+    let presets = discover_presets(&paths.presets, &paths.assets);
+    let (cfg, _) = load_settings(&paths.config).map_err(|err| err.to_string())?;
+    match args.first().map(String::as_str) {
+        None | Some("list") => {
+            for p in &presets {
+                let marker = if p.matches(&cfg) { "* " } else { "  " };
+                println!("{marker}{:<16} {}", p.name, p.description);
+            }
+            Ok(())
+        }
+        Some("save") => {
+            let name = args[1..].join(" ");
+            let path = save_preset(&paths.presets, &name, &cfg, &paths.assets)
+                .map_err(|err| err.to_string())?;
+            println!("{}", path.display());
+            Ok(())
+        }
+        Some("toggle" | "next") => {
+            let current = presets.iter().position(|p| p.matches(&cfg));
+            let next = presets
+                .get(current.map_or(0, |i| (i + 1) % presets.len()))
+                .ok_or_else(|| format!("no presets in {}", paths.presets.display()))?;
+            apply_preset(paths, next)?;
+            println!("{}", next.name);
+            Ok(())
+        }
+        Some(_) => {
+            let query = args.join(" ");
+            let preset = find_preset(&presets, &query)
+                .ok_or_else(|| format!("unknown preset {query:?} (see: ghostty-theme preset)"))?;
+            apply_preset(paths, preset)
+        }
+    }
 }
 
 fn run_background(paths: &Paths, args: &[String]) -> Result<(), String> {
@@ -112,15 +164,8 @@ fn run(paths: &Paths, args: &[String]) -> Result<(), String> {
                 println!("{}", theme.name);
             }
         }
-        "toggle" => {
-            let (cfg, _) = load_settings(&paths.config).map_err(|err| err.to_string())?;
-            let cycle = ["pastel-dark", "warm-sunset", "Catppuccin Mocha"];
-            let next = cycle
-                .iter()
-                .position(|name| *name == cfg.theme)
-                .map_or(cycle[0], |i| cycle[(i + 1) % cycle.len()]);
-            apply_one(paths, "theme", next)?;
-        }
+        "toggle" => run_preset(paths, &["next".into()])?,
+        "preset" | "presets" => run_preset(paths, &args[1..])?,
         name @ ("font" | "opacity" | "line-height" | "letter-spacing") => {
             if args.len() < 2 {
                 return Err(needs_value(name));

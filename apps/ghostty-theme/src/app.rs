@@ -14,9 +14,10 @@ use ratatui::layout::Rect;
 use ratatui_image::FontSize;
 use ratatui_image::picker::{Picker, ProtocolType};
 
-use crate::config::{Settings, render_config, theme_image};
+use crate::config::{Settings, parse_settings, render_config, theme_image};
 use crate::data::{self, Background, Paths};
 use crate::ghostty::Applier;
+use crate::preset::{Preset, discover_presets, save_preset};
 use crate::preview::{ImageKey, Loaded, Previewer};
 use crate::theme::{Theme, discover_themes};
 use crate::ui;
@@ -30,6 +31,7 @@ pub enum Event {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Section {
+    Presets,
     Themes,
     Backgrounds,
     Fonts,
@@ -37,7 +39,8 @@ pub enum Section {
     Window,
 }
 
-pub const SECTIONS: [Section; 5] = [
+pub const SECTIONS: [Section; 6] = [
+    Section::Presets,
     Section::Themes,
     Section::Backgrounds,
     Section::Fonts,
@@ -48,6 +51,7 @@ pub const SECTIONS: [Section; 5] = [
 impl Section {
     pub fn name(self) -> &'static str {
         match self {
+            Self::Presets => "Presets",
             Self::Themes => "Themes",
             Self::Backgrounds => "Backgrounds",
             Self::Fonts => "Fonts",
@@ -57,7 +61,10 @@ impl Section {
     }
 
     fn is_list(self) -> bool {
-        matches!(self, Self::Themes | Self::Backgrounds | Self::Fonts)
+        matches!(
+            self,
+            Self::Presets | Self::Themes | Self::Backgrounds | Self::Fonts
+        )
     }
 
     fn index(self) -> usize {
@@ -84,6 +91,7 @@ pub struct App {
     pub cfg: Settings,
     baseline: String,
     pub themes: Vec<Theme>,
+    pub presets: Vec<Preset>,
     pub backgrounds: Vec<Background>,
     pub fonts: Vec<String>,
     pub fonts_loading: bool,
@@ -95,6 +103,7 @@ pub struct App {
     pub visible: Vec<usize>,
     pub query: String,
     pub searching: bool,
+    pub naming: Option<String>,
     pub scope: usize,
     pub live: bool,
     pub status: Option<Status>,
@@ -120,6 +129,7 @@ impl App {
             path: String::new(),
         }];
         backgrounds.extend(data::discover_backgrounds(&paths.assets));
+        let presets = discover_presets(&paths.presets, &paths.assets);
         let mut app = Self {
             favorites: data::read_lines(&paths.favorites()).into_iter().collect(),
             recents: data::read_lines(&paths.recents()),
@@ -128,15 +138,17 @@ impl App {
             cfg,
             baseline: raw,
             themes,
+            presets,
             backgrounds,
             fonts: Vec::new(),
             fonts_loading: true,
-            section: Section::Themes,
+            section: Section::Presets,
             cursor: 0,
             offset: 0,
             visible: Vec::new(),
             query: String::new(),
             searching: false,
+            naming: None,
             scope: 0,
             live: true,
             status: None,
@@ -174,6 +186,13 @@ impl App {
     fn rebuild_visible(&mut self) {
         let query = self.query.to_lowercase();
         self.visible = match self.section {
+            Section::Presets => self
+                .presets
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| query.is_empty() || p.key.contains(&query))
+                .map(|(i, _)| i)
+                .collect(),
             Section::Themes => {
                 let mut out: Vec<usize> = self
                     .themes
@@ -225,6 +244,10 @@ impl App {
 
     fn current_index(&self) -> usize {
         let position = match self.section {
+            Section::Presets => self
+                .visible
+                .iter()
+                .position(|&i| self.presets[i].matches(&self.cfg)),
             Section::Themes => self
                 .visible
                 .iter()
@@ -259,6 +282,11 @@ impl App {
     fn select_current(&mut self) {
         if let Some(&i) = self.visible.get(self.cursor) {
             match self.section {
+                Section::Presets => {
+                    let saved = parse_settings(&self.baseline);
+                    self.cfg = self.presets[i].apply(&saved);
+                    self.sync_theme();
+                }
                 Section::Themes => {
                     self.cfg.theme = self.themes[i].name.clone();
                     if let Some(image) = theme_image(&self.cfg.theme, &self.paths.assets) {
@@ -288,7 +316,7 @@ impl App {
         let data = self.rendered();
         self.applier.flush(data.clone());
         self.baseline = data;
-        if self.section == Section::Themes {
+        if matches!(self.section, Section::Presets | Section::Themes) {
             self.recents = data::record_recent(&self.paths.recents(), &self.cfg.theme);
         }
         self.flash("Applied. This is now your Ghostty configuration", false);
@@ -314,7 +342,7 @@ impl App {
 
     fn change_value(&mut self, delta: i32) {
         match self.section {
-            Section::Themes | Section::Backgrounds | Section::Fonts => {
+            Section::Presets | Section::Themes | Section::Backgrounds | Section::Fonts => {
                 self.step(delta as isize);
                 self.select_current();
                 return;
@@ -391,9 +419,48 @@ impl App {
         false
     }
 
+    fn handle_name_key(&mut self, key: KeyEvent) -> bool {
+        let Some(name) = self.naming.as_mut() else {
+            return false;
+        };
+        match key.code {
+            KeyCode::Esc => self.naming = None,
+            KeyCode::Enter => {
+                let name = std::mem::take(name);
+                self.naming = None;
+                self.save_preset(&name);
+            }
+            KeyCode::Backspace => {
+                name.pop();
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return true,
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => name.push(c),
+            _ => {}
+        }
+        false
+    }
+
+    fn save_preset(&mut self, name: &str) {
+        match save_preset(&self.paths.presets, name, &self.cfg, &self.paths.assets) {
+            Ok(path) => {
+                self.presets = discover_presets(&self.paths.presets, &self.paths.assets);
+                if self.section == Section::Presets {
+                    self.rebuild_visible();
+                    self.cursor = self.current_index();
+                }
+                let file = path.file_name().unwrap_or_default().to_string_lossy();
+                self.flash(&format!("Saved preset {file}"), false);
+            }
+            Err(err) => self.flash(&format!("Could not save preset: {err}"), true),
+        }
+    }
+
     fn handle_key(&mut self, key: KeyEvent) -> bool {
         if key.kind == KeyEventKind::Release {
             return false;
+        }
+        if self.naming.is_some() {
+            return self.handle_name_key(key);
         }
         if self.searching {
             return self.handle_search_key(key);
@@ -436,6 +503,7 @@ impl App {
             }
             KeyCode::Enter => self.commit(),
             KeyCode::Char('x') => self.clear_background(),
+            KeyCode::Char('s') => self.naming = Some(String::new()),
             KeyCode::Char('-') => self.nudge_opacity(Opacity::Image, -5),
             KeyCode::Char('+' | '=') => self.nudge_opacity(Opacity::Image, 5),
             KeyCode::Char('<' | ',') => self.nudge_opacity(Opacity::Window, -5),
@@ -500,7 +568,11 @@ impl App {
                 let shown = self.shown_image_key();
                 self.previewer.insert(key, loaded, shown.as_ref());
             }
-            Event::Fonts(fonts) => {
+            Event::Fonts(mut fonts) => {
+                if !fonts.contains(&self.cfg.font) {
+                    fonts.push(self.cfg.font.clone());
+                    fonts.sort_by_cached_key(|font| font.to_lowercase());
+                }
                 self.fonts = fonts;
                 self.fonts_loading = false;
                 if self.section == Section::Fonts {
@@ -521,6 +593,17 @@ impl App {
         })
     }
 
+    fn neighbours(&self) -> impl Iterator<Item = usize> + '_ {
+        (1..=4)
+            .flat_map(|distance| {
+                [
+                    self.cursor.checked_sub(distance),
+                    Some(self.cursor + distance),
+                ]
+            })
+            .filter_map(|index| self.visible.get(index?).copied())
+    }
+
     fn request_images(&mut self) {
         let Some(area) = self.image_area else {
             return;
@@ -529,21 +612,16 @@ impl App {
         let mut paths: Vec<String> = Vec::with_capacity(self.backgrounds.len() + 8);
         paths.push(self.cfg.background.clone());
         match self.section {
-            Section::Themes => {
-                for distance in 1..=4 {
-                    for index in [
-                        self.cursor.checked_sub(distance),
-                        Some(self.cursor + distance),
-                    ] {
-                        let Some(&i) = index.and_then(|index| self.visible.get(index)) else {
-                            continue;
-                        };
-                        if let Some(image) = theme_image(&self.themes[i].name, &self.paths.assets) {
-                            paths.push(image.to_string_lossy().into_owned());
-                        }
-                    }
-                }
-            }
+            Section::Presets => paths.extend(
+                self.neighbours()
+                    .filter_map(|i| self.presets[i].get("background-image"))
+                    .map(String::from),
+            ),
+            Section::Themes => paths.extend(
+                self.neighbours()
+                    .filter_map(|i| theme_image(&self.themes[i].name, &self.paths.assets))
+                    .map(|image| image.to_string_lossy().into_owned()),
+            ),
             Section::Backgrounds => {
                 let mut nearby: Vec<(usize, usize)> = self
                     .visible

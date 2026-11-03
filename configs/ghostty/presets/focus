@@ -1,0 +1,12 @@
+# No image, no transparency, nothing but text
+theme = Vesper
+font-family = "CommitMono Nerd Font"
+font-size = 14
+adjust-cell-height = 20%
+adjust-cell-width = 0%
+background-opacity = 1.00
+background-blur = 0
+window-padding-x = 28
+window-decoration = none
+background-image = 
+background-image-opacity = 1.00

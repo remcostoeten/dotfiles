@@ -1,0 +1,12 @@
+# Ink and paper, solid backdrop with a faint wave
+theme = Kanagawa Wave
+font-family = "BlexMono Nerd Font"
+font-size = 13
+adjust-cell-height = 20%
+adjust-cell-width = 0%
+background-opacity = 0.97
+background-blur = 20
+window-padding-x = 20
+window-decoration = none
+background-image = rice-kanagawa-wave.png
+background-image-opacity = 0.07

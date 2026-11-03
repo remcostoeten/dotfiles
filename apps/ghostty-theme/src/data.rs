@@ -10,6 +10,7 @@ pub struct Paths {
     pub custom_themes: PathBuf,
     pub system_themes: PathBuf,
     pub assets: PathBuf,
+    pub presets: PathBuf,
     pub state: PathBuf,
     pub cache: PathBuf,
 }
@@ -28,6 +29,7 @@ impl Paths {
             custom_themes: root.join("configs/ghostty/themes"),
             system_themes: PathBuf::from("/usr/share/ghostty/themes"),
             assets: root.join("configs/ghostty/assets"),
+            presets: root.join("configs/ghostty/presets"),
             state: home.join(".local/state/ghostty-theme"),
             cache: cache.join("ghostty-theme"),
         }
@@ -84,7 +86,10 @@ pub fn record_recent(path: &Path, value: &str) -> Vec<String> {
 }
 
 pub fn discover_fonts() -> Vec<String> {
-    let Ok(output) = Command::new("fc-list").args([":", "family"]).output() else {
+    let Ok(output) = Command::new("fc-list")
+        .args([":", "family", "spacing"])
+        .output()
+    else {
         return [
             "JetBrainsMono Nerd Font",
             "FiraCode Nerd Font",
@@ -99,13 +104,23 @@ pub fn discover_fonts() -> Vec<String> {
     let text = String::from_utf8_lossy(&output.stdout);
     let unique: HashSet<&str> = text
         .lines()
-        .flat_map(|line| line.split(','))
+        .filter_map(monospace_families)
+        .flat_map(|families| families.split(','))
         .map(str::trim)
         .filter(|family| !family.is_empty())
         .collect();
     let mut fonts: Vec<String> = unique.into_iter().map(String::from).collect();
     fonts.sort_by_cached_key(|font| font.to_lowercase());
     fonts
+}
+
+fn monospace_families(line: &str) -> Option<&str> {
+    let (families, spacing) = line.split_once(":spacing=")?;
+    spacing
+        .trim()
+        .parse::<u32>()
+        .is_ok_and(|spacing| spacing >= 90)
+        .then_some(families)
 }
 
 #[derive(Clone, Debug)]
@@ -179,5 +194,18 @@ mod tests {
         assert_eq!(names, ["b", "warm-sunset", "zeta"]);
         let hit = find_background(&found, "Warm-Sunset").unwrap();
         assert!(hit.path.ends_with("warm-sunset-bg.png"));
+    }
+
+    #[test]
+    fn keeps_only_monospace_fonts() {
+        assert_eq!(
+            monospace_families("Maple Mono NF,Maple Mono NF Thin:spacing=100"),
+            Some("Maple Mono NF,Maple Mono NF Thin")
+        );
+        assert_eq!(
+            monospace_families("Geist Mono:spacing=90"),
+            Some("Geist Mono")
+        );
+        assert_eq!(monospace_families("Inter"), None);
     }
 }

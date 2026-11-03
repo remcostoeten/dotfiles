@@ -1,0 +1,12 @@
+# Frosted glass over the polar night, roomy and calm
+theme = Nord Wave
+font-family = "Maple Mono Normal NF Medium"
+font-size = 13
+adjust-cell-height = 40%
+adjust-cell-width = 0%
+background-opacity = 0.88
+background-blur = 90
+window-padding-x = 24
+window-decoration = none
+background-image = rice-nord-polar.png
+background-image-opacity = 0.06

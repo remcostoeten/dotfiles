@@ -1,0 +1,12 @@
+# Soft Catppuccin pastels, warm and low contrast
+theme = Catppuccin Mocha
+font-family = "GeistMono NF"
+font-size = 13
+adjust-cell-height = 30%
+adjust-cell-width = 0%
+background-opacity = 0.94
+background-blur = 40
+window-padding-x = 22
+window-decoration = none
+background-image = catppuccin-mocha-gradient.png
+background-image-opacity = 0.12

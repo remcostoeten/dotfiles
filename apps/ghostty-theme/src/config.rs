@@ -47,36 +47,41 @@ fn parse_unit(value: &str) -> Option<i32> {
     value.parse::<f64>().ok().map(|n| (n * 100.0 + 0.5) as i32)
 }
 
+pub fn apply_setting(s: &mut Settings, key: &str, value: &str) {
+    let value = value.trim().trim_matches('"');
+    match key.trim() {
+        "theme" => s.theme = value.into(),
+        "font-family" => s.font = value.into(),
+        "font-size" => {
+            if let Ok(n) = value.parse::<f64>() {
+                s.font_size = (n + 0.5) as i32;
+            }
+        }
+        "adjust-cell-height" => s.line_height = parse_percent(value, s.line_height),
+        "adjust-cell-width" => s.letter_spacing = parse_percent(value, s.letter_spacing),
+        "background-opacity" => s.opacity = parse_unit(value).unwrap_or(s.opacity),
+        "background-blur" => s.blur = value.parse().unwrap_or(0),
+        "window-padding-x" => s.padding = value.parse().unwrap_or(0),
+        "window-decoration" => s.decorations = value != "none" && value != "false",
+        "background-image" => s.background = value.into(),
+        "background-image-opacity" => {
+            s.image_opacity = parse_unit(value).unwrap_or(s.image_opacity)
+        }
+        _ => {}
+    }
+}
+
+pub fn setting_lines(raw: &str) -> impl Iterator<Item = (&str, &str)> {
+    raw.lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .filter_map(|line| line.split_once('='))
+        .map(|(key, value)| (key.trim(), value))
+}
+
 pub fn parse_settings(raw: &str) -> Settings {
     let mut s = Settings::default();
-    for line in raw.lines() {
-        let Some((key, value)) = line.split_once('=') else {
-            continue;
-        };
-        if line.trim_start().starts_with('#') {
-            continue;
-        }
-        let value = value.trim().trim_matches('"');
-        match key.trim() {
-            "theme" => s.theme = value.into(),
-            "font-family" => s.font = value.into(),
-            "font-size" => {
-                if let Ok(n) = value.parse::<f64>() {
-                    s.font_size = (n + 0.5) as i32;
-                }
-            }
-            "adjust-cell-height" => s.line_height = parse_percent(value, s.line_height),
-            "adjust-cell-width" => s.letter_spacing = parse_percent(value, s.letter_spacing),
-            "background-opacity" => s.opacity = parse_unit(value).unwrap_or(s.opacity),
-            "background-blur" => s.blur = value.parse().unwrap_or(0),
-            "window-padding-x" => s.padding = value.parse().unwrap_or(0),
-            "window-decoration" => s.decorations = value != "none" && value != "false",
-            "background-image" => s.background = value.into(),
-            "background-image-opacity" => {
-                s.image_opacity = parse_unit(value).unwrap_or(s.image_opacity)
-            }
-            _ => {}
-        }
+    for (key, value) in setting_lines(raw) {
+        apply_setting(&mut s, key, value);
     }
     s
 }
@@ -86,7 +91,7 @@ pub fn load_settings(path: &Path) -> io::Result<(Settings, String)> {
     Ok((parse_settings(&raw), raw))
 }
 
-const MANAGED_KEYS: [&str; 11] = [
+pub const MANAGED_KEYS: [&str; 11] = [
     "theme",
     "font-family",
     "font-size",
@@ -100,7 +105,7 @@ const MANAGED_KEYS: [&str; 11] = [
     "background-image-opacity",
 ];
 
-fn managed_values(s: &Settings) -> [String; 11] {
+pub fn managed_values(s: &Settings) -> [String; 11] {
     let font = s.font.replace('\\', "\\\\").replace('"', "\\\"");
     [
         s.theme.clone(),

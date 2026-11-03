@@ -129,6 +129,15 @@ pub fn render(frame: &mut Frame, app: &mut App) {
 
 fn list_label(app: &App, index: usize) -> String {
     match app.section {
+        Section::Presets => {
+            let preset = &app.presets[app.visible[index]];
+            let dot = if preset.matches(&app.cfg) {
+                "● "
+            } else {
+                "  "
+            };
+            format!("{dot}{}", preset.name)
+        }
         Section::Themes => {
             let theme = &app.themes[app.visible[index]];
             let star = if app.favorites.contains(&theme.name) {
@@ -168,7 +177,9 @@ fn render_list(frame: &mut Frame, app: &mut App, area: Rect, s: &Styles) {
     if app.section == Section::Themes {
         title = format!("{title}  {}", SCOPES[app.scope]);
     }
-    if app.searching {
+    if let Some(name) = &app.naming {
+        title = format!("save as: {name}▌");
+    } else if app.searching {
         title = format!("/ {}▌", app.query);
     } else if !app.query.is_empty() {
         title = format!("{title}  /{}", app.query);
@@ -201,6 +212,8 @@ fn render_list(frame: &mut Frame, app: &mut App, area: Rect, s: &Styles) {
     if count == 0 {
         let empty = if app.section == Section::Fonts && app.fonts_loading {
             "  Loading fonts"
+        } else if app.section == Section::Presets && app.presets.is_empty() {
+            "  No presets yet, press s to save one"
         } else {
             "  No matches"
         };
@@ -252,11 +265,20 @@ fn render_preview(frame: &mut Frame, app: &mut App, area: Rect, s: &Styles) {
         Constraint::Fill(1),
     ])
     .areas(area);
-    frame.render_widget(Line::styled("Live terminal preview", s.title), title);
-    let meta_text = format!(
+    let mut heading = "Live terminal preview".to_string();
+    let mut meta_text = format!(
         "{}  ·  {}pt  ·  line {:+}%  ·  cell {:+}%",
         app.cfg.font, app.cfg.font_size, app.cfg.line_height, app.cfg.letter_spacing
     );
+    if app.section == Section::Presets
+        && let Some(preset) = app.visible.get(app.cursor).map(|&i| &app.presets[i])
+    {
+        heading = format!("{}  ·  {}", preset.name, app.cfg.theme);
+        if !preset.description.is_empty() {
+            meta_text = format!("{}  ·  {meta_text}", preset.description);
+        }
+    }
+    frame.render_widget(Line::styled(heading, s.title), title);
     frame.render_widget(Line::styled(meta_text, s.muted), meta);
     render_mock(frame, app, mock, spread, s);
     render_swatches(frame, app, swatches);
@@ -359,6 +381,17 @@ fn render_image(frame: &mut Frame, app: &mut App, area: Rect, s: &Styles) {
 }
 
 fn render_footer(frame: &mut Frame, app: &App, area: Rect, s: &Styles) {
+    if app.naming.is_some() {
+        let spans = vec![
+            Span::styled("enter", s.key),
+            Span::styled(" save to configs/ghostty/presets", s.muted),
+            Span::raw("   "),
+            Span::styled("esc", s.key),
+            Span::styled(" cancel", s.muted),
+        ];
+        frame.render_widget(Line::from(spans), area);
+        return;
+    }
     if let Some(status) = &app.status {
         let style = if status.error {
             Style::new().fg(ERROR).add_modifier(Modifier::BOLD)
@@ -383,6 +416,9 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect, s: &Styles) {
         ),
         ("q", " restore & quit"),
     ];
+    if app.section == Section::Presets {
+        hints.push(("s", " save as preset"));
+    }
     if app.section == Section::Themes {
         hints.extend([("f", " favorite"), ("v", " view")]);
     }
