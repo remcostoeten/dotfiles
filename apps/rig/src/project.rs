@@ -873,7 +873,8 @@ fn can_serve(dir: &Path, root: &Path, need: Need) -> bool {
     let Some(manifest) = Manifest::load(dir) else {
         return false;
     };
-    let framework = detect_framework(dir, root, &manifest);
+    let workspace_root = dir == root && layout_of(dir, &manifest).is_some();
+    let framework = detect_framework(dir, root, &manifest).filter(|_| !workspace_root);
     resolve_task(&manifest, framework.as_ref(), need).is_some()
 }
 
@@ -1146,6 +1147,23 @@ mod tests {
         let fw =
             detect_framework(Path::new("/nowhere"), Path::new("/nowhere"), &by_script).unwrap();
         assert_eq!(fw.label, "Vite+");
+    }
+
+    #[test]
+    fn workspace_root_without_a_script_defers_to_its_packages() {
+        let dir = sandbox("vproot");
+        write(
+            &dir.join("package.json"),
+            "{\"workspaces\":[\"apps/*\"],\"devDependencies\":{\"vite-plus\":\"1.0.0\"}}",
+        );
+        write(
+            &dir.join("apps/web/package.json"),
+            "{\"scripts\":{\"build\":\"vp build\"},\"devDependencies\":{\"vite-plus\":\"1.0.0\"}}",
+        );
+        match locate(&dir, Need::Build, None).unwrap() {
+            Located::One(found) => assert_eq!(found, dir.join("apps/web")),
+            Located::Many(_) => panic!("expected one package"),
+        }
     }
 
     #[test]
