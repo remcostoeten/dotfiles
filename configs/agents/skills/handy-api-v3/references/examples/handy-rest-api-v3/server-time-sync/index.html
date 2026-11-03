@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>Client-server Time Synchronization</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+
+  <style>
+    body {
+      background-color: #f8f9fa;
+      padding: 20px;
+    }
+
+    .button-container {
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    .input-group {
+      margin-bottom: 15px;
+    }
+
+    .input-group-text {
+      min-width: 120px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1 class="text-center">Server Time Synchronization</h1>
+    <p class="text-left">
+      This example demonstrates how to synchronize the time between the client and the server by calculating the
+      server-client time offset. The offset is used to estimate the current server time, which is used in the
+      play and synctime endpoints of the synchronized protocols like HSSP, HSP, and STREAM.
+    </p>
+
+    <!-- Synchronize Section -->
+    <div class="row g-3 justify-content-center">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text" id="apiHost-label">API Host</span>
+          <div id="apiHost" class="form-control" contenteditable="false">https://handyfeeling.com</div>
+        </div>
+        <div class="input-group">
+          <span class="input-group-text" id="offset-label">Offset</span>
+          <div id="offset" class="form-control" contenteditable="false">Click 'Synchronize' to estimate
+            offset</div>
+        </div>
+        <div class="input-group">
+          <span class="input-group-text" id="rtd-label">Rtd</span>
+          <div id="rtd" class="form-control" contenteditable="false">Click 'Synchronize' to estimate rtd</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="button-container">
+      <button type="button" class="btn btn-primary me-2" id="syncClient">Synchronize</button>
+    </div>
+
+    <!-- Estimate Section -->
+    <div class="row g-3 justify-content-center mt-4">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text" id="estimate-label">ServerTime</span>
+          <div id="estimate" class="form-control" contenteditable="false">Click 'Estimate' to estimate a new
+            server time</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="button-container">
+      <button type="button" class="btn btn-primary" id="timeEstimate">Estimate</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-MrcW6ZMFZ23XO871EuaPH8fg5KpZ8bxkfuP4YR9Tt8Ph4/91hbP5dwwi5yW3nk5i" crossorigin="anonymous">
+    </script>
+  <script>
+    (async () => {
+      await import('./main.js')
+    })()
+  </script>
+</body>
+
+</html>

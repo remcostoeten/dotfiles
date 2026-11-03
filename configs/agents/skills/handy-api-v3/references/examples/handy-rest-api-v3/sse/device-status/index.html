@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+  <script type="module" src="./device-status.js"></script>
+  <title>Device Status</title>
+</head>
+
+<body>
+
+  <div class="container mt-5">
+    <h1 class="mb-3">SSE: Device status</h1>
+    <div class="alert alert-warning" role="alert">
+      You need to provide an ApplicationID issued for the Handy API to run this demo.
+      You can issue an ApplicationID by creating a developer account on
+      <a href="https://user.handyfeeling.com" class="alert-link">HandyFeeling User web</a>.
+    </div>
+    <div class="card mb-3">
+      <div class="card-body">
+        <p class="card-text">
+          This demo showcases how you can use the SSE endpoint to receive real-time device updates from the server.
+        </p>
+        <p class="card-text">
+          The UI is updated with the received device connected status update.
+        </p>
+        <p class="card-text">
+          If you unplug your device the status should change to Offline after a
+          few seconds. If you plug it back in the status should change back to Online.
+        </p>
+        <p class="card-text">
+          If you turn off the wifi mode (eg. switch to bluetooth only mode or offline mode) the status should change
+          to offline immediatley.
+        </p>
+      </div>
+    </div>
+    <div class="mb-3">
+      <device-status></device-status>
+    </div>
+
+</body>
+
+</html>

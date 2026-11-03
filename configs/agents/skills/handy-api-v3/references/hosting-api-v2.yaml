@@ -1,0 +1,283 @@
+openapi: 3.0.3
+servers:
+  - url: https://www.handyfeeling.com/api/hosting/v2
+    description: Production API server
+  - url: "{protocol}://{ip}:{port}/api/hosting/v2"
+    description: Local server
+    variables:
+      ip:
+        default: 127.0.0.1
+      port:
+        default: "6030"
+      protocol:
+        default: http
+        enum:
+          - http
+info:
+  version: 2.0.0
+  title: Hosting API v2
+  contact:
+    email: lars@sweettech.no
+  description: The API provides endpoints for script hosting.
+tags:
+  - name: Hosting
+    description: Script hosting utilities.
+paths:
+  /upload:
+    post:
+      security: []
+      tags:
+        - Hosting
+      operationId: upload
+      summary: Upload a script
+      description: |
+        Upload a script to be served from a unique temporary URL.<br> <h1>Funscript, JSON and CSV</h1>
+        For plain script files (funscript/json/csv), the endpoint will return a unique URL from where the file can be downloaded.
+        The file will be served from the temporary hosting endpoint: <code>/hosting/download</code>.
+
+        Example:
+        <ol>
+          <li>Upload script to '/hosting/upload'</li>
+          <li>The server will return a script URL in the form: https://[server]/api/script/v0/hosting/download/{scriptId}</li>
+          <li>Use the returned URL in the syncPrepare (Handy API v1) or the hssp/setup (Handy API v2/v3) endpoint.</li>
+        </ol>
+        <h1>Token file</h1>
+        If a token file is uploaded, the returned URL will be a token URL.
+
+        Example:
+        <ol>
+          <li>Upload script token file to '/hosting/upload'</li>
+          <li>The server will return a token URL in the form: https://[server]/api/script/partner/v0/token/download?...</li>
+          <li>Use the returned URL in the syncPrepare (Handy API v1) or hssp/setup (Handy API v2/v3) endpoint.<br></li>
+        </ol>
+      responses:
+        "200":
+          description: Script uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                required:
+                  - url
+              examples:
+                UploadOK:
+                  value:
+                    url: https://www.handyfeeling.com/api/hosting/v0/download/01FHZAE97FBDGXHC1Q8D6RQ7MJ
+                TokenError:
+                  $ref: "#/components/examples/TokenError"
+                TokenUrlTimeout:
+                  $ref: "#/components/examples/TokenUrlTimeout"
+                TokenExpired:
+                  $ref: "#/components/examples/TokenExpired"
+                TokenInvalid:
+                  $ref: "#/components/examples/TokenInvalid"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+  /download/{scriptId}:
+    parameters:
+      - $ref: "#/components/parameters/ScriptId"
+    get:
+      security: []
+      tags:
+        - Hosting
+      operationId: download
+      description: "Download a script from the hosting endpoint.<br> For a script to be available it first have to be uploaded using the <code>/hosting/upload</code> endpoint.<br> The returned script will always be in the CSV format required by the device. "
+      summary: Download a script from the hosting endpoint.
+      responses:
+        "200":
+          description: Script download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: text
+components:
+  schemas:
+    APIErrorObject:
+      type: object
+      properties:
+        code:
+          type: number
+        name:
+          type: string
+        message:
+          type: string
+        data:
+          type: object
+      required:
+        - code
+        - name
+  headers:
+    X-RateLimit-Limit:
+      schema:
+        type: integer
+        minimum: 0
+      example: 240
+      description: Request limit per minute window.
+    X-RateLimit-Remaining:
+      schema:
+        type: integer
+        minimum: 0
+      example: 100
+      description: The number of requests left in the current window.
+    X-RateLimit-Reset:
+      schema:
+        type: integer
+        minimum: 0
+      example: 6205
+      description: Milliseconds until next window reset.
+  parameters:
+    ScriptId:
+      name: scriptId
+      in: path
+      required: true
+      description: Script identifier
+      explode: false
+      style: simple
+      example: ab28d3f9ebdc4e6a8b5f5e5f5f5f5f5f
+      schema:
+        type: string
+        pattern: ^[a-fA-F0-9]{16}$
+  responses:
+    "400":
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      description: Bad request.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIErrorObject"
+    "401":
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIErrorObject"
+    "403":
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIErrorObject"
+    "404":
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIErrorObject"
+    "408":
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      description: Request timeout.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIErrorObject"
+    "500":
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIErrorObject"
+  examples:
+    TokenError:
+      value:
+        error:
+          code: 2000
+          name: TOKEN_ERROR
+          message: Unspecified token error
+    TokenUrlTimeout:
+      value:
+        error:
+          code: 2001
+          name: TOKEN_URL_EXPIRED
+          message: The token url have expired.
+    TokenExpired:
+      value:
+        error:
+          code: 2002
+          name: TOKEN_EXPIRED
+          message: The token have expired.
+    TokenExpiredWithPartnerInfo:
+      value:
+        error:
+          code: 2002
+          name: TOKEN_EXPIRED
+          message: The token have expired.
+          data: The token from 'https://www.mysite.com' for script 'Myscript' have expired. Please visit the site to get a new token.
+    TokenInvalid:
+      value:
+        error:
+          code: 2003
+          name: TOKEN_INVALID
+          message: The token is invalid.
+    TokenRestricted:
+      value:
+        error:
+          code: 2004
+          name: TOKEN_RESTRICTED
+          message: The token can not be used in the current context.
+    TokenRestrictedWithInfo:
+      value:
+        error:
+          code: 2004
+          name: TOKEN_RESTRICTED
+          message: The token can not be used in the current context.
+          data: The token can not be used with the provided connection key.
+    TokenUrlInvalid:
+      value:
+        error:
+          code: 2005
+          name: TOKEN_URL_INVALID
+          message: The token URL is invalid.

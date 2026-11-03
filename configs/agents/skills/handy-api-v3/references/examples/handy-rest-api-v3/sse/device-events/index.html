@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+  <script type="module" src="./../device-status/device-status.js"></script>
+  <script type="module" src="./device-events.js"></script>
+  <title>Server-sent Events (SSE) Demo</title>
+</head>
+
+<body>
+
+  <div class="container mt-5">
+    <h1 class="mb-3">SSE: Device events</h1>
+    <div class="alert alert-warning" role="alert">
+      You need to provide an ApplicationID issued for the Handy API to run this demo.
+      You can issue an ApplicationID by creating a developer account on
+      <a href="https://user.handyfeeling.com" class="alert-link">HandyFeeling User web</a>.
+    </div>
+    <div class="card mb-3">
+      <div class="card-body">
+        <p class="card-text">This demo showcases how you can use the SSE endpoint to receive real-time device updates
+          from the server. This demo listens for all device events.
+        </p>
+        <p class="card-text">
+          The UI is updated with the received device events. Events are added to the events-list as they are
+          received.
+        </p>
+        <p class="card-text">
+          You can trigger button events by pressing the buttons on your device. Only button events that trigger a device
+          state change is forwarded.
+      </div>
+    </div>
+    <div class="mb-3">
+      <device-status></device-status>
+      <device-events></device-events>
+    </div>
+
+</body>
+
+</html>

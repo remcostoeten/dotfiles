@@ -1,0 +1,12 @@
+{
+  "name": "@ohdoki/auth-proxy-server",
+  "version": "0.1.0",
+  "description": "Simple server to proxy client-token requests to the Handy API v3 token endpoint.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Lars Erik Karlsen",
+  "license": "MIT"
+}
