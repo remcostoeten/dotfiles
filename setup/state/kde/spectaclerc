@@ -1,0 +1,36 @@
+[Annotations]
+annotationToolType=6
+arrowStrokeColor=41,170,62
+ellipseFillColor=255,0,0,0
+freehandStrokeColor=255,2,6
+highlighterStrokeColor=255,0,17
+highlighterStrokeWidth=9
+lineStrokeColor=22,1,255
+pixelateStrength=0.9764590992647065
+rectangleFillColor=255,255,255,0
+rectangleStrokeColor=9,3,170
+rectangleStrokeWidth=5
+textFont=Inter,36,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0
+textFontColor=170,0,255
+
+[General]
+ocrLanguages=afr
+
+[GuiConfig]
+captureMode=5
+includePointer=true
+
+[ImageSave]
+lastImageSaveAsLocation=file:///home/remcostoeten/dev/whatsapp-history/private/media/Screenshot_20260913_184042.png
+lastImageSaveLocation=file:///tmp/claude-1000/-home-remcostoeten/ba89a628-b3b5-4d2d-8622-99c72105ceb9/scratchpad/live4.png
+translatedScreenshotsFolder=Screenshots
+
+[VideoSave]
+lastVideoSaveAsLocation=file:///home/remcostoeten/Videos/Screencasts/Screencast_20260520_204452.webm
+translatedScreencastsFolder=Screencasts
+
+[ViewerWindow]
+2 screens: Height=886
+2 screens: Width=815
+2194x1234 screen: Window-Maximized=true
+3840x2160 screen: Window-Maximized=true

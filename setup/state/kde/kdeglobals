@@ -1,0 +1,198 @@
+[ColorEffects:Disabled]
+ChangeSelectionColor=
+Color=56,56,56
+ColorAmount=0
+ColorEffect=0
+ContrastAmount=0.65
+ContrastEffect=1
+Enable=
+IntensityAmount=0.1
+IntensityEffect=2
+
+[ColorEffects:Inactive]
+ChangeSelectionColor=true
+Color=112,111,110
+ColorAmount=0.025
+ColorEffect=2
+ContrastAmount=0.1
+ContrastEffect=2
+Enable=false
+IntensityAmount=0
+IntensityEffect=0
+
+[Colors:Button]
+BackgroundAlternate=56,52,43
+BackgroundNormal=45,42,33
+DecorationFocus=225,196,109
+DecorationHover=225,196,109
+ForegroundActive=225,196,109
+ForegroundInactive=206,198,180
+ForegroundLink=225,196,109
+ForegroundNegative=255,181,159
+ForegroundNeutral=232,194,108
+ForegroundNormal=233,226,212
+ForegroundPositive=174,209,141
+ForegroundVisited=172,207,175
+
+[Colors:Complementary]
+BackgroundAlternate=30,27,19
+BackgroundNormal=17,14,7
+DecorationFocus=225,196,109
+DecorationHover=225,196,109
+ForegroundActive=225,196,109
+ForegroundInactive=206,198,180
+ForegroundLink=225,196,109
+ForegroundNegative=255,181,159
+ForegroundNeutral=232,194,108
+ForegroundNormal=233,226,212
+ForegroundPositive=174,209,141
+ForegroundVisited=172,207,175
+
+[Colors:Header]
+BackgroundAlternate=35,31,23
+BackgroundNormal=30,27,19
+DecorationFocus=225,196,109
+DecorationHover=225,196,109
+ForegroundActive=225,196,109
+ForegroundInactive=206,198,180
+ForegroundLink=225,196,109
+ForegroundNegative=255,181,159
+ForegroundNeutral=232,194,108
+ForegroundNormal=233,226,212
+ForegroundPositive=174,209,141
+ForegroundVisited=172,207,175
+
+[Colors:Header][Inactive]
+BackgroundAlternate=30,27,19
+BackgroundNormal=35,31,23
+DecorationFocus=225,196,109
+DecorationHover=225,196,109
+ForegroundActive=225,196,109
+ForegroundInactive=206,198,180
+ForegroundLink=225,196,109
+ForegroundNegative=255,181,159
+ForegroundNeutral=232,194,108
+ForegroundNormal=233,226,212
+ForegroundPositive=174,209,141
+ForegroundVisited=172,207,175
+
+[Colors:Selection]
+BackgroundAlternate=86,69,0
+BackgroundNormal=225,196,109
+DecorationFocus=225,196,109
+DecorationHover=225,196,109
+ForegroundActive=60,47,0
+ForegroundInactive=60,47,0
+ForegroundLink=225,196,109
+ForegroundNegative=255,181,159
+ForegroundNeutral=232,194,108
+ForegroundNormal=60,47,0
+ForegroundPositive=174,209,141
+ForegroundVisited=172,207,175
+
+[Colors:Tooltip]
+BackgroundAlternate=45,42,33
+BackgroundNormal=56,52,43
+DecorationFocus=225,196,109
+DecorationHover=225,196,109
+ForegroundActive=225,196,109
+ForegroundInactive=206,198,180
+ForegroundLink=225,196,109
+ForegroundNegative=255,181,159
+ForegroundNeutral=232,194,108
+ForegroundNormal=233,226,212
+ForegroundPositive=174,209,141
+ForegroundVisited=172,207,175
+
+[Colors:View]
+BackgroundAlternate=30,27,19
+BackgroundNormal=22,19,11
+DecorationFocus=225,196,109
+DecorationHover=225,196,109
+ForegroundActive=225,196,109
+ForegroundInactive=206,198,180
+ForegroundLink=225,196,109
+ForegroundNegative=255,181,159
+ForegroundNeutral=232,194,108
+ForegroundNormal=233,226,212
+ForegroundPositive=174,209,141
+ForegroundVisited=172,207,175
+
+[Colors:Window]
+BackgroundAlternate=30,27,19
+BackgroundNormal=35,31,23
+DecorationFocus=225,196,109
+DecorationHover=225,196,109
+ForegroundActive=225,196,109
+ForegroundInactive=206,198,180
+ForegroundLink=225,196,109
+ForegroundNegative=255,181,159
+ForegroundNeutral=232,194,108
+ForegroundNormal=233,226,212
+ForegroundPositive=174,209,141
+ForegroundVisited=172,207,175
+
+[General]
+BrowserApplication=brave-browser.desktop
+ColorScheme=PocketB
+ColorSchemeHash=5ad38e84cfd0de144aab68373c333b8578b6c6ed
+DeviceLedsAccentColored=false
+TerminalApplication=kitty
+XftAntialias=true
+XftHintStyle=hintslight
+XftSubPixel=none
+fixed=Geist Medium,16,-1,5,500,0,0,0,0,0,0,0,0,0,0,1,Regular,0,0
+font=Geist Medium,16,-1,5,500,0,0,0,0,0,0,0,0,0,0,1,Regular,0,0
+menuFont=Geist Medium,16,-1,5,500,0,0,0,0,0,0,0,0,0,0,1,Regular,0,0
+smallestReadableFont=Geist Medium,16,-1,5,500,0,0,0,0,0,0,0,0,0,0,1,Regular,0,0
+toolBarFont=Geist Medium,16,-1,5,500,0,0,0,0,0,0,0,0,0,0,1,Regular,0,0
+
+[Icons]
+Theme=Tela-circle-grey
+
+[KDE]
+AnimationDurationFactor=0.1
+LookAndFeelPackage=Chocula
+contrast=4
+frameContrast=0.2
+widgetStyle=Breeze
+
+[KFileDialog Settings]
+Allow Expansion=true
+Automatically select filename extension=true
+Breadcrumb Navigation=false
+Decoration position=2
+Preview Width=333
+Show Full Path=false
+Show Inline Previews=true
+Show Preview=false
+Show Speedbar=true
+Show hidden files=true
+Sort by=Date
+Sort directories first=true
+Sort hidden files last=true
+Sort reversed=false
+Speedbar Width=140
+View Style=DetailTree
+
+[KScreen]
+ScreenScaleFactors=DP-1=1;
+
+[QtQuickRendererSettings]
+SceneGraphBackend=software
+
+[Shortcuts]
+Back=Back; Alt+Left
+Forward=Forward; Alt+Right
+
+[WM]
+activeBackground=30,27,19
+activeBlend=233,226,212
+activeFont=Geist Medium,16,-1,5,500,0,0,0,0,0,0,0,0,0,0,1,Regular,0,0
+activeForeground=233,226,212
+inactiveBackground=22,19,11
+inactiveBlend=206,198,180
+inactiveForeground=206,198,180
+
+[Wallet]
+Enabled=false

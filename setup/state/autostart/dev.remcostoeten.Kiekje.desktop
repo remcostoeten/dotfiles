@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Kiekje
+Comment=Start the Kiekje tray at login
+Exec=kiekje daemon
+Icon=dev.remcostoeten.Kiekje
+Terminal=false
+NoDisplay=true
+X-KDE-autostart-phase=2
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2

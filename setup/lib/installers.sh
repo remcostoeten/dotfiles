@@ -352,6 +352,48 @@ install_paru() {
     log_success "paru installed"
 }
 
+install_quickshell_bar() {
+    if [[ "$(detect_os_family)" != "arch" ]]; then
+        log_info "Skipping Quickshell bar: only packaged for Arch"
+        return 0
+    fi
+
+    local pkg
+    for pkg in quickshell matugen cava pacman-contrib libpulse python otf-geist-mono-nerd; do
+        install_apt "$pkg" || return 1
+    done
+
+    local aur_helper="yay"
+    if ! command -v yay >/dev/null 2>&1; then
+        install_paru || return 1
+        aur_helper="paru"
+    fi
+
+    if is_installed_pacman otf-departure-mono; then
+        log_success "Departure Mono already installed"
+    elif [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "$aur_helper -S --noconfirm --needed otf-departure-mono"
+    else
+        log_step "Installing Departure Mono..."
+        "$aur_helper" -S --noconfirm --needed otf-departure-mono >/dev/null 2>&1 || {
+            log_error "Failed to install otf-departure-mono via $aur_helper"
+            return 1
+        }
+        log_success "Departure Mono installed"
+    fi
+
+    local autostart_src="$SCRIPT_DIR/../configs/kde/pocket/quickshell.desktop"
+    local autostart_dst="$HOME/.config/autostart/pocket-quickshell.desktop"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_dry_run "ln -s $autostart_src $autostart_dst"
+        return 0
+    fi
+
+    ensure_setup_backup_root
+    ensure_symlink "$autostart_src" "$autostart_dst" "$SETUP_BACKUP_ROOT"
+    log_success "Quickshell bar installed and set to start on login"
+}
+
 install_wl_clipboard() {
     local package_manager
     package_manager="$(detect_package_manager)"
@@ -757,6 +799,7 @@ setup_config_symlinks() {
         # than the editor's ($HOME/.config/Cursor).
         "hypr:$home_config_dir/hypr"
         "waybar:$home_config_dir/waybar"
+        "quickshell:$home_config_dir/quickshell"
         "dunst:$home_config_dir/dunst"
         "swayosd:$home_config_dir/swayosd"
         "git/ignore:$home_config_dir/git/ignore"

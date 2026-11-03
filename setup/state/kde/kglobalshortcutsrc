@@ -1,0 +1,438 @@
+[ActivityManager]
+_k_friendly_name=Activity Manager
+switch-to-activity-840aa958-4262-4029-94ae-cf7fc72562ff=none,none,Switch to activity "Default"
+
+[KDE Keyboard Layout Switcher]
+Switch to Last-Used Keyboard Layout=Meta+Alt+L,Meta+Alt+L,Switch to Last-Used Keyboard Layout
+Switch to Next Keyboard Layout=Meta+Alt+K,Meta+Alt+K,Switch to Next Keyboard Layout
+_k_friendly_name=Keyboard Layout Switcher
+
+[better-whatapp-desktop]
+360DBD5D25449BB944A58FAEC0903623-Ctrl+Shift+P=none,Ctrl+Shift+P,Better WhatApp Desktop shortcut: Ctrl+Shift+P
+_k_friendly_name=Better WhatApp Desktop
+
+[com.anthropic.Claude]
+0DF07FA4223847E69414F6A882C0808E-Ctrl+Alt+Space=none,Ctrl+Alt+Space,Claude shortcut: Ctrl+Alt+Space
+_k_friendly_name=Claude
+
+[com.mitchellh.ghostty]
+SHIFT+CTRL+grave=Ctrl+Shift+`,Ctrl+Shift+`,toggle_quick_terminal
+_k_friendly_name=Ghostty
+
+[dev.remcostoeten.Kiekje]
+_k_friendly_name=Kiekje
+capture-fullscreen=Meta+Shift+S,Shift+Print,Capture every screen
+capture-region=Meta+S,Print,Capture a region
+capture-window=none,none,Capture a window
+record=none,none,Start or stop a recording
+stop-recording=none,none,Cancel the recording (press Escape twice or hold it)
+
+[dev.remcostoeten.KiekjeEscTest]
+_k_friendly_name=Kiekje Esc Test
+stop-recording=none,Esc,Cancel the recording
+
+[kaccess]
+Toggle Screen Reader On and Off=none,Meta+Alt+S,Toggle Screen Reader On and Off
+_k_friendly_name=Accessibility
+
+[kmix]
+_k_friendly_name=KMix
+decrease-volume-Beep@HDA Intel PCH=none,none,Decrease volume of Beep on HDA Intel PCH
+decrease-volume-Capture 2@HDA Intel PCH=none,none,Decrease volume of Capture 2 on HDA Intel PCH
+decrease-volume-Capture@HDA Intel PCH=none,none,Decrease volume of Capture on HDA Intel PCH
+decrease-volume-Center@HDA Intel PCH=none,none,Decrease volume of Center on HDA Intel PCH
+decrease-volume-Digital@Loopback=none,none,Decrease volume of Digital on Loopback
+decrease-volume-Front Mic Boost@HDA Intel PCH=none,none,Decrease volume of Front Mic Boost on HDA Intel PCH
+decrease-volume-Front Mic@HDA Intel PCH=none,none,Decrease volume of Front Mic on HDA Intel PCH
+decrease-volume-Front@HDA Intel PCH=none,none,Decrease volume of Front on HDA Intel PCH
+decrease-volume-Headphone@HDA Intel PCH=none,none,Decrease volume of Headphone on HDA Intel PCH
+decrease-volume-Headset@SteelSeries Arctis 7=none,none,Decrease volume of Headset on SteelSeries Arctis 7
+decrease-volume-LFE@HDA Intel PCH=none,none,Decrease volume of LFE on HDA Intel PCH
+decrease-volume-Line Boost@HDA Intel PCH=none,none,Decrease volume of Line Boost on HDA Intel PCH
+decrease-volume-Line@HDA Intel PCH=none,none,Decrease volume of Line on HDA Intel PCH
+decrease-volume-Master@HDA Intel PCH=none,none,Decrease volume of Master on HDA Intel PCH
+decrease-volume-Mic@Anker PowerConf C200=none,none,Decrease volume of Mic on Anker PowerConf C200
+decrease-volume-Mic@NZXT USB MIC=none,none,Decrease volume of Mic on NZXT USB MIC
+decrease-volume-PCM@HDA Intel PCH=none,none,Decrease volume of PCM on HDA Intel PCH
+decrease-volume-PCM@Loopback=none,none,Decrease volume of PCM on Loopback
+decrease-volume-Rear Mic Boost@HDA Intel PCH=none,none,Decrease volume of Rear Mic Boost on HDA Intel PCH
+decrease-volume-Rear Mic@HDA Intel PCH=none,none,Decrease volume of Rear Mic on HDA Intel PCH
+decrease-volume-Surround@HDA Intel PCH=none,none,Decrease volume of Surround on HDA Intel PCH
+decrease_microphone_volume=Microphone Volume Down,Microphone Volume Down,Decrease Microphone Volume
+decrease_volume=Volume Down,Volume Down,Decrease Volume
+decrease_volume_small=Shift+Volume Down,Shift+Volume Down,Decrease Volume by 1%
+increase-volume-Beep@HDA Intel PCH=none,none,Increase volume of Beep on HDA Intel PCH
+increase-volume-Capture 2@HDA Intel PCH=none,none,Increase volume of Capture 2 on HDA Intel PCH
+increase-volume-Capture@HDA Intel PCH=none,none,Increase volume of Capture on HDA Intel PCH
+increase-volume-Center@HDA Intel PCH=none,none,Increase volume of Center on HDA Intel PCH
+increase-volume-Digital@Loopback=none,none,Increase volume of Digital on Loopback
+increase-volume-Front Mic Boost@HDA Intel PCH=none,none,Increase volume of Front Mic Boost on HDA Intel PCH
+increase-volume-Front Mic@HDA Intel PCH=none,none,Increase volume of Front Mic on HDA Intel PCH
+increase-volume-Front@HDA Intel PCH=none,none,Increase volume of Front on HDA Intel PCH
+increase-volume-Headphone@HDA Intel PCH=none,none,Increase volume of Headphone on HDA Intel PCH
+increase-volume-Headset@SteelSeries Arctis 7=none,none,Increase volume of Headset on SteelSeries Arctis 7
+increase-volume-LFE@HDA Intel PCH=none,none,Increase volume of LFE on HDA Intel PCH
+increase-volume-Line Boost@HDA Intel PCH=none,none,Increase volume of Line Boost on HDA Intel PCH
+increase-volume-Line@HDA Intel PCH=none,none,Increase volume of Line on HDA Intel PCH
+increase-volume-Master@HDA Intel PCH=none,none,Increase volume of Master on HDA Intel PCH
+increase-volume-Mic@Anker PowerConf C200=none,none,Increase volume of Mic on Anker PowerConf C200
+increase-volume-Mic@NZXT USB MIC=none,none,Increase volume of Mic on NZXT USB MIC
+increase-volume-PCM@HDA Intel PCH=none,none,Increase volume of PCM on HDA Intel PCH
+increase-volume-PCM@Loopback=none,none,Increase volume of PCM on Loopback
+increase-volume-Rear Mic Boost@HDA Intel PCH=none,none,Increase volume of Rear Mic Boost on HDA Intel PCH
+increase-volume-Rear Mic@HDA Intel PCH=none,none,Increase volume of Rear Mic on HDA Intel PCH
+increase-volume-Surround@HDA Intel PCH=none,none,Increase volume of Surround on HDA Intel PCH
+increase_microphone_volume=Microphone Volume Up,Microphone Volume Up,Increase Microphone Volume
+increase_volume=Volume Up,Volume Up,Increase Volume
+increase_volume_small=Ctrl+Shift++,Shift+Volume Up,Increase Volume by 1%
+mic_mute=Microphone Mute\tMeta+Volume Mute,Microphone Mute\tMeta+Volume Mute,Mute Microphone
+mute=Volume Mute,Volume Mute,Mute
+push_to_talk=none,none,Push to talk
+toggle-mute-Beep@HDA Intel PCH=none,none,Mute Beep on HDA Intel PCH
+toggle-mute-Capture 2@HDA Intel PCH=none,none,Mute Capture 2 on HDA Intel PCH
+toggle-mute-Capture@HDA Intel PCH=none,none,Mute Capture on HDA Intel PCH
+toggle-mute-Center@HDA Intel PCH=none,none,Mute Center on HDA Intel PCH
+toggle-mute-Digital@Loopback=none,none,Mute Digital on Loopback
+toggle-mute-Front Mic Boost@HDA Intel PCH=none,none,Mute Front Mic Boost on HDA Intel PCH
+toggle-mute-Front Mic@HDA Intel PCH=none,none,Mute Front Mic on HDA Intel PCH
+toggle-mute-Front@HDA Intel PCH=none,none,Mute Front on HDA Intel PCH
+toggle-mute-Headphone@HDA Intel PCH=none,none,Mute Headphone on HDA Intel PCH
+toggle-mute-Headset@SteelSeries Arctis 7=none,none,Mute Headset on SteelSeries Arctis 7
+toggle-mute-IEC958 2@HDA NVidia=none,none,Mute IEC958 2 on HDA NVidia
+toggle-mute-IEC958 3@HDA NVidia=none,none,Mute IEC958 3 on HDA NVidia
+toggle-mute-IEC958 4@HDA NVidia=none,none,Mute IEC958 4 on HDA NVidia
+toggle-mute-IEC958 Default PCM@HDA Intel PCH=none,none,Mute IEC958 Default PCM on HDA Intel PCH
+toggle-mute-IEC958@HDA Intel PCH=none,none,Mute IEC958 on HDA Intel PCH
+toggle-mute-IEC958@HDA NVidia=none,none,Mute IEC958 on HDA NVidia
+toggle-mute-LFE@HDA Intel PCH=none,none,Mute LFE on HDA Intel PCH
+toggle-mute-Line Boost@HDA Intel PCH=none,none,Mute Line Boost on HDA Intel PCH
+toggle-mute-Line@HDA Intel PCH=none,none,Mute Line on HDA Intel PCH
+toggle-mute-Master@HDA Intel PCH=none,none,Mute Master on HDA Intel PCH
+toggle-mute-Mic@Anker PowerConf C200=none,none,Mute Mic on Anker PowerConf C200
+toggle-mute-Mic@NZXT USB MIC=none,none,Mute Mic on NZXT USB MIC
+toggle-mute-PCM 2@SteelSeries Arctis 7=none,none,Mute PCM 2 on SteelSeries Arctis 7
+toggle-mute-PCM@HDA Intel PCH=none,none,Mute PCM on HDA Intel PCH
+toggle-mute-PCM@Loopback=none,none,Mute PCM on Loopback
+toggle-mute-PCM@NZXT USB MIC=none,none,Mute PCM on NZXT USB MIC
+toggle-mute-PCM@SteelSeries Arctis 7=none,none,Mute PCM on SteelSeries Arctis 7
+toggle-mute-Rear Mic Boost@HDA Intel PCH=none,none,Mute Rear Mic Boost on HDA Intel PCH
+toggle-mute-Rear Mic@HDA Intel PCH=none,none,Mute Rear Mic on HDA Intel PCH
+toggle-mute-Surround@HDA Intel PCH=none,none,Mute Surround on HDA Intel PCH
+
+[ksmserver]
+Halt Without Confirmation=none,none,Shut Down Without Confirmation
+Lock Session=Screensaver\tMeta+L,Screensaver\tMeta+L,Lock Session
+Log Out=none,Ctrl+Alt+Del,Show Logout Screen
+Log Out Without Confirmation=none,none,Log Out Without Confirmation
+LogOut=none,none,Log Out
+Reboot=none,none,Reboot
+Reboot Without Confirmation=none,none,Reboot Without Confirmation
+Shut Down=none,none,Shut Down
+_k_friendly_name=Session Management
+
+[ktorrent]
+_k_friendly_name=KTorrent
+queue_suspend=Alt+Shift+P,Alt+Shift+P,Suspend Torrents
+show_kt=Alt+Shift+T,Alt+Shift+T,Show/Hide KTorrent
+
+[kwin]
+Activate Window Demanding Attention=Meta+Ctrl+A,Meta+Ctrl+A,Activate Window Demanding Attention
+ClearLastMouseMark=Meta+Shift+F12,Meta+Shift+F12,Clear Last Mouse Mark
+ClearMouseMarks=Meta+Shift+F11,Meta+Shift+F11,Clear All Mouse Marks
+Cycle Overview=none,none,Cycle through Overview and Grid View
+Cycle Overview Opposite=none,none,Cycle through Grid View and Overview
+Decrease Opacity=none,none,Decrease Opacity of Active Window by 5%
+Edit Tiles=Meta+T,Meta+T,Toggle Tiles Editor
+Expose=none,Ctrl+F9\tMeta+F9,Toggle Present Windows (Current desktop)
+ExposeAll=Launch (C)\tCtrl+F10\tMeta+F10,Launch (C)\tCtrl+F10\tMeta+F10,Toggle Present Windows (All desktops)
+ExposeClass=Ctrl+F7\tMeta+F7,Ctrl+F7\tMeta+F7,Toggle Present Windows (Window class)
+ExposeClassCurrentDesktop=none,none,Toggle Present Windows (Window class on current desktop)
+Grid View=Meta+G,Meta+G,Toggle Grid View
+Increase Opacity=none,none,Increase Opacity of Active Window by 5%
+Kill Window=Meta+Ctrl+Esc,Meta+Ctrl+Esc,Kill Window
+Move Tablet to Next LogicalOutput=none,none,Move the tablet to the next output
+Move Window to Desktop 1 and Follow=Alt+!,none,Move Window to Desktop 1 and Follow
+Move Window to Desktop 2 and Follow=Alt+@,none,Move Window to Desktop 2 and Follow
+Move Window to Desktop 3 and Follow=Alt+#,none,Move Window to Desktop 3 and Follow
+Move Window to Desktop 4 and Follow=Alt+$,none,Move Window to Desktop 4 and Follow
+Move Window to Desktop 5 and Follow=Alt+%,none,Move Window to Desktop 5 and Follow
+Move Window to Desktop 6 and Follow=Alt+^,none,Move Window to Desktop 6 and Follow
+Move Window to Desktop 7 and Follow=Alt+&,none,Move Window to Desktop 7 and Follow
+Move Window to Desktop 8 and Follow=Alt+*,none,Move Window to Desktop 8 and Follow
+Move Window to Desktop 9 and Follow=Alt+(,none,Move Window to Desktop 9 and Follow
+MoveMouseToCenter=Meta+F6,Meta+F6,Move Mouse to Center
+MoveMouseToFocus=Meta+F5,Meta+F5,Move Mouse to Focus
+MoveZoomDown=none,none,Move Zoomed Area Downwards
+MoveZoomLeft=none,none,Move Zoomed Area to Left
+MoveZoomRight=none,none,Move Zoomed Area to Right
+MoveZoomUp=none,none,Move Zoomed Area Upwards
+Overview=Meta+W,Meta+W,Toggle Overview
+Run or Raise Brave=Alt+B,none,Run or Raise Brave
+Setup Window Shortcut=none,none,Setup Window Shortcut
+Show Desktop=Meta+D,Meta+D,Peek at Desktop
+Suspend Compositing=Alt+Shift+F12,Alt+Shift+F12,Suspend Compositing
+Switch One Desktop Down=Meta+Ctrl+Down,Meta+Ctrl+Down,Switch One Desktop Down
+Switch One Desktop Up=Meta+Ctrl+Up,Meta+Ctrl+Up,Switch One Desktop Up
+Switch One Desktop to the Left=Meta+Ctrl+Left,Meta+Ctrl+Left,Switch One Desktop to the Left
+Switch One Desktop to the Right=Meta+Ctrl+Right,Meta+Ctrl+Right,Switch One Desktop to the Right
+Switch Window Down=Meta+Alt+Down,Meta+Alt+Down,Switch to Window Below
+Switch Window Left=Meta+Alt+Left,Meta+Alt+Left,Switch to Window to the Left
+Switch Window Right=Meta+Alt+Right,Meta+Alt+Right,Switch to Window to the Right
+Switch Window Up=Meta+Alt+Up,Meta+Alt+Up,Switch to Window Above
+Switch to Desktop 1=Ctrl+F1\tAlt+1\tMeta+1\tMeta+F1,Ctrl+F1\tMeta+F1,Switch to Desktop 1
+Switch to Desktop 10=none,none,Switch to Desktop 10
+Switch to Desktop 11=none,none,Switch to Desktop 11
+Switch to Desktop 12=none,none,Switch to Desktop 12
+Switch to Desktop 13=none,none,Switch to Desktop 13
+Switch to Desktop 14=none,none,Switch to Desktop 14
+Switch to Desktop 15=none,none,Switch to Desktop 15
+Switch to Desktop 16=none,none,Switch to Desktop 16
+Switch to Desktop 17=none,none,Switch to Desktop 17
+Switch to Desktop 18=none,none,Switch to Desktop 18
+Switch to Desktop 19=none,none,Switch to Desktop 19
+Switch to Desktop 2=Ctrl+F2\tAlt+2\tMeta+2\tMeta+F2,Ctrl+F2\tMeta+F2,Switch to Desktop 2
+Switch to Desktop 20=none,none,Switch to Desktop 20
+Switch to Desktop 21=none,none,Switch to Desktop 21
+Switch to Desktop 22=none,none,Switch to Desktop 22
+Switch to Desktop 23=none,none,Switch to Desktop 23
+Switch to Desktop 24=none,none,Switch to Desktop 24
+Switch to Desktop 25=none,none,Switch to Desktop 25
+Switch to Desktop 3=Ctrl+F3\tAlt+3\tMeta+3\tMeta+F3,Ctrl+F3\tMeta+F3,Switch to Desktop 3
+Switch to Desktop 4=Meta\tCtrl+F4\tAlt+4\tMeta+F4,Ctrl+F4\tMeta+F4,Switch to Desktop 4
+Switch to Desktop 5=Alt+5\tMeta+5,none,Switch to Desktop 5
+Switch to Desktop 6=Alt+6,none,Switch to Desktop 6
+Switch to Desktop 7=Alt+7,none,Switch to Desktop 7
+Switch to Desktop 8=Alt+8,none,Switch to Desktop 8
+Switch to Desktop 9=Alt+9,none,Switch to Desktop 9
+Switch to Next Desktop=none,none,Switch to Next Desktop
+Switch to Next Screen=none,none,Switch to Next Screen
+Switch to Previous Desktop=none,none,Switch to Previous Desktop
+Switch to Previous Screen=none,none,Switch to Previous Screen
+Switch to Screen 0=none,none,Switch to Screen 0
+Switch to Screen 1=none,none,Switch to Screen 1
+Switch to Screen 2=none,none,Switch to Screen 2
+Switch to Screen 3=none,none,Switch to Screen 3
+Switch to Screen 4=none,none,Switch to Screen 4
+Switch to Screen 5=none,none,Switch to Screen 5
+Switch to Screen 6=none,none,Switch to Screen 6
+Switch to Screen 7=none,none,Switch to Screen 7
+Switch to Screen Above=none,none,Switch to Screen Above
+Switch to Screen Below=none,none,Switch to Screen Below
+Switch to Screen to the Left=none,none,Switch to Screen to the Left
+Switch to Screen to the Right=none,none,Switch to Screen to the Right
+Toggle Night Color=none,none,Suspend/Resume Night Light
+Toggle Window Raise/Lower=none,none,Toggle Window Raise/Lower
+ToggleMouseClick=Meta+*,Meta+*,Toggle Mouse Click Animation
+TrackMouse=none,none,Track mouse
+Walk Through Windows=Alt+Tab,Alt+Tab\tMeta+Tab,Walk Through Windows
+Walk Through Windows (Reverse)=Alt+Shift+Tab,Alt+Shift+Tab\tMeta+Shift+Tab,Walk Through Windows (Reverse)
+Walk Through Windows Alternative=Meta+Tab,none,Walk Through Windows Alternative
+Walk Through Windows Alternative (Reverse)=Meta+Shift+Tab,none,Walk Through Windows Alternative (Reverse)
+Walk Through Windows of Current Application=Alt+`\tMeta+`,Alt+`\tMeta+`,Walk Through Windows of Current Application
+Walk Through Windows of Current Application (Reverse)=Alt+~\tMeta+~,Alt+~\tMeta+~,Walk Through Windows of Current Application (Reverse)
+Walk Through Windows of Current Application Alternative=none,none,Walk Through Windows of Current Application Alternative
+Walk Through Windows of Current Application Alternative (Reverse)=none,none,Walk Through Windows of Current Application Alternative (Reverse)
+Window Above Other Windows=none,none,Keep Window Above Others
+Window Below Other Windows=none,none,Keep Window Below Others
+Window Close=Alt+F4,Alt+F4,Close Window
+Window Custom Quick Tile Bottom=none,none,Custom Quick Tile Window to the Bottom
+Window Custom Quick Tile Left=none,none,Custom Quick Tile Window to the Left
+Window Custom Quick Tile Right=none,none,Custom Quick Tile Window to the Right
+Window Custom Quick Tile Top=none,none,Custom Quick Tile Window to the Top
+Window Fullscreen=none,none,Make Window Fullscreen
+Window Grow Horizontal=none,none,Expand Window Horizontally
+Window Grow Vertical=none,none,Expand Window Vertically
+Window Lower=Alt+Down,none,Lower Window
+Window Maximize=Ctrl+Return\tMeta+PgUp,Meta+PgUp,Maximize Window
+Window Maximize Horizontal=none,none,Maximize Window Horizontally
+Window Maximize Vertical=none,none,Maximize Window Vertically
+Window Minimize=Meta+PgDown,Meta+PgDown,Minimize Window
+Window Move=none,none,Move Window
+Window Move Center=none,none,Move Window to the Center
+Window No Border=none,none,Toggle Window Titlebar and Frame
+Window On All Desktops=none,none,Keep Window on All Desktops
+Window One Desktop Down=Meta+Ctrl+Shift+Down,Meta+Ctrl+Shift+Down,Window One Desktop Down
+Window One Desktop Up=Meta+Ctrl+Shift+Up,Meta+Ctrl+Shift+Up,Window One Desktop Up
+Window One Desktop to the Left=Meta+Ctrl+Shift+Left,Meta+Ctrl+Shift+Left,Window One Desktop to the Left
+Window One Desktop to the Right=Meta+Ctrl+Shift+Right,Meta+Ctrl+Shift+Right,Window One Desktop to the Right
+Window One Screen Down=none,none,Move Window One Screen Down
+Window One Screen Up=none,none,Move Window One Screen Up
+Window One Screen to the Left=none,none,Move Window One Screen to the Left
+Window One Screen to the Right=none,none,Move Window One Screen to the Right
+Window Operations Menu=Alt+F3,Alt+F3,Window Menu
+Window Pack Down=none,none,Move Window Down
+Window Pack Left=none,none,Move Window Left
+Window Pack Right=none,none,Move Window Right
+Window Pack Up=none,none,Move Window Up
+Window Quick Tile Bottom=Meta+Down,Meta+Down,Quick Tile Window to the Bottom
+Window Quick Tile Bottom Left=none,none,Quick Tile Window to the Bottom Left
+Window Quick Tile Bottom Right=none,none,Quick Tile Window to the Bottom Right
+Window Quick Tile Left=Meta+Left,Meta+Left,Quick Tile Window to the Left
+Window Quick Tile Right=Meta+Right,Meta+Right,Quick Tile Window to the Right
+Window Quick Tile Top=Meta+Up,Meta+Up,Quick Tile Window to the Top
+Window Quick Tile Top Left=none,none,Quick Tile Window to the Top Left
+Window Quick Tile Top Right=none,none,Quick Tile Window to the Top Right
+Window Raise=none,none,Raise Window
+Window Resize=none,none,Resize Window
+Window Restore=Meta+Backspace,Meta+Backspace,Restore Window
+Window Shade=none,none,Shade Window
+Window Shrink Horizontal=none,none,Shrink Window Horizontally
+Window Shrink Vertical=none,none,Shrink Window Vertically
+Window to Desktop 1=Meta+!,none,Window to Desktop 1
+Window to Desktop 10=none,none,Window to Desktop 10
+Window to Desktop 11=none,none,Window to Desktop 11
+Window to Desktop 12=none,none,Window to Desktop 12
+Window to Desktop 13=none,none,Window to Desktop 13
+Window to Desktop 14=none,none,Window to Desktop 14
+Window to Desktop 15=none,none,Window to Desktop 15
+Window to Desktop 16=none,none,Window to Desktop 16
+Window to Desktop 17=none,none,Window to Desktop 17
+Window to Desktop 18=none,none,Window to Desktop 18
+Window to Desktop 19=none,none,Window to Desktop 19
+Window to Desktop 2=Meta+@,none,Window to Desktop 2
+Window to Desktop 20=none,none,Window to Desktop 20
+Window to Desktop 21=none,none,Window to Desktop 21
+Window to Desktop 22=none,none,Window to Desktop 22
+Window to Desktop 23=none,none,Window to Desktop 23
+Window to Desktop 24=none,none,Window to Desktop 24
+Window to Desktop 25=none,none,Window to Desktop 25
+Window to Desktop 3=Meta+Shift,none,Window to Desktop 3
+Window to Desktop 4=Meta+$,none,Window to Desktop 4
+Window to Desktop 5=Meta+%,none,Window to Desktop 5
+Window to Desktop 6=none,none,Window to Desktop 6
+Window to Desktop 7=none,none,Window to Desktop 7
+Window to Desktop 8=none,none,Window to Desktop 8
+Window to Desktop 9=none,none,Window to Desktop 9
+Window to Next Desktop=none,none,Window to Next Desktop
+Window to Next Screen=Meta+Shift+Right,Meta+Shift+Right,Move Window to Next Screen
+Window to Previous Desktop=none,none,Window to Previous Desktop
+Window to Previous Screen=Meta+Shift+Left,Meta+Shift+Left,Move Window to Previous Screen
+Window to Screen 0=none,none,Move Window to Screen 0
+Window to Screen 1=none,none,Move Window to Screen 1
+Window to Screen 2=none,none,Move Window to Screen 2
+Window to Screen 3=Meta+#\tMeta+4,none,Move Window to Screen 3
+Window to Screen 4=none,none,Move Window to Screen 4
+Window to Screen 5=none,none,Move Window to Screen 5
+Window to Screen 6=none,none,Move Window to Screen 6
+Window to Screen 7=none,none,Move Window to Screen 7
+_k_friendly_name=KWin
+disableInputCapture=Meta+Shift+Esc,Meta+Shift+Esc,Disable Active Input Capture
+view_actual_size=Meta+0,Meta+0,Zoom to Actual Size
+view_zoom_in=Meta++\tMeta+=,Meta++\tMeta+=,Zoom In
+view_zoom_out=Meta+-,Meta+-,Zoom Out
+
+[mediacontrol]
+_k_friendly_name=Media Controller
+mediavolumedown=none,none,Media volume down
+mediavolumeup=none,none,Media volume up
+nextmedia=Media Next,Media Next,Media playback next
+pausemedia=Media Pause,Media Pause,Pause media playback
+playmedia=none,none,Play media playback
+playpausemedia=Media Play,Media Play,Play/Pause media playback
+previousmedia=F11\tMedia Previous,Media Previous,Media playback previous
+seekbackwardmedia=Media Rewind,Media Rewind,Media playback seek backward 5s
+seekbackwardmedialong=none,none,Media playback seek backward 30s
+seekforwardmedia=Media Fast Forward,Media Fast Forward,Media playback seek forward 5s
+seekforwardmedialong=none,none,Media playback seek forward 30s
+stopmedia=Media Stop,Media Stop,Stop media playback
+
+[org_kde_powerdevil]
+Decrease Keyboard Brightness=Keyboard Brightness Down,Keyboard Brightness Down,Decrease Keyboard Brightness
+Decrease Screen Brightness=Monitor Brightness Down,Monitor Brightness Down,Decrease Screen Brightness
+Decrease Screen Brightness Small=Shift+Monitor Brightness Down,Shift+Monitor Brightness Down,Decrease Screen Brightness by 1%
+Hibernate=Hibernate,Hibernate,Hibernate
+Increase Keyboard Brightness=Keyboard Brightness Up,Keyboard Brightness Up,Increase Keyboard Brightness
+Increase Screen Brightness=Monitor Brightness Up,Monitor Brightness Up,Increase Screen Brightness
+Increase Screen Brightness Small=Shift+Monitor Brightness Up,Shift+Monitor Brightness Up,Increase Screen Brightness by 1%
+PowerDown=Power Down,Power Down,Power Down
+PowerOff=Power Off,Power Off,Power Off
+Sleep=Sleep,Sleep,Suspend
+Toggle Keyboard Backlight=Keyboard Light On/Off,Keyboard Light On/Off,Toggle Keyboard Backlight
+Turn Off Screen=none,none,Turn Off Screen
+_k_friendly_name=Power Management
+powerProfile=Battery\tMeta+B,Battery\tMeta+B,Switch Power Profile
+
+[plasmashell]
+Slideshow Wallpaper Next Image=none,none,Next Wallpaper Image
+_k_friendly_name=plasmashell
+activate application launcher=none,Meta\tAlt+F1,Activate Application Launcher
+activate task manager entry 1=none,Meta+1,Activate Task Manager Entry 1
+activate task manager entry 10=none,none,Activate Task Manager Entry 10
+activate task manager entry 2=none,Meta+2,Activate Task Manager Entry 2
+activate task manager entry 3=none,Meta+3,Activate Task Manager Entry 3
+activate task manager entry 4=none,Meta+4,Activate Task Manager Entry 4
+activate task manager entry 5=none,Meta+5,Activate Task Manager Entry 5
+activate task manager entry 6=Meta+6,Meta+6,Activate Task Manager Entry 6
+activate task manager entry 7=Meta+7,Meta+7,Activate Task Manager Entry 7
+activate task manager entry 8=Meta+8,Meta+8,Activate Task Manager Entry 8
+activate task manager entry 9=Meta+9,Meta+9,Activate Task Manager Entry 9
+activate widget 119=none,none,Activate Application Launcher Widget
+activate widget 150=none,none,Activate Application Launcher Widget
+activate widget 206=none,none,Activate Application Launcher Widget
+activate widget 238=none,none,Activate Application Launcher Widget
+activate widget 277=none,none,Activate Application Launcher Widget
+activate widget 363=none,none,Activate Application Launcher Widget
+activate widget 400=none,none,Activate Application Launcher Widget
+activate widget 457=Alt+F1,none,Activate Application Launcher Widget
+activate widget 60=none,none,Activate Application Launcher Widget
+activate widget 78=none,none,Activate Contacts Widget
+activate widget 88=none,none,Activate Application Launcher Widget
+clear history=none,none,Clear Notification History
+clear-history=none,none,Clear Clipboard History
+clipboard_action=Meta+Ctrl+X,Meta+Ctrl+X,Automatic Action Popup Menu
+cycle-panels=Meta+Alt+P,Meta+Alt+P,Move keyboard focus between panels
+cycleNextAction=none,none,Next History Item
+cyclePrevAction=none,none,Previous History Item
+edit_clipboard=none,none,Edit Contents…
+manage activities=Meta+Q,Meta+Q,Show Activity Switcher
+next activity=none,none,Walk through activities
+previous activity=none,none,Walk through activities (Reverse)
+repeat_action=none,none,Manually Invoke Action on Current Clipboard
+show dashboard=Ctrl+F12,Ctrl+F12,Show Desktop
+show-barcode=none,none,Show Barcode…
+show-on-mouse-pos=Meta+V,Meta+V,Show Clipboard Items at Mouse Position
+switch to next activity=none,none,Switch to Next Activity
+switch to previous activity=none,none,Switch to Previous Activity
+toggle do not disturb=none,none,Toggle do not disturb
+
+[services][net.local.Kearn-volume-down.desktop]
+_launch=Meta+Shift+-
+
+[services][net.local.Notch-panel.desktop]
+_launch=Meta+/
+
+[services][net.local.Terminal.desktop]
+_launch=Meta+Ctrl+3
+
+[services][net.local.kearn-palette.desktop]
+_launch=Ctrl+Space
+
+[services][net.local.kearn-volume-up.desktop]
+_launch=Meta+Shift+=
+
+[services][org.flameshot.Flameshot.desktop]
+Capture=none
+Launcher=none
+
+[speechtotextllm]
+_k_friendly_name=Speech to Text LLM
+toggle_recording=none,none,Toggle recording
+
+[wacomtablet]
+Map to fullscreen=Meta+Ctrl+F,Meta+Ctrl+F,Map to fullscreen
+Map to screen 1=Meta+Ctrl+1,Meta+Ctrl+1,Map to screen 1
+Map to screen 2=Meta+Ctrl+2,Meta+Ctrl+2,Map to screen 2
+Next Profile=Meta+Ctrl+N,Meta+Ctrl+N,Next profile
+Previous Profile=Meta+Ctrl+P,Meta+Ctrl+P,Previous Profile
+Toggle screen map selection=Meta+Ctrl+M,Meta+Ctrl+M,Toggle between all screens
+Toggle stylus mode=none,Meta+Ctrl+S,Toggle the Stylus Tool Relative/Absolute
+Toggle touch tool=Meta+Ctrl+T,Meta+Ctrl+T,Enable/Disable the Touch Tool
+_k_friendly_name=Wacom Tablet
+
+[wapp]
+360DBD5D25449BB944A58FAEC0903623-Ctrl+Shift+P=Ctrl+Shift+P,Ctrl+Shift+P,WApp shortcut: Ctrl+Shift+P
+_k_friendly_name=WApp
+
+[yakuake]
+_k_friendly_name=Yakuake
+toggle-window-state=F12,F12,Open/Retract Yakuake

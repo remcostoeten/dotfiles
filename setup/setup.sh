@@ -17,6 +17,7 @@ source "$LIB_DIR/logger.sh"
 source "$LIB_DIR/executor.sh"
 source "$LIB_DIR/packages.sh"
 source "$LIB_DIR/installers.sh"
+source "$LIB_DIR/clone.sh"
 
 usage() {
     cat <<EOF
@@ -27,8 +28,9 @@ Options:
     --verbose       Show detailed output
     --passwordless-sudo
                     Configure passwordless sudo for the current user
-    --category C    Install only specific category (essential, langs, fonts, tools, terminals, curl-tools, npm-tools, git-tools, editors, docker, system, hardware, media, desktop, gnome, kde, hyprland, keybind-manager, phonedrop)
+    --category C    Install only specific category (essential, langs, fonts, tools, terminals, curl-tools, npm-tools, git-tools, editors, docker, system, hardware, media, desktop, gnome, kde, quickshell, clone, hyprland, keybind-manager, phonedrop)
     --package P     Install specific package
+    --snapshot      Save this machine's packages, KDE settings, autostart and services to setup/state
     -h, --help      Show this help message
 
 Examples:
@@ -185,6 +187,7 @@ configure_kde_desktop() {
     fi
 
     setup_wallpaper_rotation
+    try install_quickshell_bar
     log_success "KDE Plasma aesthetics configured"
 }
 
@@ -725,6 +728,12 @@ install_category() {
         kde|plasma)
             try configure_kde_desktop
             ;;
+        quickshell)
+            try install_quickshell_bar
+            ;;
+        clone)
+            restore_machine
+            ;;
         hyprland)
             try install_hyprland
             ;;
@@ -825,6 +834,10 @@ while [[ $# -gt 0 ]]; do
             ENABLE_PASSWORDLESS_SUDO=true
             shift
             ;;
+        --snapshot)
+            snapshot_machine
+            exit 0
+            ;;
         --category)
             if [[ $# -lt 2 ]]; then
                 log_error "--category requires a value"
@@ -914,7 +927,7 @@ elif [[ -n "$package" ]]; then
     fi
     update_progress "$package"
 else
-    init_progress 15
+    init_progress 16
     run_with_progress "essential"
     run_with_progress "langs"
     run_with_progress "tools"
@@ -930,6 +943,7 @@ else
     run_with_progress "fonts"
     run_with_progress "desktop"
     run_with_progress "phonedrop"
+    run_with_progress "clone"
 fi
 
 if should_configure_fish; then

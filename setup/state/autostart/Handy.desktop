@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Handy
+Comment=Handystartup script
+Exec=/home/remcostoeten/Applications/Handy.AppImage 
+StartupNotify=false
+Terminal=false

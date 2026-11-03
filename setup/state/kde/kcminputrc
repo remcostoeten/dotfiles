@@ -1,0 +1,10 @@
+[Libinput][5426][113][Razer Razer DeathAdder Essential White Edition]
+PointerAcceleration=-0.600
+PointerAccelerationProfile=1
+
+[Libinput][5426][134][Razer Basilisk Ultimate]
+PointerAcceleration=-1.000
+
+[Mouse]
+X11LibInputXAccelProfileFlat=true
+XLbInptPointerAcceleration=-0.27

@@ -1,0 +1,28 @@
+[General]
+count=2
+rules=speechtotextllm-overlay,pocket-no-titlebars
+
+[pocket-no-titlebars]
+Description=Pocket: no title bars
+noborder=true
+noborderrule=2
+types=33
+
+[speechtotextllm-overlay]
+Description=Speech to Text LLM overlay
+above=true
+aboverule=2
+fsplevel=4
+fsplevelrule=2
+noborder=true
+noborderrule=2
+position=2806,1931
+positionrule=3
+skippager=true
+skippagerrule=2
+skipswitcher=true
+skipswitcherrule=2
+skiptaskbar=true
+skiptaskbarrule=2
+title=^Speech to Text LLM Overlay$
+titlematch=3
