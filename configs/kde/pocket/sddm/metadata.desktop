@@ -1,0 +1,11 @@
+[SddmGreeterTheme]
+Name=Pocket
+Description=Wallpaper login with a black notch clock, colored from the desktop wallpaper
+Author=remcostoeten
+Type=sddm-theme
+Version=1.0
+MainScript=Main.qml
+ConfigFile=theme.conf
+Theme-Id=pocket
+Theme-API=2.0
+QtVersion=6

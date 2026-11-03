@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Quickshell notch bar
+Exec=qs
+X-KDE-autostart-phase=2
+X-KDE-AutostartScript=false
+NoDisplay=true

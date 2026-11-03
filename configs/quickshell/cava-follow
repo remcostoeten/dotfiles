@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+config="${XDG_RUNTIME_DIR:-/tmp}/quickshell-cava.conf"
+
+playing_sink() {
+    pactl -f json list sink-inputs 2>/dev/null | python3 -I -c '
+import json
+import subprocess
+import sys
+
+streams = [stream for stream in json.load(sys.stdin) if not stream.get("corked")]
+if not streams:
+    sys.exit(0)
+sinks = json.loads(subprocess.run(["pactl", "-f", "json", "list", "sinks"], capture_output=True, text=True).stdout)
+names = {sink["index"]: sink["name"] for sink in sinks}
+print(names.get(streams[0]["sink"], ""))
+'
+}
+
+sink="$(playing_sink)"
+source="${sink:+$sink.monitor}"
+sed "s/^source = .*/source = ${source:-auto}/" "$here/cava.conf" > "$config"
+exec cava -p "$config"

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+dotfiles=~/.config/dotfiles/configs
+cache=~/.cache/pocket
+sddm_dynamic=/usr/share/sddm/themes/pocket/dynamic
+cursor_settings=~/.config/Cursor/User/settings.json
+
+usage() {
+    echo "usage: recolor [--if-changed] [image]" >&2
+    echo "  Colors the desktop from an image, the current Plasma wallpaper by default." >&2
+}
+
+current_wallpaper() {
+    qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+        'const d = desktopForScreen(0); d.currentConfigGroup = ["Wallpaper", "org.kde.image", "General"]; print(d.readConfig("Image"));' |
+        sed 's|^file://||'
+}
+
+apply_kde_scheme() {
+    local current next
+    current="$(kreadconfig6 --file kdeglobals --group General --key ColorScheme)"
+    next=PocketA
+    [[ "$current" == PocketA ]] && next=PocketB
+    mkdir -p ~/.local/share/color-schemes
+    sed "s/^ColorScheme=.*/ColorScheme=$next/" "$cache/Pocket.colors" > ~/.local/share/color-schemes/"$next".colors
+    plasma-apply-colorscheme "$next" >/dev/null
+}
+
+apply_lockscreen() {
+    local image="$1"
+    for key in Image PreviewImage; do
+        kwriteconfig6 --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image --group General --key "$key" "file://$image"
+    done
+}
+
+apply_shell() {
+    cp "$cache/fastfetch.jsonc" "$dotfiles/fastfetch/config.jsonc"
+    if [[ "$(cat "$dotfiles/starship/.active-prompt" 2>/dev/null)" == pocket ]]; then
+        fish -c 'dotfiles prompt pocket' >/dev/null
+        return
+    fi
+    pkill -USR2 -x ghostty || true
+}
+
+apply_cursor() {
+    [[ -f "$cursor_settings" ]] || return 0
+    python3 -I - "$cache/cursor.json" "$cursor_settings" <<'EOF'
+import json
+import sys
+
+colors_path, settings_path = sys.argv[1], sys.argv[2]
+try:
+    with open(settings_path) as handle:
+        settings = json.load(handle)
+except json.JSONDecodeError as error:
+    print(f"recolor: left Cursor alone, {settings_path} is not plain JSON ({error})", file=sys.stderr)
+    sys.exit(0)
+with open(colors_path) as handle:
+    settings.update(json.load(handle))
+with open(settings_path, "w") as handle:
+    json.dump(settings, handle, indent=4)
+    handle.write("\n")
+EOF
+}
+
+apply_spotify() {
+    command -v spicetify >/dev/null || return 0
+    [[ "$(spicetify config current_theme 2>/dev/null)" == Pocket ]] || return 0
+    spicetify refresh -q >/dev/null 2>&1 || echo "recolor: spicetify refresh failed, run 'spicetify backup apply'" >&2
+}
+
+apply_sddm() {
+    local image="$1"
+    [[ -w "$sddm_dynamic" ]] || return 0
+    local extension="${image##*.}"
+    rm -f "$sddm_dynamic"/background.*
+    cp "$image" "$sddm_dynamic/background.$extension"
+    { cat "$cache/sddm.conf"; echo "background=dynamic/background.$extension"; } > "$sddm_dynamic/theme.conf"
+}
+
+only_if_changed=false
+image=""
+for arg in "$@"; do
+    case "$arg" in
+        --if-changed) only_if_changed=true ;;
+        -h | --help) usage; exit 0 ;;
+        *) image="$arg" ;;
+    esac
+done
+
+[[ -n "$image" ]] || image="$(current_wallpaper)"
+image="$(readlink -f "$image")"
+[[ -f "$image" ]] || { echo "recolor: no such image: $image" >&2; exit 1; }
+
+mkdir -p "$cache"
+if $only_if_changed && [[ "$(cat "$cache/image" 2>/dev/null)" == "$image" ]]; then
+    exit 0
+fi
+
+matugen image "$image" --mode dark --prefer saturation --config "$here/matugen/config.toml" --quiet
+apply_kde_scheme
+apply_lockscreen "$image"
+apply_shell
+apply_cursor
+apply_spotify
+apply_sddm "$image"
+echo "$image" > "$cache/image"
+echo "recolored from $image"

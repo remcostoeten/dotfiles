@@ -66,3 +66,8 @@ setup/lazygit/
 setup/lazydocker/
 configs/nvim/.rice-colorscheme
 aliases/.kuizer/
+
+# Generated from the wallpaper by configs/kde/pocket/recolor
+configs/ghostty/themes/pocket
+configs/ghostty/themes/pocket-gtk.css
+configs/starship/prompts/pocket.toml

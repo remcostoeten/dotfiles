@@ -1,0 +1,8 @@
+[Unit]
+Description=Recolor the desktop when the Plasma wallpaper changes
+
+[Path]
+PathChanged=%h/.config/plasma-org.kde.plasma.desktop-appletsrc
+
+[Install]
+WantedBy=default.target

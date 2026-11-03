@@ -1,0 +1,168 @@
+{
+    "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+    "logo": {
+        "type": "file",
+        "source": "~/.config/dotfiles/configs/fastfetch/logos/noir.txt",
+        "color": {
+            "1": "{{colors.primary.default.hex}}"
+        },
+        "padding": {
+            "top": 2,
+            "left": 3,
+            "right": 6
+        }
+    },
+    "display": {
+        "separator": " ",
+        "color": {
+            "keys": "{{colors.outline_variant.default.hex}}",
+            "output": "{{colors.on_surface.default.hex}}",
+            "separator": "{{colors.outline.default.hex}}"
+        },
+        "percent": {
+            "type": 3,
+            "color": {
+                "green": "{{colors.green.default.hex}}",
+                "yellow": "{{colors.yellow.default.hex}}",
+                "red": "{{colors.primary.default.hex}}"
+            }
+        }
+    },
+    "modules": [
+        {
+            "type": "custom",
+            "format": "{#38;2;{{colors.outline_variant.default.red}};{{colors.outline_variant.default.green}};{{colors.outline_variant.default.blue}}}┌─────────────────{#38;2;{{colors.primary.default.red}};{{colors.primary.default.green}};{{colors.primary.default.blue}}}Hardware{#38;2;{{colors.outline_variant.default.red}};{{colors.outline_variant.default.green}};{{colors.outline_variant.default.blue}}}─────────────────┐"
+        },
+        {
+            "type": "host",
+            "key": "│ 󰌢 :",
+            "format": "{name}",
+            "keyColor": "{{colors.primary.default.hex}}"
+        },
+        {
+            "type": "cpu",
+            "key": "│  :",
+            "format": "{name} ({cores-logical}) @ {freq-max}",
+            "keyColor": "{{colors.yellow.default.hex}}"
+        },
+        {
+            "type": "gpu",
+            "key": "│ 󰢮 :",
+            "format": "{name} [{type}]",
+            "keyColor": "{{colors.green.default.hex}}"
+        },
+        {
+            "type": "display",
+            "key": "│ 󰍹 :",
+            "format": "{width}x{height} @ {refresh-rate} Hz",
+            "keyColor": "{{colors.cyan.default.hex}}"
+        },
+        {
+            "type": "disk",
+            "key": "│ 󰋊 :",
+            "folders": "/",
+            "format": "{size-used} / {size-total} ({size-percentage}) - {filesystem}",
+            "keyColor": "{{colors.blue.default.hex}}"
+        },
+        {
+            "type": "memory",
+            "key": "│  :",
+            "keyColor": "{{colors.magenta.default.hex}}"
+        },
+        {
+            "type": "swap",
+            "key": "│ 󰓡 :",
+            "keyColor": "{{colors.pink.default.hex}}"
+        },
+        {
+            "type": "custom",
+            "format": "{#38;2;{{colors.outline_variant.default.red}};{{colors.outline_variant.default.green}};{{colors.outline_variant.default.blue}}}└──────────────────────────────────────────┘"
+        },
+        "break",
+        {
+            "type": "custom",
+            "format": "{#38;2;{{colors.outline_variant.default.red}};{{colors.outline_variant.default.green}};{{colors.outline_variant.default.blue}}}┌─────────────────{#38;2;{{colors.primary.default.red}};{{colors.primary.default.green}};{{colors.primary.default.blue}}}Software{#38;2;{{colors.outline_variant.default.red}};{{colors.outline_variant.default.green}};{{colors.outline_variant.default.blue}}}─────────────────┐"
+        },
+        {
+            "type": "os",
+            "key": "│ 󰣇 :",
+            "format": "{pretty-name}",
+            "keyColor": "{{colors.primary.default.hex}}"
+        },
+        {
+            "type": "de",
+            "key": "│ 󰧨 :",
+            "keyColor": "{{colors.yellow.default.hex}}"
+        },
+        {
+            "type": "wm",
+            "key": "│  :",
+            "format": "{pretty-name} ({protocol-name})",
+            "keyColor": "{{colors.green.default.hex}}"
+        },
+        {
+            "type": "kernel",
+            "key": "│  :",
+            "format": "Linux {release}",
+            "keyColor": "{{colors.cyan.default.hex}}"
+        },
+        {
+            "type": "shell",
+            "key": "│  :",
+            "keyColor": "{{colors.blue.default.hex}}"
+        },
+        {
+            "type": "terminal",
+            "key": "│  :",
+            "keyColor": "{{colors.magenta.default.hex}}"
+        },
+        {
+            "type": "packages",
+            "key": "│ 󰏖 :",
+            "format": "{pacman} (pacman), {flatpak-system} (flatpak-system), {flatpak-user} (flatpak-user)",
+            "keyColor": "{{colors.pink.default.hex}}"
+        },
+        {
+            "type": "custom",
+            "key": "│ 󰏘 :",
+            "format": "Pocket {#38;2;{{colors.on_surface.default.red}};{{colors.on_surface.default.green}};{{colors.on_surface.default.blue}}}●{#38;2;{{colors.primary.default.red}};{{colors.primary.default.green}};{{colors.primary.default.blue}}}●●{#38;2;{{colors.yellow.default.red}};{{colors.yellow.default.green}};{{colors.yellow.default.blue}}}●{#38;2;{{colors.green.default.red}};{{colors.green.default.green}};{{colors.green.default.blue}}}●{#38;2;{{colors.outline.default.red}};{{colors.outline.default.green}};{{colors.outline.default.blue}}}●",
+            "keyColor": "{{colors.primary.default.hex}}"
+        },
+        {
+            "type": "terminalfont",
+            "key": "│  :",
+            "keyColor": "{{colors.yellow.default.hex}}"
+        },
+        {
+            "type": "custom",
+            "format": "{#38;2;{{colors.outline_variant.default.red}};{{colors.outline_variant.default.green}};{{colors.outline_variant.default.blue}}}└──────────────────────────────────────────┘"
+        },
+        "break",
+        {
+            "type": "custom",
+            "format": "{#38;2;{{colors.outline_variant.default.red}};{{colors.outline_variant.default.green}};{{colors.outline_variant.default.blue}}}┌──────────{#38;2;{{colors.primary.default.red}};{{colors.primary.default.green}};{{colors.primary.default.blue}}}Age / Uptime / Update{#38;2;{{colors.outline_variant.default.red}};{{colors.outline_variant.default.green}};{{colors.outline_variant.default.blue}}}───────────┐"
+        },
+        {
+            "type": "command",
+            "key": "│ 󱦟 :",
+            "text": "birth=$(stat -c %W /); echo \"OS Age: $(( ($(date +%s) - birth) / 86400 )) days\"",
+            "keyColor": "{{colors.green.default.hex}}"
+        },
+        {
+            "type": "uptime",
+            "key": "│ 󰔟 :",
+            "format": "Uptime: {?days}{days} days, {?}{hours} hours, {minutes} mins",
+            "keyColor": "{{colors.cyan.default.hex}}"
+        },
+        {
+            "type": "command",
+            "key": "│ 󰚰 :",
+            "text": "n=$(checkupdates 2>/dev/null | wc -l); echo \"Updates: $n pending\"",
+            "keyColor": "{{colors.blue.default.hex}}"
+        },
+        {
+            "type": "custom",
+            "format": "{#38;2;{{colors.outline_variant.default.red}};{{colors.outline_variant.default.green}};{{colors.outline_variant.default.blue}}}└──────────────────────────────────────────┘"
+        }
+    ]
+}

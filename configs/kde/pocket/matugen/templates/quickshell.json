@@ -1,0 +1,6 @@
+{
+    "accent": "{{colors.primary.default.hex}}",
+    "text": "{{colors.on_surface.default.hex}}",
+    "bar": "{{colors.surface_container.default.hex}}",
+    "image": "{{image}}"
+}

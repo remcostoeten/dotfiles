@@ -1,0 +1,48 @@
+[config.custom_colors]
+red = { color = "#e5484d", blend = true }
+yellow = { color = "#f5c065", blend = true }
+green = { color = "#46a758", blend = true }
+cyan = { color = "#12a594", blend = true }
+blue = { color = "#3e63dd", blend = true }
+magenta = { color = "#8e4ec6", blend = true }
+pink = { color = "#d6409f", blend = true }
+
+[templates.kde]
+input_path = '~/.config/dotfiles/configs/kde/pocket/matugen/templates/kde.colors'
+output_path = '~/.cache/pocket/Pocket.colors'
+
+[templates.quickshell]
+input_path = '~/.config/dotfiles/configs/kde/pocket/matugen/templates/quickshell.json'
+output_path = '~/.cache/pocket/quickshell.json'
+
+[templates.ghostty]
+input_path = '~/.config/dotfiles/configs/kde/pocket/matugen/templates/ghostty'
+output_path = '~/.config/dotfiles/configs/ghostty/themes/pocket'
+
+[templates.ghostty_gtk]
+input_path = '~/.config/dotfiles/configs/kde/pocket/matugen/templates/ghostty-gtk.css'
+output_path = '~/.config/dotfiles/configs/ghostty/themes/pocket-gtk.css'
+
+[templates.starship]
+input_path = '~/.config/dotfiles/configs/kde/pocket/matugen/templates/starship.toml'
+output_path = '~/.config/dotfiles/configs/starship/prompts/pocket.toml'
+
+[templates.fastfetch]
+input_path = '~/.config/dotfiles/configs/kde/pocket/matugen/templates/fastfetch.jsonc'
+output_path = '~/.cache/pocket/fastfetch.jsonc'
+
+[templates.zed]
+input_path = '~/.config/dotfiles/configs/kde/pocket/matugen/templates/zed.json'
+output_path = '~/.config/zed/themes/pocket.json'
+
+[templates.cursor]
+input_path = '~/.config/dotfiles/configs/kde/pocket/matugen/templates/cursor.json'
+output_path = '~/.cache/pocket/cursor.json'
+
+[templates.spicetify]
+input_path = '~/.config/dotfiles/configs/kde/pocket/matugen/templates/spicetify.ini'
+output_path = '~/.config/spicetify/Themes/Pocket/color.ini'
+
+[templates.sddm]
+input_path = '~/.config/dotfiles/configs/kde/pocket/matugen/templates/sddm.conf'
+output_path = '~/.cache/pocket/sddm.conf'

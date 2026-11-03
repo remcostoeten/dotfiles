@@ -1,0 +1,6 @@
+[Unit]
+Description=Recolor the desktop from the current Plasma wallpaper
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/dotfiles/configs/kde/pocket/recolor --if-changed

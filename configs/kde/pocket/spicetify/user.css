@@ -1,0 +1,15 @@
+.main-topBar-background,
+.main-topBar-overlay {
+    background-color: var(--spice-main) !important;
+}
+
+.main-nowPlayingBar-container {
+    border-top: none !important;
+}
+
+.main-card-card,
+.main-yourLibraryX-entryPoints,
+.Root__nav-bar,
+.Root__right-sidebar {
+    border-radius: 0 !important;
+}

@@ -1,0 +1,25 @@
+tabbar {
+  background: {{colors.surface_container_lowest.default.hex_alpha | set_alpha: 0.6}};
+}
+
+tabbar tabbox tab {
+  border-color: {{colors.outline_variant.default.hex_alpha | set_alpha: 0.35}};
+  background: {{colors.surface_container_high.default.hex_alpha | set_alpha: 0.5}};
+  color: {{colors.on_surface_variant.default.hex}};
+}
+
+tabbar tabbox tab:hover {
+  background: {{colors.primary.default.hex_alpha | set_alpha: 0.1}};
+  border-color: {{colors.primary.default.hex_alpha | set_alpha: 0.25}};
+  color: {{colors.on_surface.default.hex}};
+}
+
+tabbar tabbox tab:selected {
+  background: {{colors.primary.default.hex_alpha | set_alpha: 0.18}};
+  border-color: {{colors.primary.default.hex_alpha | set_alpha: 0.35}};
+  color: {{colors.on_surface.default.hex}};
+}
+
+tabbar tabbox tab:selected:hover {
+  background: {{colors.primary.default.hex_alpha | set_alpha: 0.25}};
+}
