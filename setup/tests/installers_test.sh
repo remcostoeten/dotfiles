@@ -58,6 +58,7 @@ test_setup_config_symlinks_skips_hooks_when_links_are_current() {
         "waybar:$home/.config/waybar"
         "dunst:$home/.config/dunst"
         "swayosd:$home/.config/swayosd"
+        "swaync:$home/.config/swaync"
         "git/ignore:$home/.config/git/ignore"
         "kxkbrc:$home/.config/kxkbrc"
         "sxhkd:$home/.config/sxhkd"

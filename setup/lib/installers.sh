@@ -679,6 +679,13 @@ canonical_path() {
     printf '%s/%s\n' "$(cd "$dir" 2>/dev/null && pwd -P)" "$(basename "$path")"
 }
 
+reload_swaync() {
+    pgrep -x swaync >/dev/null 2>&1 || return 0
+    command -v swaync-client >/dev/null 2>&1 || return 0
+    swaync-client --reload-config >/dev/null 2>&1 || log_warn "swaync config reload failed"
+    swaync-client --reload-css >/dev/null 2>&1 || log_warn "swaync CSS reload failed"
+}
+
 is_symlink_current() {
     local src_path="$1"
     local dst_path="$2"
@@ -802,6 +809,7 @@ setup_config_symlinks() {
         "quickshell:$home_config_dir/quickshell"
         "dunst:$home_config_dir/dunst"
         "swayosd:$home_config_dir/swayosd"
+        "swaync:$home_config_dir/swaync"
         "git/ignore:$home_config_dir/git/ignore"
         "kxkbrc:$home_config_dir/kxkbrc"
         "sxhkd:$home_config_dir/sxhkd"
@@ -821,6 +829,8 @@ setup_config_symlinks() {
             ensure_symlink "$src_path" "$dst_path" "$SETUP_BACKUP_ROOT"
         fi
     done
+
+    reload_swaync
 
     # sxhkd autostart entry (KDE launches ~/.config/autostart on login)
     local sxhkd_autostart_src="$configs_dir/sxhkd/plasma-sxhkd.desktop"

@@ -122,6 +122,21 @@
   background: transparent;
 }
 
+.floating-notifications .notification-background {
+  background: transparent;
+}
+
 .floating-notifications .notification {
+  background: #0f0f1a;
+  border: 1px solid rgba(0, 255, 237, 0.22);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+}
+
+.floating-notifications .notification-content .summary {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.floating-notifications .notification-content .body {
+  color: #cbd5e1;
 }
