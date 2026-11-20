@@ -1054,10 +1054,14 @@ async function attempt(job, failure) {
 async function refresh() {
   const response = await fetch('/api/state', { cache: 'no-store' })
   if (response.status === 401) { location.reload(); return }
-  const data = await response.json()
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  applyState(await response.json())
+}
+function applyState(data) {
   const sig = JSON.stringify(data)
   if (sig === lastSig) return
   lastSig = sig
+  try { localStorage.setItem('phonedrop-state', sig) } catch (error) { console.warn('phonedrop: state not cached', error) }
   const known = new Set(items.map((it) => it.id))
   Object.assign(S, { files: data.files, notes: data.notes, folders: data.folders, labels: data.labels, local: data.local, presence: data.presence })
   buildItems()
@@ -1084,8 +1088,12 @@ function scheduleRefresh() {
 }
 function connect() {
   const source = new EventSource('/api/events')
-  source.addEventListener('open', () => { S.live = true; scheduleRefresh(); render() })
-  source.addEventListener('error', () => { S.live = false; render() })
+  source.addEventListener('open', () => { S.live = true; scheduleRefresh(); render(); resumeUploads() })
+  source.addEventListener('error', () => {
+    S.live = false
+    render()
+    if (source.readyState === EventSource.CLOSED) setTimeout(connect, 4000)
+  })
   ;['files', 'notes', 'layout', 'labels', 'presence'].forEach((name) => source.addEventListener(name, scheduleRefresh))
 }
 async function loadPair() {
@@ -1247,11 +1255,12 @@ async function createFolder(name, ids) {
 }
 
 function upThumb(u) {
+  if (u.kind === 'note') return `<span class="thumb">${ic('note', 'sm')}</span>`
   if (u.url) return `<img class="thumb" src="${u.url}" alt="">`
   return `<span class="thumb">${esc(ext(u.name))}</span>`
 }
 function renderUploads() {
-  const html = uploads.map((u) => `<div class="up${u.status === 'failed' ? ' failed' : ''}" data-up="${u.id}">${upThumb(u)}<div class="u-main"><div class="u-row"><b>${esc(u.name)}</b><span>${u.status === 'failed' ? 'Failed · upload stopped' : u.status === 'wait' ? 'Waiting' : `${Math.round(u.pct * 100)}% · ${size(u.size)}`}</span></div><div class="bar"><i style="transform:scaleX(${u.pct})"></i></div></div>${u.status === 'failed' ? `<button class="btn sm" data-act="retry" data-v="${u.id}">Retry</button><button class="icon-btn sm" data-act="cancel-up" data-v="${u.id}" aria-label="Dismiss">${ic('x', 'sm')}</button>` : `<button class="icon-btn sm" data-act="cancel-up" data-v="${u.id}" aria-label="Cancel upload">${ic('x', 'sm')}</button>`}</div>`).join('')
+  const html = uploads.map((u) => `<div class="up${u.status === 'failed' ? ' failed' : ''}" data-up="${u.id}">${upThumb(u)}<div class="u-main"><div class="u-row"><b>${esc(u.name)}</b><span>${u.status === 'failed' ? 'Failed · upload stopped' : u.status === 'hold' ? 'Waiting for the PC' : u.status === 'wait' ? 'Waiting' : u.kind === 'note' ? 'Sending' : `${Math.round(u.pct * 100)}% · ${size(u.size)}`}</span></div><div class="bar"><i style="transform:scaleX(${u.pct})"></i></div></div>${u.status === 'failed' ? `<button class="btn sm" data-act="retry" data-v="${u.id}">Retry</button><button class="icon-btn sm" data-act="cancel-up" data-v="${u.id}" aria-label="Dismiss">${ic('x', 'sm')}</button>` : `<button class="icon-btn sm" data-act="cancel-up" data-v="${u.id}" aria-label="Cancel upload">${ic('x', 'sm')}</button>`}</div>`).join('')
   setHTML($('#pUploads'), html)
   setHTML($('#dUploads'), html)
 }
@@ -1278,9 +1287,66 @@ function putFile(u) {
     request.send(u.file)
   })
 }
+let dbPromise = null
+let resumeTimer = 0
+function dbOpen() {
+  dbPromise = dbPromise || new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error('no indexedDB')); return }
+    const request = indexedDB.open('phonedrop', 1)
+    request.onupgradeneeded = () => request.result.createObjectStore('outbox', { keyPath: 'id', autoIncrement: true })
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  return dbPromise
+}
+async function outboxTx(mode, run) {
+  const db = await dbOpen()
+  return new Promise((resolve, reject) => {
+    const request = run(db.transaction('outbox', mode).objectStore('outbox'))
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+}
+function outboxAdd(job) { return outboxTx('readwrite', (store) => store.add(job)).catch(() => null) }
+function outboxDel(id) { return id == null ? Promise.resolve() : outboxTx('readwrite', (store) => store.delete(id)).catch(() => null) }
+function outboxAll() { return outboxTx('readonly', (store) => store.getAll()).catch(() => []) }
+function transient(error) { return error instanceof TypeError || error.message === 'network error' || /^HTTP 5\d\d$/.test(error.message) }
 function dropUpload(u) {
   if (u.url) URL.revokeObjectURL(u.url)
   uploads = uploads.filter((x) => x !== u)
+  Promise.resolve(u.saved).then(() => outboxDel(u.dbId))
+}
+function holdUploads() {
+  uploads.forEach((u) => { if (u.status === 'wait' || u.status === 'up') { u.status = 'hold'; u.pct = 0 } })
+  renderUploads()
+  clearTimeout(resumeTimer)
+  resumeTimer = setTimeout(resumeUploads, 15000)
+}
+function resumeUploads() {
+  let held = false
+  uploads.forEach((u) => { if (u.status === 'hold') { u.status = 'wait'; held = true } })
+  if (!held) return
+  renderUploads()
+  pumpUploads()
+}
+function sendJob(u) {
+  return u.kind === 'note' ? call('POST', '/api/notes', { text: u.text, folder: u.folder }) : putFile(u)
+}
+function queueJob(job) {
+  seq += 1
+  const u = { id: `u${seq}`, kind: job.kind, file: job.file, text: job.text, name: job.name, size: job.file ? job.file.size : 0, pct: 0, status: 'wait', folder: job.folder, url: job.file && job.file.type.startsWith('image/') ? URL.createObjectURL(job.file) : '' }
+  u.saved = outboxAdd({ ...job, at: Date.now() }).then((id) => { u.dbId = id })
+  uploads.push(u)
+  return u
+}
+async function restoreOutbox() {
+  const jobs = await outboxAll()
+  jobs.forEach((job) => {
+    const u = queueJob({ kind: job.kind, file: job.file, text: job.text, name: job.name, folder: job.folder })
+    u.status = 'hold'
+    outboxDel(job.id)
+  })
+  if (jobs.length) { renderUploads(); resumeUploads() }
 }
 async function pumpUploads() {
   if (pumping) return
@@ -1289,11 +1355,12 @@ async function pumpUploads() {
     next.status = 'up'
     renderUploads()
     try {
-      await putFile(next)
+      await sendJob(next)
       dropUpload(next)
       sentCount += 1
     } catch (error) {
       if (error.message === 'cancelled') dropUpload(next)
+      else if (transient(error)) { holdUploads(); break }
       else { console.warn('phonedrop: upload failed', error); next.status = 'failed' }
     }
     renderUploads()
@@ -1309,10 +1376,7 @@ function queueUploads(list) {
   const files = [...list]
   if (!files.length) return
   const folder = S.folder
-  files.forEach((file) => {
-    seq += 1
-    uploads.push({ id: `u${seq}`, file, name: file.name || `pasted-${Date.now()}`, size: file.size, pct: 0, status: 'wait', folder, url: file.type.startsWith('image/') ? URL.createObjectURL(file) : '' })
-  })
+  files.forEach((file) => queueJob({ kind: 'file', file, name: file.name || `pasted-${Date.now()}`, folder }))
   renderUploads()
   pumpUploads()
 }
@@ -1322,8 +1386,21 @@ async function sendText(input) {
   if (!text) return
   input.value = ''
   syncSend()
-  const ok = await attempt(() => call('POST', '/api/notes', { text, folder: S.folder }), 'Sending failed')
-  if (!ok) { input.value = text; syncSend(); return }
+  try {
+    await call('POST', '/api/notes', { text, folder: S.folder })
+  } catch (error) {
+    if (transient(error)) {
+      queueJob({ kind: 'note', text, name: text.slice(0, 60), folder: S.folder })
+      holdUploads()
+      toast('Saved. It sends when the PC is back', { icon: 'inbox' })
+      return
+    }
+    console.warn('phonedrop: sending failed', error)
+    toast('Sending failed', { icon: 'x' })
+    input.value = text
+    syncSend()
+    return
+  }
   const sc = feedRoot()
   if (sc) sc.scrollTop = 0
   await refresh()
@@ -1729,8 +1806,17 @@ $('#pPaste').innerHTML = `${ic('clipboard')}Paste`
 $('#dUp').innerHTML = `${ic('plus', 'sm')}Upload`
 $('#dSendBtn').disabled = true
 setView(S.view)
+try {
+  const cached = localStorage.getItem('phonedrop-state')
+  if (cached) applyState(JSON.parse(cached))
+} catch (error) {
+  console.warn('phonedrop: cached state unusable', error)
+}
 refresh().catch((error) => console.warn('phonedrop: initial load failed', error))
 connect()
+restoreOutbox()
+window.addEventListener('online', resumeUploads)
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resumeUploads() })
 </script>
 </body>
 </html>

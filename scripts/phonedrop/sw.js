@@ -1,4 +1,4 @@
-const CACHE = 'phonedrop-shell-v1';
+const CACHE = 'phonedrop-shell-v2';
 const SHELL = ['/', '/icon.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -20,12 +20,15 @@ function isShellRequest(request) {
 
 async function networkFirst(request) {
   const cache = await caches.open(CACHE);
+  const key = new URL(request.url).pathname;
   try {
     const response = await fetch(request);
-    if (response.ok && request.method === 'GET') cache.put(new URL(request.url).pathname, response.clone());
-    return response;
+    if (response.ok && request.method === 'GET') cache.put(key, response.clone());
+    if (response.status < 500) return response;
+    const cached = await cache.match(key);
+    return cached || response;
   } catch (error) {
-    const cached = await cache.match(new URL(request.url).pathname);
+    const cached = await cache.match(key);
     if (cached) return cached;
     throw error;
   }
