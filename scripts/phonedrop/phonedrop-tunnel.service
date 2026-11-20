@@ -1,0 +1,11 @@
+[Unit]
+Description=phonedrop — Cloudflare tunnel
+After=network-online.target phonedrop.service
+
+[Service]
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate run --token-file %h/.config/phonedrop/tunnel-token
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

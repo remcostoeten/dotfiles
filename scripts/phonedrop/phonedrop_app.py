@@ -86,6 +86,8 @@ MAX_NOTES = 300
 MAX_LABEL_NAME = 40
 HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}")
 COOKIE = "phonedrop"
+PUBLIC_URL_FILE = CONFIG_DIR / "public_url"
+PROXY_HEADERS = ("Cf-Connecting-Ip", "Cf-Ray", "X-Forwarded-For", "X-Real-Ip", "Forwarded")
 TLS_DIR = CONFIG_DIR / "tls"
 CA_NAME = "phonedrop local CA"
 CA_CONSTRAINTS = ("nameConstraints=critical,permitted;DNS:" + MDNS_NAME + ",permitted;DNS:localhost,"
@@ -190,6 +192,14 @@ def ring_phone() -> str:
             return ""
     except OSError as error:
         return f"Could not reach Bark: {error}"
+
+
+def read_public_url() -> str:
+    try:
+        url = PUBLIC_URL_FILE.read_text().strip()
+    except FileNotFoundError:
+        return ""
+    return url.rstrip("/") + "/" if url.startswith("https://") else ""
 
 
 def read_json(path: Path, fallback):
@@ -324,6 +334,13 @@ class WebPush:
         self.private = None
 
     def usable(self) -> bool:
+        if importlib.util.find_spec("cryptography"):
+            return True
+        # the service starts with python -S, so site-packages is added only when push needs it
+        import site
+
+        site.main()
+        importlib.invalidate_caches()
         return importlib.util.find_spec("cryptography") is not None
 
     def key(self):
@@ -1085,7 +1102,7 @@ def make_handler(app: App):
 
         @property
         def is_local(self) -> bool:
-            return self.client_address[0] in app.local_addresses
+            return self.client_address[0] in app.local_addresses and not any(self.headers.get(h) for h in PROXY_HEADERS)
 
         @property
         def origin(self) -> str:
@@ -1322,7 +1339,8 @@ def make_handler(app: App):
             if not self.query().get("k", [""])[0] or self.has_cookie():
                 return {}
             log(paint("●", "32"), f"paired {bold(self.origin)}{self.surface} {dim(self.client_address[0])}")
-            return {"Set-Cookie": f"{COOKIE}={app.token}; Max-Age=315360000; Path=/; SameSite=Lax; HttpOnly"}
+            secure = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else ""
+            return {"Set-Cookie": f"{COOKIE}={app.token}; Max-Age=315360000; Path=/; SameSite=Lax; HttpOnly{secure}"}
 
         def send_app(self):
             self.send_bytes(200, app.page, "text/html; charset=utf-8", self.pair_headers())
@@ -1794,7 +1812,7 @@ def serve(folder: str, port: int, tray: bool = True) -> None:
     bound_port = server.server_address[1]
     mdns = publish_mdns(ip)
     host = MDNS_NAME if mdns else ip
-    placeholder.public_url = f"http://{host}:{bound_port}/"
+    placeholder.public_url = read_public_url() or f"http://{host}:{bound_port}/"
     secure = bind_server(make_handler(placeholder), bound_port + 1, secure=True) if ensure_certs(ip) else None
     if secure:
         placeholder.https_url = f"https://{host}:{secure.server_address[1]}/"
