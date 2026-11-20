@@ -35,3 +35,38 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || !isShellRequest(event.request)) return;
   event.respondWith(networkFirst(event.request));
 });
+
+function readPush(event) {
+  try {
+    return event.data ? event.data.json() : {};
+  } catch (error) {
+    return { body: event.data.text() };
+  }
+}
+
+self.addEventListener('push', (event) => {
+  const data = readPush(event);
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'phonedrop', {
+      body: data.body || '',
+      icon: '/icon.png',
+      badge: '/icon.png',
+      tag: 'phonedrop',
+      renotify: true,
+      data: { url: data.url || '/' },
+    }),
+  );
+});
+
+async function openApp(url) {
+  const target = new URL(url, self.location.origin).href;
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const open = windows.find((client) => client.url.startsWith(self.location.origin));
+  if (open) return open.focus();
+  return self.clients.openWindow(target);
+}
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(openApp((event.notification.data && event.notification.data.url) || '/'));
+});

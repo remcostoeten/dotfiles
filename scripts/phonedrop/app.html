@@ -200,11 +200,15 @@ button.conn:focus-visible{background:var(--fill-3)}
 .up.failed .bar i{background:var(--err)}
 .up.failed .u-row span{color:var(--err)}
 .composer{display:flex;align-items:flex-end;gap:8px}
-.cbox{flex:1;display:flex;align-items:center;min-height:54px;border-radius:27px;background:var(--surface);border:1px solid var(--line);padding:0 6px 0 18px;transition:background-color 150ms ease}
+.cbox{flex:1;min-width:0;display:flex;align-items:center;min-height:54px;border-radius:27px;background:var(--surface);border:1px solid var(--line);padding:0 6px 0 18px;transition:background-color 150ms ease}
 .cbox:focus-within{background:var(--surface-h)}
 .cbox input{flex:1;min-width:0;border:0;background:none;font-size:16px;height:52px}
 .cbox input::placeholder,.dcomp input::placeholder,.search input::placeholder{color:var(--muted)}
-.send{width:40px;height:40px;border-radius:999px;background:var(--fg);color:var(--bg);display:grid;place-items:center;opacity:0;transform:scale(.85);pointer-events:none;transition:opacity 150ms ease,transform 180ms var(--ease-out),background-color 150ms ease}
+.send{flex:none;width:40px;height:40px;border-radius:999px;background:var(--fg);color:var(--bg);display:grid;place-items:center;opacity:0;transform:scale(.85);pointer-events:none;transition:opacity 150ms ease,transform 180ms var(--ease-out),background-color 150ms ease}
+.paste{display:flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;background:var(--fill-2);font-size:14px;font-weight:500;flex:none;transition:background-color 150ms ease,transform 160ms var(--ease-out)}
+.paste:active{transform:scale(.95)}
+.paste .i{width:16px;height:16px}
+.cbox.has .paste{display:none}
 .cbox.has .send{opacity:1;transform:none;pointer-events:auto}
 .send:focus-visible{background:var(--accent-strong);color:#fff}
 .fab{width:54px;height:54px;border-radius:999px;background:var(--accent-strong);color:#fff;flex:none;display:grid;place-items:center;transition:background-color 150ms ease,transform 160ms var(--ease-out);box-shadow:0 8px 20px -8px color-mix(in srgb,var(--accent-strong) 70%,transparent)}
@@ -314,6 +318,8 @@ button.conn:focus-visible{background:var(--fill-3)}
 .step .num{width:24px;height:24px;border-radius:50%;background:var(--fill-2);display:grid;place-items:center;font:500 12px var(--mono);flex:none}
 .step b{font-weight:600}
 .step .i{vertical-align:-3px}
+.push-actions{display:flex;gap:8px;margin-top:12px}.push-actions .btn{flex:1}
+.push-state{display:flex;align-items:center;gap:8px;font-size:14px}
 
 .dapp{width:100%;max-width:1380px;min-width:1100px;height:max(680px,min(880px,calc(100vh - 100px)));border-radius:14px;border:1px solid var(--line);background:var(--surface);display:grid;grid-template-columns:256px minmax(0,1fr) 352px;overflow:hidden;position:relative;box-shadow:0 30px 80px -40px rgba(10,10,10,.35)}
 .dapp.unpaired{grid-template-columns:256px minmax(0,1fr)}
@@ -452,7 +458,7 @@ body.desk .toasts{top:76px}
   <div class="dock" id="pDock">
     <div class="uploads" id="pUploads"></div>
     <form class="composer" data-form="comp" autocomplete="off">
-      <label class="cbox" id="pBox"><input name="t" id="pIn" placeholder="Note, link or code" enterkeyhint="send" aria-label="Send text to the PC"><button class="send" type="submit" aria-label="Send text" id="pSend"></button></label>
+      <label class="cbox" id="pBox"><input name="t" id="pIn" placeholder="Note, link or code" enterkeyhint="send" aria-label="Send text to the PC"><button class="paste" type="button" data-act="paste" aria-label="Paste from clipboard" id="pPaste"></button><button class="send" type="submit" aria-label="Send text" id="pSend"></button></label>
       <button type="button" class="fab" data-act="upload" aria-label="Send photos and files" id="pFab"></button>
     </form>
     <div class="actbar" id="pAct" role="toolbar" aria-label="Selection actions"></div>
@@ -507,7 +513,9 @@ const P = {
   inbox: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
   music: 'M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
   ext: 'M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
-  arrows: 'M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4'
+  arrows: 'M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4',
+  clipboard: 'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z',
+  bell: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0'
 }
 const COLORS = ['#fe5101', '#1fae78', '#2f80ed', '#8b5cf6', '#e5484d', '#f5b544', '#0ea5b7', '#8a8a8a']
 const DESK_QUERY = window.matchMedia('(min-width: 900px)')
@@ -518,7 +526,7 @@ const S = {
   files: [], notes: [], folders: [], labels: [], local: false, presence: { connected: [], last: null, paired: false },
   view: DESK_QUERY.matches ? 'desk' : 'phone', loaded: false, live: false, installable: false,
   filter: 'all', label: '', folder: '', search: '',
-  selecting: false, sel: new Set(), cur: '', arriving: new Set(), sheet: null, armed: '', newColor: COLORS[2]
+  selecting: false, sel: new Set(), cur: '', arriving: new Set(), sheet: null, armed: '', newColor: COLORS[2], push: null, pushBusy: false
 }
 let items = []
 let uploads = []
@@ -834,6 +842,28 @@ function pairBody() {
   loadPair()
   return `<div class="pair-grid"><div class="qrcard">${qrBlock()}<div class="u">scan with the phone camera</div></div><div style="flex:1;min-width:0"><div class="steps" style="margin-top:4px">${stepsHTML()}</div>${pairInfo ? `<div class="urlrow"><span>${esc(pairInfo.url)}</span><button class="btn sm" data-act="copy-url">Copy</button></div>` : ''}${waitingHTML()}</div></div>`
 }
+function pushSupported() { return 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window }
+
+function pushHint(text) { return `<div class="hint">${ic('bell')}<span>${text}</span></div>` }
+
+function pushBody() {
+  const p = S.push
+  if (!p) return '<p class="muted">Checking…</p>'
+  if (p.failed) return pushHint('Could not reach the PC.')
+  if (!p.usable) return pushHint('The PC needs the <b>python-cryptography</b> package. Install it and restart phonedrop.')
+  if (!window.isSecureContext) {
+    if (!p.secure_url) return pushHint('HTTPS is off on the PC because <code>openssl</code> is missing.')
+    return `<p class="muted" style="font-size:13.5px;line-height:1.5">iOS only allows notifications for a home screen app opened over HTTPS. Trust the certificate once, then add the secure page to your home screen.</p><div class="steps" style="margin-top:14px"><div class="step"><span class="num">1</span><span>Tap <b>Get certificate</b> and allow the download.</span></div><div class="step"><span class="num">2</span><span>Settings, General, <b>VPN &amp; Device Management</b>, install phonedrop local CA.</span></div><div class="step"><span class="num">3</span><span>Settings, General, About, <b>Certificate Trust Settings</b>, turn it on.</span></div><div class="step"><span class="num">4</span><span>Tap <b>Open secure page</b>, then Share and <b>Add to Home Screen</b>. Open phonedrop from there and come back to this screen.</span></div></div><div class="push-actions"><a class="btn lg" href="/ca.crt">Get certificate</a><a class="btn lg primary" href="${esc(p.secure_url)}">Open secure page</a></div>`
+  }
+  if (!pushSupported()) {
+    if (isIOS && !navigator.standalone) return pushHint('Tap <b>Share</b>, then <b>Add to Home Screen</b>. Open phonedrop from the home screen and come back here.')
+    return pushHint('This browser does not support notifications.')
+  }
+  if (Notification.permission === 'denied') return pushHint('Notifications are blocked. Allow them in Settings, Notifications, phonedrop.')
+  if (p.on) return `<div class="push-state"><span class="dot"></span>On. This phone is told when the PC sends something.</div><div class="push-actions"><button class="btn lg" data-act="push-test"${S.pushBusy ? ' disabled' : ''}>Send test</button><button class="btn lg" data-act="push-off"${S.pushBusy ? ' disabled' : ''}>Turn off</button></div>`
+  return `<p class="muted" style="font-size:13.5px;line-height:1.5">Get a notification when the PC sends a file or text, even with phonedrop closed.</p><div class="push-actions"><button class="btn lg primary" data-act="push-on"${S.pushBusy ? ' disabled' : ''}>Turn on notifications</button></div>`
+}
+
 function sheetHTML(d) {
   if (d.kind === 'detail') {
     const it = byId(d.id)
@@ -863,7 +893,7 @@ function sheetHTML(d) {
   }
   if (d.kind === 'conn') {
     const showHint = isIOS && !navigator.standalone
-    return `${head('PC', S.live ? 'Connected over wifi' : 'Offline')}<div class="sh-body"><dl class="meta-l" style="margin-top:4px"><dt>Address</dt><dd class="mono">${esc(location.host)}</dd><dt>Status</dt><dd><span class="dot${S.live ? '' : ' off'}"></span>${S.live ? 'Live, items arrive instantly' : 'What you send waits for the PC'}</dd></dl>${showHint ? `<div class="hint">${ic('share')}<span>Tap <b>Share</b> in Safari, then <b>Add to Home Screen</b>. phonedrop then opens full screen, like an app.</span></div>` : ''}<a class="btn lg" style="width:100%;margin-top:16px" href="/cam">${ic('camera', 'sm')}Use this phone as a camera</a></div>`
+    return `${head('PC', S.live ? 'Connected over wifi' : 'Offline')}<div class="sh-body"><dl class="meta-l" style="margin-top:4px"><dt>Address</dt><dd class="mono">${esc(location.host)}</dd><dt>Status</dt><dd><span class="dot${S.live ? '' : ' off'}"></span>${S.live ? 'Live, items arrive instantly' : 'What you send waits for the PC'}</dd></dl>${showHint ? `<div class="hint">${ic('share')}<span>Tap <b>Share</b> in Safari, then <b>Add to Home Screen</b>. phonedrop then opens full screen, like an app.</span></div>` : ''}<a class="btn lg" style="width:100%;margin-top:16px" href="/cam">${ic('camera', 'sm')}Use this phone as a camera</a><div class="sect">Notifications</div>${pushBody()}</div>`
   }
   if (d.kind === 'pair') return `${head('Pair a phone', 'Phone and PC on the same wifi network')}<div class="sh-body">${pairBody()}</div>`
   return ''
@@ -902,6 +932,62 @@ function refreshSheet() {
   sh.dataset.html = html
   sh.querySelectorAll('form input[name]').forEach((input) => { if (typed[input.name]) input.value = typed[input.name] })
 }
+async function loadPush() {
+  try {
+    const response = await fetch('/api/push', { cache: 'no-store' })
+    if (!response.ok) throw new Error(response.status)
+    const info = await response.json()
+    let on = false
+    if (window.isSecureContext && pushSupported()) {
+      const registration = await Promise.race([navigator.serviceWorker.ready, new Promise((resolve) => setTimeout(resolve, 3000))])
+      on = !!(registration && (await registration.pushManager.getSubscription()))
+    }
+    S.push = { ...info, on }
+  } catch (error) {
+    S.push = { failed: true }
+  }
+  refreshSheet()
+}
+
+function keyBytes(text) {
+  const raw = atob(text.replace(/-/g, '+').replace(/_/g, '/'))
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0))
+}
+
+async function pushOn() {
+  if ((await Notification.requestPermission()) !== 'granted') return
+  const registration = await navigator.serviceWorker.ready
+  const existing = await registration.pushManager.getSubscription()
+  const sub = existing || (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(S.push.key) }))
+  const response = await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub.toJSON()) })
+  if (!response.ok) throw new Error(`subscribe ${response.status}`)
+  S.push.on = true
+}
+
+async function pushOff() {
+  const registration = await navigator.serviceWorker.ready
+  const sub = await registration.pushManager.getSubscription()
+  if (sub) {
+    await fetch('/api/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) })
+    await sub.unsubscribe()
+  }
+  S.push.on = false
+}
+
+async function runPush(action, done) {
+  S.pushBusy = true
+  refreshSheet()
+  try {
+    await action()
+    if (done) toast(done)
+  } catch (error) {
+    console.warn('phonedrop: push failed', error)
+    toast('Notifications failed. Try again.')
+  }
+  S.pushBusy = false
+  refreshSheet()
+}
+
 function closeSheet() {
   const layer = $('#layer')
   if (!layer.classList.contains('open')) return
@@ -1063,6 +1149,13 @@ async function saveToLibrary(list) {
   }
 }
 
+function openLink(url) {
+  const a = document.createElement('a')
+  a.href = url
+  a.target = '_blank'
+  a.rel = 'noopener noreferrer'
+  a.click()
+}
 function openItem(id) {
   if (S.view === 'desk') { setCursor(id, true); return }
   openSheet({ kind: 'detail', id })
@@ -1265,7 +1358,23 @@ const ACT = {
     S.installable = false
     render()
   },
-  conn: () => openSheet({ kind: 'conn' }),
+  paste: async () => {
+    const input = $('#pIn')
+    try {
+      const text = await navigator.clipboard.readText()
+      if (!text.trim()) { toast('Clipboard is empty'); return }
+      input.value = text
+      syncSend()
+      input.focus()
+    } catch (error) {
+      input.focus()
+      toast('Long press the field and tap Paste')
+    }
+  },
+  conn: () => { openSheet({ kind: 'conn' }); loadPush() },
+  'push-on': () => runPush(pushOn, 'Notifications on'),
+  'push-off': () => runPush(pushOff, 'Notifications off'),
+  'push-test': () => runPush(async () => { await fetch('/api/push/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }) }),
   pair: () => openSheet({ kind: 'pair' }),
   'hint-x': () => { writeFlag('hintDismissed'); render() },
   filter: (el) => { S.filter = el.dataset.v; render() },
@@ -1378,6 +1487,7 @@ document.addEventListener('click', (e) => {
   const id = row.dataset.id
   if (S.selecting || (S.view === 'desk' && (e.ctrlKey || e.metaKey))) toggleSel(id)
   else if (S.view === 'desk') setCursor(id, false)
+  else if (byId(id) && byId(id).kind === 'link') openLink(byId(id).url)
   else openItem(id)
 })
 document.addEventListener('dblclick', (e) => {
@@ -1615,6 +1725,7 @@ if ('serviceWorker' in navigator) {
 
 $('#pSend').innerHTML = ic('up')
 $('#pFab').innerHTML = ic('plus')
+$('#pPaste').innerHTML = `${ic('clipboard')}Paste`
 $('#dUp').innerHTML = `${ic('plus', 'sm')}Upload`
 $('#dSendBtn').disabled = true
 setView(S.view)

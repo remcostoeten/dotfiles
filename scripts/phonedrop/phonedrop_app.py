@@ -22,6 +22,8 @@ import base64
 import contextlib
 import errno
 import hashlib
+import importlib.util
+import io
 import json
 import mimetypes
 import os
@@ -55,6 +57,15 @@ STATE_FILE = CONFIG_DIR / "state.json"
 BARK_FILE = CONFIG_DIR / "bark_key"
 BARK_SERVER = "https://api.day.app"
 BARK_TIMEOUT_SECONDS = 10
+DIALOG_TIMEOUT_SECONDS = 600
+IMAGE_FILTER = "*.png *.jpg *.jpeg *.gif *.webp *.heic *.avif|Images\n*|All files"
+PUSH_KEY_FILE = CONFIG_DIR / "vapid.pem"
+PUSH_FILE = CONFIG_DIR / "push.json"
+PUSH_HOSTS = ("push.apple.com", "googleapis.com", "push.services.mozilla.com", "notify.windows.com")
+PUSH_TIMEOUT_SECONDS = 10
+PUSH_TTL_SECONDS = 86400
+PUSH_BODY_LIMIT = 3000
+VAPID_SUBJECT = "mailto:phonedrop@example.com"
 STREAM_DEAD_AFTER_MS = 30000
 UNIT_FILE = Path.home() / ".config/systemd/user/phonedrop.service"
 DESKTOP_FILE = Path.home() / ".local/share/applications/phonedrop.desktop"
@@ -231,6 +242,149 @@ def notify(title: str, body: str) -> None:
     if shutil.which("notify-send"):
         subprocess.Popen(["notify-send", "-a", "phonedrop", "-i", "phone", title, body],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def b64u(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def unb64u(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def hkdf(secret: bytes, salt: bytes, info: bytes, length: int) -> bytes:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+    return HKDF(hashes.SHA256(), length, salt, info).derive(secret)
+
+
+def point_bytes(key) -> bytes:
+    from cryptography.hazmat.primitives import serialization
+
+    return key.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+
+
+def encrypt_push(payload: bytes, ua_public: bytes, auth_secret: bytes, sender=None, salt: bytes | None = None) -> bytes:
+    """Encrypt a Web Push payload with aes128gcm (RFC 8188 and RFC 8291)."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    sender = sender or ec.generate_private_key(ec.SECP256R1())
+    sender_public = point_bytes(sender)
+    shared = sender.exchange(ec.ECDH(), ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), ua_public))
+    salt = salt or os.urandom(16)
+    ikm = hkdf(shared, auth_secret, b"WebPush: info\0" + ua_public + sender_public, 32)
+    key = hkdf(ikm, salt, b"Content-Encoding: aes128gcm\0", 16)
+    nonce = hkdf(ikm, salt, b"Content-Encoding: nonce\0", 12)
+    record = AESGCM(key).encrypt(nonce, payload + b"\x02", None)
+    return salt + struct.pack(">IB", 4096, len(sender_public)) + sender_public + record
+
+
+def vapid_authorization(private, endpoint: str) -> str:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+
+    parts = urllib.parse.urlsplit(endpoint)
+    segments = [{"typ": "JWT", "alg": "ES256"},
+                {"aud": f"{parts.scheme}://{parts.netloc}", "exp": int(time.time()) + 12 * 3600, "sub": VAPID_SUBJECT}]
+    signing = ".".join(b64u(json.dumps(part, separators=(",", ":")).encode()) for part in segments)
+    r, s = decode_dss_signature(private.sign(signing.encode(), ec.ECDSA(hashes.SHA256())))
+    return f"vapid t={signing}.{b64u(r.to_bytes(32, 'big') + s.to_bytes(32, 'big'))}, k={b64u(point_bytes(private))}"
+
+
+def push_endpoint_ok(endpoint: str) -> bool:
+    parts = urllib.parse.urlsplit(endpoint)
+    host = parts.hostname or ""
+    return parts.scheme == "https" and any(host == known or host.endswith("." + known) for known in PUSH_HOSTS)
+
+
+def load_vapid_key():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    try:
+        return serialization.load_pem_private_key(PUSH_KEY_FILE.read_bytes(), None)
+    except FileNotFoundError:
+        key = ec.generate_private_key(ec.SECP256R1())
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        PUSH_KEY_FILE.write_bytes(key.private_bytes(
+            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+        PUSH_KEY_FILE.chmod(0o600)
+        return key
+
+
+class WebPush:
+    """Web Push to subscribed phones, so an installed home screen app can be reached while closed."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.subs: dict = read_json(PUSH_FILE, {})
+        self.private = None
+
+    def usable(self) -> bool:
+        return importlib.util.find_spec("cryptography") is not None
+
+    def key(self):
+        with self.lock:
+            if self.private is None:
+                self.private = load_vapid_key()
+            return self.private
+
+    def public_key(self) -> str:
+        return b64u(point_bytes(self.key())) if self.usable() else ""
+
+    def count(self) -> int:
+        with self.lock:
+            return len(self.subs)
+
+    def add(self, subscription: dict) -> bool:
+        endpoint = subscription.get("endpoint")
+        keys = subscription.get("keys")
+        if not isinstance(endpoint, str) or not push_endpoint_ok(endpoint) or not isinstance(keys, dict):
+            return False
+        if not all(isinstance(keys.get(name), str) and keys[name] for name in ("p256dh", "auth")):
+            return False
+        with self.lock:
+            self.subs[endpoint] = {"p256dh": keys["p256dh"], "auth": keys["auth"], "added": time.time()}
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            write_json(PUSH_FILE, self.subs)
+        return True
+
+    def remove(self, endpoint: str) -> None:
+        with self.lock:
+            if self.subs.pop(endpoint, None) is not None:
+                write_json(PUSH_FILE, self.subs)
+
+    def deliver(self, endpoint: str, sub: dict, payload: bytes) -> None:
+        # imported on demand so the idle service never loads the HTTP client
+        import urllib.error
+        import urllib.request
+
+        body = encrypt_push(payload, unb64u(sub["p256dh"]), unb64u(sub["auth"]))
+        request = urllib.request.Request(endpoint, data=body, method="POST", headers={
+            "Authorization": vapid_authorization(self.key(), endpoint), "Content-Encoding": "aes128gcm",
+            "Content-Type": "application/octet-stream", "TTL": str(PUSH_TTL_SECONDS), "Urgency": "high"})
+        try:
+            with urllib.request.urlopen(request, timeout=PUSH_TIMEOUT_SECONDS):
+                return
+        except urllib.error.HTTPError as error:
+            if error.code in (404, 410):
+                self.remove(endpoint)
+            log(paint("!", "33"), f"push refused ({error.code}) by {urllib.parse.urlsplit(endpoint).hostname}")
+        except OSError as error:
+            log(paint("!", "33"), f"push failed: {error}")
+
+    def send(self, title: str, body: str, url: str = "/") -> int:
+        with self.lock:
+            targets = list(self.subs.items())
+        if not targets or not self.usable():
+            return 0
+        payload = json.dumps({"title": title, "body": body[:PUSH_BODY_LIMIT], "url": url}).encode()
+        for endpoint, sub in targets:
+            threading.Thread(target=self.deliver, args=(endpoint, sub, payload), daemon=True).start()
+        return len(targets)
 
 
 class Store:
@@ -894,6 +1048,7 @@ class App:
         self.https_url = ""
         self.camera = Camera()
         self.presence = Presence(hub)
+        self.push = WebPush()
         self.local_addresses = own_addresses()
         self.page = (APP_DIR / "app.html").read_bytes()
         self.cam_page = (APP_DIR / "cam.html").read_bytes()
@@ -1016,6 +1171,10 @@ def make_handler(app: App):
                 return self.send_json({**app.store.state(), "local": self.is_local, "presence": app.presence_state()})
             if route == "/api/events":
                 return self.stream_events()
+            if route == "/api/push":
+                return self.send_json({
+                    "usable": app.push.usable(), "key": app.push.public_key(), "devices": app.push.count(),
+                    "secure_url": f"{app.https_url}?k={app.token}" if app.https_url else ""})
             if route == "/api/pair" and self.is_local:
                 return self.send_json({"url": app.pair_url, "svg": qr_svg(app.pair_url)})
             if route.startswith("/f/"):
@@ -1041,6 +1200,8 @@ def make_handler(app: App):
             log(paint("↑", "35"), f"{bold(target.name)}  {dim(human_size(size) + ' from ' + self.origin)}")
             if not self.is_local:
                 notify(f"Received from {self.origin}", f"{target.name} · {human_size(size)}")
+            else:
+                app.push.send("File from PC", f"{target.name} · {human_size(size)}")
             app.hub.publish("files")
             self.send_json({"name": target.name}, 201)
 
@@ -1101,6 +1262,16 @@ def make_handler(app: App):
                 changed = app.store.set_labels(items, add, remove)
                 app.hub.publish("labels")
                 return self.send_json({"changed": changed})
+            if route == "/api/push/subscribe":
+                if not app.push.usable() or not app.push.add(body):
+                    return self.send_error(400)
+                log(paint("◔", "35"), f"push subscribed {dim(self.origin)}")
+                return self.send_json({"ok": True}, 201)
+            if route == "/api/push/unsubscribe":
+                app.push.remove(str(body.get("endpoint", "")))
+                return self.send_json({"ok": True})
+            if route == "/api/push/test":
+                return self.send_json({"sent": app.push.send("phonedrop", "Notifications are on")})
             if route != "/api/notes":
                 return self.send_error(404)
             text = str(body.get("text", "")).strip()
@@ -1110,6 +1281,8 @@ def make_handler(app: App):
             log(paint("✎", "36"), f"text from {self.origin}  {dim(text[:60])}")
             if not self.is_local:
                 notify(f"Text from {self.origin}", text[:200])
+            else:
+                app.push.send("Text from PC", text)
             app.hub.publish("notes")
             self.send_json(note, 201)
 
@@ -1511,6 +1684,61 @@ def stop_self() -> None:
         os.kill(os.getpid(), signal.SIGINT)
 
 
+def run_tool(args: list[str]) -> bytes | None:
+    try:
+        done = subprocess.run(args, capture_output=True, timeout=DIALOG_TIMEOUT_SECONDS)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return done.stdout if done.returncode == 0 else None
+
+
+def send_text_from_pc(app: App, text: str) -> None:
+    text = text.strip()
+    if not text:
+        return notify("phonedrop", "Nothing to send")
+    app.store.add_note(text, "PC")
+    app.hub.publish("notes")
+    app.push.send("Text from PC", text)
+    log(paint("✎", "36"), f"text from PC  {dim(text[:60])}")
+    notify("phonedrop", "Text sent")
+
+
+def send_file_from_pc(app: App, name: str, stream, size: int) -> None:
+    target = app.store.save_upload(safe_name(name) or f"upload-{int(time.time())}", stream, size, "PC")
+    app.hub.publish("files")
+    app.push.send("File from PC", f"{target.name} · {human_size(size)}")
+    log(paint("↑", "35"), f"{bold(target.name)}  {dim(human_size(size) + ' from PC')}")
+    notify("phonedrop", f"Sent {target.name}")
+
+
+def pick_and_send_files(app: App) -> None:
+    picked = run_tool(["kdialog", "--title", "Send to phone", "--multiple", "--separate-output",
+                       "--getopenfilename", str(Path.home()), IMAGE_FILTER])
+    for line in (picked or b"").decode().splitlines():
+        path = Path(line)
+        if path.is_file():
+            with path.open("rb") as fh:
+                send_file_from_pc(app, path.name, fh, path.stat().st_size)
+
+
+def ask_and_send_text(app: App) -> None:
+    typed = run_tool(["kdialog", "--title", "Send to phone", "--textinputbox", "Text to send"])
+    send_text_from_pc(app, (typed or b"").decode())
+
+
+def paste_and_send(app: App) -> None:
+    types = (run_tool(["wl-paste", "--list-types"]) or b"").decode().split()
+    image = next((kind for kind in types if kind.startswith("image/")), "")
+    if image:
+        data = run_tool(["wl-paste", "--no-newline", "--type", image]) or b""
+        if data:
+            extension = mimetypes.guess_extension(image) or ".png"
+            return send_file_from_pc(app, f"clipboard-{time.strftime('%Y%m%d-%H%M%S')}{extension}", io.BytesIO(data), len(data))
+    if any(kind.startswith("text/") or kind in ("STRING", "UTF8_STRING") for kind in types):
+        return send_text_from_pc(app, (run_tool(["wl-paste", "--no-newline", "--type", "text"]) or b"").decode())
+    notify("phonedrop", "Clipboard has no text or image")
+
+
 def start_tray(app: App, root: Path, local_url: str) -> None:
     # imported on demand so --no-tray pays nothing for the DBus code
     from phonedrop_tray import MenuItem, Tray
@@ -1529,6 +1757,15 @@ def start_tray(app: App, root: Path, local_url: str) -> None:
             MenuItem("Camera viewer" + (" · live" if live else ""), lambda: open_url(local_url + "cam")),
             MenuItem("Open folder", lambda: launch(["xdg-open", str(root)])),
         ]
+        if shutil.which("kdialog"):
+            items += [MenuItem(separator=True), MenuItem("Send image…", lambda: pick_and_send_files(app)),
+                      MenuItem("New text…", lambda: ask_and_send_text(app))]
+        if shutil.which("wl-paste"):
+            if not shutil.which("kdialog"):
+                items.append(MenuItem(separator=True))
+            items.append(MenuItem("Send clipboard", lambda: paste_and_send(app)))
+        if len(items) > 3:
+            items.append(MenuItem(separator=True))
         if BARK_FILE.exists():
             items.append(MenuItem("Ring phone", lambda: threading.Thread(target=ring, daemon=True).start()))
         if shutil.which("wl-copy"):
