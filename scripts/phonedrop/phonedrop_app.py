@@ -518,8 +518,9 @@ class Hub:
 class Presence:
     """Tracks which devices other than this PC hold an open live-update stream."""
 
-    def __init__(self):
+    def __init__(self, hub: "Hub | None" = None):
         self.lock = threading.Lock()
+        self.hub = hub
         self.streams: dict[str, int] = {}
         self.last_seen: tuple[str, datetime] | None = None
         self.on_change = None
@@ -533,8 +534,16 @@ class Presence:
         if not flipped:
             return
         log(paint("●", "32") if step > 0 else dim("○"), f"{device} {'connected' if step > 0 else 'disconnected'}")
+        if self.hub:
+            self.hub.publish("presence")
         if self.on_change:
             self.on_change()
+
+    def snapshot(self) -> dict:
+        with self.lock:
+            connected = sorted(device for device, count in self.streams.items() if count)
+            last = {"device": self.last_seen[0], "at": self.last_seen[1].timestamp()} if self.last_seen else None
+        return {"connected": connected, "last": last}
 
     def summary(self) -> str:
         with self.lock:
@@ -884,7 +893,7 @@ class App:
         self.public_url = public_url
         self.https_url = ""
         self.camera = Camera()
-        self.presence = Presence()
+        self.presence = Presence(hub)
         self.local_addresses = own_addresses()
         self.page = (APP_DIR / "app.html").read_bytes()
         self.cam_page = (APP_DIR / "cam.html").read_bytes()
@@ -895,6 +904,13 @@ class App:
     @property
     def pair_url(self) -> str:
         return f"{self.public_url}?k={self.token}"
+
+    def presence_state(self) -> dict:
+        snapshot = self.presence.snapshot()
+        store = self.store
+        sent_by_phone = any(entry.get("from", "PC") != "PC" for entry in store.meta.values()) or any(
+            note.get("from", "PC") != "PC" for note in store.notes)
+        return {**snapshot, "paired": bool(snapshot["last"]) or sent_by_phone}
 
 
 def make_handler(app: App):
@@ -997,7 +1013,7 @@ def make_handler(app: App):
             if route == "/api/cam/ws":
                 return self.camera_socket(self.query().get("role", [""])[0])
             if route == "/api/state":
-                return self.send_json({**app.store.state(), "local": self.is_local})
+                return self.send_json({**app.store.state(), "local": self.is_local, "presence": app.presence_state()})
             if route == "/api/events":
                 return self.stream_events()
             if route == "/api/pair" and self.is_local:
